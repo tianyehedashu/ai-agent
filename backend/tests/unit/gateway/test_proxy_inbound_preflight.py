@@ -92,6 +92,53 @@ async def test_optional_model_skips_model_whitelist(
     assert result.reservations == []
 
 
+def _mock_guard(resolved: ResolvedModelName | None, *, exempt: bool) -> MagicMock:
+    guard = MagicMock()
+    guard.check_model = MagicMock()
+    guard.resolve_and_validate_request_model = AsyncMock(return_value=resolved)
+    guard.check_capability = MagicMock()
+    guard.check_limits = AsyncMock()
+    guard.is_platform_budget_exempt = AsyncMock(return_value=exempt)
+    guard.check_budget = AsyncMock(return_value=["phase1"])
+    guard.check_entitlement = AsyncMock()
+    guard.release_budget_reservations = AsyncMock()
+    return guard
+
+
+def _chat_ctx() -> ProxyContext:
+    return ProxyContext(
+        team_id=uuid.uuid4(),
+        user_id=uuid.uuid4(),
+        vkey=None,
+        capability=GatewayCapability.CHAT,
+        request_id="rid",
+        store_full_messages=False,
+        guardrail_enabled=False,
+    )
+
+
+@pytest.mark.asyncio
+async def test_personal_team_model_skips_all_platform_budget() -> None:
+    resolved = _resolved("chat")
+    guard = _mock_guard(resolved, exempt=True)
+    result = await run_proxy_inbound_preflight(
+        guard, _chat_ctx(), capability=GatewayCapability.CHAT, model="my-byok-model"
+    )
+    assert result.reservations == []
+    guard.check_budget.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_shared_team_model_still_runs_phase1_budget() -> None:
+    resolved = _resolved("chat")
+    guard = _mock_guard(resolved, exempt=False)
+    result = await run_proxy_inbound_preflight(
+        guard, _chat_ctx(), capability=GatewayCapability.CHAT, model="team-model"
+    )
+    assert result.reservations == ["phase1"]
+    guard.check_budget.assert_awaited_once()
+
+
 @pytest.mark.asyncio
 async def test_preflight_rejects_unregistered_model(db_session: Any) -> None:
     ctx = ProxyContext(

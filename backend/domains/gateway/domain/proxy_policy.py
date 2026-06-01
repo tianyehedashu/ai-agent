@@ -34,6 +34,8 @@ class BudgetReservation:
     budget_model_name: str | None
     reserved_requests: int = 0
     reserved_tokens: int = 0
+    credential_id: uuid.UUID | None = None
+    tenant_id: uuid.UUID | None = None
 
 
 @dataclass(frozen=True)
@@ -46,12 +48,18 @@ class BudgetCheckQuery:
         period: ``daily`` / ``monthly`` / ``total``。
         model_name: ``None`` = 全模型汇总行（``gateway_budgets.model_name IS NULL``），
             其它值表示模型级专属预算行。
+        credential_id: ``None`` = 命中 ``credential_id IS NULL`` 的汇总/模型行（Phase1）；
+            非空 = 成员+凭据(+模型) 专属预算行（Phase2，部署选定后归因）。
+        tenant_id: 仅 ``target_kind=user`` 且 ``credential_id IS NULL`` 的成员总量/模型护栏行非空，
+            表示按团队隔离的归属；命中 ``gateway_budgets.tenant_id`` 精确匹配（含 ``IS NULL``）。
     """
 
     target_kind: str
     target_id: uuid.UUID | None
     period: str
     model_name: str | None
+    credential_id: uuid.UUID | None = None
+    tenant_id: uuid.UUID | None = None
 
 
 def build_budget_check_plan(
@@ -59,17 +67,22 @@ def build_budget_check_plan(
     targets: tuple[BudgetTarget, ...],
     periods: tuple[str, ...],
     request_model: str | None,
+    tenant_id: uuid.UUID | None = None,
 ) -> tuple[BudgetCheckQuery, ...]:
     """生成单次代理调用应扫描的全部预算查询坐标（纯函数）。
 
     每个非空 target × period × ``budget_model_keys(request_model)``。
     顺序保证「先汇总行（``None``），再模型专属行」，与历史 ``_check_budget``
     行为一致；调用方按此顺序遇到耗尽即抛错。
+
+    ``tenant_id`` 仅施加于 ``user`` 维度（成员总量/模型护栏按团队隔离）；
+    其余维度恒以 ``tenant_id=None`` 匹配。
     """
     queries: list[BudgetCheckQuery] = []
     for target_kind, target_id in targets:
         if target_id is None and target_kind != "system":
             continue
+        query_tenant = tenant_id if target_kind == "user" else None
         for period in periods:
             for model_key in budget_model_keys(request_model):
                 queries.append(
@@ -78,8 +91,37 @@ def build_budget_check_plan(
                         target_id=target_id,
                         period=period,
                         model_name=model_key,
+                        tenant_id=query_tenant,
                     )
                 )
+    return tuple(queries)
+
+
+def build_user_credential_budget_plan(
+    *,
+    user_id: uuid.UUID,
+    credential_id: uuid.UUID,
+    gateway_model_name: str | None,
+    periods: tuple[str, ...],
+) -> tuple[BudgetCheckQuery, ...]:
+    """Phase2 成员+凭据(+模型) 预算扫描坐标（部署选定后）。
+
+    与 Phase1 隔离：仅 ``target_kind=user`` + 指定 ``credential_id``；
+    ``gateway_model_name`` 为部署实际虚拟别名（非路由名），同时扫描凭据汇总行
+    （``model_name IS NULL``）与该别名专属行。
+    """
+    queries: list[BudgetCheckQuery] = []
+    for period in periods:
+        for model_key in budget_model_keys(gateway_model_name):
+            queries.append(
+                BudgetCheckQuery(
+                    target_kind="user",
+                    target_id=user_id,
+                    period=period,
+                    model_name=model_key,
+                    credential_id=credential_id,
+                )
+            )
     return tuple(queries)
 
 

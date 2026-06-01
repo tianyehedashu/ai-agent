@@ -43,5 +43,11 @@ async def test_get_many_by_plan_single_query(db_session: AsyncSession) -> None:
         ),
     )
     rows = await repo.get_many_by_plan(plan)
-    assert (budget.target_kind, budget.target_id, budget.period, budget.model_name) in rows
+    assert (
+        budget.target_kind,
+        budget.target_id,
+        budget.period,
+        budget.model_name,
+        budget.credential_id,
+    ) in rows
     assert len(rows) == 1

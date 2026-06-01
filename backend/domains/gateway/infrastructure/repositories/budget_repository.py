@@ -56,8 +56,15 @@ class BudgetRepository:
     async def get_many_by_plan(
         self,
         plan: tuple[BudgetCheckQuery, ...] | list[BudgetCheckQuery],
-    ) -> dict[tuple[str, uuid.UUID | None, str, str | None], GatewayBudget]:
-        """一次查询拉取预算扫描 plan 中的全部配置行。"""
+    ) -> dict[
+        tuple[str, uuid.UUID | None, str, str | None, uuid.UUID | None, uuid.UUID | None],
+        GatewayBudget,
+    ]:
+        """一次查询拉取预算扫描 plan 中的全部配置行。
+
+        坐标含 ``credential_id`` 与 ``tenant_id``：均按 ``None``→``IS NULL`` / 非空→相等匹配。
+        ``tenant_id`` 仅对成员总量/模型护栏行非空（按团队隔离）。
+        """
         if not plan:
             return {}
         clauses = []
@@ -70,20 +77,40 @@ class BudgetRepository:
                 target_clause = GatewayBudget.target_id.is_(None)
             else:
                 target_clause = GatewayBudget.target_id == query.target_id
+            if query.credential_id is None:
+                credential_clause = GatewayBudget.credential_id.is_(None)
+            else:
+                credential_clause = GatewayBudget.credential_id == query.credential_id
+            if query.tenant_id is None:
+                tenant_clause = GatewayBudget.tenant_id.is_(None)
+            else:
+                tenant_clause = GatewayBudget.tenant_id == query.tenant_id
             clauses.append(
                 and_(
                     GatewayBudget.target_kind == query.target_kind,
                     target_clause,
                     GatewayBudget.period == query.period,
                     model_clause,
+                    credential_clause,
+                    tenant_clause,
                 )
             )
         stmt = select(GatewayBudget).where(or_(*clauses))
         result = await self._session.execute(stmt)
         rows = list(result.scalars().all())
-        out: dict[tuple[str, uuid.UUID | None, str, str | None], GatewayBudget] = {}
+        out: dict[
+            tuple[str, uuid.UUID | None, str, str | None, uuid.UUID | None, uuid.UUID | None],
+            GatewayBudget,
+        ] = {}
         for row in rows:
-            key = (row.target_kind, row.target_id, row.period, row.model_name)
+            key = (
+                row.target_kind,
+                row.target_id,
+                row.period,
+                row.model_name,
+                row.credential_id,
+                row.tenant_id,
+            )
             out[key] = row
         return out
 
@@ -94,17 +121,29 @@ class BudgetRepository:
         period: str,
         *,
         model_name: str | None = None,
+        credential_id: uuid.UUID | None = None,
+        tenant_id: uuid.UUID | None = None,
     ) -> GatewayBudget | None:
         if model_name is None:
             model_clause = GatewayBudget.model_name.is_(None)
         else:
             model_clause = GatewayBudget.model_name == model_name
+        if credential_id is None:
+            credential_clause = GatewayBudget.credential_id.is_(None)
+        else:
+            credential_clause = GatewayBudget.credential_id == credential_id
+        if tenant_id is None:
+            tenant_clause = GatewayBudget.tenant_id.is_(None)
+        else:
+            tenant_clause = GatewayBudget.tenant_id == tenant_id
         stmt = select(GatewayBudget).where(
             and_(
                 GatewayBudget.target_kind == target_kind,
                 GatewayBudget.target_id == target_id,
                 GatewayBudget.period == period,
                 model_clause,
+                credential_clause,
+                tenant_clause,
             )
         )
         result = await self._session.execute(stmt)
@@ -117,19 +156,30 @@ class BudgetRepository:
         target_id: uuid.UUID | None,
         period: str,
         model_name: str | None = None,
+        credential_id: uuid.UUID | None = None,
+        tenant_id: uuid.UUID | None = None,
         limit_usd: Decimal | None = None,
         soft_limit_usd: Decimal | None = None,
         limit_tokens: int | None = None,
         limit_requests: int | None = None,
         reset_at: datetime | None = None,
     ) -> GatewayBudget:
-        existing = await self.get_for(target_kind, target_id, period, model_name=model_name)
+        existing = await self.get_for(
+            target_kind,
+            target_id,
+            period,
+            model_name=model_name,
+            credential_id=credential_id,
+            tenant_id=tenant_id,
+        )
         if existing is None:
             budget = GatewayBudget(
                 target_kind=target_kind,
                 target_id=target_id,
                 period=period,
                 model_name=model_name,
+                credential_id=credential_id,
+                tenant_id=tenant_id,
                 limit_usd=limit_usd,
                 soft_limit_usd=soft_limit_usd,
                 limit_tokens=limit_tokens,
@@ -168,24 +218,33 @@ class BudgetRepository:
             target_id = item.get("target_id")
             period = item["period"]
             model_name = item.get("model_name")
-            if model_name is None:
-                clauses.append(
-                    and_(
-                        GatewayBudget.target_kind == target_kind,
-                        GatewayBudget.target_id == target_id,
-                        GatewayBudget.period == period,
-                        GatewayBudget.model_name.is_(None),
-                    )
+            credential_id = item.get("credential_id")
+            tenant_id = item.get("tenant_id")
+            model_clause = (
+                GatewayBudget.model_name.is_(None)
+                if model_name is None
+                else GatewayBudget.model_name == model_name
+            )
+            credential_clause = (
+                GatewayBudget.credential_id.is_(None)
+                if credential_id is None
+                else GatewayBudget.credential_id == credential_id
+            )
+            tenant_clause = (
+                GatewayBudget.tenant_id.is_(None)
+                if tenant_id is None
+                else GatewayBudget.tenant_id == tenant_id
+            )
+            clauses.append(
+                and_(
+                    GatewayBudget.target_kind == target_kind,
+                    GatewayBudget.target_id == target_id,
+                    GatewayBudget.period == period,
+                    model_clause,
+                    credential_clause,
+                    tenant_clause,
                 )
-            else:
-                clauses.append(
-                    and_(
-                        GatewayBudget.target_kind == target_kind,
-                        GatewayBudget.target_id == target_id,
-                        GatewayBudget.period == period,
-                        GatewayBudget.model_name == model_name,
-                    )
-                )
+            )
 
         existing_rows: list[GatewayBudget] = []
         if clauses:
@@ -195,7 +254,14 @@ class BudgetRepository:
 
         existing_by_key: dict[tuple, GatewayBudget] = {}
         for row in existing_rows:
-            key = (row.target_kind, row.target_id, row.period, row.model_name)
+            key = (
+                row.target_kind,
+                row.target_id,
+                row.period,
+                row.model_name,
+                row.credential_id,
+                row.tenant_id,
+            )
             existing_by_key[key] = row
 
         # 2. 分类：更新 vs 插入
@@ -208,6 +274,8 @@ class BudgetRepository:
                 item.get("target_id"),
                 item["period"],
                 item.get("model_name"),
+                item.get("credential_id"),
+                item.get("tenant_id"),
             )
             existing = existing_by_key.get(key)
             if existing is not None:
@@ -225,6 +293,8 @@ class BudgetRepository:
                     target_id=item.get("target_id"),
                     period=item["period"],
                     model_name=item.get("model_name"),
+                    credential_id=item.get("credential_id"),
+                    tenant_id=item.get("tenant_id"),
                     limit_usd=item.get("limit_usd"),
                     soft_limit_usd=item.get("soft_limit_usd"),
                     limit_tokens=item.get("limit_tokens"),

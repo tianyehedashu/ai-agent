@@ -52,22 +52,22 @@ describe('quotaListParamsForContext', () => {
   it('narrows personal context to user_id', () => {
     expect(
       quotaListParamsForContext({ kind: 'personal', userId: 'u1', modelNames: ['gpt-4'] })
-    ).toEqual({ user_id: 'u1' })
+    ).toEqual({ user_id: 'u1', include_usage: true })
   })
 
   it('narrows team_model context to model_name', () => {
     expect(
       quotaListParamsForContext({ kind: 'team_model', modelName: 'claude-3', userId: 'u1' })
-    ).toEqual({ model_name: 'claude-3' })
+    ).toEqual({ model_name: 'claude-3', include_usage: true })
   })
 
-  it('returns undefined for credential context', () => {
+  it('falls back to usage-only fetch for credential context', () => {
     expect(
       quotaListParamsForContext({
         kind: 'credential',
         userId: 'u1',
         linkedModelNames: ['m1'],
       })
-    ).toBeUndefined()
+    ).toEqual({ include_usage: true })
   })
 })

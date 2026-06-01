@@ -23,6 +23,9 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from libs.orm.base import BaseModel
 
+# 成员总量/模型护栏行唯一索引中 tenant_id 为 NULL 时的占位 UUID（非 user 维度恒用此值）。
+_TENANT_SENTINEL = "00000000-0000-0000-0000-000000000000"
+
 
 class GatewayBudget(BaseModel):
     """预算配置
@@ -42,8 +45,23 @@ class GatewayBudget(BaseModel):
         nullable=True,
         index=True,
     )
+    tenant_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        nullable=True,
+        index=True,
+        comment=(
+            "仅 target_kind=user 且 credential_id IS NULL 时非空：成员总量/模型护栏所属团队"
+            "（按团队隔离成员额度）；其余维度为 NULL（refs gateway_teams.id，无 DB FK）"
+        ),
+    )
     period: Mapped[str] = mapped_column(String(20), nullable=False)
     model_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    credential_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        nullable=True,
+        index=True,
+        comment="非空表示「成员+凭据(+模型)」专属预算；仅与 target_kind=user 组合（refs provider_credentials.id，无 DB FK）",
+    )
 
     # 限额
     limit_usd: Mapped[Decimal | None] = mapped_column(Numeric(12, 4), nullable=True)
@@ -83,22 +101,46 @@ class GatewayBudget(BaseModel):
     )
 
     __table_args__ = (
+        # 成员总量/模型护栏行（credential_id IS NULL）按 tenant 隔离：
+        # 用 COALESCE(tenant_id, 全零 UUID) 使非 user 维度（tenant_id 恒 NULL）仍保持原唯一性，
+        # 同一成员在不同团队的护栏行可并存。
         Index(
             "uq_gateway_budgets_target_period_agg",
             "target_kind",
             "target_id",
+            text(f"coalesce(tenant_id, '{_TENANT_SENTINEL}'::uuid)"),
             "period",
             unique=True,
-            postgresql_where=text("model_name IS NULL"),
+            postgresql_where=text("model_name IS NULL AND credential_id IS NULL"),
         ),
         Index(
             "uq_gateway_budgets_target_period_model",
             "target_kind",
             "target_id",
+            text(f"coalesce(tenant_id, '{_TENANT_SENTINEL}'::uuid)"),
             "period",
             "model_name",
             unique=True,
-            postgresql_where=text("model_name IS NOT NULL"),
+            postgresql_where=text("model_name IS NOT NULL AND credential_id IS NULL"),
+        ),
+        Index(
+            "uq_gateway_budgets_target_period_cred_agg",
+            "target_kind",
+            "target_id",
+            "period",
+            "credential_id",
+            unique=True,
+            postgresql_where=text("model_name IS NULL AND credential_id IS NOT NULL"),
+        ),
+        Index(
+            "uq_gateway_budgets_target_period_cred_model",
+            "target_kind",
+            "target_id",
+            "period",
+            "credential_id",
+            "model_name",
+            unique=True,
+            postgresql_where=text("model_name IS NOT NULL AND credential_id IS NOT NULL"),
         ),
         Index("ix_gateway_budgets_target_lookup", "target_kind", "target_id"),
     )

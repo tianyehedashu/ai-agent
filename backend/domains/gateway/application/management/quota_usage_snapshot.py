@@ -10,13 +10,18 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
-from typing import TYPE_CHECKING
 import uuid
 
 from domains.gateway.application.budget_service import (
     BudgetService,
     BudgetUsageCoord,
+    redis_credential_segment_for_budget,
     redis_model_segment_for_budget,
+    redis_tenant_segment_for_budget,
+)
+from domains.gateway.application.management.quota_rule_read_model import (
+    QuotaRuleReadModel,
+    QuotaRuleUsage,
 )
 from domains.gateway.application.quota_plan_service import QuotaPlanService
 from domains.gateway.domain.quota_plan import (
@@ -25,12 +30,6 @@ from domains.gateway.domain.quota_plan import (
     PlanQuotaSpec,
 )
 from utils.logging import get_logger
-
-if TYPE_CHECKING:
-    from domains.gateway.application.management.quota_rule_read_model import (
-        QuotaRuleReadModel,
-        QuotaRuleUsage,
-    )
 
 logger = get_logger(__name__)
 
@@ -61,11 +60,20 @@ async def enrich_quota_rules_with_usage(
         if rule.key.layer != "platform":
             continue
         target_id_str = str(rule.key.target_id) if rule.key.target_id else None
+        target_kind = rule.key.target_kind or "tenant"
+        # 成员总量/模型护栏行（user + 无凭据）的用量桶按团队隔离，须带 tenant 段。
+        tenant_seg = (
+            redis_tenant_segment_for_budget(rule.key.team_id)
+            if target_kind == "user" and rule.key.credential_id is None
+            else None
+        )
         coord = BudgetUsageCoord(
-            target_kind=rule.key.target_kind or "tenant",
+            target_kind=target_kind,
             target_id=target_id_str,
             period=rule.key.period or "total",
             model_segment=redis_model_segment_for_budget(rule.key.model_name),
+            credential_segment=redis_credential_segment_for_budget(rule.key.credential_id),
+            tenant_segment=tenant_seg,
         )
         platform_coords.append((idx, coord))
 
@@ -145,10 +153,6 @@ async def enrich_quota_rules_with_usage(
         # 如果无法获取实时用量，回退到已有的 usage（Platform 层可能已有 DB 值）
         if usage is None and rule.usage is not None:
             usage = rule.usage
-
-        from domains.gateway.application.management.quota_rule_read_model import (
-            QuotaRuleReadModel,
-        )
 
         result.append(
             QuotaRuleReadModel(

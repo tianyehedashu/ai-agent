@@ -63,6 +63,8 @@ class ProxyContext:
     """调用者展示名（name 或 email）；在鉴权/桥接层解析一次，metadata 构建不再查库。"""
     proxy_timing: GatewayProxyTiming | None = None
     """``chat_completion`` 写入的网关内耗时，供 OpenAI 兼容面响应头透出。"""
+    personal_team_id: uuid.UUID | None = None
+    """触发用户个人工作区 team id（请求级懒加载缓存，用于平台配额豁免判定）。"""
 
 
 __all__ = ["EntitlementReservationState", "ProxyContext"]

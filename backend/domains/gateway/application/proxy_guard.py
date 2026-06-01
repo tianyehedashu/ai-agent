@@ -35,6 +35,7 @@ from domains.gateway.application.budget_service import (
     BudgetService,
     BudgetUsageCoord,
     redis_model_segment_for_budget,
+    redis_tenant_segment_for_budget,
 )
 from domains.gateway.application.entitlement_guard import (
     EntitlementContext,
@@ -45,6 +46,9 @@ from domains.gateway.application.model_or_route_resolution import (
     resolve_model_or_route,
 )
 from domains.gateway.domain.errors import BudgetExceededError, GatewayModelNotFoundError
+from domains.gateway.domain.policies.budget_exemption_policy import (
+    should_skip_platform_budget_preflight,
+)
 from domains.gateway.domain.proxy_policy import (
     BudgetCheckQuery,
     BudgetReservation,
@@ -225,6 +229,30 @@ class ProxyGuard:
     # 预算预扣 / 释放
     # ---------------------------------------------------------------------
 
+    async def is_platform_budget_exempt(
+        self, ctx: ProxyContext, resolved: ResolvedModelName | None
+    ) -> bool:
+        """命中个人工作区模型时豁免全部平台配额（含成员总量 / 成员+凭据+模型）。
+
+        仅当解析行的 ``tenant_id`` 等于计费团队（需判断该团队是否个人工作区）时才查询个人团队，
+        系统模型 / 跨团队个人别名均无需查库。
+        """
+        if resolved is None or ctx.user_id is None:
+            return False
+        record_tenant_id = getattr(resolved.record, "tenant_id", None)
+        if not isinstance(record_tenant_id, uuid.UUID):
+            return False
+        if record_tenant_id == ctx.team_id and ctx.personal_team_id is None:
+            from domains.tenancy.application.team_service import TeamService
+
+            personal = await TeamService(self._session).ensure_personal_team(ctx.user_id)
+            ctx.personal_team_id = personal.id
+        return should_skip_platform_budget_preflight(
+            record_tenant_id,
+            billing_team_id=ctx.team_id,
+            personal_team_id=ctx.personal_team_id,
+        )
+
     async def check_budget(
         self, ctx: ProxyContext, *, estimate_tokens: int = 0
     ) -> list[BudgetReservation]:
@@ -239,20 +267,32 @@ class ProxyGuard:
             targets=targets,
             periods=(PERIOD_DAILY, PERIOD_MONTHLY, PERIOD_TOTAL),
             request_model=ctx.budget_model,
+            tenant_id=ctx.team_id,
         )
 
         async def load_budget_rows() -> dict[
-            tuple[str, uuid.UUID | None, str, str | None],
+            tuple[
+                str, uuid.UUID | None, str, str | None, uuid.UUID | None, uuid.UUID | None
+            ],
             GatewayBudget,
         ]:
             return await repo.get_many_by_plan(plan)
 
         budget_by_coord = await get_cached_budget_by_plan(plan, load_budget_rows)
 
-        check_items: list[tuple[BudgetCheckQuery, BudgetConfigRow, BudgetUsageCoord, str]] = []
+        check_items: list[
+            tuple[BudgetCheckQuery, BudgetConfigRow, BudgetUsageCoord, str]
+        ] = []
         for query in plan:
             budget = budget_by_coord.get(
-                (query.target_kind, query.target_id, query.period, query.model_name)
+                (
+                    query.target_kind,
+                    query.target_id,
+                    query.period,
+                    query.model_name,
+                    query.credential_id,
+                    query.tenant_id,
+                )
             )
             if budget is None:
                 continue
@@ -262,6 +302,7 @@ class ProxyGuard:
                 target_id=target_id_str,
                 period=query.period,
                 model_segment=redis_model_segment_for_budget(budget.model_name),
+                tenant_segment=redis_tenant_segment_for_budget(query.tenant_id),
             )
             check_items.append((query, budget, usage_coord, target_id_str))
 
@@ -279,6 +320,7 @@ class ProxyGuard:
                 limit_tokens=budget.limit_tokens,
                 limit_requests=budget.limit_requests,
                 budget_model_name=budget.model_name,
+                tenant_id=query.tenant_id,
                 prefetched_usage=prefetched,
             )
             if not check.allowed:
@@ -317,6 +359,7 @@ class ProxyGuard:
                     limit_tokens=budget.limit_tokens,
                     estimate_tokens=estimate_tokens,
                     budget_model_name=budget.model_name,
+                    tenant_id=query.tenant_id,
                 )
             except Exception:
                 await self.release_budget_reservations(reservations)
@@ -330,6 +373,7 @@ class ProxyGuard:
                         budget_model_name=budget.model_name,
                         reserved_requests=reserved_requests,
                         reserved_tokens=reserved_tokens,
+                        tenant_id=query.tenant_id,
                     )
                 )
         return reservations
@@ -344,6 +388,7 @@ class ProxyGuard:
                     budget_model_name=reservation.budget_model_name,
                     reserved_requests=reservation.reserved_requests,
                     reserved_tokens=reservation.reserved_tokens,
+                    tenant_id=reservation.tenant_id,
                 )
 
     # ---------------------------------------------------------------------

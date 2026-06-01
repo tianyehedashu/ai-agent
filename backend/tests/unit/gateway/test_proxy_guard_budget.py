@@ -48,7 +48,7 @@ def _ctx(*, team_id: uuid.UUID) -> ProxyContext:
 
 def _tenant_monthly_row(
     team_id: uuid.UUID,
-) -> tuple[tuple[str, uuid.UUID | None, str, str | None], BudgetConfigRow]:
+) -> tuple[tuple[str, uuid.UUID | None, str, str | None, uuid.UUID | None], BudgetConfigRow]:
     row = BudgetConfigRow(
         target_kind="tenant",
         target_id=team_id,
@@ -58,7 +58,14 @@ def _tenant_monthly_row(
         limit_tokens=None,
         limit_requests=None,
     )
-    return (row.target_kind, row.target_id, row.period, row.model_name), row
+    return (
+        row.target_kind,
+        row.target_id,
+        row.period,
+        row.model_name,
+        row.credential_id,
+        row.tenant_id,
+    ), row
 
 
 @pytest.mark.asyncio
@@ -113,7 +120,14 @@ async def test_check_budget_reserves_requests_when_under_limit(monkeypatch) -> N
         limit_tokens=None,
         limit_requests=100,
     )
-    coord = (row.target_kind, row.target_id, row.period, row.model_name)
+    coord = (
+        row.target_kind,
+        row.target_id,
+        row.period,
+        row.model_name,
+        row.credential_id,
+        row.tenant_id,
+    )
 
     async def fake_cached(_plan, _loader):
         return {coord: row}

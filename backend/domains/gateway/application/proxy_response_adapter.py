@@ -255,6 +255,8 @@ async def settle_usage(
         if target_id is None:
             continue
         target_id_str = str(target_id)
+        # 成员总量/模型护栏按团队隔离：user 维度结算到含 tenant 段的桶。
+        tenant_scope = ctx.team_id if target_kind == "user" else None
         for period in periods:
             for model_key in model_keys:
                 with suppress(Exception):
@@ -265,6 +267,7 @@ async def settle_usage(
                         delta_cost=cost,
                         delta_tokens=tokens,
                         budget_model_name=model_key,
+                        tenant_id=tenant_scope,
                     )
 
     state = ctx.entitlement_state
@@ -291,10 +294,15 @@ async def settle_usage(
             for target_kind, target_id in scope_items:
                 if target_id is None:
                     continue
+                tenant_scope = ctx.team_id if target_kind == "user" else None
                 for period in periods:
                     for model_key in model_keys:
                         record = await repo.get_for(
-                            target_kind, target_id, period, model_name=model_key
+                            target_kind,
+                            target_id,
+                            period,
+                            model_name=model_key,
+                            tenant_id=tenant_scope,
                         )
                         if record is None:
                             continue

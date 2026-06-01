@@ -52,7 +52,12 @@ async def run_proxy_inbound_preflight(
         resolved = None
     guard.check_capability(ctx)
     await guard.check_limits(ctx, estimate_tokens=estimate_tokens)
-    reservations = await guard.check_budget(ctx, estimate_tokens=estimate_tokens)
+    # 个人工作区模型豁免全部平台配额：Phase1 直接返回空预扣，
+    # Phase2（pre_call hook）因无成员+凭据规则自然跳过。
+    if await guard.is_platform_budget_exempt(ctx, resolved):
+        reservations: list[BudgetReservation] = []
+    else:
+        reservations = await guard.check_budget(ctx, estimate_tokens=estimate_tokens)
     try:
         await guard.check_entitlement(
             ctx,

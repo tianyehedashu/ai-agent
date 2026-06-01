@@ -112,7 +112,14 @@ export function matchQuotaRulesForContext(rules: QuotaRule[], ctx: BudgetViewCon
         }
         if (r.key.layer === 'platform') {
           if (r.key.target_kind === 'tenant') return true
-          if (r.key.target_kind === 'user' && r.key.user_id === ctx.userId) return true
+          if (r.key.target_kind === 'user' && r.key.user_id === ctx.userId) {
+            // 成员规则仅展示与本凭据相关或无凭据维度的行，避免串显其它凭据限额。
+            return (
+              r.key.credential_id === null ||
+              ctx.credentialId === undefined ||
+              r.key.credential_id === ctx.credentialId
+            )
+          }
         }
         return false
       })

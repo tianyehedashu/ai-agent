@@ -91,6 +91,8 @@ async def commit_budget_from_callback(
         if target_id is None:
             continue
         target_id_str = str(target_id)
+        # 成员总量/模型护栏按团队隔离：user 维度结算到含 tenant 段的桶。
+        tenant_scope = team_id if target_kind == "user" else None
         for period in periods:
             for mk in model_keys:
                 with suppress(Exception):
@@ -101,6 +103,7 @@ async def commit_budget_from_callback(
                         delta_cost=delta,
                         delta_tokens=0,
                         budget_model_name=mk,
+                        tenant_id=tenant_scope,
                     )
 
     if defer and delta > 0:
@@ -115,6 +118,7 @@ async def commit_budget_from_callback(
                 for target_kind, target_id in target_items:
                     if target_id is None:
                         continue
+                    tenant_scope = team_id if target_kind == "user" else None
                     for period in periods:
                         for mk in model_keys:
                             record = await repo.get_for(
@@ -122,6 +126,7 @@ async def commit_budget_from_callback(
                                 target_id,
                                 period,
                                 model_name=mk,
+                                tenant_id=tenant_scope,
                             )
                             if record is None:
                                 continue

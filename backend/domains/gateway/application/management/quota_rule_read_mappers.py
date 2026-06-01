@@ -46,7 +46,7 @@ def budget_to_quota_rule(
         team_id=team_id,
         layer="platform",
         user_id=user_id,
-        credential_id=None,
+        credential_id=budget.credential_id,
         model_name=budget.model_name,
         period=budget.period,
         window_seconds=None,

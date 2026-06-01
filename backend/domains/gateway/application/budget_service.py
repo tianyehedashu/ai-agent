@@ -47,12 +47,33 @@ def redis_model_segment_for_budget(budget_model_name: str | None) -> str | None:
     return _redis_model_segment(budget_model_name)
 
 
+def _redis_credential_segment(credential_id: uuid.UUID | str | None) -> str | None:
+    if credential_id is None:
+        return None
+    return _model_segment_hash(str(credential_id))
+
+
+def redis_credential_segment_for_budget(
+    credential_id: uuid.UUID | str | None,
+) -> str | None:
+    return _redis_credential_segment(credential_id)
+
+
+def redis_tenant_segment_for_budget(tenant_id: uuid.UUID | str | None) -> str | None:
+    """成员总量/模型护栏按团队隔离时的 Redis 桶分段（仅 user 维度使用）。"""
+    if tenant_id is None:
+        return None
+    return _model_segment_hash(str(tenant_id))
+
+
 def _bucket_key(
     target_kind: str,
     target_id: str | None,
     period: str,
     *,
     model_segment: str | None = None,
+    credential_segment: str | None = None,
+    tenant_segment: str | None = None,
 ) -> str:
     """Redis key for budget current values"""
     sid = target_id or "system"
@@ -63,6 +84,10 @@ def _bucket_key(
     else:
         suffix = "total"
     base = f"gateway:budget:{target_kind}:{sid}:{period}:{suffix}"
+    if tenant_segment:
+        base = f"{base}:t:{tenant_segment}"
+    if credential_segment:
+        base = f"{base}:c:{credential_segment}"
     if model_segment:
         return f"{base}:m:{model_segment}"
     return base
@@ -74,11 +99,20 @@ def _legacy_team_bucket_key(
     period: str,
     *,
     model_segment: str | None = None,
+    credential_segment: str | None = None,
+    tenant_segment: str | None = None,
 ) -> str | None:
     """迁移期：``tenant`` 预算曾以 ``team`` 写入 Redis，读时合并旧 key。"""
     if target_kind != "tenant":
         return None
-    return _bucket_key("team", target_id, period, model_segment=model_segment)
+    return _bucket_key(
+        "team",
+        target_id,
+        period,
+        model_segment=model_segment,
+        credential_segment=credential_segment,
+        tenant_segment=tenant_segment,
+    )
 
 
 def _rate_key(target_kind: str, target_id: str | None, dimension: str) -> str:
@@ -95,6 +129,8 @@ class BudgetUsageCoord:
     target_id: str | None
     period: str
     model_segment: str | None
+    credential_segment: str | None = None
+    tenant_segment: str | None = None
 
 
 @dataclass
@@ -188,23 +224,18 @@ class BudgetService:
         target_id: str | None,
         period: str,
         model_segment: str | None,
+        credential_segment: str | None = None,
+        tenant_segment: str | None = None,
     ) -> tuple[Decimal, int, int]:
-        batch = await self.read_budget_usage_batch(
-            [
-                BudgetUsageCoord(
-                    target_kind=target_kind,
-                    target_id=target_id,
-                    period=period,
-                    model_segment=model_segment,
-                )
-            ]
-        )
         coord = BudgetUsageCoord(
             target_kind=target_kind,
             target_id=target_id,
             period=period,
             model_segment=model_segment,
+            credential_segment=credential_segment,
+            tenant_segment=tenant_segment,
         )
+        batch = await self.read_budget_usage_batch([coord])
         return batch.get(coord, (Decimal("0"), 0, 0))
 
     async def read_budget_usage_batch(
@@ -224,6 +255,8 @@ class BudgetService:
                 coord.target_id,
                 coord.period,
                 model_segment=coord.model_segment,
+                credential_segment=coord.credential_segment,
+                tenant_segment=coord.tenant_segment,
             )
             key_entries.append((coord, primary, False))
             legacy = _legacy_team_bucket_key(
@@ -231,6 +264,8 @@ class BudgetService:
                 coord.target_id,
                 coord.period,
                 model_segment=coord.model_segment,
+                credential_segment=coord.credential_segment,
+                tenant_segment=coord.tenant_segment,
             )
             if legacy is not None:
                 key_entries.append((coord, legacy, True))
@@ -273,6 +308,8 @@ class BudgetService:
         limit_tokens: int | None,
         limit_requests: int | None,
         budget_model_name: str | None = None,
+        credential_id: uuid.UUID | str | None = None,
+        tenant_id: uuid.UUID | str | None = None,
         prefetched_usage: tuple[Decimal, int, int] | None = None,
     ) -> BudgetCheckResult:
         """读取当前 budget 状态；超限返回 allowed=False
@@ -280,6 +317,8 @@ class BudgetService:
         当前 cost/tokens/requests 来自 Redis 桶，由 commit 异步累加。
         """
         seg = _redis_model_segment(budget_model_name)
+        cred_seg = _redis_credential_segment(credential_id)
+        tenant_seg = redis_tenant_segment_for_budget(tenant_id)
         if prefetched_usage is not None:
             used_cost, used_tokens, used_requests = prefetched_usage
         else:
@@ -288,6 +327,8 @@ class BudgetService:
                 target_id=target_id,
                 period=period,
                 model_segment=seg,
+                credential_segment=cred_seg,
+                tenant_segment=tenant_seg,
             )
 
         if limit_usd is not None and 0 < limit_usd <= used_cost:
@@ -331,6 +372,8 @@ class BudgetService:
         limit_tokens: int | None = None,
         estimate_tokens: int = 0,
         budget_model_name: str | None = None,
+        credential_id: uuid.UUID | str | None = None,
+        tenant_id: uuid.UUID | str | None = None,
     ) -> tuple[int, int]:
         """预扣请求名额与/或 token 估算（防止并发穿透）。
 
@@ -343,7 +386,16 @@ class BudgetService:
 
         client = await get_redis_client()
         seg = _redis_model_segment(budget_model_name)
-        key = _bucket_key(target_kind, target_id, period, model_segment=seg)
+        cred_seg = _redis_credential_segment(credential_id)
+        tenant_seg = redis_tenant_segment_for_budget(tenant_id)
+        key = _bucket_key(
+            target_kind,
+            target_id,
+            period,
+            model_segment=seg,
+            credential_segment=cred_seg,
+            tenant_segment=tenant_seg,
+        )
 
         reserved_requests = 0
         reserved_tokens = 0
@@ -393,6 +445,8 @@ class BudgetService:
         target_id: str | None,
         period: str,
         budget_model_name: str | None = None,
+        credential_id: uuid.UUID | str | None = None,
+        tenant_id: uuid.UUID | str | None = None,
         reserved_requests: int = 1,
         reserved_tokens: int = 0,
     ) -> None:
@@ -401,7 +455,16 @@ class BudgetService:
             return
         client = await get_redis_client()
         seg = _redis_model_segment(budget_model_name)
-        key = _bucket_key(target_kind, target_id, period, model_segment=seg)
+        cred_seg = _redis_credential_segment(credential_id)
+        tenant_seg = redis_tenant_segment_for_budget(tenant_id)
+        key = _bucket_key(
+            target_kind,
+            target_id,
+            period,
+            model_segment=seg,
+            credential_segment=cred_seg,
+            tenant_segment=tenant_seg,
+        )
         if reserved_requests > 0:
             await client.hincrby(key, "requests", -reserved_requests)
         if reserved_tokens > 0:
@@ -416,11 +479,22 @@ class BudgetService:
         delta_cost: Decimal,
         delta_tokens: int,
         budget_model_name: str | None = None,
+        credential_id: uuid.UUID | str | None = None,
+        tenant_id: uuid.UUID | str | None = None,
     ) -> None:
         """结算：在 Redis 中累加真实 cost/token；DB 由 rollup 任务异步同步"""
         client = await get_redis_client()
         seg = _redis_model_segment(budget_model_name)
-        key = _bucket_key(target_kind, target_id, period, model_segment=seg)
+        cred_seg = _redis_credential_segment(credential_id)
+        tenant_seg = redis_tenant_segment_for_budget(tenant_id)
+        key = _bucket_key(
+            target_kind,
+            target_id,
+            period,
+            model_segment=seg,
+            credential_segment=cred_seg,
+            tenant_segment=tenant_seg,
+        )
         pipe = client.pipeline()
         pipe.hincrbyfloat(key, "cost", float(delta_cost))
         pipe.hincrby(key, "tokens", delta_tokens)
@@ -439,5 +513,7 @@ __all__ = [
     "BudgetService",
     "BudgetUsageCoord",
     "ScopeIdentifier",
+    "redis_credential_segment_for_budget",
     "redis_model_segment_for_budget",
+    "redis_tenant_segment_for_budget",
 ]

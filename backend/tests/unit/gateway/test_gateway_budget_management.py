@@ -24,7 +24,9 @@ async def test_list_budgets_for_tenant_and_user_includes_visible_key_budgets() -
     user_id = uuid.uuid4()
     key_id = uuid.uuid4()
     tenant_budget = SimpleNamespace(id=uuid.uuid4(), target_kind="tenant")
-    user_budget = SimpleNamespace(id=uuid.uuid4(), target_kind="user")
+    user_budget = SimpleNamespace(
+        id=uuid.uuid4(), target_kind="user", credential_id=None, tenant_id=tenant_id
+    )
     key_budget = SimpleNamespace(id=uuid.uuid4(), target_kind="key")
 
     svc._budgets.list_for_target = AsyncMock(
@@ -38,7 +40,9 @@ async def test_list_budgets_for_tenant_and_user_includes_visible_key_budgets() -
     )
     svc._budgets.list_for_target_ids = AsyncMock(return_value=[key_budget])
 
-    rows = await svc.list_budgets_for_tenant_and_user(tenant_id, user_id, actor_user_id=user_id)
+    rows = await svc.list_budgets_for_tenant_and_user(
+        tenant_id, user_id, actor_user_id=user_id, visible_credential_ids=frozenset()
+    )
 
     assert rows == [tenant_budget, user_budget, key_budget]
     svc._budgets.list_for_target_ids.assert_awaited_once_with("key", [key_id])
@@ -52,7 +56,13 @@ async def test_list_budgets_for_team_admin_merges_all_scopes() -> None:
     member_id = uuid.uuid4()
     key_id = uuid.uuid4()
     tenant_budget = SimpleNamespace(id=uuid.uuid4(), target_kind="tenant", model_name=None)
-    user_budget = SimpleNamespace(id=uuid.uuid4(), target_kind="user", model_name="gpt-4")
+    user_budget = SimpleNamespace(
+        id=uuid.uuid4(),
+        target_kind="user",
+        model_name="gpt-4",
+        credential_id=None,
+        tenant_id=tenant_id,
+    )
     key_budget = SimpleNamespace(id=uuid.uuid4(), target_kind="key", model_name=None)
     system_budget = SimpleNamespace(id=uuid.uuid4(), target_kind="system", model_name=None)
 
@@ -74,9 +84,72 @@ async def test_list_budgets_for_team_admin_merges_all_scopes() -> None:
     rows = await svc.list_budgets_for_team_admin(
         tenant_id,
         include_system=True,
+        visible_credential_ids=frozenset(),
     )
 
     assert rows == [tenant_budget, user_budget, key_budget, system_budget]
+
+
+@pytest.mark.asyncio
+async def test_list_budgets_drops_other_team_member_guardrail() -> None:
+    """成员总量护栏按团队隔离：他团队 tenant_id 的成员行不在本团队列出。"""
+    session = MagicMock()
+    svc = GatewayManagementReadService(session)
+    tenant_id = uuid.uuid4()
+    other_team = uuid.uuid4()
+    user_id = uuid.uuid4()
+    own = SimpleNamespace(
+        id=uuid.uuid4(), target_kind="user", credential_id=None, tenant_id=tenant_id
+    )
+    foreign = SimpleNamespace(
+        id=uuid.uuid4(), target_kind="user", credential_id=None, tenant_id=other_team
+    )
+
+    svc._budgets.list_for_target = AsyncMock(
+        side_effect=lambda kind, tid: {("user", user_id): [own, foreign]}.get((kind, tid), [])
+    )
+    svc._vkeys.list_for_tenant = AsyncMock(return_value=[])
+    svc._budgets.list_for_target_ids = AsyncMock(return_value=[])
+
+    rows = await svc.list_budgets_for_tenant_and_user(
+        tenant_id, user_id, actor_user_id=user_id, visible_credential_ids=frozenset()
+    )
+
+    assert own in rows
+    assert foreign not in rows
+
+
+@pytest.mark.asyncio
+async def test_list_budgets_drops_other_team_credential_scoped_member_budget() -> None:
+    """成员+凭据预算按团队可见凭据收敛：他团队凭据的成员行不在本团队列出。"""
+    session = MagicMock()
+    svc = GatewayManagementReadService(session)
+    tenant_id = uuid.uuid4()
+    user_id = uuid.uuid4()
+    own_cred = uuid.uuid4()
+    foreign_cred = uuid.uuid4()
+    own = SimpleNamespace(
+        id=uuid.uuid4(), target_kind="user", credential_id=own_cred, tenant_id=None
+    )
+    foreign = SimpleNamespace(
+        id=uuid.uuid4(), target_kind="user", credential_id=foreign_cred, tenant_id=None
+    )
+
+    svc._budgets.list_for_target = AsyncMock(
+        side_effect=lambda kind, tid: {("user", user_id): [own, foreign]}.get((kind, tid), [])
+    )
+    svc._vkeys.list_for_tenant = AsyncMock(return_value=[])
+    svc._budgets.list_for_target_ids = AsyncMock(return_value=[])
+
+    rows = await svc.list_budgets_for_tenant_and_user(
+        tenant_id,
+        user_id,
+        actor_user_id=user_id,
+        visible_credential_ids=frozenset({own_cred}),
+    )
+
+    assert own in rows
+    assert foreign not in rows
 
 
 @pytest.mark.asyncio
@@ -84,8 +157,20 @@ async def test_list_budgets_for_team_admin_filters_target_kind_and_model() -> No
     session = MagicMock()
     svc = GatewayManagementReadService(session)
     tenant_id = uuid.uuid4()
-    matching = SimpleNamespace(id=uuid.uuid4(), target_kind="user", model_name="claude-3")
-    other = SimpleNamespace(id=uuid.uuid4(), target_kind="user", model_name="gpt-4")
+    matching = SimpleNamespace(
+        id=uuid.uuid4(),
+        target_kind="user",
+        model_name="claude-3",
+        credential_id=None,
+        tenant_id=tenant_id,
+    )
+    other = SimpleNamespace(
+        id=uuid.uuid4(),
+        target_kind="user",
+        model_name="gpt-4",
+        credential_id=None,
+        tenant_id=tenant_id,
+    )
 
     svc._budgets.list_for_target = AsyncMock(return_value=[])
     svc._teams.list_team_members = AsyncMock(return_value=[SimpleNamespace(user_id=uuid.uuid4())])
@@ -96,6 +181,7 @@ async def test_list_budgets_for_team_admin_filters_target_kind_and_model() -> No
         tenant_id,
         target_kind="user",
         model_name="claude-3",
+        visible_credential_ids=frozenset(),
     )
 
     assert rows == [matching]

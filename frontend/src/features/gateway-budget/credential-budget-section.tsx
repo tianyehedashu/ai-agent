@@ -39,8 +39,9 @@ export function CredentialBudgetSection({
       kind: 'credential' as const,
       userId,
       linkedModelNames,
+      credentialId,
     }),
-    [userId, linkedModelNames]
+    [userId, linkedModelNames, credentialId]
   )
 
   return (

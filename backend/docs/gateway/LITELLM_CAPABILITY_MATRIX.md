@@ -189,16 +189,27 @@ model_info = { id, team_id, capability, gateway_credential_id, … }
 ```
 ensure_gateway_callbacks()
   ├─ GatewayCustomLogger          → 成功/失败落库、Redis 计数、采样
-  ├─ ProviderPlanPreCallLogger    → 上游厂商套餐预扣（provider_plan_guard.py）
+  ├─ ProviderPlanPreCallLogger    → async_pre_call_hook（provider_plan_guard.py）：
+  │     ① 成员+凭据+模型 平台预算（Phase2，部署已选）→ maybe_reserve_user_credential_budget
+  │     ② 上游厂商套餐预扣（ProviderPlan）
   └─ GatewayPiiGuardrail (可选)   → async_pre_call_hook 脱敏
 
 Router.acompletion / acompletion
   → Provider HTTP
   → async_log_success_event / async_log_failure_event
   → ProxyResponseAdapter 结算 budget / entitlement（Gateway 层，非 LiteLLM）
+  → Phase2 结算：commit_user_credential_budget（成功）/ release（失败）
 ```
 
-**流式**：metadata 设 `gateway_defer_cost_settlement=True`，避免 proxy 与 callback 双计；末帧由 callback + `proxy_stream_settlement` 兜底。
+**两阶段平台预算**：
+- **Phase1（入站 preflight）**：`ProxyGuard.check_budget` 扫描 `credential_id IS NULL` 的 system/tenant/user/key 维度（含成员总量、成员+模型）。
+- **Phase2（`async_pre_call_hook`，部署选定后）**：按 Router 注入的 `gateway_user_id` / `gateway_credential_id` / `gateway_model_name` 命中「成员+凭据+模型」专属预算（`gateway_budgets.credential_id`）。先存在性索引 `gw:budget_uc:{user_id}` 快路径排除无规则用户，命中才走 `budget_config_cache` + Redis 预扣。
+
+**失败语义差异（重要）**：Phase2 耗尽抛 `BudgetExceededError` → HTTP 429，**不**进入 ProviderPlan、**不**触发 Router cooldown/fallback（否则会绕过成员限额换 deployment）；而 `ProviderPlanExhaustedError` 才触发 fallback。
+
+**personal team 豁免**：命中个人工作区注册模型（`record.tenant_id == 个人团队`）时，preflight 跳过 Phase1，且因无团队预算/索引而天然跳过 Phase2。
+
+**流式**：metadata 设 `gateway_defer_cost_settlement=True`，避免 proxy 与 callback 双计；末帧由 callback + `proxy_stream_settlement` 兜底；Phase2 结算以 `request_id` 幂等。
 
 ---
 

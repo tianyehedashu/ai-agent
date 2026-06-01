@@ -34,6 +34,8 @@ def test_budget_config_coord_key() -> None:
         row.target_id,
         row.period,
         row.model_name,
+        row.credential_id,
+        row.tenant_id,
     )
 
 
@@ -55,8 +57,10 @@ async def test_get_cached_budget_by_plan_hits_local_cache(monkeypatch) -> None:
             limit_usd=Decimal("5"),
             limit_tokens=None,
             limit_requests=None,
+            credential_id=None,
+            tenant_id=None,
         )
-        return {("tenant", tid, "daily", None): orm_row}
+        return {("tenant", tid, "daily", None, None, None): orm_row}
 
     monkeypatch.setattr(
         "domains.gateway.application.budget_config_cache._get_version",
@@ -72,7 +76,37 @@ async def test_get_cached_budget_by_plan_hits_local_cache(monkeypatch) -> None:
 
     assert calls == 1
     assert first == second
-    assert first[("tenant", tid, "daily", None)].limit_usd == Decimal("5")
+    assert first[("tenant", tid, "daily", None, None, None)].limit_usd == Decimal("5")
+
+
+@pytest.mark.asyncio
+async def test_no_budget_coord_is_negatively_cached(monkeypatch) -> None:
+    """查无预算的坐标写墓碑后，后续请求不再查库（消除每请求 DB 命中）。"""
+    clear_budget_config_cache_for_tests()
+    calls = 0
+    tid = uuid.uuid4()
+    plan = (BudgetCheckQuery("tenant", tid, "daily", None),)
+
+    async def loader() -> dict:
+        nonlocal calls
+        calls += 1
+        return {}
+
+    monkeypatch.setattr(
+        "domains.gateway.application.budget_config_cache._get_version",
+        AsyncMock(return_value="9"),
+    )
+    monkeypatch.setattr(
+        "domains.gateway.application.budget_config_cache._get_redis_client",
+        AsyncMock(return_value=None),
+    )
+
+    first = await get_cached_budget_by_plan(plan, loader)
+    second = await get_cached_budget_by_plan(plan, loader)
+
+    assert calls == 1
+    assert first == {}
+    assert second == {}
 
 
 @pytest.mark.asyncio
@@ -93,8 +127,10 @@ async def test_invalidate_budget_config_cache_clears_local(monkeypatch) -> None:
             limit_usd=Decimal("1"),
             limit_tokens=None,
             limit_requests=None,
+            credential_id=None,
+            tenant_id=None,
         )
-        return {("tenant", tid, "daily", None): orm_row}
+        return {("tenant", tid, "daily", None, None, None): orm_row}
 
     version = {"v": "1"}
 

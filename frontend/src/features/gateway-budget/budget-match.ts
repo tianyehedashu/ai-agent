@@ -3,7 +3,7 @@ import type { GatewayBudget } from '@/api/gateway/budgets'
 export type BudgetViewContext =
   | { kind: 'personal'; userId: string; modelNames?: string[] }
   | { kind: 'team_model'; modelName: string; userId?: string }
-  | { kind: 'credential'; userId: string; linkedModelNames: string[] }
+  | { kind: 'credential'; userId: string; linkedModelNames: string[]; credentialId?: string }
   | { kind: 'virtual_key'; keyId: string }
 
 function modelMatchesBudget(budget: GatewayBudget, modelNames: string[]): boolean {

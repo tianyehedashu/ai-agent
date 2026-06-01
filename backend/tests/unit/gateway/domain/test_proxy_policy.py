@@ -90,3 +90,19 @@ def test_build_budget_check_plan_includes_system_without_target_id() -> None:
     kinds = {q.target_kind for q in plan}
     assert "system" in kinds
     assert any(q.target_kind == "system" and q.target_id is None for q in plan)
+
+
+def test_build_budget_check_plan_scopes_tenant_only_to_user_target() -> None:
+    """tenant_id 仅施加于 user 维度（成员总量/模型护栏按团队隔离）。"""
+    team_id = uuid.uuid4()
+    user_id = uuid.uuid4()
+    plan = build_budget_check_plan(
+        targets=(("system", None), ("tenant", team_id), ("user", user_id)),
+        periods=("daily",),
+        request_model=None,
+        tenant_id=team_id,
+    )
+    by_kind = {q.target_kind: q for q in plan}
+    assert by_kind["user"].tenant_id == team_id
+    assert by_kind["tenant"].tenant_id is None
+    assert by_kind["system"].tenant_id is None

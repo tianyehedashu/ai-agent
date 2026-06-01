@@ -21,6 +21,7 @@ from domains.gateway.domain.policies.budget_scope_policy import (
     budget_target_allowed,
 )
 from domains.gateway.domain.types import BudgetScope
+from libs.exceptions import ValidationError
 from domains.gateway.infrastructure.models.entitlement_plan import EntitlementPlan
 from domains.gateway.infrastructure.models.provider_plan import ProviderPlan
 from domains.gateway.infrastructure.repositories.alert_repository import GatewayAlertRepository
@@ -142,6 +143,16 @@ class GatewayManagementWriteBaseMixin:
         )
         if row is None:
             raise CredentialNotFoundError(str(credential_id))
+
+    async def _assert_model_alias_on_credential(
+        self, credential_id: uuid.UUID, model_name: str
+    ) -> None:
+        """成员+凭据预算的 ``model_name`` 须为该凭据下已注册别名（路由虚拟名不可直接写入）。"""
+        pairs = await self._models.list_name_real_model_pairs_for_credential(credential_id)
+        if model_name not in {alias for alias, _ in pairs}:
+            raise ValidationError(
+                f"模型别名 {model_name!r} 未注册在该凭据下；多凭据路由请使用「别名--凭据」具体别名"
+            )
 
     async def _assert_provider_plan_in_credential(
         self, plan_id: uuid.UUID, *, credential_id: uuid.UUID

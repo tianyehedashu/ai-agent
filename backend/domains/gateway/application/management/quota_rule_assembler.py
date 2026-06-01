@@ -56,19 +56,6 @@ async def assemble_team_quota_rules(
 
     rules: list[QuotaRuleReadModel] = []
 
-    if is_team_admin:
-        budgets = await reads.list_budgets_for_team_admin(
-            team_id,
-            include_system=is_platform_admin,
-        )
-    else:
-        budgets = await reads.list_budgets_for_tenant_and_user(
-            team_id,
-            actor_user_id,
-            actor_user_id=actor_user_id,
-        )
-    rules.extend(budget_to_quota_rule(b, team_id=team_id) for b in budgets)
-
     creds = await reads.list_credential_summaries_for_team(
         team_id,
         user_id=actor_user_id,
@@ -76,6 +63,22 @@ async def assemble_team_quota_rules(
         is_platform_admin=is_platform_admin,
     )
     visible_credential_ids = frozenset(c.id for c in creds)
+
+    if is_team_admin:
+        budgets = await reads.list_budgets_for_team_admin(
+            team_id,
+            include_system=is_platform_admin,
+            visible_credential_ids=visible_credential_ids,
+        )
+    else:
+        budgets = await reads.list_budgets_for_tenant_and_user(
+            team_id,
+            actor_user_id,
+            actor_user_id=actor_user_id,
+            visible_credential_ids=visible_credential_ids,
+        )
+    rules.extend(budget_to_quota_rule(b, team_id=team_id) for b in budgets)
+
     if creds:
         plans_by_cred = await reads.list_provider_plans_with_quotas_for_credentials(
             [c.id for c in creds]

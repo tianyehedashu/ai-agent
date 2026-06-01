@@ -244,6 +244,14 @@ def build_provider_plan_pre_call_logger() -> Any:
             data: dict[str, Any],
             call_type: str,
         ) -> dict[str, Any] | None:
+            # Phase2：成员+凭据+模型平台预算（部署已选）。耗尽抛 BudgetExceededError，
+            # 直接 hard fail（HTTP 429），不进入 ProviderPlan / Router fallback。
+            from domains.gateway.application.budget_deployment_check import (
+                maybe_reserve_user_credential_budget,
+            )
+
+            await maybe_reserve_user_credential_budget(data)
+
             cred_id, real_model = _extract_credential_and_model(data)
             if cred_id is None:
                 return None

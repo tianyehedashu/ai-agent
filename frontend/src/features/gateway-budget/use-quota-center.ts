@@ -71,7 +71,8 @@ export function patchQuotaBatchFormForLayer(
       ...values,
       layer,
       subjectMode,
-      credentialIds: [],
+      // 仅「指定成员」可附带凭据维度；其余主体清空凭据选择。
+      credentialIds: subjectMode === 'users' ? values.credentialIds : [],
       userIds: subjectMode === 'users' ? values.userIds : [],
       keyIds: subjectMode === 'keys' ? values.keyIds : [],
     }
@@ -103,6 +104,7 @@ export function patchQuotaBatchFormForSubjectMode(
     subjectMode,
     userIds: subjectMode === 'users' ? values.userIds : [],
     keyIds: subjectMode === 'keys' ? values.keyIds : [],
+    credentialIds: subjectMode === 'users' ? values.credentialIds : [],
   }
 }
 
@@ -145,19 +147,27 @@ function buildBatchRules(values: QuotaBatchFormValues): QuotaRuleUpsertBody[] | 
       }
     }
     if (subjects.length === 0) return null
+    // 仅 target_kind=user 允许附带凭据（成员+凭据+模型）；选了凭据时做成员×凭据×模型笛卡尔积。
     for (const sub of subjects) {
-      for (const model of models) {
-        const body: QuotaRuleUpsertBody = {
-          layer: 'platform',
-          target_kind: sub.target_kind,
-          period: values.period,
+      const credTargets =
+        sub.target_kind === 'user' && values.credentialIds.length > 0
+          ? values.credentialIds
+          : [null]
+      for (const credId of credTargets) {
+        for (const model of models) {
+          const body: QuotaRuleUpsertBody = {
+            layer: 'platform',
+            target_kind: sub.target_kind,
+            period: values.period,
+          }
+          if (sub.target_id) body.target_id = sub.target_id
+          if (credId) body.credential_id = credId
+          if (model) body.model_name = model
+          if (lu !== null) body.limit_usd = lu
+          if (lt !== null) body.limit_tokens = lt
+          if (lr !== null) body.limit_requests = lr
+          rules.push(body)
         }
-        if (sub.target_id) body.target_id = sub.target_id
-        if (model) body.model_name = model
-        if (lu !== null) body.limit_usd = lu
-        if (lt !== null) body.limit_tokens = lt
-        if (lr !== null) body.limit_requests = lr
-        rules.push(body)
       }
     }
     return rules

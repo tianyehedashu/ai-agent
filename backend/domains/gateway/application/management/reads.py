@@ -78,6 +78,9 @@ from domains.gateway.domain.policies.model_registry_scope import (
     filter_system_registry_rows,
     is_requestable_registry_scope,
 )
+from domains.gateway.domain.policies.quota_rule_visibility import (
+    member_user_budget_visible_in_team,
+)
 from domains.gateway.domain.team_credential_access import (
     assert_team_credential_readable_by_actor,
     filter_team_credentials_visible_to_actor,
@@ -133,6 +136,26 @@ if TYPE_CHECKING:
     from domains.gateway.application.management.playground_credential_reads import (
         PlaygroundCredentialSummaryItem,
     )
+
+
+def _visible_member_budgets(
+    budgets: list[GatewayBudget],
+    *,
+    team_id: UUID,
+    visible_credential_ids: frozenset[UUID],
+) -> list[GatewayBudget]:
+    """成员 user 预算按团队轴收敛（规则在 domain ``member_user_budget_visible_in_team``）：
+    护栏行按 ``tenant_id`` 隔离，凭据级行按团队可见凭据集合收敛，杜绝跨团队泄漏。"""
+    return [
+        b
+        for b in budgets
+        if member_user_budget_visible_in_team(
+            credential_id=b.credential_id,
+            budget_tenant_id=b.tenant_id,
+            team_id=team_id,
+            visible_credential_ids=visible_credential_ids,
+        )
+    ]
 
 
 class GatewayManagementReadService(GatewayUsageLogReadMixin):
@@ -259,6 +282,21 @@ class GatewayManagementReadService(GatewayUsageLogReadMixin):
         )
         out.extend(system_credential_from_orm(c) for c in visible_system)
         return out
+
+    async def _visible_credential_ids_for_team(
+        self,
+        team_id: UUID,
+        *,
+        user_id: UUID | None = None,
+        is_platform_admin: bool = False,
+    ) -> frozenset[UUID]:
+        """当前视角在团队内可见的凭据 id 集合（成员 user 预算凭据级收敛用）。"""
+        creds = await self.list_credential_summaries_for_team(
+            team_id,
+            user_id=user_id,
+            is_platform_admin=is_platform_admin,
+        )
+        return frozenset(c.id for c in creds)
 
     async def get_managed_credential_for_team(
         self,
@@ -564,12 +602,27 @@ class GatewayManagementReadService(GatewayUsageLogReadMixin):
         user_id: UUID | None,
         *,
         actor_user_id: UUID | None = None,
+        visible_credential_ids: frozenset[UUID] | None = None,
     ) -> list[Any]:
-        """成员读路径：团队 tenant 预算 + 当前 user 预算 + 可见 vkey 的 key 预算。"""
+        """成员读路径：团队 tenant 预算 + 当前 user 预算 + 可见 vkey 的 key 预算。
+
+        成员 user 预算按团队轴收敛（护栏按 tenant 隔离、凭据级按可见凭据收敛）；
+        ``visible_credential_ids`` 未传时按当前成员视角即时计算（assembler 可传入复用）。
+        """
         budgets: list[Any] = []
         budgets.extend(await self._budgets.list_for_target("tenant", tenant_id))
         if user_id is not None:
-            budgets.extend(await self._budgets.list_for_target("user", user_id))
+            if visible_credential_ids is None:
+                visible_credential_ids = await self._visible_credential_ids_for_team(
+                    tenant_id, user_id=actor_user_id or user_id
+                )
+            budgets.extend(
+                _visible_member_budgets(
+                    await self._budgets.list_for_target("user", user_id),
+                    team_id=tenant_id,
+                    visible_credential_ids=visible_credential_ids,
+                )
+            )
         keys = await self._vkeys.list_for_tenant(
             tenant_id, include_system=False, include_inactive=False
         )
@@ -589,8 +642,13 @@ class GatewayManagementReadService(GatewayUsageLogReadMixin):
         include_system: bool = False,
         target_kind: str | None = None,
         model_name: str | None = None,
+        visible_credential_ids: frozenset[UUID] | None = None,
     ) -> list[GatewayBudget]:
-        """Admin 读路径：团队 tenant + 成员 user + 团队 vkey + 可选 system。"""
+        """Admin 读路径：团队 tenant + 成员 user + 团队 vkey + 可选 system。
+
+        成员 user 预算同样按团队轴收敛：护栏按 tenant 隔离、凭据级按团队凭据收敛，
+        admin 视角的可见凭据集合 = 本团队全部凭据（含可见 system）。
+        """
         plan = plan_admin_budget_fetch(
             target_kind=target_kind,
             include_system=include_system,
@@ -603,7 +661,17 @@ class GatewayManagementReadService(GatewayUsageLogReadMixin):
         if plan.fetch_user:
             user_ids = list(await self.list_team_member_user_ids(tenant_id))
             if user_ids:
-                budgets.extend(await self._budgets.list_for_target_ids("user", user_ids))
+                if visible_credential_ids is None:
+                    visible_credential_ids = await self._visible_credential_ids_for_team(
+                        tenant_id, is_platform_admin=include_system
+                    )
+                budgets.extend(
+                    _visible_member_budgets(
+                        await self._budgets.list_for_target_ids("user", user_ids),
+                        team_id=tenant_id,
+                        visible_credential_ids=visible_credential_ids,
+                    )
+                )
 
         if plan.fetch_key:
             keys = await self._vkeys.list_for_tenant(

@@ -65,6 +65,24 @@ def filter_quota_rules_for_member(
     return [quota_rule_visible_to_member(key, ctx) for key in keys]
 
 
+def member_user_budget_visible_in_team(
+    *,
+    credential_id: UUID | None,
+    budget_tenant_id: UUID | None,
+    team_id: UUID,
+    visible_credential_ids: frozenset[UUID],
+) -> bool:
+    """成员 ``user`` 预算行在当前团队是否可见（团队轴收敛，纯规则）。
+
+    - 总量 / 模型护栏（``credential_id`` 为空）：按团队隔离，须 ``budget_tenant_id == team_id``；
+    - 成员 + 凭据(+模型)：凭据天然绑定团队，须 ``credential_id`` 落在团队可见凭据集合内，
+      避免同一用户在他团队的凭据级预算行跨团队泄漏。
+    """
+    if credential_id is None:
+        return budget_tenant_id == team_id
+    return credential_id in visible_credential_ids
+
+
 def _platform_rule_visible(
     key: QuotaRuleVisibilityKey,
     ctx: QuotaRuleVisibilityContext,
@@ -101,5 +119,6 @@ __all__ = [
     "QuotaRuleVisibilityContext",
     "QuotaRuleVisibilityKey",
     "filter_quota_rules_for_member",
+    "member_user_budget_visible_in_team",
     "quota_rule_visible_to_member",
 ]

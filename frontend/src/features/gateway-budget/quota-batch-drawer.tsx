@@ -223,6 +223,48 @@ export function QuotaBatchDrawer({
                     </div>
                   </div>
                 ) : null}
+                {values.subjectMode === 'users' ? (
+                  <div className="space-y-2">
+                    <Label>凭据（可选，多选）</Label>
+                    <Input
+                      value={credQuery}
+                      onChange={(e) => {
+                        setCredQuery(e.target.value)
+                      }}
+                      placeholder="搜索凭据…（不选=成员总量护栏）"
+                      className="h-8 text-xs"
+                    />
+                    <div className="max-h-40 space-y-2 overflow-y-auto rounded-md border p-2">
+                      <MetaListPlaceholder
+                        loading={metaLoading}
+                        empty={!metaLoading && filteredCreds.length === 0}
+                        emptyHint={credQuery ? '无匹配凭据' : '暂无团队凭据。'}
+                      />
+                      {filteredCreds.map((c) => (
+                        <label
+                          key={c.id}
+                          className="flex cursor-pointer items-center gap-2 text-sm"
+                        >
+                          <Checkbox
+                            checked={values.credentialIds.includes(c.id)}
+                            disabled={disabled || metaLoading}
+                            onCheckedChange={(checked) => {
+                              const next = checked
+                                ? [...values.credentialIds, c.id]
+                                : values.credentialIds.filter((id) => id !== c.id)
+                              onChange({ ...values, credentialIds: next })
+                            }}
+                          />
+                          {c.label}
+                        </label>
+                      ))}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      不选凭据=成员在全团队的总用量护栏；选凭据=限制该成员在指定团队凭据上的细粒度用量。
+                      多凭据路由请选择凭据后再指定其下「别名--凭据」具体模型；个人工作区模型不受平台配额约束。
+                    </p>
+                  </div>
+                ) : null}
                 {values.subjectMode === 'keys' ? (
                   <div className="space-y-2">
                     <Label>虚拟 Key（可多选）</Label>

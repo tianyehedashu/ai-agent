@@ -47,11 +47,14 @@ class EntitlementWritesMixin:
             tenant_id=tenant_id,
             is_platform_admin=is_platform_admin,
         )
+        # 成员总量/模型护栏按团队隔离（user 维度，无凭据）。
+        budget_tenant = tenant_id if target_kind == "user" else None
         budget = await self._budgets.upsert(
             target_kind=target_kind,
             target_id=target_id,
             period=period,
             model_name=model_name,
+            tenant_id=budget_tenant,
             limit_usd=limit_usd,
             soft_limit_usd=None,
             limit_tokens=limit_tokens,

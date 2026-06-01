@@ -7,6 +7,9 @@ from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Literal
 import uuid
 
+from domains.gateway.domain.policies.platform_budget_upsert_policy import (
+    validate_platform_budget_upsert,
+)
 from domains.gateway.infrastructure.models.budget import GatewayBudget
 from domains.gateway.infrastructure.models.entitlement_plan import EntitlementPlan
 from domains.gateway.infrastructure.models.provider_plan import ProviderPlan
@@ -151,7 +154,7 @@ class QuotaRuleWritesMixin:
         for index, cmd in enumerate(commands):
             if cmd.layer == "platform":
                 try:
-                    item = self._prepare_platform_upsert_item(
+                    item = await self._prepare_platform_upsert_item(
                         cmd,
                         tenant_id=tenant_id,
                         is_platform_admin=is_platform_admin,
@@ -166,8 +169,14 @@ class QuotaRuleWritesMixin:
         if platform_items:
             batch_results = await self._budgets.batch_upsert([item for _, item in platform_items])
             for (_, _), budget in zip(platform_items, batch_results, strict=True):
+                await self._maybe_index_user_credential_budget(budget)
                 succeeded.append(budget_to_quota_rule(budget, team_id=tenant_id))
                 any_changed = True
+            from domains.gateway.application.gateway_cache_invalidation import (
+                invalidate_gateway_budget_config_cache,
+            )
+
+            await invalidate_gateway_budget_config_cache()
 
         # ------------------------------------------------------------------
         # Upstream / Downstream 保持逐条处理（plan 逻辑复杂，不适合纯 SQL 批量）
@@ -225,16 +234,19 @@ class QuotaRuleWritesMixin:
 
         return QuotaRuleBatchResult(succeeded=succeeded, failed=failed)
 
-    def _prepare_platform_upsert_item(
+    async def _resolve_platform_target(
         self,
         cmd: QuotaRuleUpsertCommand,
         *,
         tenant_id: uuid.UUID,
         is_platform_admin: bool,
-    ) -> dict[str, object]:
-        """将 platform 命令解析为 batch_upsert 所需字典；权限检查会抛异常。"""
-        target_kind = cmd.target_kind
+    ) -> tuple[str, uuid.UUID | None, uuid.UUID | None, str]:
+        """归一化 platform target_kind/target_id/budget_tenant/period 并完成校验链。
 
+        返回的 ``budget_tenant`` 仅在「成员总量/模型护栏」（``target_kind=user`` 且无
+        ``credential_id``）时为当前团队，使成员额度按团队隔离；其余维度为 ``None``。
+        """
+        target_kind = cmd.target_kind
         if target_kind is None:
             if cmd.access_kind == "vkey" and cmd.access_id is not None:
                 target_kind = "key"
@@ -244,7 +256,6 @@ class QuotaRuleWritesMixin:
                 target_kind = "tenant"
 
         target_id = cmd.target_id
-
         if target_kind == "tenant":
             target_id = tenant_id
         elif target_kind == "user":
@@ -254,17 +265,57 @@ class QuotaRuleWritesMixin:
 
         if target_kind == "key" and target_id is None:
             raise ValidationError("platform key 配额需要 access_id 或 target_id")
-
         if target_kind == "system" and not is_platform_admin:
             raise ValidationError("仅平台管理员可设置 system 配额")
 
-        # 注意：此处仅做同步权限断言；若需异步 DB 校验（如 target_id 是否真在团队中），
-        # 仍由上层调用方保证，或接受放宽校验以换取批量性能。
+        period = cmd.period or "monthly"
+        validate_platform_budget_upsert(
+            target_kind=target_kind,
+            credential_id=cmd.credential_id,
+            model_name=cmd.model_name,
+            period=period,
+            limit_usd=cmd.limit_usd,
+            limit_tokens=cmd.limit_tokens,
+            limit_requests=cmd.limit_requests,
+        )
+
+        await self._assert_budget_target_in_team(
+            target_kind,
+            target_id,
+            tenant_id=tenant_id,
+            is_platform_admin=is_platform_admin,
+        )
+        if cmd.credential_id is not None:
+            await self._assert_credential_in_team(
+                cmd.credential_id,
+                tenant_id=tenant_id,
+                is_platform_admin=is_platform_admin,
+            )
+            if cmd.model_name:
+                await self._assert_model_alias_on_credential(cmd.credential_id, cmd.model_name)
+
+        # 成员总量/模型护栏按团队隔离；成员+凭据行由 credential 绑定团队，tenant 维度留空。
+        budget_tenant = tenant_id if (target_kind == "user" and cmd.credential_id is None) else None
+        return target_kind, target_id, budget_tenant, period
+
+    async def _prepare_platform_upsert_item(
+        self,
+        cmd: QuotaRuleUpsertCommand,
+        *,
+        tenant_id: uuid.UUID,
+        is_platform_admin: bool,
+    ) -> dict[str, object]:
+        """将 platform 命令解析为 batch_upsert 所需字典；校验失败会抛异常。"""
+        target_kind, target_id, budget_tenant, period = await self._resolve_platform_target(
+            cmd, tenant_id=tenant_id, is_platform_admin=is_platform_admin
+        )
         return {
             "target_kind": target_kind,
             "target_id": target_id,
-            "period": cmd.period or "monthly",
+            "tenant_id": budget_tenant,
+            "period": period,
             "model_name": cmd.model_name,
+            "credential_id": cmd.credential_id,
             "limit_usd": cmd.limit_usd,
             "soft_limit_usd": None,
             "limit_tokens": cmd.limit_tokens,
@@ -278,42 +329,8 @@ class QuotaRuleWritesMixin:
         tenant_id: uuid.UUID,
         is_platform_admin: bool,
     ) -> GatewayBudget:
-        target_kind = cmd.target_kind
-
-        if target_kind is None:
-            if cmd.access_kind == "vkey" and cmd.access_id is not None:
-                target_kind = "key"
-
-            elif cmd.user_id is not None:
-                target_kind = "user"
-
-            else:
-                target_kind = "tenant"
-
-        target_id = cmd.target_id
-
-        if target_kind == "tenant":
-            target_id = tenant_id
-
-        elif target_kind == "user":
-            target_id = cmd.user_id or target_id
-
-        elif target_kind == "key":
-            target_id = cmd.access_id or target_id
-
-        if target_kind == "key" and target_id is None:
-            raise ValidationError("platform key 配额需要 access_id 或 target_id")
-
-        if target_kind == "system" and not is_platform_admin:
-            raise ValidationError("仅平台管理员可设置 system 配额")
-
-        period = cmd.period or "monthly"
-
-        await self._assert_budget_target_in_team(
-            target_kind,
-            target_id,
-            tenant_id=tenant_id,
-            is_platform_admin=is_platform_admin,
+        target_kind, target_id, budget_tenant, period = await self._resolve_platform_target(
+            cmd, tenant_id=tenant_id, is_platform_admin=is_platform_admin
         )
 
         budget = await self._budgets.upsert(
@@ -321,11 +338,14 @@ class QuotaRuleWritesMixin:
             target_id=target_id,
             period=period,
             model_name=cmd.model_name,
+            credential_id=cmd.credential_id,
+            tenant_id=budget_tenant,
             limit_usd=cmd.limit_usd,
             soft_limit_usd=None,
             limit_tokens=cmd.limit_tokens,
             limit_requests=cmd.limit_requests,
         )
+        await self._maybe_index_user_credential_budget(budget)
         from domains.gateway.application.gateway_cache_invalidation import (
             invalidate_gateway_budget_config_cache,
             invalidate_gateway_quota_rule_cache_for_team,
@@ -335,6 +355,17 @@ class QuotaRuleWritesMixin:
         await invalidate_gateway_quota_rule_cache_for_team(tenant_id)
         self.invalidate_tenant_gateway_read_caches(tenant_id)
         return budget
+
+    @staticmethod
+    async def _maybe_index_user_credential_budget(budget: GatewayBudget) -> None:
+        """维护成员+凭据预算存在性索引（热路径 Phase2 快路径依赖）。"""
+        if budget.credential_id is None or budget.target_id is None:
+            return
+        from domains.gateway.application.user_credential_budget_index import (
+            add_user_credential,
+        )
+
+        await add_user_credential(budget.target_id, budget.credential_id)
 
     async def _upsert_upstream_quota_rule(
         self,

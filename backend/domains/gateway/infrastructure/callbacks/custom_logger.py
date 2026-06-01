@@ -800,6 +800,27 @@ async def _persist_event(
                 total_tokens=input_tokens + output_tokens,
                 budget_model=str(route_name) if route_name else None,
             )
+        # Phase2：成员+凭据(+模型) 平台预算结算（按部署实际凭据/别名归因）
+        with suppress(Exception):
+            from domains.gateway.application.budget_deployment_check import (
+                commit_user_credential_budget,
+            )
+
+            await commit_user_credential_budget(
+                user_id=user_id,
+                credential_id=cred_id,
+                gateway_model_name=str(deploy_name) if deploy_name else None,
+                cost_usd=cost_usd,
+                total_tokens=input_tokens + output_tokens,
+                request_id=request_id_str,
+            )
+    elif status == "failed":
+        with suppress(Exception):
+            from domains.gateway.application.budget_deployment_check import (
+                release_user_credential_budget_from_metadata,
+            )
+
+            await release_user_credential_budget_from_metadata(metadata)
 
     # ---------- 写 Redis 实时计数 ----------
     with suppress(Exception):

@@ -27,6 +27,8 @@ class FakeBudget:
     limit_tokens: int | None = 100_000
     limit_requests: int | None = 100
     model_name: str | None = None
+    credential_id: uuid.UUID | None = None
+    tenant_id: uuid.UUID | None = None
 
 
 class RecordingBudgetService(BudgetService):
@@ -54,8 +56,10 @@ class RecordingBudgetService(BudgetService):
         limit_tokens: int | None = None,
         estimate_tokens: int = 0,
         budget_model_name: str | None = None,
+        credential_id: uuid.UUID | str | None = None,
+        tenant_id: uuid.UUID | str | None = None,
     ) -> tuple[int, int]:
-        _ = limit_tokens, estimate_tokens
+        _ = limit_tokens, estimate_tokens, credential_id, tenant_id
         self.reserved.append((target_kind, target_id, period, budget_model_name))
         return (1 if limit_requests else 0, 0)
 
@@ -66,10 +70,12 @@ class RecordingBudgetService(BudgetService):
         target_id: str | None,
         period: str,
         budget_model_name: str | None = None,
+        credential_id: uuid.UUID | str | None = None,
+        tenant_id: uuid.UUID | str | None = None,
         reserved_requests: int = 1,
         reserved_tokens: int = 0,
     ) -> None:
-        _ = reserved_requests, reserved_tokens
+        _ = reserved_requests, reserved_tokens, credential_id, tenant_id
         self.released.append((target_kind, target_id, period, budget_model_name))
 
     async def commit(self, **_kwargs: object) -> None:
@@ -104,7 +110,10 @@ class CommitRecordingBudgetService(BudgetService):
         delta_cost: Decimal,
         delta_tokens: int,
         budget_model_name: str | None = None,
+        credential_id: uuid.UUID | str | None = None,
+        tenant_id: uuid.UUID | str | None = None,
     ) -> None:
+        _ = credential_id, tenant_id
         self.commits.append(
             (target_kind, target_id, period, budget_model_name, delta_tokens, delta_cost)
         )
@@ -124,9 +133,19 @@ class FakeBudgetRepository:
                 query.target_id,
                 query.period,
                 model_name=query.model_name,
+                tenant_id=query.tenant_id,
             )
             if row is not None:
-                out[(query.target_kind, query.target_id, query.period, query.model_name)] = row
+                out[
+                    (
+                        query.target_kind,
+                        query.target_id,
+                        query.period,
+                        query.model_name,
+                        query.credential_id,
+                        query.tenant_id,
+                    )
+                ] = row
         return out
 
     async def get_for(
@@ -136,7 +155,10 @@ class FakeBudgetRepository:
         period: str,
         *,
         model_name: str | None = None,
+        credential_id: uuid.UUID | None = None,
+        tenant_id: uuid.UUID | None = None,
     ) -> FakeBudget | None:
+        _ = credential_id
         if (
             target_kind in {"tenant", "user"}
             and target_id is not None
@@ -153,6 +175,7 @@ class FakeBudgetRepository:
                     target_id=target_id,
                     period=period,
                     model_name=None,
+                    tenant_id=tenant_id,
                 )
             if model_name == "gpt-4o-mini":
                 return FakeBudget(
@@ -160,6 +183,7 @@ class FakeBudgetRepository:
                     target_id=target_id,
                     period=period,
                     model_name="gpt-4o-mini",
+                    tenant_id=tenant_id,
                 )
         return None
 
@@ -301,7 +325,10 @@ async def test_settle_usage_commits_aggregate_and_model_redis_buckets(
             period: str,
             *,
             model_name: str | None = None,
+            credential_id: uuid.UUID | None = None,
+            tenant_id: uuid.UUID | None = None,
         ) -> _Row | None:
+            _ = credential_id, tenant_id
             if target_kind != "tenant" or target_uuid != team_id:
                 return None
             if period not in {"daily", "monthly", "total"}:
