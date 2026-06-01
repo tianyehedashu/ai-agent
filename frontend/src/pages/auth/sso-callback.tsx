@@ -48,6 +48,7 @@ export default function SsoCallbackPage(): React.JSX.Element {
     const ticket = searchParams.get('ticket')
     // IAM 回调带 ticket：同域 plus-ui /sso-callback 完成 ticket→guard_token（登录接口需加密）
     if (ticket) {
+      markSsoAttempt()
       const qs = new URLSearchParams(searchParams)
       const stored = sessionStorage.getItem(SSO_RETURN_PATH_KEY)
       const returnPath = stored?.startsWith('/') ? stored : '/'

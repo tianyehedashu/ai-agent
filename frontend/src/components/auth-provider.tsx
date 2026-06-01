@@ -83,6 +83,7 @@ export function AuthProvider({ children }: Readonly<AuthProviderProps>): React.J
   }, [sessionUser, isFetched, setCurrentUser])
 
   const isOnPublicPath = PUBLIC_PATHS.includes(location.pathname)
+  const ssoCooldownActive = isWithinSsoCooldown()
   /** guard_token 为 HttpOnly，401 后须用冷却期避免 SSO 死循环 */
   const shouldStartSso =
     isSsoMode &&
@@ -90,7 +91,7 @@ export function AuthProvider({ children }: Readonly<AuthProviderProps>): React.J
     isFetched &&
     !isOnPublicPath &&
     isSessionInvalid &&
-    !isWithinSsoCooldown()
+    !ssoCooldownActive
 
   useEffect(() => {
     if (!shouldStartSso || ssoRedirectStarted.current) {
@@ -147,7 +148,7 @@ export function AuthProvider({ children }: Readonly<AuthProviderProps>): React.J
 
   // 未认证 + 不在公开页面
   if (!sessionUser && isFetched && !isOnPublicPath) {
-    if (isSsoMode && isSessionInvalid && isWithinSsoCooldown()) {
+    if (isSsoMode && isSessionInvalid && ssoCooldownActive) {
       return (
         <div className="flex h-screen items-center justify-center bg-background">
           <div className="flex flex-col items-center gap-4 text-center">
