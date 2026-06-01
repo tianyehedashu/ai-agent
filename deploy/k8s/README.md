@@ -47,6 +47,14 @@ docker build -f frontend/Dockerfile \
 docker push giimall-acr-registry-vpc.cn-hangzhou.cr.aliyuncs.com/prod/ai-agent-frontend:v1.0.0
 ```
 
+**SSO 网关**：生产须在 HiGress 启用 `giikin-auth-bridge`（见 [docs/SSO.md](../docs/SSO.md)、[deploy/higress/README.md](../higress/README.md)）。Backend Secret 示例：
+
+```env
+AUTH_MODE=sso
+GIIKIN_INTERNAL_KEY=<与 WasmPlugin internal_key 相同>
+GIIKIN_SESSION_COOKIE_FALLBACK=false
+```
+
 ### 2. 创建 Secret
 
 以 [`deploy/backend.env.production`](../backend.env.production) 为参考，**勿直接 commit 含真实 Key 的文件**。

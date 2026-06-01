@@ -1,41 +1,78 @@
-# Higress 接入 AI Agent
+# HiGress 接入 AI Agent（SSO + 路由）
 
-公网示例：`http://gateway.giimallai.com/ai-agent/`（站点根 `/` 为其他系统，勿与 AI Agent 混淆）。
+公网示例：`http://gateway.giimallai.com/ai-agent/`
 
-## 探测结果（2026-05）
+**完整 SSO 说明**：[docs/SSO.md](../../docs/SSO.md)
 
-| 检查项 | 结果 |
+---
+
+## 流量路径
+
+```
+gateway.giimallai.com/ai-agent/
+    │
+    ├─ /ai-agent/assets/*     → frontend Nginx 静态资源
+    ├─ /ai-agent/api/*        → frontend Nginx 反代 → backend:8000
+    │                              ↑
+    │                         HiGress giikin-auth-bridge（WasmPlugin）
+    │                         在到达 frontend 前注入 X-Giikin-* Header
+    └─ /ai-agent/*            → frontend SPA (index.html)
+```
+
+| 检查项 | 期望 |
 |--------|------|
-| `GET /ai-agent/api/v1/system/health` | 200，`environment: production` |
-| `GET /ai-agent/` | 200，AI Agent SPA |
-| `POST /ai-agent/api/v1/chat`（无 Token） | 401，需登录 |
-| `https://gateway.giimallai.com/...` | **443 未连通** — 浏览器若强制 HTTPS 会出现 network error |
+| `GET /ai-agent/api/v1/system/health` | 200 |
+| `GET /ai-agent/api/v1/auth/me` 无 Cookie | 401 |
+| `GET /ai-agent/api/v1/auth/me` 有 guard_token + auth-bridge | 200 |
+| `GET /ai-agent/` | 200 SPA |
+
+---
 
 ## 必配项
 
-1. **路径**：`path: /ai-agent`，`pathType: Prefix` → `frontend:80`（见 [`ai-agent-ingress.example.yaml`](ai-agent-ingress.example.yaml)）。
-2. **禁止**把 `/ai-agent` rewrite 掉，否则 FastAPI `ROOT_PATH=/ai-agent` 会 404。
-3. **SSE 超时**：`higress.io/timeout: "3600"`；云 SLB 空闲超时同步调大。
-4. **勿**对 Chat 开启 `proxy-next-upstream` 重试。
-5. **前端**：生产构建勿设置 `VITE_API_URL`（同域相对路径 `/ai-agent/api/v1/...`）。
-6. **SSO**：K8s Secret 设 `AUTH_MODE=sso` + `GIIKIN_INTERNAL_KEY`（与 giikin-auth-bridge 一致）；前端 `frontend/Dockerfile` 已默认 `VITE_AUTH_MODE=sso` 与 IAM binding URL，Jenkins 构建无需额外 build-arg。同域已登录用户可经 `guard_token` Cookie + Redis 识别（无需 auth-bridge 亦可工作）。
+### 1. Ingress 路由
 
-## 验证
+[`ai-agent-ingress.example.yaml`](ai-agent-ingress.example.yaml)
+
+- `path: /ai-agent`，`pathType: Prefix` → `frontend:80`
+- **禁止** rewrite `/ai-agent` → `/`
+- Chat SSE：`higress.io/timeout: "3600"`
+- 请求体：`nginx.ingress.kubernetes.io/proxy-body-size: "50m"`
+
+### 2. giikin-auth-bridge WasmPlugin
+
+[`giikin-auth-bridge-wasmplugin.example.yaml`](giikin-auth-bridge-wasmplugin.example.yaml)
+
+- 匹配 ai-agent Ingress / API 路径
+- `internal_key` = K8s Secret `GIIKIN_INTERNAL_KEY`
+- Redis = **IAM 会话 Redis**（插件读 guard_token 会话；与 ai-agent 应用 Redis **无关**）
+
+### 3. ai-agent Backend Secret
+
+```bash
+AUTH_MODE=sso
+GIIKIN_INTERNAL_KEY=<与 WasmPlugin internal_key 相同>
+GIIKIN_SESSION_COOKIE_FALLBACK=false
+ROOT_PATH=/ai-agent
+```
+
+### 4. 前端镜像
+
+Dockerfile 已默认 `VITE_AUTH_MODE=sso` 与 IAM binding URL；Jenkins 无需额外 build-arg。
+
+---
+
+## 验证命令
 
 ```bash
 curl -s http://gateway.giimallai.com/ai-agent/api/v1/system/health
-# 期望 JSON status healthy
-
-curl -s -o /dev/null -w '%{http_code}\n' http://gateway.giimallai.com/ai-agent/
-# 期望 200
+curl -s -o /dev/null -w '%{http_code}\n' http://gateway.giimallai.com/ai-agent/api/v1/auth/me
 ```
 
-## 用户访问入口
-
-- 正确：`http://gateway.giimallai.com/ai-agent/`
-- 错误：`http://gateway.giimallai.com/`（吉喵云多租户系统，非本应用）
+---
 
 ## 相关文档
 
-- [deploy/k8s/README.md](../k8s/README.md)
-- [Higress Ingress 注解](https://higress.cn/docs/latest/user/annotation/)
+- [docs/SSO.md](../../docs/SSO.md) — 架构、流程、故障排查
+- [deploy/k8s/README.md](../k8s/README.md) — 镜像发版与 Secret
+- giikin 插件源码：`giikin/plugins/giikin-auth-bridge/`

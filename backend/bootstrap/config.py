@@ -80,6 +80,8 @@ class Settings(BaseSettings):
     # Redis 配置
     # ========================================================================
     redis_url: str = "redis://localhost:6379/0"
+    # 与 giikin-iam 共用阿里云 Redis 时须与 Nacos spring.data.redis 一致（含 username）
+    redis_username: str | None = None
     redis_password: str | None = None
     celery_broker_url: str = "redis://localhost:6379/1"
     celery_result_backend: str = "redis://localhost:6379/2"
@@ -219,8 +221,10 @@ class Settings(BaseSettings):
     giikin_user_json_header: str = "X-Giikin-User-JSON"
     giikin_user_id_header: str = "X-Giikin-User-Id"
     giikin_internal_key_header: str = "X-Giikin-Internal-Key"
-    # 与 giikin-iam UserActionListener 下发的 Cookie 名一致
+    # 与 giikin-iam UserActionListener 下发的 Cookie 名一致（仅 cookie 回退模式使用）
     giikin_session_cookie_name: str = "guard_token"
+    # 生产应关闭：身份由 HiGress giikin-auth-bridge 注入 Header，不应由 backend 直连 IAM Redis
+    giikin_session_cookie_fallback: bool = False
 
     @property
     def is_sso_auth(self) -> bool:

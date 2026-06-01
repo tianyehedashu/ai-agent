@@ -1,5 +1,7 @@
 # AI Agent — Higress Ingress 示例（gateway.giimallai.com 等同域部署）
 #
+# SSO：/ai-agent/api 须配合 giikin-auth-bridge WasmPlugin → docs/SSO.md
+#
 # 要点：
 # - 保留 /ai-agent 前缀，勿 rewrite 为 /
 # - Chat SSE 需加长超时（higress.io/timeout）

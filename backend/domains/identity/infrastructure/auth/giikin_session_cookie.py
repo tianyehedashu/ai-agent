@@ -1,7 +1,7 @@
 """giikin SSO 会话 Cookie 解析（guard_token → Redis user:session:*）。
 
-当 HiGress giikin-auth-bridge 尚未注入 X-Giikin-* Header 时，SSO 模式可回退读取
-浏览器 Cookie 并在与 giikin-iam 共用的 Redis 中解析会话（同域部署场景）。
+**仅用于开发/应急**：`GIIKIN_SESSION_COOKIE_FALLBACK=true` 且未部署 auth-bridge 时。
+生产身份应由 HiGress giikin-auth-bridge 注入 X-Giikin-* Header，backend 不应直连 IAM Redis。
 """
 
 from __future__ import annotations

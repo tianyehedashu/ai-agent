@@ -23,6 +23,14 @@ const RAW_SSO_LOGOUT_URL = import.meta.env.VITE_SSO_LOGOUT_URL ?? ''
 /** sessionStorage：SSO 跳转 manage.giikin.com 前保存，回调后恢复路径 */
 export const SSO_RETURN_PATH_KEY = 'ai_agent_sso_return_path'
 
+/** 浏览器是否已有 giikin-iam 下发的 guard_token（同域 SSO 会话） */
+export function hasGuardTokenCookie(): boolean {
+  if (typeof document === 'undefined') {
+    return false
+  }
+  return document.cookie.split(';').some((part) => part.trim().startsWith('guard_token='))
+}
+
 function normalizeAppRoot(): string {
   const appRoot = (import.meta.env.VITE_APP_ROOT as string | undefined) ?? '/ai-agent'
   if (!appRoot || appRoot === '/') {

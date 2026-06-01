@@ -1,0 +1,53 @@
+# giikin-auth-bridge — HiGress WasmPlugin 示例（ai-agent API 鉴权）
+#
+# 应用前请替换：
+#   - internal_key（与 ai-agent Secret GIIKIN_INTERNAL_KEY 一致）
+#   - redis.service_name / username / password（IAM 会话 Redis，非 ai-agent 应用 Redis）
+#   - matchRules.ingress（与集群 Ingress 名称一致）
+#
+# 构建插件：giikin 仓库 plugins/giikin-auth-bridge/build.sh → plugin.wasm
+# 文档：docs/SSO.md
+---
+apiVersion: extensions.higress.io/v1alpha1
+kind: WasmPlugin
+metadata:
+  name: giikin-auth-bridge-ai-agent
+  namespace: higress-system
+spec:
+  # 高于业务插件，先于转发执行
+  priority: 200
+  # 插件镜像/OCI 地址由集群 Wasm 分发配置决定，此处仅 defaultConfig
+  defaultConfig:
+    internal_key: "mvp-test-internal-key-2026"
+    session_cookie_name: "guard_token"
+    audit_enabled: true
+    audit_retention_days: 7
+    audit_log_body: false
+    redis:
+      # HiGress 集群内 Redis 服务名（DNS 或 McpBridge static），指向 IAM 会话库
+      service_name: "redis.static"
+      service_port: 6379
+      username: "test_giimall_redis"
+      password: "REPLACE_WITH_IAM_REDIS_PASSWORD"
+      database: 0
+      timeout: 2000
+  # 仅对 ai-agent API 路径启用（静态 SPA 不需要）
+  matchRules:
+    - ingress:
+        - test/ai-agent
+      config:
+        internal_key: "mvp-test-internal-key-2026"
+        session_cookie_name: "guard_token"
+        redis:
+          service_name: "redis.static"
+          service_port: 6379
+          username: "test_giimall_redis"
+          password: "REPLACE_WITH_IAM_REDIS_PASSWORD"
+          database: 0
+          timeout: 2000
+  # 若 HiGress 版本支持按路径匹配，可改用 route 级规则，例如：
+  # matchRules:
+  #   - service:
+  #       - test/frontend.test.svc.cluster.local:80
+  #     config: { ... }
+  # 并在网关控制台限定 path 前缀 /ai-agent/api

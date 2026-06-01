@@ -11,6 +11,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { Loader2 } from 'lucide-react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 
+import { APP_ROOT } from '@/api/paths'
 import { SSO_RETURN_PATH_KEY } from '@/config/auth'
 
 function resolveReturnPath(raw: string | null): string {
@@ -31,9 +32,17 @@ export default function SsoCallbackPage(): React.JSX.Element {
   const [searchParams] = useSearchParams()
 
   useEffect(() => {
+    const ticket = searchParams.get('ticket')
+    // IAM 回调带 ticket 时：同域 plus-ui /sso-callback 完成 ticket→guard_token（IAM 登录接口需加密）
+    if (ticket) {
+      const qs = searchParams.toString()
+      window.location.replace(`${window.location.origin}/sso-callback?${qs}`)
+      return
+    }
+
     const stored = sessionStorage.getItem(SSO_RETURN_PATH_KEY)
     sessionStorage.removeItem(SSO_RETURN_PATH_KEY)
-    const target = resolveReturnPath(searchParams.get('redirect') ?? stored)
+    const target = resolveReturnPath(searchParams.get('redirect') ?? stored ?? `${APP_ROOT}/`)
     void queryClient.invalidateQueries({ queryKey: ['auth', 'currentUser'] }).then(() => {
       navigate(target, { replace: true })
     })

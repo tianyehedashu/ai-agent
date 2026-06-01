@@ -103,10 +103,13 @@ async def resolve_giikin_identity(
     request: Request,
     settings: Settings,
 ) -> GiikinGatewayClaims | None:
-    """解析 giikin 身份：优先 HiGress Header，其次 guard_token Cookie + Redis。"""
+    """解析 giikin 身份：生产仅信任 HiGress 注入 Header；开发可开 cookie 回退。"""
     claims = parse_gateway_identity(request, settings)
     if claims is not None:
         return claims
+
+    if not settings.giikin_session_cookie_fallback:
+        return None
 
     from domains.identity.infrastructure.auth.giikin_session_cookie import (
         resolve_claims_from_session_cookie,

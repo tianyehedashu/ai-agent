@@ -14,15 +14,25 @@ from bootstrap.config import settings
 _redis_client: Any | None = None
 
 
+def _redis_connect_kwargs() -> dict[str, object]:
+    kwargs: dict[str, object] = {
+        "encoding": "utf-8",
+        "decode_responses": True,
+    }
+    if settings.redis_username:
+        kwargs["username"] = settings.redis_username
+    if settings.redis_password:
+        kwargs["password"] = settings.redis_password
+    return kwargs
+
+
 async def init_redis() -> None:
     """初始化 Redis 连接"""
     global _redis_client
 
     _redis_client = redis.from_url(
         settings.redis_url,
-        password=settings.redis_password,
-        encoding="utf-8",
-        decode_responses=True,
+        **_redis_connect_kwargs(),
     )
 
     # 测试连接
@@ -52,9 +62,7 @@ async def get_redis_client() -> Any:
     if _redis_client is None:
         _redis_client = redis.from_url(
             settings.redis_url,
-            password=settings.redis_password,
-            encoding="utf-8",
-            decode_responses=True,
+            **_redis_connect_kwargs(),
         )
 
     return _redis_client

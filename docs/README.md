@@ -23,6 +23,7 @@
 | 文档 | 说明 |
 |------|------|
 | [DEPLOYMENT.md](./DEPLOYMENT.md) | 全栈部署与安装 |
+| [SSO.md](./SSO.md) | **Giikin SSO 生产集成**（auth-bridge、Secret、验证） |
 | [logging.md](./logging.md) | 统一日志（Python + TypeScript） |
 | [SONARQUBE.md](./SONARQUBE.md) | SonarCloud / SonarQube 质量门禁（含脚本附录索引） |
 

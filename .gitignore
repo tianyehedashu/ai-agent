@@ -1,5 +1,8 @@
 ﻿# AI Agent .gitignore
 
+# 含敏感 Redis 凭证的临时 patch，勿提交
+deploy/k8s/patch-redis-iam-align-live.json
+
 # ============================================
 # Python
 # ============================================
