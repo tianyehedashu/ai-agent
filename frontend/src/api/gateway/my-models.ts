@@ -64,6 +64,8 @@ export interface PersonalGatewayModelUpdateBody {
   display_name?: string
   model_id?: string
   credential_id?: string
+  model_types?: ModelType[]
+  resync_capabilities?: boolean
   is_active?: boolean
 }
 

@@ -195,6 +195,61 @@ class TestCredentialUpstreamProbeApi:
         await client.delete(f"/api/v1/gateway/my-credentials/{cid}", headers=auth_headers)
 
     @pytest.mark.asyncio
+    async def test_probe_kimi_k26_infers_vision_via_semantic_provider(
+        self, client: AsyncClient, auth_headers: dict, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from typing import Any
+
+        import litellm
+
+        def _selective_model_info(*, model: str) -> dict[str, Any]:
+            if model == "moonshot/kimi-k2.6":
+                return {"supports_vision": True, "mode": "chat"}
+            raise ValueError(f"unmapped: {model}")
+
+        monkeypatch.setattr(litellm, "get_model_info", _selective_model_info)
+
+        r1 = await client.post(
+            "/api/v1/gateway/my-credentials",
+            headers=auth_headers,
+            json={
+                "provider": "volcengine",
+                "name": f"probe-kimi-{uuid.uuid4().hex[:8]}",
+                "api_key": "sk-volc-mock",
+                "api_base": None,
+            },
+        )
+        assert r1.status_code == 201, r1.text
+        cid = r1.json()["id"]
+
+        volc_items = RawUpstreamListResult(
+            ok=True,
+            http_status=200,
+            items=(("kimi-k2.6", "volcengine"),),
+            error_message=None,
+        )
+
+        with patch.object(
+            OpenAICompatibleModelListAdapter,
+            "fetch_models",
+            new=AsyncMock(return_value=volc_items),
+        ):
+            pr = await client.post(
+                f"/api/v1/gateway/my-credentials/{cid}/probe",
+                headers=auth_headers,
+                json={},
+            )
+        assert pr.status_code == 200, pr.text
+        probe = pr.json()
+        assert probe["support"] == "full"
+        assert len(probe["items"]) == 1
+        inferred = probe["items"][0]["inferred_model_types"]
+        assert "text" in inferred
+        assert "image" in inferred
+
+        await client.delete(f"/api/v1/gateway/my-credentials/{cid}", headers=auth_headers)
+
+    @pytest.mark.asyncio
     async def test_my_batch_import_with_items_per_model_types(
         self, client: AsyncClient, auth_headers: dict
     ) -> None:

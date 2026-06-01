@@ -8,6 +8,7 @@ from domains.gateway.domain.litellm_capability_mapping import (
     LitellmModelInfoHints,
     hints_from_model_info,
 )
+from domains.gateway.domain.provider_inference import infer_provider_name
 
 
 class LitellmCapabilityHintAdapter:
@@ -23,10 +24,29 @@ class LitellmCapabilityHintAdapter:
             return f"{prov}/{rm}"
         return rm
 
-    def get_model_hints(self, *, provider: str, real_model: str) -> LitellmModelInfoHints | None:
-        model_id = self._resolve_model_id(provider, real_model)
-        if not model_id:
-            return None
+    @staticmethod
+    def _bare_model_id(real_model: str) -> str:
+        rm = (real_model or "").strip()
+        if "/" in rm:
+            return rm.split("/", 1)[1]
+        return rm
+
+    def _candidate_model_ids(self, *, provider: str, real_model: str) -> tuple[str, ...]:
+        """凭据 provider 优先；失败时 fallback 到模型 id 语义 provider（如 kimi → moonshot）。"""
+        candidates: list[str] = []
+        primary = self._resolve_model_id(provider, real_model)
+        if primary:
+            candidates.append(primary)
+        semantic = infer_provider_name(real_model).strip().lower()
+        bare = self._bare_model_id(real_model)
+        if semantic and bare:
+            fallback = f"{semantic}/{bare}"
+            if fallback not in candidates:
+                candidates.append(fallback)
+        return tuple(candidates)
+
+    @staticmethod
+    def _fetch_model_info(model_id: str) -> dict[str, Any] | None:
         try:
             import litellm
         except ImportError:
@@ -35,7 +55,14 @@ class LitellmCapabilityHintAdapter:
             raw = litellm.get_model_info(model=model_id)
         except Exception:
             return None
-        return hints_from_model_info(cast("dict[str, Any]", raw))
+        return cast("dict[str, Any]", raw)
+
+    def get_model_hints(self, *, provider: str, real_model: str) -> LitellmModelInfoHints | None:
+        for model_id in self._candidate_model_ids(provider=provider, real_model=real_model):
+            raw = self._fetch_model_info(model_id)
+            if raw is not None:
+                return hints_from_model_info(raw)
+        return None
 
     def supports_reasoning(self, *, provider: str, real_model: str) -> bool | None:
         hints = self.get_model_hints(provider=provider, real_model=real_model)

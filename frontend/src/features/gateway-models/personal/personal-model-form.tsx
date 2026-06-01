@@ -20,7 +20,12 @@ import { credentialProbeCacheKey } from '@/features/gateway-credentials/credenti
 import { CredentialUpstreamModelsPanel } from '@/features/gateway-credentials/credential-upstream-models-panel'
 import { providerLabel } from '@/features/gateway-credentials/provider-schemas'
 import { NO_CREDENTIAL } from '@/features/gateway-models/constants'
-import { ChevronDown, Info } from '@/lib/lucide-icons'
+import {
+  ModelCapabilityEditor,
+  capabilityEditorValuesFromPersonalModel,
+  type ModelCapabilityEditorValues,
+} from '@/features/gateway-models/model-capability-editor'
+import { ChevronDown, Info, Loader2, RefreshCw } from '@/lib/lucide-icons'
 import { cn } from '@/lib/utils'
 import type { ModelType } from '@/types/user-model'
 import { MODEL_TYPE_LABELS } from '@/types/user-model'
@@ -33,6 +38,7 @@ export interface PersonalModelFormValues {
   model_id: string
   credential_id: string
   model_types: ModelType[]
+  resync_capabilities?: boolean
 }
 
 const EMPTY_FORM: PersonalModelFormValues = {
@@ -63,6 +69,8 @@ interface PersonalModelFormProps {
   initialCredentialId?: string
   /** 批量导入成功 */
   onImported?: (createdCount: number, modelIds?: string[]) => void
+  onResyncCapabilities?: () => void
+  isResyncing?: boolean
 }
 
 function buildInitialForm(
@@ -91,6 +99,8 @@ export function PersonalModelForm({
   lockCredentialId,
   initialCredentialId,
   onImported,
+  onResyncCapabilities,
+  isResyncing = false,
 }: PersonalModelFormProps): React.JSX.Element {
   const lockCredential = lockCredentialId !== undefined && lockCredentialId !== ''
   const activeCredentials = useMemo(() => credentials.filter((c) => c.is_active), [credentials])
@@ -104,6 +114,16 @@ export function PersonalModelForm({
   const [form, setForm] = useState<PersonalModelFormValues>(() =>
     buildInitialForm(initial, credentials, lockCredentialId, initialCredentialId)
   )
+  const [capabilityValues, setCapabilityValues] = useState<ModelCapabilityEditorValues>(() =>
+    initial && mode === 'edit'
+      ? capabilityEditorValuesFromPersonalModel(initial)
+      : capabilityEditorValuesFromPersonalModel({ capability: 'chat', model_types: ['text'] })
+  )
+
+  useEffect(() => {
+    if (mode !== 'edit' || !initial) return
+    setCapabilityValues(capabilityEditorValuesFromPersonalModel(initial))
+  }, [mode, initial])
   const [manualOpen, setManualOpen] = useState(false)
   const [probeUnsupported, setProbeUnsupported] = useState(false)
   const manualSectionRef = useRef<HTMLDivElement>(null)
@@ -181,6 +201,16 @@ export function PersonalModelForm({
   }
 
   function handleSubmit(): void {
+    if (mode === 'edit') {
+      onSubmit({
+        ...form,
+        model_types:
+          capabilityValues.modelTypes.length > 0
+            ? [capabilityValues.modelTypes[0] ?? 'text']
+            : form.model_types.slice(0, 1),
+      })
+      return
+    }
     onSubmit(form)
   }
 
@@ -259,6 +289,29 @@ export function PersonalModelForm({
                 </SelectContent>
               </Select>
             </div>
+
+            <ModelCapabilityEditor
+              values={capabilityValues}
+              onChange={setCapabilityValues}
+              singleModelType
+            />
+
+            {onResyncCapabilities ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={isSubmitting || isResyncing}
+                onClick={onResyncCapabilities}
+              >
+                {isResyncing ? (
+                  <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <RefreshCw className="mr-1 h-3.5 w-3.5" />
+                )}
+                从 LiteLLM 同步能力
+              </Button>
+            ) : null}
           </div>
 
           <div className="flex justify-end gap-2">

@@ -22,6 +22,7 @@ from domains.gateway.domain.upstream_type_inference import (
         ("bge-reranker-v2", ()),
         ("gpt-4o", ("text", "image")),
         ("generic-model", ("text",)),
+        ("kimi-k2.6", ("text", "image")),
     ],
 )
 def test_infer_upstream_model_types(upstream_id: str, expected: tuple[str, ...]) -> None:

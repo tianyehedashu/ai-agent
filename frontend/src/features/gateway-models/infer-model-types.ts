@@ -1,8 +1,9 @@
 /**
- * 上游 model id → personal model_types（启发式，仅用于凭据页「从上游导入」预览）。
+ * 上游 model id 客户端兜底推断（仅当 probe API **未**返回 ``inferred_model_types`` 时使用）。
  *
- * 列表筛选、Playground、注册表展示以 API 返回的 ``model_types`` / ``?type=`` 为准；
- * 与 backend ``domains/gateway/domain/registry_model_types.infer_model_types_from_tags`` 不同源，勿混用。
+ * SSOT：backend ``upstream_type_inference.infer_upstream_model_types`` +
+ * ``infer_upstream_model_types_for_catalog``（含 LiteLLM hint）。
+ * 凭据探测 / 批量导入应优先使用 ``resolveUpstreamModelTypes`` 的服务端字段。
  */
 
 import type { ModelType } from '@/types/user-model'
@@ -11,15 +12,7 @@ const VALID_TYPES: readonly ModelType[] = ['text', 'image', 'image_gen', 'video'
 
 const NON_IMPORTABLE = /embedding|embed|rerank|moderation|whisper|tts|speech|transcri/i
 
-const IMAGE_GEN =
-  /(^dall-e|dall-e|\/dall-e|imagen|flux|stable-diffusion|sdxl|wanx.*image|wan.*-image|gpt-image|image-1|\/image\/)/i
-
-const VIDEO =
-  /(^sora|\/sora|sora-|wan.*t2v|wanx.*video|cogvideox|kling|runway|luma|veo|seedance|video-gen|\/video\/)/i
-
-const VISION_CHAT =
-  /(-vl-|\/vl\/|vision|omni|gpt-4o|gpt-4\.1|gpt-5|claude-3|claude-sonnet|claude-opus|claude-haiku|gemini-|qwen.*vl|qwen-vl|glm-4v|yi-vision)/i
-
+/** 无服务端推断时的保守兜底：不可导入 SKU 为空，其余视为纯文本。 */
 export function inferUpstreamModelTypes(
   _provider: string,
   upstreamId: string,
@@ -31,9 +24,6 @@ export function inferUpstreamModelTypes(
   const haystack = ownedBy ? `${mid} ${ownedBy}` : mid
   if (NON_IMPORTABLE.test(haystack)) return []
 
-  if (IMAGE_GEN.test(mid)) return ['image_gen']
-  if (VIDEO.test(mid)) return ['video']
-  if (VISION_CHAT.test(mid)) return ['text', 'image']
   return ['text']
 }
 

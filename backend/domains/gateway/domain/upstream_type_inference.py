@@ -26,7 +26,8 @@ _VIDEO_RE = re.compile(
 
 _VISION_CHAT_RE = re.compile(
     r"(-vl-|/vl/|vision|omni|gpt-4o|gpt-4\.1|gpt-5|claude-3|claude-sonnet|"
-    r"claude-opus|claude-haiku|gemini-|qwen.*vl|qwen-vl|glm-4v|yi-vision)",
+    r"claude-opus|claude-haiku|gemini-|qwen.*vl|qwen-vl|glm-4v|yi-vision|"
+    r"kimi-k2|kimi-k2\.|moonshot)",
     re.IGNORECASE,
 )
 

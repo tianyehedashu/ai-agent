@@ -378,6 +378,14 @@ class GatewayModelUpdate(BaseModel):
     )
     real_model: str | None = None
     credential_id: uuid.UUID | None = None
+    capability: str | None = Field(
+        default=None,
+        description="主调用面（OpenAI 兼容 HTTP 入口）；编辑时须与虚拟路由内 sibling 一致",
+    )
+    model_types: list[str] | None = Field(
+        default=None,
+        description="产品特性类型（text/image/image_gen/video）；写入 tags supports_*",
+    )
     weight: int | None = None
     rpm_limit: int | None = None
     tpm_limit: int | None = None
@@ -623,6 +631,14 @@ class PersonalModelUpdate(BaseModel):
     display_name: str | None = Field(None, min_length=1, max_length=100)
     model_id: str | None = Field(None, min_length=1, max_length=200)
     credential_id: uuid.UUID | None = None
+    model_types: list[str] | None = Field(
+        default=None,
+        description="单行编辑时仅允许一个 model_type",
+    )
+    resync_capabilities: bool = Field(
+        default=False,
+        description="为 true 时从 LiteLLM 重算能力 tags（不持久化）",
+    )
     is_active: bool | None = None
     enabled: bool | None = None
 

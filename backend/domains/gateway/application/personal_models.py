@@ -9,6 +9,7 @@ from domains.gateway.application.config_catalog_sync import (
     model_types_for_gateway_registration,
     selector_capabilities_from_tags,
 )
+from domains.gateway.domain.model_types_tags import tags_from_model_types
 from domains.gateway.domain.types import PERSONAL_MODEL_TYPES
 
 if TYPE_CHECKING:
@@ -29,14 +30,18 @@ def capability_for_model_type(model_type: str) -> str:
 
 
 def tags_for_model_type(model_type: str) -> dict[str, Any]:
-    tags: dict[str, Any] = {}
-    if model_type == "image":
-        tags["supports_vision"] = True
-    elif model_type == "image_gen":
-        tags["supports_image_gen"] = True
-    elif model_type == "video":
-        tags["supports_video_gen"] = True
-    return tags
+    """创建 personal 行时的初始 tags（SSOT：``model_types_tags``，仅写入 true 标记）。"""
+    mtype = model_type.strip().lower()
+    if mtype not in PERSONAL_MODEL_TYPES:
+        return {}
+    capability = capability_for_model_type(mtype)
+    merged = tags_from_model_types(
+        [mtype],
+        existing_tags={},
+        capability=capability,
+        clear_unselected=False,
+    )
+    return {key: value for key, value in merged.items() if value is True}
 
 
 def slugify_display_name(display_name: str) -> str:

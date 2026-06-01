@@ -32,11 +32,19 @@ export function PersonalModelEditPane({ modelId }: PersonalModelEditPaneProps): 
     enabled: modelId !== '',
   })
 
-  const { updateMutation } = usePersonalModelMutations({
-    onUpdateSuccess: () => {
-      navigate(personalModelDetailHref(teamId, modelId))
-    },
-  })
+  const { updateMutation } = usePersonalModelMutations()
+
+  const handleResyncCapabilities = useCallback((): void => {
+    if (!model) return
+    updateMutation.mutate(
+      { id: model.id, body: { resync_capabilities: true } },
+      {
+        onSuccess: () => {
+          toast({ title: '能力已从 LiteLLM 同步' })
+        },
+      }
+    )
+  }, [model, updateMutation, toast])
 
   const handleSubmit = useCallback(
     (values: PersonalModelFormValues): void => {
@@ -45,17 +53,25 @@ export function PersonalModelEditPane({ modelId }: PersonalModelEditPaneProps): 
         toast({ title: '请填写必填项并选择凭据', variant: 'destructive' })
         return
       }
-      updateMutation.mutate({
-        id: model.id,
-        body: {
-          display_name: values.display_name,
-          model_id: values.model_id,
-          credential_id: values.credential_id,
-          is_active: model.is_active,
+      updateMutation.mutate(
+        {
+          id: model.id,
+          body: {
+            display_name: values.display_name,
+            model_id: values.model_id,
+            credential_id: values.credential_id,
+            is_active: model.is_active,
+            model_types: values.model_types,
+          },
         },
-      })
+        {
+          onSuccess: () => {
+            navigate(personalModelDetailHref(teamId, modelId))
+          },
+        }
+      )
     },
-    [model, updateMutation, toast]
+    [model, modelId, navigate, teamId, updateMutation, toast]
   )
 
   const handleCancel = useCallback((): void => {
@@ -87,6 +103,8 @@ export function PersonalModelEditPane({ modelId }: PersonalModelEditPaneProps): 
       onSubmit={handleSubmit}
       onCancel={handleCancel}
       isSubmitting={updateMutation.isPending}
+      onResyncCapabilities={handleResyncCapabilities}
+      isResyncing={updateMutation.isPending}
     />
   )
 }

@@ -59,6 +59,12 @@ import { cn } from '@/lib/utils'
 import { useUserStore } from '@/stores/user'
 
 import { ModelCapabilityBadges } from './model-capability-badges'
+import {
+  ModelCapabilityEditor,
+  capabilityEditorValuesFromModel,
+  modelCapabilityPatchFromEditor,
+  type ModelCapabilityEditorValues,
+} from '../model-capability-editor'
 
 interface ModelInspectorProps {
   model: GatewayModel | null
@@ -130,6 +136,12 @@ const ModelInspectorPanel = memo(function ModelInspectorPanel({
   const [rpmLimit, setRpmLimit] = useState(model.rpm_limit !== null ? String(model.rpm_limit) : '')
   const [tpmLimit, setTpmLimit] = useState(model.tpm_limit !== null ? String(model.tpm_limit) : '')
   const [copied, setCopied] = useState(false)
+  const [capabilityValues, setCapabilityValues] = useState<ModelCapabilityEditorValues>(() =>
+    capabilityEditorValuesFromModel(model)
+  )
+  const [capabilityBaseline, setCapabilityBaseline] = useState<ModelCapabilityEditorValues>(() =>
+    capabilityEditorValuesFromModel(model)
+  )
 
   useEffect(() => {
     setModelName(model.name)
@@ -138,6 +150,9 @@ const ModelInspectorPanel = memo(function ModelInspectorPanel({
     setWeight(String(model.weight))
     setRpmLimit(model.rpm_limit !== null ? String(model.rpm_limit) : '')
     setTpmLimit(model.tpm_limit !== null ? String(model.tpm_limit) : '')
+    const capValues = capabilityEditorValuesFromModel(model)
+    setCapabilityValues(capValues)
+    setCapabilityBaseline(capValues)
   }, [
     model.id,
     model.name,
@@ -146,6 +161,9 @@ const ModelInspectorPanel = memo(function ModelInspectorPanel({
     model.weight,
     model.rpm_limit,
     model.tpm_limit,
+    model.capability,
+    model.model_types,
+    model.upstream_call_shape,
   ])
 
   const referencingRoutes = useMemo(
@@ -167,20 +185,23 @@ const ModelInspectorPanel = memo(function ModelInspectorPanel({
     return matching.length > 0 ? matching : pool
   }, [credentials, model.credential_id, model.provider])
 
-  const isTestable = TESTABLE_CAPABILITIES.has(model.capability)
+  const isTestable = TESTABLE_CAPABILITIES.has(capabilityValues.capability)
   const slice = usageScope === 'workspace' ? usageRow?.workspace : usageRow?.user
   const req = slice?.requests ?? 0
   const tok = (slice?.input_tokens ?? 0) + (slice?.output_tokens ?? 0)
   const cost = coalesceNumber(slice?.cost_usd)
   const daysLabel = usageDays === 1 ? '24 小时' : usageDays === 7 ? '7 天' : '30 天'
   const nameDirty = modelName.trim() !== model.name
+  const capabilityPatch = modelCapabilityPatchFromEditor(capabilityValues, capabilityBaseline)
+  const capabilityDirty = Object.keys(capabilityPatch).length > 0
   const dirty =
     nameDirty ||
     realModel.trim() !== model.real_model ||
     credentialId !== model.credential_id ||
     weight !== String(model.weight) ||
     rpmLimit !== (model.rpm_limit !== null ? String(model.rpm_limit) : '') ||
-    tpmLimit !== (model.tpm_limit !== null ? String(model.tpm_limit) : '')
+    tpmLimit !== (model.tpm_limit !== null ? String(model.tpm_limit) : '') ||
+    capabilityDirty
 
   async function copyReason(): Promise<void> {
     const text = model.last_test_reason?.trim()
@@ -195,12 +216,22 @@ const ModelInspectorPanel = memo(function ModelInspectorPanel({
   function handleSave(): void {
     const trimmedName = modelName.trim()
     if (!trimmedName || !realModel.trim() || !credentialId) return
+    if (
+      capabilityPatch.capability !== undefined &&
+      referencingRoutes.length > 0 &&
+      !window.confirm(
+        `该模型被 ${String(referencingRoutes.length)} 条虚拟路由引用；修改主调用面须与路由内其他 deployment 一致。是否继续保存？`
+      )
+    ) {
+      return
+    }
     const body: GatewayModelUpdateBody = {
       real_model: realModel.trim(),
       credential_id: credentialId,
       weight: parsePositiveInt(weight) ?? 1,
       rpm_limit: parsePositiveInt(rpmLimit),
       tpm_limit: parsePositiveInt(tpmLimit),
+      ...capabilityPatch,
     }
     if (trimmedName !== model.name) {
       body.name = trimmedName
@@ -342,7 +373,11 @@ const ModelInspectorPanel = memo(function ModelInspectorPanel({
             <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               能力
             </h3>
-            <ModelCapabilityBadges model={model} />
+            {canManage && !configManaged ? (
+              <ModelCapabilityEditor values={capabilityValues} onChange={setCapabilityValues} />
+            ) : (
+              <ModelCapabilityBadges model={model} />
+            )}
           </section>
 
           <section className="space-y-2">

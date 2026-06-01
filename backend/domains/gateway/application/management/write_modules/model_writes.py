@@ -27,6 +27,10 @@ from domains.gateway.domain.errors import (
 )
 from domains.gateway.domain.litellm_capability_mapping import strip_litellm_capability_tags
 from domains.gateway.domain.litellm_model_id import build_litellm_model_id
+from domains.gateway.domain.model_types_tags import (
+    tags_from_model_types,
+    validate_model_types_for_capability,
+)
 from domains.gateway.domain.policies.credential_scope import (
     assert_system_credential_mutation_allowed,
     registry_target_for_credential_scope,
@@ -37,6 +41,7 @@ from domains.gateway.domain.types import (
     GATEWAY_MODEL_MANAGED_BY_TAG,
     PERSONAL_MODEL_PROVIDERS,
     PERSONAL_MODEL_TYPES,
+    GatewayCapability,
     is_config_managed_system_gateway_model,
 )
 from libs.exceptions import HttpMappableDomainError, ValidationError
@@ -45,6 +50,15 @@ from utils.logging import get_logger
 logger = get_logger(__name__)
 
 _BATCH_MODEL_OP_MAX = 200
+_ALLOWED_UPSTREAM_CALL_SHAPES = frozenset({"openai_compat", "anthropic_native"})
+
+
+def _parse_gateway_capability(raw: str) -> str:
+    key = raw.strip().lower()
+    try:
+        return GatewayCapability(key).value
+    except ValueError as exc:
+        raise ValidationError(f"不支持的 capability: {raw}") from exc
 
 
 @dataclass(frozen=True)
@@ -107,6 +121,33 @@ def _prepare_gateway_model_write_fields(
 
 class ModelWritesMixin:
     """写侧 mixin — 由 GatewayManagementWriteService 组合。"""
+
+    async def _assert_capability_compatible_with_routes(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        model_name: str,
+        new_capability: str,
+    ) -> None:
+        routes = await self._routes.list_for_tenant(tenant_id, only_enabled=False)
+        new_cap = new_capability.strip().lower()
+        for route in routes:
+            primary = list(route.primary_models or ())
+            if model_name not in primary:
+                continue
+            for sibling_name in primary:
+                if sibling_name == model_name:
+                    continue
+                sibling = await self._models.get_by_name(tenant_id, sibling_name)
+                if sibling is None:
+                    continue
+                sibling_cap = str(sibling.capability or "").strip().lower()
+                if sibling_cap != new_cap:
+                    virtual = getattr(route, "virtual_model", route)
+                    raise ValidationError(
+                        f"虚拟路由 {virtual!r} 内各 deployment 的 capability 须一致；"
+                        f"{sibling_name!r} 为 {sibling_cap!r}，无法将当前模型改为 {new_cap!r}"
+                    )
 
     async def _assert_team_model_mutation_allowed(
         self,
@@ -223,31 +264,78 @@ class ModelWritesMixin:
     async def update_personal_model(
         self, user_id: uuid.UUID, model_id: uuid.UUID, fields: dict[str, Any]
     ) -> Any:
+        from domains.gateway.application.personal_models import capability_for_model_type
+
         tenant_id = await self._ensure_personal_tenant_id(user_id)
         existing = await self._models.get_for_tenant(model_id, tenant_id)
         if existing is None:
             raise ManagementEntityNotFoundError("model", str(model_id))
+        incoming = dict(fields)
+        resync_capabilities = bool(incoming.pop("resync_capabilities", False))
+        model_types_raw = incoming.pop("model_types", None)
+        if resync_capabilities and is_config_managed_system_gateway_model(tags=existing.tags):
+            raise ValidationError("配置托管的系统模型不可从 LiteLLM 同步能力")
+
         update_fields: dict[str, Any] = {}
-        if "credential_id" in fields and fields["credential_id"] is not None:
-            await self._assert_user_owns_credential(user_id, fields["credential_id"])
-            nrow = await self._creds.get(fields["credential_id"])
+        if "credential_id" in incoming and incoming["credential_id"] is not None:
+            await self._assert_user_owns_credential(user_id, incoming["credential_id"])
+            nrow = await self._creds.get(incoming["credential_id"])
             if nrow is None:
-                raise CredentialNotFoundError(str(fields["credential_id"]))
+                raise CredentialNotFoundError(str(incoming["credential_id"]))
             if nrow.provider.strip().lower() != existing.provider.strip().lower():
                 raise ValidationError(
                     f"凭据提供商为 {nrow.provider}，与当前模型的 provider（{existing.provider}）不一致"
                 )
-            update_fields["credential_id"] = fields["credential_id"]
-        if fields.get("model_id") is not None:
+            update_fields["credential_id"] = incoming["credential_id"]
+        if incoming.get("model_id") is not None:
             update_fields["real_model"] = build_litellm_model_id(
-                existing.provider, str(fields["model_id"])
+                existing.provider, str(incoming["model_id"])
             )
-        if fields.get("is_active") is not None:
-            update_fields["enabled"] = fields["is_active"]
-        if fields.get("display_name") is not None:
+        if incoming.get("is_active") is not None:
+            update_fields["enabled"] = incoming["is_active"]
+        if model_types_raw is not None:
+            if len(model_types_raw) != 1:
+                raise ValidationError("个人模型编辑仅支持单一 model_type")
+            mtype = str(model_types_raw[0]).strip().lower()
+            if mtype not in PERSONAL_MODEL_TYPES:
+                raise ValidationError(f"无效的 model_type: {mtype}")
+            update_fields["capability"] = capability_for_model_type(mtype)
+        if incoming.get("display_name") is not None:
             merged_tags = dict(existing.tags or {})
-            merged_tags["display_name"] = fields["display_name"]
+            merged_tags["display_name"] = incoming["display_name"]
             update_fields["tags"] = merged_tags
+
+        config_managed = is_config_managed_system_gateway_model(tags=existing.tags)
+        needs_tags_pipeline = (
+            resync_capabilities
+            or model_types_raw is not None
+            or "real_model" in update_fields
+            or "tags" in update_fields
+        )
+        if needs_tags_pipeline:
+            merged_tags = dict(existing.tags or {})
+            if isinstance(update_fields.get("tags"), dict):
+                merged_tags.update(update_fields["tags"])
+            effective_capability = str(
+                update_fields.get("capability") or existing.capability
+            ).strip()
+            if model_types_raw is not None:
+                merged_tags = tags_from_model_types(
+                    [str(model_types_raw[0]).strip().lower()],
+                    existing_tags=merged_tags,
+                    capability=effective_capability,
+                )
+            if resync_capabilities:
+                merged_tags = strip_litellm_capability_tags(merged_tags)
+            real_for_tags = str(update_fields.get("real_model") or existing.real_model).strip()
+            update_fields["tags"] = build_gateway_model_tags(
+                merged_tags,
+                provider=existing.provider,
+                real_model=real_for_tags,
+                skip_hints=config_managed,
+                hint_mode="resync" if resync_capabilities else "fill_missing",
+            )
+
         if not update_fields:
             return existing
         updated = await self._models.update(model_id, **update_fields)
@@ -614,13 +702,58 @@ class ModelWritesMixin:
             if prefix_msg:
                 raise ValidationError(prefix_msg)
             update_fields["real_model"] = build_litellm_model_id(existing.provider, raw_rm)
+        if "upstream_call_shape" in update_fields:
+            shape_raw = update_fields["upstream_call_shape"]
+            if shape_raw is None or (isinstance(shape_raw, str) and not shape_raw.strip()):
+                update_fields["upstream_call_shape"] = None
+            else:
+                shape = str(shape_raw).strip().lower()
+                if shape not in _ALLOWED_UPSTREAM_CALL_SHAPES:
+                    raise ValidationError(
+                        f"upstream_call_shape 须为 {sorted(_ALLOWED_UPSTREAM_CALL_SHAPES)} 之一"
+                    )
+                update_fields["upstream_call_shape"] = shape
+        config_managed = is_config_managed_system_gateway_model(tags=existing.tags)
+        model_types_raw = update_fields.pop("model_types", None)
+        if "capability" in update_fields and update_fields["capability"] is not None:
+            new_capability = _parse_gateway_capability(str(update_fields["capability"]))
+            if config_managed:
+                raise ValidationError("配置托管的系统模型不可修改主调用面")
+            existing_cap = str(existing.capability or "").strip().lower()
+            if new_capability != existing_cap and owner_tenant_id is not None:
+                await self._assert_capability_compatible_with_routes(
+                    tenant_id=owner_tenant_id,
+                    model_name=existing.name,
+                    new_capability=new_capability,
+                )
+            update_fields["capability"] = new_capability
         resync_capabilities = bool(update_fields.pop("resync_capabilities", False))
-        if resync_capabilities and is_config_managed_system_gateway_model(tags=existing.tags):
+        if resync_capabilities and config_managed:
             raise ValidationError("配置托管的系统模型不可从 LiteLLM 同步能力")
-        if resync_capabilities or "real_model" in update_fields or "tags" in update_fields:
+        effective_capability = str(
+            update_fields.get("capability") or existing.capability
+        ).strip()
+        if model_types_raw is not None:
+            if config_managed:
+                raise ValidationError("配置托管的系统模型不可修改产品特性")
+            validate_model_types_for_capability(model_types_raw, effective_capability)
+        needs_tags_pipeline = (
+            resync_capabilities
+            or "real_model" in update_fields
+            or "tags" in update_fields
+            or model_types_raw is not None
+            or "capability" in update_fields
+        )
+        if needs_tags_pipeline:
             merged_tags = dict(existing.tags or {})
             if isinstance(update_fields.get("tags"), dict):
                 merged_tags.update(update_fields["tags"])
+            if model_types_raw is not None:
+                merged_tags = tags_from_model_types(
+                    model_types_raw,
+                    existing_tags=merged_tags,
+                    capability=effective_capability,
+                )
             if resync_capabilities:
                 merged_tags = strip_litellm_capability_tags(merged_tags)
             real_for_tags = str(update_fields.get("real_model") or existing.real_model).strip()
@@ -628,7 +761,7 @@ class ModelWritesMixin:
                 merged_tags,
                 provider=existing.provider,
                 real_model=real_for_tags,
-                skip_hints=is_config_managed_system_gateway_model(tags=existing.tags),
+                skip_hints=config_managed,
                 hint_mode="resync" if resync_capabilities else "fill_missing",
             )
         new_name_raw = update_fields.get("name")

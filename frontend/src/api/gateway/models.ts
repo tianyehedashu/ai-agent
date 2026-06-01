@@ -37,6 +37,7 @@ export interface GatewayModel {
   tpm_limit: number | null
   enabled: boolean
   tags?: Record<string, unknown> | null
+  upstream_call_shape?: string | null
   /** 选择器用特性类型（后端由 tags + capability 推导） */
   model_types?: string[]
   /** 与 ModelCapabilitySnapshot 对齐的扁平特性 */
@@ -187,6 +188,8 @@ export interface GatewayModelUpdateBody {
   name?: string | null
   real_model?: string | null
   credential_id?: string | null
+  capability?: string | null
+  model_types?: string[] | null
   weight?: number | null
   rpm_limit?: number | null
   tpm_limit?: number | null

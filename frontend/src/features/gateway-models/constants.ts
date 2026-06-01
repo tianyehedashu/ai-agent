@@ -36,7 +36,7 @@ export type GatewayCapability = (typeof CAPABILITIES)[number]
 export const CAPABILITY_LABELS: Record<GatewayCapability, string> = {
   chat: '聊天 / 文本生成',
   embedding: '向量 Embedding',
-  image: '图片理解',
+  image: '图片生成（/v1/images）',
   video_generation: '视频生成',
   moderation: '内容审核',
   audio_transcription: '语音转文字',
