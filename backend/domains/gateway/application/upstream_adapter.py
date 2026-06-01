@@ -6,6 +6,10 @@ from typing import TYPE_CHECKING, Any
 
 from domains.gateway.domain.model_capability import tags_to_capability_snapshot
 from domains.gateway.domain.policies.invocation_policy import apply_invocation_kwargs
+from domains.gateway.domain.policies.volcengine_message_sanitize import (
+    is_volcengine_provider,
+    sanitize_messages_for_volcengine,
+)
 from domains.gateway.domain.upstream_policy import (
     clamp_max_tokens,
     max_output_tokens_limit,
@@ -45,6 +49,10 @@ class UpstreamAdapter:
                 record.real_model,
                 messages,
             )
+        if is_volcengine_provider(record.provider):
+            volcengine_messages = adapted.get("messages")
+            if isinstance(volcengine_messages, list):
+                adapted["messages"] = sanitize_messages_for_volcengine(volcengine_messages)
         return adapted
 
 
