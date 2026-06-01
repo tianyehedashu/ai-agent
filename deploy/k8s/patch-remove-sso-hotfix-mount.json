@@ -1,0 +1,22 @@
+[
+  {
+    "op": "remove",
+    "path": "/spec/template/spec/containers/0/volumeMounts/5"
+  },
+  {
+    "op": "remove",
+    "path": "/spec/template/spec/containers/0/volumeMounts/4"
+  },
+  {
+    "op": "remove",
+    "path": "/spec/template/spec/containers/0/volumeMounts/3"
+  },
+  {
+    "op": "remove",
+    "path": "/spec/template/spec/containers/0/volumeMounts/2"
+  },
+  {
+    "op": "remove",
+    "path": "/spec/template/spec/volumes/2"
+  }
+]

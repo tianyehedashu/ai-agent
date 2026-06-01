@@ -151,13 +151,24 @@ kubectl -n test rollout status deployment/backend --timeout=180s
 # 环境变量：fallback 必须为 false；不应再有 REDIS_USERNAME
 kubectl -n test exec deploy/backend -- env | grep -E 'GIIKIN_SESSION|REDIS_USERNAME|AUTH_MODE'
 
-# 运行中代码：须含 cookie_fallback 开关（旧热修镜像无此判断）
+# 勿再挂载 ai-agent-sso-hotfix ConfigMap（会覆盖 giikin_gateway.py / config.py 走旧热修）
+kubectl -n test get deploy backend -o yaml | grep -i sso-hotfix || echo "OK: no sso-hotfix mount"
+
+# 运行中代码：须含 cookie_fallback 开关（旧热修镜像/ConfigMap 无此判断）
 kubectl -n test exec deploy/backend -- grep -n cookie_fallback /app/domains/identity/infrastructure/auth/giikin_gateway.py
 
 # 带 guard_token 但无 Header：新镜像应 401，非 500
 curl -s -o /dev/null -w '%{http_code}\n' -b 'guard_token=invalid' \
   http://gateway.giimallai.com/ai-agent/api/v1/auth/me
 # 期望 401
+```
+
+若集群曾应用 [`patch-backend-sso-hotfix.yaml`](patch-backend-sso-hotfix.yaml)，须撤销挂载：
+
+```bash
+kubectl -n test patch deployment backend --type=json \
+  --patch-file patch-remove-sso-hotfix-mount.json
+kubectl -n test rollout status deployment/backend --timeout=180s
 ```
 
 参考 [`deploy/higress/giikin-auth-bridge-wasmplugin.example.yaml`](../higress/giikin-auth-bridge-wasmplugin.example.yaml)、[docs/SSO.md](../../docs/SSO.md)。
