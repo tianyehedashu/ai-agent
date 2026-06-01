@@ -20,6 +20,77 @@ export const isSsoMode = AUTH_MODE === 'sso'
 const RAW_SSO_LOGIN_URL = import.meta.env.VITE_SSO_LOGIN_URL ?? ''
 const RAW_SSO_LOGOUT_URL = import.meta.env.VITE_SSO_LOGOUT_URL ?? ''
 
+/** sessionStorage：SSO 跳转 manage.giikin.com 前保存，回调后恢复路径 */
+export const SSO_RETURN_PATH_KEY = 'ai_agent_sso_return_path'
+
+function normalizeAppRoot(): string {
+  const appRoot = (import.meta.env.VITE_APP_ROOT as string | undefined) ?? '/ai-agent'
+  if (!appRoot || appRoot === '/') {
+    return ''
+  }
+  return appRoot.endsWith('/') ? appRoot.slice(0, -1) : appRoot
+}
+
+interface SsoBindingResponse {
+  code?: number
+  msg?: string
+  data?: string
+}
+
+/**
+ * 构造 IAM binding API URL（GET /auth/binding/company_sso）。
+ * 该接口返回 JSON `{ code, data: authorizeUrl }`，不能直接浏览器导航。
+ */
+export function buildSsoBindingApiUrl(): URL | null {
+  if (!RAW_SSO_LOGIN_URL.trim()) {
+    return null
+  }
+  const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost'
+  const url = new URL(RAW_SSO_LOGIN_URL.trim(), origin)
+  const appRoot = normalizeAppRoot()
+  url.searchParams.set('callbackOrigin', `${origin}${appRoot}`)
+  if (!url.searchParams.has('domain')) {
+    url.searchParams.set('domain', typeof window !== 'undefined' ? window.location.host : 'admin')
+  }
+  return url
+}
+
+/**
+ * 发起 SSO 登录：先请求 binding API 取 authorizeUrl，再跳转 manage.giikin.com（与 plus-ui 一致）。
+ */
+export async function initiateSsoLogin(returnPath: string): Promise<void> {
+  const bindingUrl = buildSsoBindingApiUrl()
+  if (!bindingUrl) {
+    window.location.href = '/login'
+    return
+  }
+
+  sessionStorage.setItem(SSO_RETURN_PATH_KEY, returnPath)
+
+  const response = await fetch(bindingUrl.toString(), { credentials: 'include' })
+  const body = (await response.json()) as SsoBindingResponse
+
+  if (body.code === 200 && typeof body.data === 'string' && body.data.trim()) {
+    window.location.href = body.data.trim()
+    return
+  }
+
+  throw new Error(body.msg ?? 'SSO 登录初始化失败')
+}
+
+/**
+ * @deprecated 请使用 {@link initiateSsoLogin}；binding 接口返回 JSON 而非 302。
+ */
+export function buildSsoLoginUrl(returnPath: string): string {
+  const bindingUrl = buildSsoBindingApiUrl()
+  if (!bindingUrl) {
+    return '/login'
+  }
+  const normalizedReturn = returnPath.startsWith('/') ? returnPath : `/${returnPath}`
+  bindingUrl.searchParams.set('redirect', `${window.location.origin}${normalizedReturn}`)
+  return bindingUrl.toString()
+}
+
 /** 生产默认同域 IAM 登出（清除 guard_token + Redis 会话） */
 const DEFAULT_SSO_LOGOUT_URL = 'http://gateway.giimallai.com/api/auth/logout'
 
@@ -34,22 +105,4 @@ export function resolveSsoLogoutUrl(): string {
     return `${window.location.origin}/api/auth/logout`
   }
   return DEFAULT_SSO_LOGOUT_URL
-}
-
-/**
- * 构造 SSO 登录跳转地址，附带当前来源以便登录后回跳。
- * callbackOrigin 含 VITE_APP_ROOT，使 IAM 回调落到 /ai-agent/sso-callback。
- */
-export function buildSsoLoginUrl(returnPath: string): string {
-  if (!RAW_SSO_LOGIN_URL) {
-    return '/login'
-  }
-  const appRoot = (import.meta.env.VITE_APP_ROOT as string | undefined) ?? '/ai-agent'
-  const normalizedRoot = appRoot.endsWith('/') ? appRoot.slice(0, -1) : appRoot
-  const origin = typeof window !== 'undefined' ? window.location.origin : ''
-  const callbackOrigin = encodeURIComponent(`${origin}${normalizedRoot}`)
-  const normalizedReturn = returnPath.startsWith('/') ? returnPath : `/${returnPath}`
-  const redirect = encodeURIComponent(`${origin}${normalizedReturn}`)
-  const sep = RAW_SSO_LOGIN_URL.includes('?') ? '&' : '?'
-  return `${RAW_SSO_LOGIN_URL}${sep}callbackOrigin=${callbackOrigin}&redirect=${redirect}`
 }

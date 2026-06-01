@@ -11,6 +11,8 @@ import { useQueryClient } from '@tanstack/react-query'
 import { Loader2 } from 'lucide-react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 
+import { SSO_RETURN_PATH_KEY } from '@/config/auth'
+
 function resolveReturnPath(raw: string | null): string {
   if (!raw) return '/'
   try {
@@ -29,7 +31,9 @@ export default function SsoCallbackPage(): React.JSX.Element {
   const [searchParams] = useSearchParams()
 
   useEffect(() => {
-    const target = resolveReturnPath(searchParams.get('redirect'))
+    const stored = sessionStorage.getItem(SSO_RETURN_PATH_KEY)
+    sessionStorage.removeItem(SSO_RETURN_PATH_KEY)
+    const target = resolveReturnPath(searchParams.get('redirect') ?? stored)
     void queryClient.invalidateQueries({ queryKey: ['auth', 'currentUser'] }).then(() => {
       navigate(target, { replace: true })
     })

@@ -30,7 +30,7 @@
                                      · 注入 X-Giikin-Internal-Key
 ```
 
-1. **登录**：用户访问 ai-agent，未登录则前端整页跳转到 giikin SSO 登录入口（`VITE_SSO_LOGIN_URL`，附 `callbackOrigin`/`redirect`）。
+1. **登录**：用户访问 ai-agent，未登录则前端 **fetch** `GET /auth/binding/company_sso`（附 `callbackOrigin`），取 JSON 中的 `data`（manage.giikin.com 授权 URL）再整页跳转；**不可**直接导航 binding URL（会显示 JSON）。
 2. **下发 Cookie**：`giikin-iam` 登录成功后由 `UserActionListener` 直接 `Set-Cookie: guard_token=...`（Nacos `spring.higress.session-cookie-*` 配置），实现跨应用会话桥接。
 3. **回跳**：登录后回到 ai-agent `/sso-callback`，前端刷新 `GET /auth/me` 并跳回原始页面。
 4. **每次请求**：HiGress 校验 Cookie 并注入身份 Header；ai-agent 信任并解析。
