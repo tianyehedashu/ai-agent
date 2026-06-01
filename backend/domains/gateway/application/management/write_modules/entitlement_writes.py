@@ -94,6 +94,40 @@ class EntitlementWritesMixin:
         await invalidate_gateway_quota_rule_cache_for_team(tenant_id)
         self.invalidate_tenant_gateway_read_caches(tenant_id)
 
+    async def delete_self_budget(
+        self,
+        budget_id: uuid.UUID,
+        *,
+        tenant_id: uuid.UUID,
+        actor_user_id: uuid.UUID,
+    ) -> None:
+        """成员自助删除：仅允许删本人「user + 本人凭据」的 platform 配额行。"""
+        budget = await self._budgets.get(budget_id)
+        if budget is None:
+            raise ManagementEntityNotFoundError("budget", str(budget_id))
+        if (
+            budget.target_kind != "user"
+            or budget.target_id != actor_user_id
+            or budget.credential_id is None
+        ):
+            raise ManagementEntityNotFoundError("budget", str(budget_id))
+        await self._assert_credential_owned_by_actor(
+            budget.credential_id,
+            actor_user_id=actor_user_id,
+            tenant_id=tenant_id,
+        )
+        deleted = await self._budgets.delete(budget_id)
+        if not deleted:
+            raise ManagementEntityNotFoundError("budget", str(budget_id))
+        from domains.gateway.application.gateway_cache_invalidation import (
+            invalidate_gateway_budget_config_cache,
+            invalidate_gateway_quota_rule_cache_for_team,
+        )
+
+        await invalidate_gateway_budget_config_cache()
+        await invalidate_gateway_quota_rule_cache_for_team(tenant_id)
+        self.invalidate_tenant_gateway_read_caches(tenant_id)
+
     async def create_alert_rule(
         self,
         *,

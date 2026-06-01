@@ -10,6 +10,7 @@ import { useNavigate } from 'react-router-dom'
 
 import { ApiError } from '@/api/errors'
 import type { GatewayUsageAggregation } from '@/api/gateway/logs'
+import type { QuotaRule } from '@/api/gateway/quota-rules'
 import {
   statsApi,
   type GatewayUsageStatsGroupBy,
@@ -22,6 +23,8 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { budgetsAdminHref } from '@/features/gateway-budget/paths'
+import { findQuotaRuleForStatsRow } from '@/features/gateway-budget/quota-rule-utils'
+import { useGatewayQuotaRules } from '@/features/gateway-budget/use-gateway-quota-rules'
 import { useInfiniteGatewayModelPages } from '@/features/gateway-models/hooks/use-infinite-gateway-model-pages'
 import { GATEWAY_DISPLAY_CURRENCY } from '@/features/gateway-pricing/display-currency'
 import { GatewayRefreshButton } from '@/features/gateway-shared/gateway-refresh-button'
@@ -405,6 +408,23 @@ export default function GatewayStatsPage(): React.JSX.Element {
   )
 
   const items = useMemo(() => statsQuery.data?.items ?? EMPTY_STATS_ITEMS, [statsQuery.data?.items])
+
+  // 平台配额（含实时用量）：用于统计行内展示「对应配额」。跨团队聚合维度不一定属本团队，跳过。
+  const quotaRulesQuery = useGatewayQuotaRules(
+    teamId,
+    { layer: 'platform', include_usage: true },
+    { enabled: teamId.length > 0 && !crossTeamStatsEnabled }
+  )
+  const quotaByRowKey = useMemo((): ReadonlyMap<string, QuotaRule> | undefined => {
+    const rules = quotaRulesQuery.data ?? []
+    if (crossTeamStatsEnabled || rules.length === 0) return undefined
+    const map = new Map<string, QuotaRule>()
+    for (const it of items) {
+      const rule = findQuotaRuleForStatsRow(rules, groupBy, it)
+      if (rule) map.set(it.group_key, rule)
+    }
+    return map.size > 0 ? map : undefined
+  }, [quotaRulesQuery.data, items, groupBy, crossTeamStatsEnabled])
 
   const tableCredentialTopN = useMemo(() => {
     const credentialCount = credentialOptions.length || TABLE_CREDENTIAL_TOP_N
@@ -904,7 +924,12 @@ export default function GatewayStatsPage(): React.JSX.Element {
           ) : null}
           {!statsQuery.isLoading && !statsQuery.isError && items.length > 0 ? (
             groupBy === 'user_model_credential' ? (
-              <UsageStatsCubeTable items={items} maxRequests={maxRequests} showCost={isAdmin} />
+              <UsageStatsCubeTable
+                items={items}
+                maxRequests={maxRequests}
+                showCost={isAdmin}
+                quotaByRowKey={quotaByRowKey}
+              />
             ) : (
               <UsageStatsRankingTable
                 items={items}
@@ -915,6 +940,7 @@ export default function GatewayStatsPage(): React.JSX.Element {
                 breakdownByRowKey={breakdownByRowKey}
                 loadingRowKeys={loadingRowKeys}
                 credentialTopN={tableCredentialTopN}
+                quotaByRowKey={quotaByRowKey}
                 onDrill={handleRowDrill}
                 onShowDetail={handleShowDetail}
                 onSetQuota={handleSetQuota}

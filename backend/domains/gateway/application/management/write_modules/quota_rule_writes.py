@@ -124,12 +124,33 @@ class QuotaRuleWritesMixin:
 
         raise ValidationError(f"不支持的配额层级: {cmd.layer}")
 
+    async def batch_upsert_self_quota_rules(
+        self,
+        commands: list[QuotaRuleUpsertCommand],
+        *,
+        tenant_id: uuid.UUID,
+        actor_user_id: uuid.UUID,
+    ) -> QuotaRuleBatchResult:
+        """成员自助：仅允许写「本人 user + 本人凭据(+模型)」的 platform 配额。
+
+        复用 ``batch_upsert_quota_rules`` 的平台批量路径；``actor_user_id`` 触发自助
+        校验（强制 target_kind=user / target_id=actor / 凭据归属本人），非 platform
+        命令直接失败。
+        """
+        return await self.batch_upsert_quota_rules(
+            commands,
+            tenant_id=tenant_id,
+            is_platform_admin=False,
+            actor_user_id=actor_user_id,
+        )
+
     async def batch_upsert_quota_rules(
         self,
         commands: list[QuotaRuleUpsertCommand],
         *,
         tenant_id: uuid.UUID,
         is_platform_admin: bool,
+        actor_user_id: uuid.UUID | None = None,
     ) -> QuotaRuleBatchResult:
         from domains.gateway.application.management.plan_read_mappers import (
             entitlement_plan_from_orm,
@@ -158,11 +179,18 @@ class QuotaRuleWritesMixin:
                         cmd,
                         tenant_id=tenant_id,
                         is_platform_admin=is_platform_admin,
+                        actor_user_id=actor_user_id,
                     )
                     platform_items.append((index, item))
                 except (ValidationError, AIAgentError) as exc:
                     logger.warning("quota rule batch upsert failed index=%s: %s", index, exc)
                     failed.append(QuotaRuleBatchFailure(index=index, error=str(exc)))
+            elif actor_user_id is not None:
+                failed.append(
+                    QuotaRuleBatchFailure(
+                        index=index, error="成员自助配额仅支持平台层（platform）"
+                    )
+                )
             else:
                 non_platform_commands.append((index, cmd))
 
@@ -240,11 +268,15 @@ class QuotaRuleWritesMixin:
         *,
         tenant_id: uuid.UUID,
         is_platform_admin: bool,
+        actor_user_id: uuid.UUID | None = None,
     ) -> tuple[str, uuid.UUID | None, uuid.UUID | None, str]:
         """归一化 platform target_kind/target_id/budget_tenant/period 并完成校验链。
 
         返回的 ``budget_tenant`` 仅在「成员总量/模型护栏」（``target_kind=user`` 且无
         ``credential_id``）时为当前团队，使成员额度按团队隔离；其余维度为 ``None``。
+
+        ``actor_user_id`` 非空表示成员自助模式：强制「本人 user + 本人凭据(+模型)」，
+        并以凭据归属断言替代团队管理员的成员/凭据归属断言。
         """
         target_kind = cmd.target_kind
         if target_kind is None:
@@ -263,6 +295,14 @@ class QuotaRuleWritesMixin:
         elif target_kind == "key":
             target_id = cmd.access_id or target_id
 
+        if actor_user_id is not None:
+            if target_kind != "user":
+                raise ValidationError("成员自助配额仅支持设置本人维度（target_kind=user）")
+            if target_id != actor_user_id:
+                raise ValidationError("成员自助配额只能设置本人额度")
+            if cmd.credential_id is None:
+                raise ValidationError("成员自助配额需指定本人的凭据")
+
         if target_kind == "key" and target_id is None:
             raise ValidationError("platform key 配额需要 access_id 或 target_id")
         if target_kind == "system" and not is_platform_admin:
@@ -279,20 +319,31 @@ class QuotaRuleWritesMixin:
             limit_requests=cmd.limit_requests,
         )
 
-        await self._assert_budget_target_in_team(
-            target_kind,
-            target_id,
-            tenant_id=tenant_id,
-            is_platform_admin=is_platform_admin,
-        )
-        if cmd.credential_id is not None:
-            await self._assert_credential_in_team(
+        if actor_user_id is not None:
+            if cmd.credential_id is None:
+                raise ValidationError("成员自助配额需指定本人的凭据")
+            await self._assert_credential_owned_by_actor(
                 cmd.credential_id,
+                actor_user_id=actor_user_id,
                 tenant_id=tenant_id,
-                is_platform_admin=is_platform_admin,
             )
             if cmd.model_name:
                 await self._assert_model_alias_on_credential(cmd.credential_id, cmd.model_name)
+        else:
+            await self._assert_budget_target_in_team(
+                target_kind,
+                target_id,
+                tenant_id=tenant_id,
+                is_platform_admin=is_platform_admin,
+            )
+            if cmd.credential_id is not None:
+                await self._assert_credential_in_team(
+                    cmd.credential_id,
+                    tenant_id=tenant_id,
+                    is_platform_admin=is_platform_admin,
+                )
+                if cmd.model_name:
+                    await self._assert_model_alias_on_credential(cmd.credential_id, cmd.model_name)
 
         # 成员总量/模型护栏按团队隔离；成员+凭据行由 credential 绑定团队，tenant 维度留空。
         budget_tenant = tenant_id if (target_kind == "user" and cmd.credential_id is None) else None
@@ -304,10 +355,14 @@ class QuotaRuleWritesMixin:
         *,
         tenant_id: uuid.UUID,
         is_platform_admin: bool,
+        actor_user_id: uuid.UUID | None = None,
     ) -> dict[str, object]:
         """将 platform 命令解析为 batch_upsert 所需字典；校验失败会抛异常。"""
         target_kind, target_id, budget_tenant, period = await self._resolve_platform_target(
-            cmd, tenant_id=tenant_id, is_platform_admin=is_platform_admin
+            cmd,
+            tenant_id=tenant_id,
+            is_platform_admin=is_platform_admin,
+            actor_user_id=actor_user_id,
         )
         return {
             "target_kind": target_kind,

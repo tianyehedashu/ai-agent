@@ -1,12 +1,14 @@
 import { memo, useCallback } from 'react'
 import type React from 'react'
 
+import type { QuotaRule } from '@/api/gateway/quota-rules'
 import type { GatewayUsageStatsItem } from '@/api/gateway/stats'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { GATEWAY_DISPLAY_CURRENCY } from '@/features/gateway-pricing/display-currency'
 import { UsageStatsBreakdownCredentials } from '@/features/gateway-usage/usage-stats-breakdown-credentials'
 import { UsageStatsBreakdownPrimary } from '@/features/gateway-usage/usage-stats-breakdown-primary'
+import { UsageStatsQuotaCell } from '@/features/gateway-usage/usage-stats-quota-cell'
 import type { UsageStatsRowBreakdown } from '@/features/gateway-usage/use-usage-stats-breakdown-batch'
 import { BarChart3, Shield } from '@/lib/lucide-icons'
 import { coalesceMoney, formatMoney } from '@/lib/money'
@@ -22,6 +24,8 @@ export interface UsageStatsRankingTableProps {
   breakdownByRowKey: ReadonlyMap<string, UsageStatsRowBreakdown>
   loadingRowKeys: ReadonlySet<string>
   credentialTopN: number
+  /** 行 group_key → 对应平台配额规则；提供则展示「配额」列 */
+  quotaByRowKey?: ReadonlyMap<string, QuotaRule>
   onDrill: (item: GatewayUsageStatsItem) => void
   onShowDetail: (item: GatewayUsageStatsItem) => void
   onSetQuota?: (item: GatewayUsageStatsItem) => void
@@ -35,6 +39,8 @@ const StatsRow = memo(function StatsRow({
   rowBreakdown,
   rowBreakdownLoading,
   credentialTopN,
+  showQuota,
+  quotaRule,
   onDrill,
   onShowDetail,
   onSetQuota,
@@ -46,6 +52,8 @@ const StatsRow = memo(function StatsRow({
   rowBreakdown?: UsageStatsRowBreakdown
   rowBreakdownLoading: boolean
   credentialTopN: number
+  showQuota: boolean
+  quotaRule?: QuotaRule
   onDrill: (item: GatewayUsageStatsItem) => void
   onShowDetail: (item: GatewayUsageStatsItem) => void
   onSetQuota?: (item: GatewayUsageStatsItem) => void
@@ -150,6 +158,11 @@ const StatsRow = memo(function StatsRow({
       <td className="px-4 py-3 text-right tabular-nums">
         {Math.round(item.avg_latency_ms).toLocaleString()}ms
       </td>
+      {showQuota ? (
+        <td className="px-4 py-3">
+          <UsageStatsQuotaCell rule={quotaRule} />
+        </td>
+      ) : null}
       <td className="px-4 py-3 text-right">
         <div className="flex items-center justify-end gap-1">
           {onSetQuota ? (
@@ -189,10 +202,12 @@ export const UsageStatsRankingTable = memo(function UsageStatsRankingTable({
   breakdownByRowKey,
   loadingRowKeys,
   credentialTopN,
+  quotaByRowKey,
   onDrill,
   onShowDetail,
   onSetQuota,
 }: Readonly<UsageStatsRankingTableProps>): React.JSX.Element {
+  const showQuota = quotaByRowKey !== undefined
   return (
     <div className="overflow-x-auto">
       <table className="w-full min-w-[1040px] text-sm">
@@ -219,6 +234,9 @@ export const UsageStatsRankingTable = memo(function UsageStatsRankingTable({
             {showCost ? <th className="px-4 py-2 text-right font-medium">成本</th> : null}
             <th className="px-4 py-2 text-right font-medium">缓存</th>
             <th className="px-4 py-2 text-right font-medium">延迟</th>
+            {showQuota ? (
+              <th className="w-[140px] px-4 py-2 text-right font-medium">配额</th>
+            ) : null}
             <th className="w-[120px] px-4 py-2 text-right font-medium">操作</th>
           </tr>
         </thead>
@@ -235,6 +253,8 @@ export const UsageStatsRankingTable = memo(function UsageStatsRankingTable({
                 rowBreakdown={breakdownByRowKey.get(rowKey)}
                 rowBreakdownLoading={loadingRowKeys.has(rowKey)}
                 credentialTopN={credentialTopN}
+                showQuota={showQuota}
+                quotaRule={quotaByRowKey?.get(item.group_key)}
                 onDrill={onDrill}
                 onShowDetail={onShowDetail}
                 onSetQuota={onSetQuota}

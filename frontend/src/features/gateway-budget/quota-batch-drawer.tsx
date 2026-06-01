@@ -42,6 +42,8 @@ export interface QuotaBatchDrawerProps {
   disabled: boolean
   pending: boolean
   previewCount: number
+  /** admin=全维度；member=仅本人 + 本人凭据的平台配额自助 */
+  mode?: 'admin' | 'member'
   memberOptions: { id: string; label: string }[]
   keyOptions: { id: string; label: string }[]
   credentialOptions: { id: string; label: string }[]
@@ -94,6 +96,7 @@ export function QuotaBatchDrawer({
   disabled,
   pending,
   previewCount,
+  mode = 'admin',
   memberOptions,
   keyOptions,
   credentialOptions,
@@ -106,6 +109,7 @@ export function QuotaBatchDrawer({
   const [keyQuery, setKeyQuery] = useState('')
   const [credQuery, setCredQuery] = useState('')
 
+  const isMember = mode === 'member'
   const filteredMembers = useFilteredOptions(memberOptions, memberQuery)
   const filteredKeys = useFilteredOptions(keyOptions, keyQuery)
   const filteredCreds = useFilteredOptions(credentialOptions, credQuery)
@@ -115,207 +119,66 @@ export function QuotaBatchDrawer({
       <SheetContent className="flex max-h-[100dvh] w-full flex-col sm:max-w-lg">
         <OverlayScope className="flex min-h-0 flex-1 flex-col">
           <SheetHeader className="shrink-0 pr-8 text-left">
-            <SheetTitle>批量设置配额</SheetTitle>
+            <SheetTitle>{isMember ? '设置我的配额' : '批量设置配额'}</SheetTitle>
             <SheetDescription>
-              选择层级与维度组合，统一应用限额。平台配额按全团队/成员/虚拟
-              Key；上游需指定凭据；下游按虚拟 Key 写入权益套餐。
+              {isMember
+                ? '为本人在「自己创建的团队凭据」上设置平台消费限额（自我约束）。选择凭据与模型后填写限额。'
+                : '选择层级与维度组合，统一应用限额。平台配额按全团队/成员/虚拟 Key；上游需指定凭据；下游按虚拟 Key 写入权益套餐。'}
             </SheetDescription>
           </SheetHeader>
 
           <div className="mt-4 grid min-h-0 flex-1 gap-4 overflow-y-auto pr-1">
-            <div className="space-y-2">
-              <Label htmlFor="quota-batch-layer">层级</Label>
-              <Select
-                value={values.layer}
-                onValueChange={(layer) => {
-                  onChange(
-                    patchQuotaBatchFormForLayer(values, layer as QuotaBatchFormValues['layer'])
-                  )
-                }}
-                disabled={disabled}
-              >
-                <SelectTrigger id="quota-batch-layer">
-                  <SelectValue placeholder="选择层级" />
-                </SelectTrigger>
-                <SelectContent>
-                  {(['platform', 'upstream', 'downstream'] as const).map((layer) => (
-                    <SelectItem key={layer} value={layer}>
-                      {LAYER_LABELS[layer]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                {values.layer === 'platform'
-                  ? '限制本团队在 Gateway 上的消费（租户/成员/Key）。'
-                  : values.layer === 'upstream'
-                    ? '限制上游凭据调用额度，可勾选全部凭据批量写入。'
-                    : '为虚拟 Key 配置下游客户权益套餐桶。'}
-              </p>
-            </div>
-
-            {values.layer === 'platform' ? (
+            {isMember ? (
               <>
                 <div className="space-y-2">
-                  <Label htmlFor="quota-batch-subject">主体</Label>
-                  <Select
-                    value={values.subjectMode}
-                    onValueChange={(mode) => {
-                      onChange(
-                        patchQuotaBatchFormForSubjectMode(
-                          values,
-                          mode as QuotaBatchFormValues['subjectMode']
-                        )
-                      )
+                  <Label>凭据（必选，可多选）</Label>
+                  <Input
+                    value={credQuery}
+                    onChange={(e) => {
+                      setCredQuery(e.target.value)
                     }}
-                    disabled={disabled}
-                  >
-                    <SelectTrigger id="quota-batch-subject">
-                      <SelectValue placeholder="选择主体" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="tenant">全团队</SelectItem>
-                      <SelectItem value="users">指定成员</SelectItem>
-                      <SelectItem value="keys">虚拟 Key</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  {values.subjectMode === 'tenant' ? (
-                    <p className="text-xs text-muted-foreground">
-                      对当前团队全体生效一条平台护栏（与成员/Key 规则可并存）。
-                    </p>
-                  ) : null}
+                    placeholder="搜索本人凭据…"
+                    className="h-8 text-xs"
+                  />
+                  <div className="max-h-40 space-y-2 overflow-y-auto rounded-md border p-2">
+                    <MetaListPlaceholder
+                      loading={metaLoading}
+                      empty={!metaLoading && filteredCreds.length === 0}
+                      emptyHint={
+                        credQuery ? '无匹配凭据' : '暂无本人创建的团队凭据；可先在凭据页添加。'
+                      }
+                    />
+                    {filteredCreds.map((c) => (
+                      <label key={c.id} className="flex cursor-pointer items-center gap-2 text-sm">
+                        <Checkbox
+                          checked={values.credentialIds.includes(c.id)}
+                          disabled={disabled || metaLoading}
+                          onCheckedChange={(checked) => {
+                            const next = checked
+                              ? [...values.credentialIds, c.id]
+                              : values.credentialIds.filter((id) => id !== c.id)
+                            onChange({ ...values, credentialIds: next })
+                          }}
+                        />
+                        {c.label}
+                      </label>
+                    ))}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    仅展示本人创建的团队凭据。个人 BYOK
+                    凭据请在「凭据」页就地设限；个人工作区模型不受平台配额约束。
+                  </p>
                 </div>
-                {values.subjectMode === 'users' ? (
-                  <div className="space-y-2">
-                    <Label>成员（可多选）</Label>
-                    <Input
-                      value={memberQuery}
-                      onChange={(e) => {
-                        setMemberQuery(e.target.value)
-                      }}
-                      placeholder="搜索成员…"
-                      className="h-8 text-xs"
-                    />
-                    <div className="max-h-40 space-y-2 overflow-y-auto rounded-md border p-2">
-                      <MetaListPlaceholder
-                        loading={metaLoading}
-                        empty={!metaLoading && filteredMembers.length === 0}
-                        emptyHint={memberQuery ? '无匹配成员' : '暂无成员，请先在团队页添加成员。'}
-                      />
-                      {filteredMembers.map((m) => (
-                        <label
-                          key={m.id}
-                          className="flex cursor-pointer items-center gap-2 text-sm"
-                        >
-                          <Checkbox
-                            checked={values.userIds.includes(m.id)}
-                            disabled={disabled || metaLoading}
-                            onCheckedChange={(checked) => {
-                              const next = checked
-                                ? [...values.userIds, m.id]
-                                : values.userIds.filter((id) => id !== m.id)
-                              onChange({ ...values, userIds: next })
-                            }}
-                          />
-                          {m.label}
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                ) : null}
-                {values.subjectMode === 'users' ? (
-                  <div className="space-y-2">
-                    <Label>凭据（可选，多选）</Label>
-                    <Input
-                      value={credQuery}
-                      onChange={(e) => {
-                        setCredQuery(e.target.value)
-                      }}
-                      placeholder="搜索凭据…（不选=成员总量护栏）"
-                      className="h-8 text-xs"
-                    />
-                    <div className="max-h-40 space-y-2 overflow-y-auto rounded-md border p-2">
-                      <MetaListPlaceholder
-                        loading={metaLoading}
-                        empty={!metaLoading && filteredCreds.length === 0}
-                        emptyHint={credQuery ? '无匹配凭据' : '暂无团队凭据。'}
-                      />
-                      {filteredCreds.map((c) => (
-                        <label
-                          key={c.id}
-                          className="flex cursor-pointer items-center gap-2 text-sm"
-                        >
-                          <Checkbox
-                            checked={values.credentialIds.includes(c.id)}
-                            disabled={disabled || metaLoading}
-                            onCheckedChange={(checked) => {
-                              const next = checked
-                                ? [...values.credentialIds, c.id]
-                                : values.credentialIds.filter((id) => id !== c.id)
-                              onChange({ ...values, credentialIds: next })
-                            }}
-                          />
-                          {c.label}
-                        </label>
-                      ))}
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      不选凭据=成员在全团队的总用量护栏；选凭据=限制该成员在指定团队凭据上的细粒度用量。
-                      多凭据路由请选择凭据后再指定其下「别名--凭据」具体模型；个人工作区模型不受平台配额约束。
-                    </p>
-                  </div>
-                ) : null}
-                {values.subjectMode === 'keys' ? (
-                  <div className="space-y-2">
-                    <Label>虚拟 Key（可多选）</Label>
-                    <Input
-                      value={keyQuery}
-                      onChange={(e) => {
-                        setKeyQuery(e.target.value)
-                      }}
-                      placeholder="搜索 Key…"
-                      className="h-8 text-xs"
-                    />
-                    <div className="max-h-40 space-y-2 overflow-y-auto rounded-md border p-2">
-                      <MetaListPlaceholder
-                        loading={metaLoading}
-                        empty={!metaLoading && filteredKeys.length === 0}
-                        emptyHint={keyQuery ? '无匹配 Key' : '暂无虚拟 Key，请先在 Key 页创建。'}
-                      />
-                      {filteredKeys.map((k) => (
-                        <label
-                          key={k.id}
-                          className="flex cursor-pointer items-center gap-2 text-sm"
-                        >
-                          <Checkbox
-                            checked={values.keyIds.includes(k.id)}
-                            disabled={disabled || metaLoading}
-                            onCheckedChange={(checked) => {
-                              const next = checked
-                                ? [...values.keyIds, k.id]
-                                : values.keyIds.filter((id) => id !== k.id)
-                              onChange({ ...values, keyIds: next })
-                            }}
-                          />
-                          {k.label}
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                ) : null}
                 <div className="space-y-2">
-                  <Label htmlFor="quota-batch-period">周期</Label>
+                  <Label htmlFor="quota-batch-period-self">周期</Label>
                   <Select
                     value={values.period}
                     onValueChange={(period) => {
-                      onChange({
-                        ...values,
-                        period: period as QuotaBatchFormValues['period'],
-                      })
+                      onChange({ ...values, period: period as QuotaBatchFormValues['period'] })
                     }}
                     disabled={disabled}
                   >
-                    <SelectTrigger id="quota-batch-period">
+                    <SelectTrigger id="quota-batch-period-self">
                       <SelectValue placeholder="选择周期" />
                     </SelectTrigger>
                     <SelectContent>
@@ -328,154 +191,374 @@ export function QuotaBatchDrawer({
               </>
             ) : null}
 
-            {values.layer === 'upstream' ? (
-              <>
-                <label className="flex cursor-pointer items-center gap-2 text-sm">
-                  <Checkbox
-                    checked={values.allCredentials}
-                    disabled={disabled}
-                    onCheckedChange={(checked) => {
-                      onChange({ ...values, allCredentials: checked === true })
-                    }}
-                  />
-                  全部凭据
-                </label>
-                {!values.allCredentials ? (
-                  <div className="space-y-2">
-                    <Label>凭据（可多选）</Label>
-                    <Input
-                      value={credQuery}
-                      onChange={(e) => {
-                        setCredQuery(e.target.value)
-                      }}
-                      placeholder="搜索凭据…"
-                      className="h-8 text-xs"
-                    />
-                    <div className="max-h-40 space-y-2 overflow-y-auto rounded-md border p-2">
-                      <MetaListPlaceholder
-                        loading={metaLoading}
-                        empty={!metaLoading && filteredCreds.length === 0}
-                        emptyHint={credQuery ? '无匹配凭据' : '暂无凭据，请先在凭据页添加。'}
-                      />
-                      {filteredCreds.map((c) => (
-                        <label
-                          key={c.id}
-                          className="flex cursor-pointer items-center gap-2 text-sm"
-                        >
-                          <Checkbox
-                            checked={values.credentialIds.includes(c.id)}
-                            disabled={disabled || metaLoading}
-                            onCheckedChange={(checked) => {
-                              const next = checked
-                                ? [...values.credentialIds, c.id]
-                                : values.credentialIds.filter((id) => id !== c.id)
-                              onChange({ ...values, credentialIds: next })
-                            }}
-                          />
-                          {c.label}
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                ) : null}
-                <div>
-                  <Label htmlFor="quota-batch-window-up">窗口（秒，0=套餐周期）</Label>
-                  <Input
-                    id="quota-batch-window-up"
-                    value={values.windowSeconds}
-                    onChange={(e) => {
-                      onChange({ ...values, windowSeconds: e.target.value })
-                    }}
-                    disabled={disabled}
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="quota-batch-label-up">桶标签</Label>
-                  <Input
-                    id="quota-batch-label-up"
-                    value={values.quotaLabel}
-                    onChange={(e) => {
-                      onChange({ ...values, quotaLabel: e.target.value })
-                    }}
-                    disabled={disabled}
-                  />
-                </div>
-              </>
-            ) : null}
-
-            {values.layer === 'downstream' ? (
+            {isMember ? null : (
               <>
                 <div className="space-y-2">
-                  <Label>虚拟 Key（必选，可多选）</Label>
-                  <div className="max-h-40 space-y-2 overflow-y-auto rounded-md border p-2">
-                    <MetaListPlaceholder
-                      loading={metaLoading}
-                      empty={!metaLoading && keyOptions.length === 0}
-                      emptyHint="暂无虚拟 Key，请先在 Key 页创建。"
-                    />
-                    {keyOptions.map((k) => (
-                      <label key={k.id} className="flex cursor-pointer items-center gap-2 text-sm">
-                        <Checkbox
-                          checked={values.keyIds.includes(k.id)}
-                          disabled={disabled || metaLoading}
-                          onCheckedChange={(checked) => {
-                            const next = checked
-                              ? [...values.keyIds, k.id]
-                              : values.keyIds.filter((id) => id !== k.id)
-                            onChange({ ...values, keyIds: next })
-                          }}
-                        />
-                        {k.label}
-                      </label>
-                    ))}
-                  </div>
-                </div>
-                <div>
-                  <Label htmlFor="quota-batch-window-down">窗口（秒，0=套餐周期）</Label>
-                  <Input
-                    id="quota-batch-window-down"
-                    value={values.windowSeconds}
-                    onChange={(e) => {
-                      onChange({ ...values, windowSeconds: e.target.value })
+                  <Label htmlFor="quota-batch-layer">层级</Label>
+                  <Select
+                    value={values.layer}
+                    onValueChange={(layer) => {
+                      onChange(
+                        patchQuotaBatchFormForLayer(values, layer as QuotaBatchFormValues['layer'])
+                      )
                     }}
                     disabled={disabled}
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="quota-batch-label-down">桶标签</Label>
-                  <Input
-                    id="quota-batch-label-down"
-                    value={values.quotaLabel}
-                    onChange={(e) => {
-                      onChange({ ...values, quotaLabel: e.target.value })
-                    }}
-                    disabled={disabled}
-                  />
-                </div>
-              </>
-            ) : null}
-
-            <div className="space-y-2 border-t pt-4">
-              <p className="text-sm font-medium">模板预设</p>
-              <div className="flex flex-wrap gap-2">
-                {QUOTA_TEMPLATES.map((t) => (
-                  <Button
-                    key={t.label}
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    className="h-7 text-xs"
-                    disabled={disabled}
-                    onClick={() => {
-                      onChange(applyQuotaTemplate(values, t))
-                    }}
                   >
-                    {t.label}
-                    <span className="ml-1 text-[10px] text-muted-foreground">{t.description}</span>
-                  </Button>
-                ))}
+                    <SelectTrigger id="quota-batch-layer">
+                      <SelectValue placeholder="选择层级" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(['platform', 'upstream', 'downstream'] as const).map((layer) => (
+                        <SelectItem key={layer} value={layer}>
+                          {LAYER_LABELS[layer]}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    {values.layer === 'platform'
+                      ? '限制本团队在 Gateway 上的消费（租户/成员/Key）。'
+                      : values.layer === 'upstream'
+                        ? '限制上游凭据调用额度，可勾选全部凭据批量写入。'
+                        : '为虚拟 Key 配置下游客户权益套餐桶。'}
+                  </p>
+                </div>
+
+                {values.layer === 'platform' ? (
+                  <>
+                    <div className="space-y-2">
+                      <Label htmlFor="quota-batch-subject">主体</Label>
+                      <Select
+                        value={values.subjectMode}
+                        onValueChange={(mode) => {
+                          onChange(
+                            patchQuotaBatchFormForSubjectMode(
+                              values,
+                              mode as QuotaBatchFormValues['subjectMode']
+                            )
+                          )
+                        }}
+                        disabled={disabled}
+                      >
+                        <SelectTrigger id="quota-batch-subject">
+                          <SelectValue placeholder="选择主体" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="tenant">全团队</SelectItem>
+                          <SelectItem value="users">指定成员</SelectItem>
+                          <SelectItem value="keys">虚拟 Key</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      {values.subjectMode === 'tenant' ? (
+                        <p className="text-xs text-muted-foreground">
+                          对当前团队全体生效一条平台护栏（与成员/Key 规则可并存）。
+                        </p>
+                      ) : null}
+                    </div>
+                    {values.subjectMode === 'users' ? (
+                      <div className="space-y-2">
+                        <Label>成员（可多选）</Label>
+                        <Input
+                          value={memberQuery}
+                          onChange={(e) => {
+                            setMemberQuery(e.target.value)
+                          }}
+                          placeholder="搜索成员…"
+                          className="h-8 text-xs"
+                        />
+                        <div className="max-h-40 space-y-2 overflow-y-auto rounded-md border p-2">
+                          <MetaListPlaceholder
+                            loading={metaLoading}
+                            empty={!metaLoading && filteredMembers.length === 0}
+                            emptyHint={
+                              memberQuery ? '无匹配成员' : '暂无成员，请先在团队页添加成员。'
+                            }
+                          />
+                          {filteredMembers.map((m) => (
+                            <label
+                              key={m.id}
+                              className="flex cursor-pointer items-center gap-2 text-sm"
+                            >
+                              <Checkbox
+                                checked={values.userIds.includes(m.id)}
+                                disabled={disabled || metaLoading}
+                                onCheckedChange={(checked) => {
+                                  const next = checked
+                                    ? [...values.userIds, m.id]
+                                    : values.userIds.filter((id) => id !== m.id)
+                                  onChange({ ...values, userIds: next })
+                                }}
+                              />
+                              {m.label}
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+                    {values.subjectMode === 'users' ? (
+                      <div className="space-y-2">
+                        <Label>凭据（可选，多选）</Label>
+                        <Input
+                          value={credQuery}
+                          onChange={(e) => {
+                            setCredQuery(e.target.value)
+                          }}
+                          placeholder="搜索凭据…（不选=成员总量护栏）"
+                          className="h-8 text-xs"
+                        />
+                        <div className="max-h-40 space-y-2 overflow-y-auto rounded-md border p-2">
+                          <MetaListPlaceholder
+                            loading={metaLoading}
+                            empty={!metaLoading && filteredCreds.length === 0}
+                            emptyHint={credQuery ? '无匹配凭据' : '暂无团队凭据。'}
+                          />
+                          {filteredCreds.map((c) => (
+                            <label
+                              key={c.id}
+                              className="flex cursor-pointer items-center gap-2 text-sm"
+                            >
+                              <Checkbox
+                                checked={values.credentialIds.includes(c.id)}
+                                disabled={disabled || metaLoading}
+                                onCheckedChange={(checked) => {
+                                  const next = checked
+                                    ? [...values.credentialIds, c.id]
+                                    : values.credentialIds.filter((id) => id !== c.id)
+                                  onChange({ ...values, credentialIds: next })
+                                }}
+                              />
+                              {c.label}
+                            </label>
+                          ))}
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          不选凭据=成员在全团队的总用量护栏；选凭据=限制该成员在指定团队凭据上的细粒度用量。
+                          多凭据路由请选择凭据后再指定其下「别名--凭据」具体模型；个人工作区模型不受平台配额约束。
+                        </p>
+                      </div>
+                    ) : null}
+                    {values.subjectMode === 'keys' ? (
+                      <div className="space-y-2">
+                        <Label>虚拟 Key（可多选）</Label>
+                        <Input
+                          value={keyQuery}
+                          onChange={(e) => {
+                            setKeyQuery(e.target.value)
+                          }}
+                          placeholder="搜索 Key…"
+                          className="h-8 text-xs"
+                        />
+                        <div className="max-h-40 space-y-2 overflow-y-auto rounded-md border p-2">
+                          <MetaListPlaceholder
+                            loading={metaLoading}
+                            empty={!metaLoading && filteredKeys.length === 0}
+                            emptyHint={
+                              keyQuery ? '无匹配 Key' : '暂无虚拟 Key，请先在 Key 页创建。'
+                            }
+                          />
+                          {filteredKeys.map((k) => (
+                            <label
+                              key={k.id}
+                              className="flex cursor-pointer items-center gap-2 text-sm"
+                            >
+                              <Checkbox
+                                checked={values.keyIds.includes(k.id)}
+                                disabled={disabled || metaLoading}
+                                onCheckedChange={(checked) => {
+                                  const next = checked
+                                    ? [...values.keyIds, k.id]
+                                    : values.keyIds.filter((id) => id !== k.id)
+                                  onChange({ ...values, keyIds: next })
+                                }}
+                              />
+                              {k.label}
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+                    <div className="space-y-2">
+                      <Label htmlFor="quota-batch-period">周期</Label>
+                      <Select
+                        value={values.period}
+                        onValueChange={(period) => {
+                          onChange({
+                            ...values,
+                            period: period as QuotaBatchFormValues['period'],
+                          })
+                        }}
+                        disabled={disabled}
+                      >
+                        <SelectTrigger id="quota-batch-period">
+                          <SelectValue placeholder="选择周期" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="daily">每日</SelectItem>
+                          <SelectItem value="monthly">每月</SelectItem>
+                          <SelectItem value="total">总额</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </>
+                ) : null}
+
+                {values.layer === 'upstream' ? (
+                  <>
+                    <label className="flex cursor-pointer items-center gap-2 text-sm">
+                      <Checkbox
+                        checked={values.allCredentials}
+                        disabled={disabled}
+                        onCheckedChange={(checked) => {
+                          onChange({ ...values, allCredentials: checked === true })
+                        }}
+                      />
+                      全部凭据
+                    </label>
+                    {!values.allCredentials ? (
+                      <div className="space-y-2">
+                        <Label>凭据（可多选）</Label>
+                        <Input
+                          value={credQuery}
+                          onChange={(e) => {
+                            setCredQuery(e.target.value)
+                          }}
+                          placeholder="搜索凭据…"
+                          className="h-8 text-xs"
+                        />
+                        <div className="max-h-40 space-y-2 overflow-y-auto rounded-md border p-2">
+                          <MetaListPlaceholder
+                            loading={metaLoading}
+                            empty={!metaLoading && filteredCreds.length === 0}
+                            emptyHint={credQuery ? '无匹配凭据' : '暂无凭据，请先在凭据页添加。'}
+                          />
+                          {filteredCreds.map((c) => (
+                            <label
+                              key={c.id}
+                              className="flex cursor-pointer items-center gap-2 text-sm"
+                            >
+                              <Checkbox
+                                checked={values.credentialIds.includes(c.id)}
+                                disabled={disabled || metaLoading}
+                                onCheckedChange={(checked) => {
+                                  const next = checked
+                                    ? [...values.credentialIds, c.id]
+                                    : values.credentialIds.filter((id) => id !== c.id)
+                                  onChange({ ...values, credentialIds: next })
+                                }}
+                              />
+                              {c.label}
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+                    <div>
+                      <Label htmlFor="quota-batch-window-up">窗口（秒，0=套餐周期）</Label>
+                      <Input
+                        id="quota-batch-window-up"
+                        value={values.windowSeconds}
+                        onChange={(e) => {
+                          onChange({ ...values, windowSeconds: e.target.value })
+                        }}
+                        disabled={disabled}
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="quota-batch-label-up">桶标签</Label>
+                      <Input
+                        id="quota-batch-label-up"
+                        value={values.quotaLabel}
+                        onChange={(e) => {
+                          onChange({ ...values, quotaLabel: e.target.value })
+                        }}
+                        disabled={disabled}
+                      />
+                    </div>
+                  </>
+                ) : null}
+
+                {values.layer === 'downstream' ? (
+                  <>
+                    <div className="space-y-2">
+                      <Label>虚拟 Key（必选，可多选）</Label>
+                      <div className="max-h-40 space-y-2 overflow-y-auto rounded-md border p-2">
+                        <MetaListPlaceholder
+                          loading={metaLoading}
+                          empty={!metaLoading && keyOptions.length === 0}
+                          emptyHint="暂无虚拟 Key，请先在 Key 页创建。"
+                        />
+                        {keyOptions.map((k) => (
+                          <label
+                            key={k.id}
+                            className="flex cursor-pointer items-center gap-2 text-sm"
+                          >
+                            <Checkbox
+                              checked={values.keyIds.includes(k.id)}
+                              disabled={disabled || metaLoading}
+                              onCheckedChange={(checked) => {
+                                const next = checked
+                                  ? [...values.keyIds, k.id]
+                                  : values.keyIds.filter((id) => id !== k.id)
+                                onChange({ ...values, keyIds: next })
+                              }}
+                            />
+                            {k.label}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <Label htmlFor="quota-batch-window-down">窗口（秒，0=套餐周期）</Label>
+                      <Input
+                        id="quota-batch-window-down"
+                        value={values.windowSeconds}
+                        onChange={(e) => {
+                          onChange({ ...values, windowSeconds: e.target.value })
+                        }}
+                        disabled={disabled}
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="quota-batch-label-down">桶标签</Label>
+                      <Input
+                        id="quota-batch-label-down"
+                        value={values.quotaLabel}
+                        onChange={(e) => {
+                          onChange({ ...values, quotaLabel: e.target.value })
+                        }}
+                        disabled={disabled}
+                      />
+                    </div>
+                  </>
+                ) : null}
+              </>
+            )}
+
+            {isMember ? null : (
+              <div className="space-y-2 border-t pt-4">
+                <p className="text-sm font-medium">模板预设</p>
+                <div className="flex flex-wrap gap-2">
+                  {QUOTA_TEMPLATES.map((t) => (
+                    <Button
+                      key={t.label}
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-xs"
+                      disabled={disabled}
+                      onClick={() => {
+                        onChange(applyQuotaTemplate(values, t))
+                      }}
+                    >
+                      {t.label}
+                      <span className="ml-1 text-[10px] text-muted-foreground">
+                        {t.description}
+                      </span>
+                    </Button>
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
 
             <div className="space-y-2 border-t pt-4">
               <p className="text-sm font-medium">限额与模型</p>

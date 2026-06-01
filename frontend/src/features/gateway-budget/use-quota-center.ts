@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
@@ -15,6 +15,7 @@ import { GATEWAY_MODELS_STALE_MS } from '@/features/gateway-models/utils'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { useToast } from '@/hooks/use-toast'
+import { useUserStore } from '@/stores/user'
 import { formatTeamMemberDisplay } from '@/types/permissions'
 
 import { parseOptionalInt, parseOptionalUsd } from './budget-form-utils'
@@ -217,8 +218,11 @@ function buildBatchRules(values: QuotaBatchFormValues): QuotaRuleUpsertBody[] | 
   return rules
 }
 
+export type QuotaCenterMode = 'admin' | 'member'
+
 export interface QuotaCenterState {
   teamId: string
+  mode: QuotaCenterMode
   formDisabled: boolean
   isLoading: boolean
   isRefreshing: boolean
@@ -255,13 +259,18 @@ export interface QuotaCenterState {
 function useQuotaCenterImpl(): QuotaCenterState {
   const teamId = useGatewayTeamId()
   const { toast } = useToast()
-  const { isPlatformViewer } = useGatewayPermission()
+  const { isAdmin, isPlatformViewer } = useGatewayPermission()
+  const { currentUser } = useUserStore()
+  const selfUserId = currentUser?.id ?? null
+  const mode: QuotaCenterMode = isAdmin ? 'admin' : 'member'
   const queryClient = useQueryClient()
   const [searchParams, setSearchParams] = useSearchParams()
 
   const layerFilter = searchParams.get('layer') ?? 'all'
   const modelFilter = searchParams.get('model') ?? ''
   const periodFilter = searchParams.get('period') ?? 'all'
+  // 成员自助：从凭据详情「设置我的限额 →」带入的凭据预填，用于预加载凭据元数据并自动开抽屉。
+  const credentialPrefill = mode === 'member' ? searchParams.get('credential_id') : null
 
   const [batchOpen, setBatchOpen] = useState(false)
   const [batchValues, setBatchValues] = useState<QuotaBatchFormValues>(DEFAULT_BATCH_FORM)
@@ -280,7 +289,8 @@ function useQuotaCenterImpl(): QuotaCenterState {
   const rulesQuery = useGatewayQuotaRules(teamId, listParams)
 
   const needsPickerData = batchOpen || modelFilter.trim() !== ''
-  const needsLabelData = batchOpen || (rulesQuery.data?.length ?? 0) > 0
+  const needsLabelData =
+    batchOpen || (rulesQuery.data?.length ?? 0) > 0 || credentialPrefill !== null
 
   const keysQuery = useQuery({
     queryKey: ['gateway', 'keys', teamId],
@@ -363,7 +373,10 @@ function useQuotaCenterImpl(): QuotaCenterState {
   )
 
   const batchMutation = useMutation({
-    mutationFn: (rules: QuotaRuleUpsertBody[]) => gatewayApi.batchUpsertQuotaRules(teamId, rules),
+    mutationFn: (rules: QuotaRuleUpsertBody[]) =>
+      mode === 'member'
+        ? gatewayApi.batchUpsertSelfQuotaRules(teamId, rules)
+        : gatewayApi.batchUpsertQuotaRules(teamId, rules),
     onSuccess: (result: QuotaRuleBatchUpsertResponse) => {
       void queryClient.invalidateQueries({ queryKey: ['gateway-quota-rules', teamId] })
       void queryClient.invalidateQueries({ queryKey: ['gateway-budgets', teamId] })
@@ -384,7 +397,10 @@ function useQuotaCenterImpl(): QuotaCenterState {
   })
 
   const deleteMutation = useMutation({
-    mutationFn: (budgetId: string) => gatewayApi.deleteBudget(teamId, budgetId),
+    mutationFn: (budgetId: string) =>
+      mode === 'member'
+        ? gatewayApi.deleteSelfQuotaRule(teamId, budgetId)
+        : gatewayApi.deleteBudget(teamId, budgetId),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: gatewayQuotaRulesQueryKey(teamId) })
       void queryClient.invalidateQueries({ queryKey: ['gateway-budgets', teamId] })
@@ -408,10 +424,14 @@ function useQuotaCenterImpl(): QuotaCenterState {
     [setSearchParams]
   )
 
-  const credentialOptions = useMemo(
-    () => (credsQuery.data ?? []).map((c) => ({ id: c.id, label: c.name })),
-    [credsQuery.data]
-  )
+  const credentialOptions = useMemo(() => {
+    let creds = credsQuery.data ?? []
+    if (mode === 'member') {
+      // 成员自助仅能设置「本人创建的团队凭据」（个人 BYOK 凭据在凭据页就地设限）。
+      creds = creds.filter((c) => selfUserId !== null && c.created_by_user_id === selfUserId)
+    }
+    return creds.map((c) => ({ id: c.id, label: c.name }))
+  }, [credsQuery.data, mode, selfUserId])
 
   const credentialIds = useMemo(() => credentialOptions.map((c) => c.id), [credentialOptions])
 
@@ -420,10 +440,19 @@ function useQuotaCenterImpl(): QuotaCenterState {
     [batchValues, credentialIds]
   )
 
-  const batchPreviewCount = useMemo(
-    () => buildBatchRules(resolvedBatchValues)?.length ?? 0,
-    [resolvedBatchValues]
-  )
+  const batchPreviewCount = useMemo(() => {
+    let v = resolvedBatchValues
+    if (mode === 'member') {
+      v = {
+        ...resolvedBatchValues,
+        layer: 'platform',
+        subjectMode: 'users',
+        userIds: selfUserId !== null ? [selfUserId] : [],
+        keyIds: [],
+      }
+    }
+    return buildBatchRules(v)?.length ?? 0
+  }, [resolvedBatchValues, mode, selfUserId])
 
   const memberOptions = useMemo(
     () =>
@@ -440,7 +469,30 @@ function useQuotaCenterImpl(): QuotaCenterState {
   )
 
   const submitBatch = useCallback(() => {
-    const rules = buildBatchRules(resolvedBatchValues)
+    let formValues = resolvedBatchValues
+    if (mode === 'member') {
+      // 成员自助：强制锁定为本人 + platform，凭据必选。
+      if (selfUserId === null) {
+        toast({ title: '无法识别当前用户', variant: 'destructive' })
+        return
+      }
+      if (resolvedBatchValues.credentialIds.length === 0) {
+        toast({
+          title: '请选择本人凭据',
+          description: '自助配额须指定本人创建的凭据',
+          variant: 'destructive',
+        })
+        return
+      }
+      formValues = {
+        ...resolvedBatchValues,
+        layer: 'platform',
+        subjectMode: 'users',
+        userIds: [selfUserId],
+        keyIds: [],
+      }
+    }
+    const rules = buildBatchRules(formValues)
     if (!rules || rules.length === 0) {
       toast({
         title: '请完善表单',
@@ -454,7 +506,7 @@ function useQuotaCenterImpl(): QuotaCenterState {
       return
     }
     batchMutation.mutate(rules)
-  }, [resolvedBatchValues, batchMutation, toast])
+  }, [resolvedBatchValues, batchMutation, toast, mode, selfUserId])
 
   const confirmDelete = useCallback(
     (rule: QuotaRule) => {
@@ -502,6 +554,23 @@ function useQuotaCenterImpl(): QuotaCenterState {
     [deleteMutation, toast]
   )
 
+  // 成员自助：从凭据详情「设置我的限额 →」跳转时，待 owned 凭据加载后预填并自动开抽屉。
+  const consumedPrefillRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (credentialPrefill === null) return
+    if (consumedPrefillRef.current === credentialPrefill) return
+    if (!credentialOptions.some((c) => c.id === credentialPrefill)) return
+    consumedPrefillRef.current = credentialPrefill
+    setBatchValues({
+      ...DEFAULT_BATCH_FORM,
+      subjectMode: 'users',
+      credentialIds: [credentialPrefill],
+      allModels: modelFilter.trim() === '',
+      modelNames: modelFilter.trim() === '' ? [] : [modelFilter.trim()],
+    })
+    setBatchOpen(true)
+  }, [credentialPrefill, modelFilter, credentialOptions])
+
   const selectRule = useCallback((rule: QuotaRule) => {
     setSelectedId(quotaRuleRowId(rule))
   }, [])
@@ -516,7 +585,9 @@ function useQuotaCenterImpl(): QuotaCenterState {
 
   return {
     teamId,
-    formDisabled: isPlatformViewer,
+    mode,
+    // 平台只读账号全站不可写；成员模式下若无法识别本人则禁用自助写入。
+    formDisabled: isPlatformViewer || (mode === 'member' && selfUserId === null),
     isLoading: rulesQuery.isLoading,
     isRefreshing: rulesQuery.isFetching,
     filteredItems,

@@ -1,9 +1,11 @@
 import { memo } from 'react'
 import type React from 'react'
 
+import type { QuotaRule } from '@/api/gateway/quota-rules'
 import type { GatewayUsageStatsItem } from '@/api/gateway/stats'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { GATEWAY_DISPLAY_CURRENCY } from '@/features/gateway-pricing/display-currency'
+import { UsageStatsQuotaCell } from '@/features/gateway-usage/usage-stats-quota-cell'
 import { formatMoney } from '@/lib/money'
 import { formatCompact, formatPercent } from '@/lib/number'
 import { cn } from '@/lib/utils'
@@ -12,16 +14,22 @@ export interface UsageStatsCubeTableProps {
   items: readonly GatewayUsageStatsItem[]
   maxRequests: number
   showCost: boolean
+  /** 行 group_key → 对应平台配额规则；提供则展示「配额」列 */
+  quotaByRowKey?: ReadonlyMap<string, QuotaRule>
 }
 
 const CubeRow = memo(function CubeRow({
   item,
   maxRequests,
   showCost,
+  showQuota,
+  quotaRule,
 }: Readonly<{
   item: GatewayUsageStatsItem
   maxRequests: number
   showCost: boolean
+  showQuota: boolean
+  quotaRule?: QuotaRule
 }>): React.JSX.Element {
   const width = Math.max(4, (item.requests / maxRequests) * 100)
   const parts = item.label_parts ?? item.label.split(' / ')
@@ -89,6 +97,11 @@ const CubeRow = memo(function CubeRow({
       <td className="px-4 py-3 text-right tabular-nums">
         {Math.round(item.avg_latency_ms).toLocaleString()}ms
       </td>
+      {showQuota ? (
+        <td className="px-4 py-3">
+          <UsageStatsQuotaCell rule={quotaRule} />
+        </td>
+      ) : null}
     </tr>
   )
 })
@@ -97,7 +110,9 @@ export const UsageStatsCubeTable = memo(function UsageStatsCubeTable({
   items,
   maxRequests,
   showCost,
+  quotaByRowKey,
 }: Readonly<UsageStatsCubeTableProps>): React.JSX.Element {
+  const showQuota = quotaByRowKey !== undefined
   return (
     <div className="overflow-x-auto">
       <table className="w-full min-w-[1040px] text-sm">
@@ -112,6 +127,9 @@ export const UsageStatsCubeTable = memo(function UsageStatsCubeTable({
             {showCost ? <th className="px-4 py-2 text-right font-medium">成本</th> : null}
             <th className="px-4 py-2 text-right font-medium">缓存</th>
             <th className="px-4 py-2 text-right font-medium">延迟</th>
+            {showQuota ? (
+              <th className="w-[140px] px-4 py-2 text-right font-medium">配额</th>
+            ) : null}
           </tr>
         </thead>
         <tbody>
@@ -121,6 +139,8 @@ export const UsageStatsCubeTable = memo(function UsageStatsCubeTable({
               item={item}
               maxRequests={maxRequests}
               showCost={showCost}
+              showQuota={showQuota}
+              quotaRule={quotaByRowKey?.get(item.group_key)}
             />
           ))}
         </tbody>

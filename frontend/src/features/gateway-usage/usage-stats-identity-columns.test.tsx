@@ -38,7 +38,7 @@ describe('UsageStatsBreakdownPrimary', () => {
 })
 
 describe('UsageStatsBreakdownCredentials', () => {
-  it('renders all credential slices without rank labels', () => {
+  it('renders stacked bar with top1 label and overflow count, no rank labels', () => {
     render(
       <UsageStatsBreakdownCredentials
         data={{
@@ -53,9 +53,27 @@ describe('UsageStatsBreakdownCredentials', () => {
         }}
       />
     )
+    // 顶部条按 group_key 渲染每个分片（次要凭据名仅出现在 title 中）。
+    expect(screen.getByTitle(/火山-personal/)).toBeInTheDocument()
+    // 摘要行只展示 Top1 凭据名 + 占比 + 溢出计数。
     expect(screen.getByText('火山-company')).toBeInTheDocument()
-    expect(screen.getByText('火山-personal')).toBeInTheDocument()
-    expect(screen.getByText(/共 2 个凭据/)).toBeInTheDocument()
+    expect(screen.getByText('60%')).toBeInTheDocument()
+    expect(screen.getByText('+1')).toBeInTheDocument()
     expect(screen.queryByText(/#1/)).not.toBeInTheDocument()
+  })
+
+  it('shows unassigned-request hint when parent exceeds listed slices', () => {
+    render(
+      <UsageStatsBreakdownCredentials
+        data={{
+          parent_group_by: 'user',
+          parent_group_key: 'u1',
+          breakdown_by: 'credential',
+          parent_requests: 10,
+          items: [{ group_key: 'c1', label: '火山-company', requests: 6, share: 0.6 }],
+        }}
+      />
+    )
+    expect(screen.getByText(/4 次请求未关联凭据/)).toBeInTheDocument()
   })
 })

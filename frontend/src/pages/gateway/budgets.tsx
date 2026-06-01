@@ -1,13 +1,12 @@
 /**
- * AI Gateway · 预算配额（Admin 专页）
+ * AI Gateway · 配额中心
+ *
+ * 管理员：全团队配额管理；普通成员：「我的配额」自助查看与设置本人凭据限额。
  */
 
 import { Suspense, useEffect } from 'react'
 
-import { Navigate } from 'react-router-dom'
-
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
-import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { lazyWithReload } from '@/lib/lazy-with-reload'
 import { Loader2 } from '@/lib/lucide-icons'
 
@@ -24,21 +23,12 @@ const adminWorkspaceFallback = (
   </div>
 )
 
-function teamOverviewHref(teamId: string): string {
-  return `/gateway/teams/${encodeURIComponent(teamId)}/overview`
-}
-
 export default function GatewayBudgetsPage(): React.JSX.Element {
-  const teamId = useGatewayTeamId()
   const { isAdmin } = useGatewayPermission()
 
   useEffect(() => {
-    document.title = '配额中心 · AI Gateway'
-  }, [])
-
-  if (!isAdmin) {
-    return <Navigate to={teamOverviewHref(teamId)} replace />
-  }
+    document.title = `${isAdmin ? '配额中心' : '我的配额'} · AI Gateway`
+  }, [isAdmin])
 
   return (
     <Suspense fallback={adminWorkspaceFallback}>

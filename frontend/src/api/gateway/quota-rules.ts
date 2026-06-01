@@ -117,4 +117,13 @@ export const quotaRulesApi = {
     apiClient.put<QuotaRuleBatchUpsertResponse>(teamGatewayPath(teamId, '/quota-rules/batch'), {
       rules,
     }),
+  /** 成员自助：仅写本人「user + 本人凭据(+模型)」的平台配额 */
+  batchUpsertSelfQuotaRules: (teamId: string, rules: QuotaRuleUpsertBody[]) =>
+    apiClient.put<QuotaRuleBatchUpsertResponse>(
+      teamGatewayPath(teamId, '/quota-rules/self-batch'),
+      { rules }
+    ),
+  /** 成员自助：删除本人「user + 本人凭据」的平台配额行 */
+  deleteSelfQuotaRule: (teamId: string, budgetId: string) =>
+    apiClient.delete<unknown>(teamGatewayPath(teamId, `/quota-rules/self/${budgetId}`)),
 } as const

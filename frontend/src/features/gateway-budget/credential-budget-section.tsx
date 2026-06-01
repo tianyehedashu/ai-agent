@@ -14,6 +14,8 @@ export interface CredentialBudgetSectionProps {
   credentialId: string
   userId: string
   isAdmin: boolean
+  /** 非管理员但本人创建的团队凭据：可自助到「我的配额」设限 */
+  canSelfManage?: boolean
 }
 
 /** 团队凭据详情：按 credential_id 关联模型匹配 tenant/user 预算。 */
@@ -21,6 +23,7 @@ export function CredentialBudgetSection({
   credentialId,
   userId,
   isAdmin,
+  canSelfManage = false,
 }: CredentialBudgetSectionProps): React.JSX.Element {
   const teamId = useGatewayTeamId()
   const { items: models, isLoading: modelsLoading } = useInfiniteGatewayModelPages(
@@ -48,6 +51,7 @@ export function CredentialBudgetSection({
     <BudgetUsageCardWithAdminLink
       teamId={teamId}
       isAdmin={isAdmin}
+      canSelfManage={canSelfManage}
       modelPrefill={modelPrefill}
       credentialPrefill={credentialId}
       layerPrefill="upstream"

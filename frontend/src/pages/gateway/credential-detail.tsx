@@ -425,7 +425,14 @@ export default function GatewayCredentialDetailPage(): React.JSX.Element {
         <ProviderPlansSection teamId={teamId} credentialId={id} />
 
         {currentUser?.id ? (
-          <CredentialBudgetSection credentialId={id} userId={currentUser.id} isAdmin={isAdmin} />
+          <CredentialBudgetSection
+            credentialId={id}
+            userId={currentUser.id}
+            isAdmin={isAdmin}
+            canSelfManage={
+              !isAdmin && cred.scope === 'team' && cred.created_by_user_id === currentUser.id
+            }
+          />
         ) : null}
 
         <CredentialLinkedModelsSection

@@ -136,6 +136,58 @@ export function matchQuotaRulesForContext(rules: QuotaRule[], ctx: BudgetViewCon
   }
 }
 
+/**
+ * 调用统计行 → 对应平台配额规则（best-effort，仅 platform 层）。
+ *
+ * - `user`：成员总量护栏（user + 无凭据 + 无模型）
+ * - `credential`：该凭据下任一平台配额行（成员+凭据）
+ * - `model`：优先团队级该模型，其次任意该模型
+ * - `user_model_credential`：Phase2 成员+凭据(+模型) 行
+ */
+export function findQuotaRuleForStatsRow(
+  rules: readonly QuotaRule[],
+  groupBy: string,
+  row: { group_key: string; group_key_parts?: string[] | null }
+): QuotaRule | null {
+  const platform = rules.filter((r) => r.key.layer === 'platform')
+  if (groupBy === 'user') {
+    return (
+      platform.find(
+        (r) =>
+          r.key.target_kind === 'user' &&
+          r.key.user_id === row.group_key &&
+          r.key.credential_id === null &&
+          r.key.model_name === null
+      ) ?? null
+    )
+  }
+  if (groupBy === 'credential') {
+    return platform.find((r) => r.key.credential_id === row.group_key) ?? null
+  }
+  if (groupBy === 'model') {
+    return (
+      platform.find((r) => r.key.model_name === row.group_key && r.key.target_kind === 'tenant') ??
+      platform.find((r) => r.key.model_name === row.group_key) ??
+      null
+    )
+  }
+  if (groupBy === 'user_model_credential') {
+    const parts = row.group_key_parts ?? []
+    const [userId, model, credId] = parts
+    if (!userId || !credId) return null
+    return (
+      platform.find(
+        (r) =>
+          r.key.target_kind === 'user' &&
+          r.key.user_id === userId &&
+          r.key.credential_id === credId &&
+          (r.key.model_name === model || r.key.model_name === null)
+      ) ?? null
+    )
+  }
+  return null
+}
+
 export function computeQuotaRuleUsageRatio(rule: QuotaRule): {
   ratio: number
   barColor: string

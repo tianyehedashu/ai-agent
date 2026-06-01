@@ -138,16 +138,12 @@ export default function GatewayLayout(): React.JSX.Element {
       },
       { to: gatewayTeamNavHref(teamId, 'pricing'), label: '定价目录', icon: CircleDollarSign },
       { to: gatewayTeamNavHref(teamId, 'routes'), label: '虚拟路由', icon: Route, end: true },
-      ...(isAdmin
-        ? [
-            {
-              to: gatewayTeamNavHref(teamId, 'budgets'),
-              label: '配额中心',
-              icon: Receipt,
-              end: true,
-            },
-          ]
-        : []),
+      {
+        to: gatewayTeamNavHref(teamId, 'budgets'),
+        label: isAdmin ? '配额中心' : '我的配额',
+        icon: Receipt,
+        end: true,
+      },
       { to: gatewayTeamNavHref(teamId, 'logs'), label: '调用日志', icon: FileText, end: true },
       { to: gatewayTeamNavHref(teamId, 'members'), label: '团队管理', icon: Users, end: true },
     ]

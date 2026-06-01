@@ -20,8 +20,10 @@ import { useGatewayQuotaRules } from './use-gateway-quota-rules'
 export interface BudgetUsageCardProps {
   teamId: string
   context: BudgetViewContext
-  /** Admin 在资源详情页可链到专页 */
-  adminManageHref?: string
+  /** 可链到配额中心 / 我的配额（admin 或自助成员） */
+  manageHref?: string
+  /** 链接文案，默认「在配额中心配置 →」 */
+  manageLabel?: string
   className?: string
   /** 关联模型列表加载中（凭据详情页避免闪「暂无预算」） */
   modelsLoading?: boolean
@@ -74,7 +76,8 @@ function QuotaUsageRow({ rule }: { rule: QuotaRule }): React.JSX.Element {
 export function BudgetUsageCard({
   teamId,
   context,
-  adminManageHref,
+  manageHref,
+  manageLabel = '在配额中心配置 →',
   className,
   modelsLoading = false,
 }: BudgetUsageCardProps): React.JSX.Element {
@@ -93,9 +96,9 @@ export function BudgetUsageCard({
               平台预算、上游厂商额度与下游权益；各层级独立计量与拦截。
             </CardDescription>
           </div>
-          {adminManageHref ? (
-            <Link to={adminManageHref} className="text-xs text-primary hover:underline">
-              在配额中心配置 →
+          {manageHref ? (
+            <Link to={manageHref} className="text-xs text-primary hover:underline">
+              {manageLabel}
             </Link>
           ) : null}
         </div>
@@ -119,20 +122,26 @@ export function BudgetUsageCard({
 }
 
 export function BudgetUsageCardWithAdminLink(
-  props: Omit<BudgetUsageCardProps, 'adminManageHref'> & {
+  props: Omit<BudgetUsageCardProps, 'manageHref' | 'manageLabel'> & {
     isAdmin: boolean
+    /** 非管理员但拥有该凭据：可自助到「我的配额」设限 */
+    canSelfManage?: boolean
     modelPrefill?: string
     credentialPrefill?: string
     layerPrefill?: 'platform' | 'upstream' | 'downstream'
   }
 ): React.JSX.Element {
-  const { isAdmin, modelPrefill, credentialPrefill, layerPrefill, teamId, ...rest } = props
-  const adminHref = isAdmin
-    ? budgetsAdminHref(teamId, {
-        model: modelPrefill,
-        credential: credentialPrefill,
-        layer: layerPrefill,
-      })
-    : undefined
-  return <BudgetUsageCard teamId={teamId} adminManageHref={adminHref} {...rest} />
+  const { isAdmin, canSelfManage, modelPrefill, credentialPrefill, layerPrefill, teamId, ...rest } =
+    props
+  // admin → 上游/全维度配额中心；自助成员 → 我的配额（仅 platform，credential 预填）。
+  const href =
+    isAdmin || canSelfManage
+      ? budgetsAdminHref(teamId, {
+          model: modelPrefill,
+          credential: credentialPrefill,
+          layer: isAdmin ? layerPrefill : 'platform',
+        })
+      : undefined
+  const label = isAdmin ? '在配额中心配置 →' : '设置我的限额 →'
+  return <BudgetUsageCard teamId={teamId} manageHref={href} manageLabel={label} {...rest} />
 }

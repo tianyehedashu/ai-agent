@@ -20,8 +20,8 @@ from domains.gateway.domain.policies.budget_scope_policy import (
     BudgetTeamContext,
     budget_target_allowed,
 )
+from domains.gateway.domain.team_credential_access import actor_owns_team_credential
 from domains.gateway.domain.types import BudgetScope
-from libs.exceptions import ValidationError
 from domains.gateway.infrastructure.models.entitlement_plan import EntitlementPlan
 from domains.gateway.infrastructure.models.provider_plan import ProviderPlan
 from domains.gateway.infrastructure.repositories.alert_repository import GatewayAlertRepository
@@ -47,6 +47,7 @@ from domains.gateway.infrastructure.repositories.virtual_key_repository import (
 )
 from domains.identity.application.api_key_use_case import ApiKeyUseCase
 from domains.tenancy.application.team_service import TeamService
+from libs.exceptions import ValidationError
 from utils.logging import get_logger
 
 if TYPE_CHECKING:
@@ -143,6 +144,27 @@ class GatewayManagementWriteBaseMixin:
         )
         if row is None:
             raise CredentialNotFoundError(str(credential_id))
+
+    async def _assert_credential_owned_by_actor(
+        self, credential_id: uuid.UUID, *, actor_user_id: uuid.UUID, tenant_id: uuid.UUID
+    ) -> None:
+        """成员自助配额：凭据须为本人 BYOK（``scope=user`` 且 ``scope_id==actor``）
+        或本人在该团队创建的凭据（``created_by_user_id==actor``）。否则抛
+        ``CredentialNotFoundError``（防枚举他人凭据）。
+        """
+        cred = await self._creds.get(credential_id)
+        if cred is None:
+            raise CredentialNotFoundError(str(credential_id))
+        if cred.scope == "user":
+            if cred.scope_id == actor_user_id:
+                return
+            raise CredentialNotFoundError(str(credential_id))
+        if cred.tenant_id == tenant_id and actor_owns_team_credential(
+            created_by_user_id=cred.created_by_user_id,
+            actor_user_id=actor_user_id,
+        ):
+            return
+        raise CredentialNotFoundError(str(credential_id))
 
     async def _assert_model_alias_on_credential(
         self, credential_id: uuid.UUID, model_name: str

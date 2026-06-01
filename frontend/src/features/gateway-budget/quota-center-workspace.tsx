@@ -31,14 +31,17 @@ const QuotaBatchDrawer = lazy(async () => {
 export function QuotaCenterWorkspace(): React.JSX.Element {
   const ws = useQuotaCenter()
   const [viewMode, setViewMode] = useState<'table' | 'card'>('table')
+  const isMember = ws.mode === 'member'
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-2xl font-semibold">配额中心</h2>
+          <h2 className="text-2xl font-semibold">{isMember ? '我的配额' : '配额中心'}</h2>
           <p className="text-sm text-muted-foreground">
-            统一管理平台消费护栏、上游厂商额度与下游客户权益；按层级区分，支持批量设置。
+            {isMember
+              ? '查看与我相关的配额，并为本人在「自己创建的团队凭据」上自助设置消费限额。'
+              : '统一管理平台消费护栏、上游厂商额度与下游客户权益；按层级区分，支持批量设置。'}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -48,7 +51,7 @@ export function QuotaCenterWorkspace(): React.JSX.Element {
               ws.setBatchOpen(true)
             }}
           >
-            批量设置
+            {isMember ? '设置我的配额' : '批量设置'}
           </Button>
           <GatewayRefreshButton
             isFetching={ws.isRefreshing}
@@ -143,8 +146,11 @@ export function QuotaCenterWorkspace(): React.JSX.Element {
       <QuotaOverviewCards rules={ws.filteredItems} isLoading={ws.isLoading} />
 
       {ws.formDisabled ? (
-        <p className="text-sm text-muted-foreground">
-          当前为只读模式（Platform Viewer），无法修改配额。
+        <p className="text-sm text-muted-foreground">当前为只读模式，无法修改配额。</p>
+      ) : null}
+      {isMember && !ws.formDisabled ? (
+        <p className="text-xs text-muted-foreground">
+          自助配额仅作用于本人在「自己创建的团队凭据」上的消费；个人 BYOK 凭据请在凭据页就地设限。
         </p>
       ) : null}
 
@@ -182,6 +188,7 @@ export function QuotaCenterWorkspace(): React.JSX.Element {
             disabled={ws.formDisabled}
             pending={ws.batchPending}
             previewCount={ws.batchPreviewCount}
+            mode={ws.mode}
             memberOptions={ws.memberOptions}
             keyOptions={ws.keyOptions}
             credentialOptions={ws.credentialOptions}

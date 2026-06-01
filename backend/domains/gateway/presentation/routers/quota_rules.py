@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import cast
 import uuid
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, status
 
 from domains.gateway.application.management.quota_rule_read_model import (
     QuotaRuleLayer,
@@ -80,6 +80,41 @@ async def batch_upsert_quota_rules(
         failed=[
             QuotaRuleBatchFailureItem(index=item.index, error=item.error) for item in result.failed
         ],
+    )
+
+
+@router.put("/quota-rules/self-batch", response_model=QuotaRuleBatchUpsertResponse)
+async def batch_upsert_self_quota_rules(
+    body: QuotaRuleBatchUpsertRequest,
+    team: CurrentTeam,
+    writes: MgmtWrites,
+) -> QuotaRuleBatchUpsertResponse:
+    """成员自助：仅写本人「user + 本人凭据(+模型)」的平台配额（自我约束）。"""
+    commands = [_upsert_to_command(item) for item in body.rules]
+    result = await writes.batch_upsert_self_quota_rules(
+        commands,
+        tenant_id=team.team_id,
+        actor_user_id=team.user_id,
+    )
+    return QuotaRuleBatchUpsertResponse(
+        succeeded=[quota_rule_to_response(row) for row in result.succeeded],
+        failed=[
+            QuotaRuleBatchFailureItem(index=item.index, error=item.error) for item in result.failed
+        ],
+    )
+
+
+@router.delete("/quota-rules/self/{budget_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_self_quota_rule(
+    budget_id: uuid.UUID,
+    team: CurrentTeam,
+    writes: MgmtWrites,
+) -> None:
+    """成员自助：删除本人「user + 本人凭据」的平台配额行。"""
+    await writes.delete_self_budget(
+        budget_id,
+        tenant_id=team.team_id,
+        actor_user_id=team.user_id,
     )
 
 

@@ -49,5 +49,6 @@ async def test_get_many_by_plan_single_query(db_session: AsyncSession) -> None:
         budget.period,
         budget.model_name,
         budget.credential_id,
+        budget.tenant_id,
     ) in rows
     assert len(rows) == 1
