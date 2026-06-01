@@ -80,6 +80,7 @@ export function AuthProvider({ children }: Readonly<AuthProviderProps>): React.J
   }, [sessionUser, isFetched, setCurrentUser])
 
   const isOnPublicPath = PUBLIC_PATHS.includes(location.pathname)
+  /** 仅 auth/me 明确 401 且无用户时才发起 SSO；同域已有 guard_token 时 me 返回 200，不会跳转 */
   const shouldStartSso =
     isSsoMode && !sessionUser && isFetched && !isOnPublicPath && isSessionInvalid
 
@@ -111,9 +112,7 @@ export function AuthProvider({ children }: Readonly<AuthProviderProps>): React.J
     )
   }
 
-  const isOnPublicPath = PUBLIC_PATHS.includes(location.pathname)
-
-  // 严重错误状态（如服务不可用）- auth/me 的 401 走下方登录重定向
+  // 严重错误状态（如服务不可用）- auth/me 的 401 走下方 SSO / 登录重定向
   if (error && !isSessionInvalid) {
     const detail =
       error instanceof ApiError && error.status === 404
