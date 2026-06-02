@@ -58,6 +58,7 @@ class TestTokenExpiry:
             patch("domains.identity.infrastructure.user_manager.UserManager"),
         ):
             mock_settings.is_sso_auth = False
+            mock_settings.is_hybrid_auth = False
             mock_settings.is_development = True
 
             with pytest.raises(TokenError) as exc_info:
@@ -88,6 +89,7 @@ class TestTokenExpiry:
             patch("domains.identity.infrastructure.user_manager.UserManager"),
         ):
             mock_settings.is_sso_auth = False
+            mock_settings.is_hybrid_auth = False
             mock_settings.is_development = False
 
             with pytest.raises(TokenError) as exc_info:
@@ -118,6 +120,7 @@ class TestTokenExpiry:
             patch("domains.identity.infrastructure.user_manager.UserManager"),
         ):
             mock_settings.is_sso_auth = False
+            mock_settings.is_hybrid_auth = False
             mock_settings.is_development = True
 
             with pytest.raises(TokenError):
@@ -154,6 +157,7 @@ class TestTokenExpiry:
             patch("domains.identity.infrastructure.user_manager.UserManager"),
         ):
             mock_settings.is_sso_auth = False
+            mock_settings.is_hybrid_auth = False
             principal = await get_principal(request, credentials, mock_db)
 
         assert principal is not None
@@ -171,6 +175,7 @@ class TestTokenExpiry:
 
         with patch("domains.identity.application.principal_service.settings") as mock_settings:
             mock_settings.is_sso_auth = False
+            mock_settings.is_hybrid_auth = False
             mock_settings.is_development = True
 
             with pytest.raises(AuthenticationError) as exc_info:
@@ -189,9 +194,121 @@ class TestTokenExpiry:
 
         with patch("domains.identity.application.principal_service.settings") as mock_settings:
             mock_settings.is_sso_auth = False
+            mock_settings.is_hybrid_auth = False
             mock_settings.is_development = False
 
             with pytest.raises(AuthenticationError) as exc_info:
                 await get_principal(request, None, mock_db)
 
             assert exc_info.value.code == "AUTHENTICATION_ERROR"
+
+    @pytest.mark.asyncio
+    async def test_hybrid_bearer_jwt_takes_priority(self):
+        """测试: hybrid 模式下 Bearer JWT 优先于网关 Header"""
+        from domains.identity.application.principal_service import get_principal
+
+        request = self._create_mock_request()
+        credentials = self._create_mock_credentials("valid-jwt-token")
+        mock_db = AsyncMock()
+
+        mock_user = MagicMock()
+        mock_user.id = uuid.uuid4()
+        mock_user.email = "local@example.com"
+        mock_user.name = "LocalUser"
+        mock_user.role = "user"
+        mock_user.vendor_creator_id = None
+
+        mock_strategy = MagicMock()
+        mock_strategy.read_token = AsyncMock(return_value=mock_user)
+
+        with (
+            patch("domains.identity.application.principal_service.settings") as mock_settings,
+            patch(
+                "domains.identity.infrastructure.authentication.get_jwt_strategy",
+                return_value=mock_strategy,
+            ),
+            patch("fastapi_users_db_sqlalchemy.SQLAlchemyUserDatabase"),
+            patch("domains.identity.infrastructure.user_manager.UserManager"),
+        ):
+            mock_settings.is_sso_auth = False
+            mock_settings.is_hybrid_auth = True
+            principal = await get_principal(request, credentials, mock_db)
+
+        assert principal is not None
+        assert principal.email == "local@example.com"
+
+    @pytest.mark.asyncio
+    async def test_hybrid_falls_back_to_gateway_when_jwt_invalid(self):
+        """测试: hybrid 模式下 JWT 无效时 fallback 到网关 Header"""
+        from domains.identity.application.principal_service import get_principal
+        from domains.identity.application.giikin_identity_service import GiikinIdentityService
+
+        request = self._create_mock_request()
+        credentials = self._create_mock_credentials("expired-jwt-token")
+        mock_db = AsyncMock()
+
+        mock_user = MagicMock()
+        mock_user.id = uuid.uuid4()
+        mock_user.email = "sso@example.com"
+        mock_user.name = "SSOUser"
+        mock_user.role = "user"
+        mock_user.vendor_creator_id = None
+
+        mock_strategy = MagicMock()
+        mock_strategy.read_token = AsyncMock(return_value=None)
+
+        mock_claims = MagicMock()
+
+        with (
+            patch("domains.identity.application.principal_service.settings") as mock_settings,
+            patch(
+                "domains.identity.infrastructure.authentication.get_jwt_strategy",
+                return_value=mock_strategy,
+            ),
+            patch("fastapi_users_db_sqlalchemy.SQLAlchemyUserDatabase"),
+            patch("domains.identity.infrastructure.user_manager.UserManager"),
+            patch(
+                "domains.identity.infrastructure.auth.giikin_gateway.resolve_giikin_identity",
+                return_value=mock_claims,
+            ),
+            patch.object(GiikinIdentityService, "resolve_or_provision", return_value=mock_user),
+        ):
+            mock_settings.is_sso_auth = False
+            mock_settings.is_hybrid_auth = True
+            principal = await get_principal(request, credentials, mock_db)
+
+        assert principal is not None
+        assert principal.email == "sso@example.com"
+
+    @pytest.mark.asyncio
+    async def test_hybrid_no_bearer_uses_gateway(self):
+        """测试: hybrid 模式下无 Bearer 时直接走网关 Header"""
+        from domains.identity.application.principal_service import get_principal
+        from domains.identity.application.giikin_identity_service import GiikinIdentityService
+
+        request = self._create_mock_request()
+        mock_db = AsyncMock()
+
+        mock_user = MagicMock()
+        mock_user.id = uuid.uuid4()
+        mock_user.email = "sso-no-bearer@example.com"
+        mock_user.name = "SSOUser"
+        mock_user.role = "user"
+        mock_user.vendor_creator_id = None
+
+        mock_claims = MagicMock()
+
+        with (
+            patch("domains.identity.application.principal_service.settings") as mock_settings,
+            patch(
+                "domains.identity.infrastructure.auth.giikin_gateway.resolve_giikin_identity",
+                return_value=mock_claims,
+            ),
+            patch.object(GiikinIdentityService, "resolve_or_provision", return_value=mock_user),
+        ):
+            mock_settings.is_sso_auth = False
+            mock_settings.is_hybrid_auth = True
+            principal = await get_principal(request, None, mock_db)
+
+        assert principal is not None
+        assert principal.email == "sso-no-bearer@example.com"

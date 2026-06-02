@@ -16,6 +16,7 @@ import { userApi } from '@/api/user'
 import {
   clearSsoAttempt,
   clearStaleGiikinSession,
+  initiateSsoLogin,
   markSsoAttempt,
   SSO_RETURN_PATH_KEY,
 } from '@/config/auth'
@@ -79,6 +80,7 @@ export default function SsoCallbackPage(): React.JSX.Element {
   const queryClient = useQueryClient()
   const [searchParams] = useSearchParams()
   const [callbackError, setCallbackError] = useState<string | null>(null)
+  const [autoRecovering, setAutoRecovering] = useState(false)
 
   useEffect(() => {
     const ticket = searchParams.get('ticket')
@@ -111,9 +113,19 @@ export default function SsoCallbackPage(): React.JSX.Element {
         clearSsoAttempt()
         navigate(navigateTarget, { replace: true })
       } catch {
-        markSsoAttempt()
+        // 与 AuthProvider 对称：先清 stale Cookie，再自动重新发起 SSO；失败才落到手动重试页
+        setAutoRecovering(true)
         await clearStaleGiikinSession()
-        setCallbackError('登录凭证已失效，请点击下方按钮重新登录。')
+        clearSsoAttempt()
+        // 回写 returnPath，使 SSO 完成后能跳回原目标
+        sessionStorage.setItem(SSO_RETURN_PATH_KEY, target)
+        try {
+          await initiateSsoLogin(target)
+        } catch (err: unknown) {
+          setAutoRecovering(false)
+          const message = err instanceof Error ? err.message : 'SSO 登录初始化失败'
+          setCallbackError(`登录凭证已失效且自动重新登录失败：${message}`)
+        }
       }
     })()
   }, [navigate, queryClient, searchParams])
@@ -128,20 +140,22 @@ export default function SsoCallbackPage(): React.JSX.Element {
             type="button"
             onClick={() => {
               setCallbackError(null)
+              setAutoRecovering(true)
               void (async () => {
                 await clearStaleGiikinSession()
                 clearSsoAttempt()
                 try {
-                  await fetchCurrentUserWithRetry(queryClient)
-                  navigate('/', { replace: true })
-                } catch {
-                  setCallbackError('仍无法识别登录态，请从登录页重新发起 SSO。')
+                  await initiateSsoLogin('/')
+                } catch (err: unknown) {
+                  setAutoRecovering(false)
+                  const message = err instanceof Error ? err.message : 'SSO 登录初始化失败'
+                  setCallbackError(`仍无法重新登录：${message}`)
                 }
               })()
             }}
             className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
           >
-            重试
+            重新登录
           </button>
         </div>
       </div>
@@ -152,7 +166,9 @@ export default function SsoCallbackPage(): React.JSX.Element {
     <div className="flex h-screen items-center justify-center bg-background">
       <div className="flex flex-col items-center gap-3">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-        <p className="text-sm text-muted-foreground">正在完成登录...</p>
+        <p className="text-sm text-muted-foreground">
+          {autoRecovering ? '登录已过期，正在重新登录…' : '正在完成登录...'}
+        </p>
       </div>
     </div>
   )

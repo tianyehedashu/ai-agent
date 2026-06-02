@@ -209,11 +209,12 @@ class Settings(BaseSettings):
 
     # ========================================================================
     # 认证模式
-    #   sso   - 生产：信任 HiGress(giikin-auth-bridge) 注入的 X-Giikin-* 身份 Header，
-    #           校验 X-Giikin-Internal-Key，并按 giikin user_id JIT 建本地用户
-    #   local - 本地/开发：走 ai-agent 自身的邮箱密码 + JWT 登录
+    #   sso    - 生产：信任 HiGress(giikin-auth-bridge) 注入的 X-Giikin-* 身份 Header，
+    #            校验 X-Giikin-Internal-Key，并按 giikin user_id JIT 建本地用户
+    #   local  - 本地/开发：走 ai-agent 自身的邮箱密码 + JWT 登录
+    #   hybrid - 双通道：同时支持 SSO 与邮箱密码登录；Bearer JWT 优先，无 Bearer 才走网关 Header
     # ========================================================================
-    auth_mode: Literal["sso", "local"] = "local"
+    auth_mode: Literal["sso", "local", "hybrid"] = "local"
     # 与 HiGress giikin-auth-bridge 的 internal_key 对齐。
     # sso 模式下必填（fail-closed）：缺失则任何绕过网关的直连都能伪造 X-Giikin-* 身份。
     giikin_internal_key: SecretStr | None = None
@@ -225,11 +226,23 @@ class Settings(BaseSettings):
     giikin_session_cookie_name: str = "guard_token"
     # 生产应关闭：身份由 HiGress giikin-auth-bridge 注入 Header，不应由 backend 直连 IAM Redis
     giikin_session_cookie_fallback: bool = False
+    # 是否允许公开注册（hybrid/local 模式下可关闭，仅管理员创建账号）
+    allow_register: bool = True
 
     @property
     def is_sso_auth(self) -> bool:
         """是否启用 giikin 网关 SSO 认证模式。"""
         return self.auth_mode == "sso"
+
+    @property
+    def is_hybrid_auth(self) -> bool:
+        """是否启用双通道认证模式（SSO + 本地邮箱密码）。"""
+        return self.auth_mode == "hybrid"
+
+    @property
+    def is_sso_capable(self) -> bool:
+        """是否具备 SSO 能力（sso 或 hybrid）。"""
+        return self.auth_mode in ("sso", "hybrid")
 
     def model_post_init(self, __context: object) -> None:  # pylint: disable=arguments-differ
         """初始化后处理：如果 jwt_secret_key 是默认值，则使用 jwt_secret 的值"""
@@ -241,13 +254,13 @@ class Settings(BaseSettings):
         ):
             self.jwt_secret_key = self.jwt_secret.get_secret_value()
 
-        # fail-closed：SSO 模式必须配置 internal_key，否则可被绕过网关伪造身份
-        if self.auth_mode == "sso" and (
+        # fail-closed：SSO / hybrid 模式必须配置 internal_key，否则可被绕过网关伪造身份
+        if self.auth_mode in ("sso", "hybrid") and (
             self.giikin_internal_key is None
             or not self.giikin_internal_key.get_secret_value().strip()
         ):
             msg = (
-                "auth_mode='sso' requires giikin_internal_key to be set "
+                f"auth_mode='{self.auth_mode}' requires giikin_internal_key to be set "
                 "(防止绕过 HiGress 直连伪造 X-Giikin-* 身份)"
             )
             raise ValueError(msg)

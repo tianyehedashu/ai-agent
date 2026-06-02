@@ -23,10 +23,12 @@ import {
   clearSsoAttempt,
   clearStaleGiikinSession,
   initiateSsoLogin,
+  isHybridMode,
   isSsoMode,
   isWithinSsoCooldown,
 } from '@/config/auth'
 import { useToast } from '@/hooks/use-toast'
+import { getAuthToken } from '@/stores/auth'
 import { useUserStore } from '@/stores/user'
 
 const PUBLIC_PATHS = ['/login', '/register', '/sso-callback']
@@ -48,8 +50,13 @@ export function AuthProvider({ children }: Readonly<AuthProviderProps>): React.J
   const [ssoStaleRecovering, setSsoStaleRecovering] = useState(false)
 
   const isOnSsoCallback = location.pathname === '/sso-callback'
-  /** 回调页由 SsoCallbackPage 负责换票与 auth/me，避免抢先 401 触发冷却期 */
-  const deferAuthMe = isOnSsoCallback
+  const isOnPublicPath = PUBLIC_PATHS.includes(location.pathname)
+  /**
+   * 公开页跳过 auth/me：
+   * - /sso-callback 由 SsoCallbackPage 自行换票与重试，避免抢先 401 触发冷却期
+   * - /login、/register 不受守卫保护，无需提前校验身份（即便已登录也由各页面自行判断）
+   */
+  const deferAuthMe = isOnSsoCallback || isOnPublicPath
 
   const {
     data: currentUser,
@@ -98,8 +105,12 @@ export function AuthProvider({ children }: Readonly<AuthProviderProps>): React.J
   }, [sessionUser, isFetched, setCurrentUser])
 
   // SSO 回调后 guard_token 写入存在短延迟，冷却期内先重试 auth/me 再报错
+  // hybrid + 有本地 JWT 时跳过此 effect：JWT 过期应走 /login 而非 SSO 自愈
   useEffect(() => {
     if (!isSsoMode || !isWithinSsoCooldown() || ssoPostLoginRetryDone.current || deferAuthMe) {
+      return
+    }
+    if (isHybridMode && !!getAuthToken()) {
       return
     }
     if (!isSessionInvalid || sessionUser) {
@@ -143,16 +154,20 @@ export function AuthProvider({ children }: Readonly<AuthProviderProps>): React.J
     })()
   }, [deferAuthMe, isSessionInvalid, location.pathname, queryClient, refetch, sessionUser, toast])
 
-  const isOnPublicPath = PUBLIC_PATHS.includes(location.pathname)
   const ssoCooldownActive = isWithinSsoCooldown()
-  /** guard_token 为 HttpOnly，401 后须用冷却期避免 SSO 死循环 */
+  /**
+   * hybrid 模式下，若本地有 JWT token 说明用户已通过邮箱登录，
+   * 不应自动跳 SSO（JWT 过期走 refresh 机制，而非 SSO 重定向）。
+   */
+  const hasLocalJwt = !!getAuthToken()
   const shouldStartSso =
     isSsoMode &&
     !sessionUser &&
     isFetched &&
     !isOnPublicPath &&
     isSessionInvalid &&
-    !ssoCooldownActive
+    !ssoCooldownActive &&
+    !(isHybridMode && hasLocalJwt)
 
   useEffect(() => {
     if (!shouldStartSso || ssoRedirectStarted.current) {
@@ -271,6 +286,10 @@ export function AuthProvider({ children }: Readonly<AuthProviderProps>): React.J
             </div>
           </div>
         )
+      }
+      // hybrid 模式下有本地 JWT 但已过期 → 跳登录页（用户可选 SSO 或邮箱重新登录）
+      if (isHybridMode && hasLocalJwt) {
+        return <Navigate to="/login" state={{ from: location.pathname }} replace />
       }
       return (
         <div className="flex h-screen items-center justify-center bg-background">

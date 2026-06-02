@@ -5,6 +5,7 @@ Identity principal service.
 - sso 模式：信任 HiGress(giikin-auth-bridge) 注入的 X-Giikin-* 身份 Header，
   校验 Internal-Key 并按 giikin user_id JIT 映射本地用户。
 - local 模式：本地邮箱密码签发的 JWT（Authorization: Bearer）。
+- hybrid 模式：Bearer JWT 优先；无 Bearer 或 JWT 无效时 fallback 到网关 Header。
 """
 
 from __future__ import annotations
@@ -76,8 +77,20 @@ async def get_principal(
     credentials: HTTPAuthorizationCredentials | None,
     db: AsyncSession,
 ) -> Principal:
-    """获取当前主体（无有效身份一律 401，不支持匿名）。"""
+    """获取当前主体（无有效身份一律 401，不支持匿名）。
+
+    hybrid 模式优先级：Authorization Bearer JWT > 网关 X-Giikin-* Header。
+    这保证「邮箱登录后同一浏览器仍有 SSO Cookie」时以邮箱身份为准。
+    """
     if settings.is_sso_auth:
+        return await _principal_from_gateway(request, db)
+    if settings.is_hybrid_auth:
+        # 有 Bearer 先试 JWT；JWT 无效（非缺失）时 fallback 到网关 Header
+        if credentials and credentials.credentials:
+            try:
+                return await _principal_from_jwt(credentials, db)
+            except (AuthenticationError, TokenError):
+                pass
         return await _principal_from_gateway(request, db)
     return await _principal_from_jwt(credentials, db)
 

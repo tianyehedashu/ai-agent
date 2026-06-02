@@ -7,6 +7,7 @@ from typing import Annotated
 from fastapi import APIRouter, Body, Depends, status
 from pydantic import BaseModel, Field
 
+from bootstrap.config import settings
 from domains.identity.application import UserUseCase
 from domains.identity.infrastructure.authentication import (
     auth_backend,
@@ -37,10 +38,11 @@ router.include_router(
     prefix="/jwt",
     tags=["Authentication"],
 )
-router.include_router(
-    fastapi_users.get_register_router(UserRead, UserCreate),
-    tags=["Authentication"],
-)
+if settings.allow_register:
+    router.include_router(
+        fastapi_users.get_register_router(UserRead, UserCreate),
+        tags=["Authentication"],
+    )
 
 
 @router.get("/me")

@@ -2,7 +2,7 @@ import { useState } from 'react'
 
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useQueryClient } from '@tanstack/react-query'
-import { Loader2, Lock, Mail, Terminal } from 'lucide-react'
+import { ChevronDown, Loader2, Lock, Mail, Terminal } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { z } from 'zod'
@@ -25,7 +25,7 @@ import {
   FormMessage,
 } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
-import { initiateSsoLogin, isSsoMode } from '@/config/auth'
+import { initiateSsoLogin, isSsoMode, showLocalLogin } from '@/config/auth'
 import { useToast } from '@/hooks/use-toast'
 import { useUserStore } from '@/stores/user'
 
@@ -41,6 +41,7 @@ export default function LoginPage(): React.JSX.Element {
   const { toast } = useToast()
   const queryClient = useQueryClient()
   const [isLoading, setIsLoading] = useState(false)
+  const [localFormExpanded, setLocalFormExpanded] = useState(false)
   const navState = location.state as { from?: string } | null | undefined
   const from = navState?.from ?? '/'
 
@@ -70,7 +71,6 @@ export default function LoginPage(): React.JSX.Element {
     setIsLoading(true)
     try {
       await login(values)
-      // 清除所有缓存的查询数据，确保使用新身份重新获取
       await queryClient.invalidateQueries()
       toast({
         title: '登录成功',
@@ -87,6 +87,114 @@ export default function LoginPage(): React.JSX.Element {
       setIsLoading(false)
     }
   }
+
+  const ssoSection = isSsoMode ? (
+    <div className="space-y-4">
+      <Button
+        type="button"
+        className="w-full bg-primary/90 shadow-lg shadow-primary/20 transition-all duration-300 hover:bg-primary"
+        disabled={isLoading}
+        onClick={() => {
+          void onSsoLogin()
+        }}
+      >
+        {isLoading ? (
+          <>
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            跳转中...
+          </>
+        ) : (
+          'Giikin SSO 登录'
+        )}
+      </Button>
+      {showLocalLogin && (
+        <>
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center">
+              <span className="w-full border-t" />
+            </div>
+            <div className="relative flex justify-center text-xs uppercase">
+              <span className="bg-background/60 px-2 text-muted-foreground">或</span>
+            </div>
+          </div>
+          <button
+            type="button"
+            className="flex w-full items-center justify-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
+            onClick={() => {
+              setLocalFormExpanded((prev) => !prev)
+            }}
+          >
+            邮箱密码登录
+            <ChevronDown
+              className={`h-4 w-4 transition-transform ${localFormExpanded ? 'rotate-180' : ''}`}
+            />
+          </button>
+        </>
+      )}
+    </div>
+  ) : null
+
+  const localFormSection = (
+    <Form {...form}>
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+        <FormField
+          control={form.control}
+          name="email"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>邮箱</FormLabel>
+              <FormControl>
+                <div className="relative">
+                  <Mail className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="name@example.com"
+                    className="border-muted-foreground/20 bg-background/50 pl-9 transition-all duration-300 focus:border-primary/50 focus:ring-primary/20"
+                    {...field}
+                  />
+                </div>
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={form.control}
+          name="password"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>密码</FormLabel>
+              <FormControl>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    type="password"
+                    placeholder="••••••••"
+                    className="border-muted-foreground/20 bg-background/50 pl-9 transition-all duration-300 focus:border-primary/50 focus:ring-primary/20"
+                    {...field}
+                  />
+                </div>
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <Button
+          type="submit"
+          className="w-full bg-primary/90 shadow-lg shadow-primary/20 transition-all duration-300 hover:bg-primary"
+          disabled={isLoading}
+        >
+          {isLoading ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              登录中...
+            </>
+          ) : (
+            '登录'
+          )}
+        </Button>
+      </form>
+    </Form>
+  )
 
   return (
     <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-background">
@@ -107,87 +215,27 @@ export default function LoginPage(): React.JSX.Element {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {isSsoMode ? (
-            <Button
-              type="button"
-              className="w-full bg-primary/90 shadow-lg shadow-primary/20 transition-all duration-300 hover:bg-primary"
-              disabled={isLoading}
-              onClick={() => {
-                void onSsoLogin()
-              }}
-            >
-              {isLoading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  跳转中...
-                </>
-              ) : (
-                'Giikin SSO 登录'
-              )}
-            </Button>
-          ) : (
-            <Form {...form}>
-              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                <FormField
-                  control={form.control}
-                  name="email"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>邮箱</FormLabel>
-                      <FormControl>
-                        <div className="relative">
-                          <Mail className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                          <Input
-                            placeholder="name@example.com"
-                            className="border-muted-foreground/20 bg-background/50 pl-9 transition-all duration-300 focus:border-primary/50 focus:ring-primary/20"
-                            {...field}
-                          />
-                        </div>
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="password"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>密码</FormLabel>
-                      <FormControl>
-                        <div className="relative">
-                          <Lock className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                          <Input
-                            type="password"
-                            placeholder="••••••••"
-                            className="border-muted-foreground/20 bg-background/50 pl-9 transition-all duration-300 focus:border-primary/50 focus:ring-primary/20"
-                            {...field}
-                          />
-                        </div>
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <Button
-                  type="submit"
-                  className="w-full bg-primary/90 shadow-lg shadow-primary/20 transition-all duration-300 hover:bg-primary"
-                  disabled={isLoading}
-                >
-                  {isLoading ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      登录中...
-                    </>
-                  ) : (
-                    '登录'
-                  )}
-                </Button>
-              </form>
-            </Form>
+          {/* local 模式：直接展示邮箱表单 */}
+          {!isSsoMode && localFormSection}
+
+          {/* sso 模式：仅 SSO 按钮 */}
+          {isSsoMode && !showLocalLogin && ssoSection}
+
+          {/* hybrid 模式：SSO 按钮 + 折叠邮箱表单 */}
+          {isSsoMode && showLocalLogin && (
+            <>
+              {ssoSection}
+              <div
+                className={`overflow-hidden transition-all duration-300 ${
+                  localFormExpanded ? 'mt-4 max-h-96 opacity-100' : 'max-h-0 opacity-0'
+                }`}
+              >
+                {localFormSection}
+              </div>
+            </>
           )}
         </CardContent>
-        {!isSsoMode && (
+        {showLocalLogin && !isSsoMode && (
           <CardFooter className="flex flex-col space-y-2 text-center text-sm text-muted-foreground">
             <p>
               还没有账号？{' '}

@@ -4,18 +4,28 @@
  * - local：本地邮箱密码 + JWT 登录（默认，开发环境）
  * - sso：经 giikin 单点登录；身份由 HiGress(giikin-auth-bridge) 经 guard_token Cookie 注入，
  *        前端不持有本地 token，未登录时跳转到 SSO 登录入口。
+ * - hybrid：双通道，同时支持 SSO 与邮箱密码登录；Bearer JWT 优先，无 Bearer 才走网关 Header。
  *
  * 相关环境变量：
- * - VITE_AUTH_MODE: 'sso' | 'local'
- * - VITE_SSO_LOGIN_URL: SSO 登录入口（完整 URL 或同域路径），sso 模式必填
+ * - VITE_AUTH_MODE: 'sso' | 'local' | 'hybrid'
+ * - VITE_SSO_LOGIN_URL: SSO 登录入口（完整 URL 或同域路径），sso/hybrid 模式必填
  * - VITE_SSO_LOGOUT_URL: SSO 登出 API（可选，默认同域 /api/auth/logout，与 plus-ui 一致）
  */
 
-export type AuthMode = 'sso' | 'local'
+export type AuthMode = 'sso' | 'local' | 'hybrid'
 
-export const AUTH_MODE: AuthMode = import.meta.env.VITE_AUTH_MODE === 'sso' ? 'sso' : 'local'
+const RAW_AUTH_MODE = import.meta.env.VITE_AUTH_MODE ?? 'local'
+export const AUTH_MODE: AuthMode =
+  RAW_AUTH_MODE === 'sso' || RAW_AUTH_MODE === 'hybrid' ? RAW_AUTH_MODE : 'local'
 
-export const isSsoMode = AUTH_MODE === 'sso'
+/** 是否具备 SSO 能力（sso 或 hybrid） */
+export const isSsoMode = AUTH_MODE !== 'local'
+
+/** 是否为 hybrid 双通道模式 */
+export const isHybridMode = AUTH_MODE === 'hybrid'
+
+/** 是否展示本地邮箱密码登录表单 */
+export const showLocalLogin = AUTH_MODE === 'local' || AUTH_MODE === 'hybrid'
 
 const RAW_SSO_LOGIN_URL = import.meta.env.VITE_SSO_LOGIN_URL ?? ''
 const RAW_SSO_LOGOUT_URL = import.meta.env.VITE_SSO_LOGOUT_URL ?? ''

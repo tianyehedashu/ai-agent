@@ -13,7 +13,7 @@
 import { create } from 'zustand'
 
 import { userApi, type CurrentUser, type LoginParams, type RegisterParams } from '@/api/user'
-import { clearSsoAttempt, isSsoMode, resolveSsoLogoutUrl } from '@/config/auth'
+import { clearSsoAttempt, isHybridMode, isSsoMode, resolveSsoLogoutUrl } from '@/config/auth'
 import { clearAuth, setAuthToken } from '@/stores/auth'
 
 function appRootPath(): string {
@@ -91,10 +91,12 @@ export const useUserStore = create<UserState>((set) => ({
   },
 
   // Logout
-  // local：清 JWT；sso：须调 IAM /api/auth/logout 清除 guard_token，否则刷新后仍登录
+  // local：清 JWT；sso：须调 IAM /api/auth/logout 清除 guard_token
+  // hybrid：同时清 JWT + 调 IAM logout，确保切换身份时状态干净
   logout: async () => {
     try {
       if (isSsoMode) {
+        // sso / hybrid 模式都需清 SSO Cookie
         const response = await fetch(resolveSsoLogoutUrl(), {
           method: 'POST',
           credentials: 'include',
@@ -102,7 +104,9 @@ export const useUserStore = create<UserState>((set) => ({
         if (!response.ok) {
           console.warn('[SSO logout] IAM logout failed:', response.status, response.statusText)
         }
-      } else {
+      }
+      if (!isSsoMode || isHybridMode) {
+        // local / hybrid 模式也清本地 JWT 会话
         await userApi.logout()
       }
     } catch (error) {
