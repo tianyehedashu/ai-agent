@@ -117,7 +117,12 @@ async def adapt_anthropic_stream(
         if isinstance(chunk, dict):
             usage_patch = extract_usage_from_anthropic_stream_event(chunk)
             if usage_patch is not None:
-                last_usage = usage_patch
+                # Anthropic 流式 usage 分散在 message_start（input / cache）
+                # 和 message_delta（output）中；必须累积而非覆盖，
+                # 否则 cache_read_input_tokens 和 input_tokens 会丢失。
+                if last_usage is None:
+                    last_usage = {}
+                last_usage.update(usage_patch)
                 apply_gateway_cache_hit_to_metadata(metadata, usage_patch)
         out = anthropic_stream_chunk_to_bytes(chunk)
         if out is not None:

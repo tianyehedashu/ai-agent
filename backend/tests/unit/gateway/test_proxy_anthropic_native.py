@@ -654,6 +654,91 @@ async def test_adapt_anthropic_stream_sets_cache_hit(
 
 
 @pytest.mark.asyncio
+async def test_adapt_anthropic_stream_accumulates_usage_across_events(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """真实 Anthropic 流：message_start 含 cache_read，message_delta 仅含 output_tokens。
+
+    last_usage 必须累积两个事件的字段，否则缓存命中和 input_tokens 会丢失。
+    """
+    monkeypatch.setattr(
+        "domains.gateway.application.proxy_response_adapter.schedule_settle_usage",
+        lambda *args, **kwargs: None,
+    )
+    captured_usage: dict[str, Any] = {}
+
+    async def fake_finalize(
+        _ctx: Any,
+        _budget: Any,
+        metadata: dict[str, Any],
+        usage: dict[str, Any] | None,
+        _entitlement: Any,
+        *,
+        response_for_cost: Any | None = None,
+    ) -> None:
+        _ = metadata, response_for_cost
+        captured_usage["usage"] = usage
+
+    monkeypatch.setattr(
+        "domains.gateway.application.proxy_response_adapter.finalize_deferred_stream_settlement",
+        fake_finalize,
+    )
+
+    async def fake_stream() -> AsyncIterator[dict[str, Any]]:
+        # message_start 含 input + cache_read（真实 Anthropic 行为）
+        yield {
+            "type": "message_start",
+            "message": {
+                "id": "msg_abc",
+                "type": "message",
+                "role": "assistant",
+                "usage": {
+                    "input_tokens": 5000,
+                    "cache_creation_input_tokens": 0,
+                    "cache_read_input_tokens": 3000,
+                    "output_tokens": 0,
+                },
+            },
+        }
+        # message_delta 仅含 output_tokens（真实 Anthropic 行为）
+        yield {
+            "type": "message_delta",
+            "delta": {"stop_reason": "end_turn"},
+            "usage": {"output_tokens": 200},
+        }
+        yield {"type": "message_stop"}
+
+    team_id = uuid.uuid4()
+    ctx = ProxyContext(
+        team_id=team_id,
+        user_id=uuid.uuid4(),
+        vkey=_vkey(team_id),
+        capability=GatewayCapability.CHAT,
+        request_id="req-stream-accumulate",
+        store_full_messages=False,
+        guardrail_enabled=False,
+    )
+    metadata: dict[str, Any] = {}
+    stream = adapt_anthropic_stream(
+        fake_stream(),
+        ctx,
+        _NoopBudget(),
+        metadata=metadata,
+        downstream_custom=None,
+    )
+    chunks = [chunk async for chunk in stream]
+    assert len(chunks) > 0
+    # metadata 应在 message_start 时就设置 cache_hit
+    assert metadata.get("gateway_cache_hit") is True
+    # last_usage 应累积两个事件的字段
+    final = captured_usage.get("usage")
+    assert final is not None
+    assert final.get("input_tokens") == 5000
+    assert final.get("output_tokens") == 200
+    assert final.get("cache_read_input_tokens") == 3000
+
+
+@pytest.mark.asyncio
 async def test_anthropic_messages_translates_thinking_for_deepseek_v4(
     db_session: AsyncSession,
     monkeypatch: pytest.MonkeyPatch,
