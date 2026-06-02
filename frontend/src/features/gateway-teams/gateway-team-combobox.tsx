@@ -33,21 +33,8 @@ function teamOptionSubtitle(team: GatewayTeam, viewerUserId: string | null): str
   return team.slug.trim().length > 0 ? team.slug : undefined
 }
 
-function matchesTeamSearch(
-  team: GatewayTeam,
-  query: string,
-  label: string,
-  subtitle: string | undefined
-): boolean {
-  const haystack = [
-    label,
-    subtitle,
-    team.slug,
-    team.name,
-    team.owner_email,
-    team.owner_name,
-    team.id,
-  ]
+function matchesTeamSearch(team: GatewayTeam, query: string, label: string): boolean {
+  const haystack = [label, team.slug, team.name, team.owner_email, team.owner_name, team.id]
     .filter(Boolean)
     .join(' ')
     .toLowerCase()
@@ -110,10 +97,9 @@ export function GatewayTeamCombobox({
     if (!q) return teams
     return teams.filter((team) => {
       const label = resolveLabel(team)
-      const subtitle = teamOptionSubtitle(team, viewerUserId)
-      return matchesTeamSearch(team, q, label, subtitle)
+      return matchesTeamSearch(team, q, label)
     })
-  }, [teams, search, resolveLabel, viewerUserId])
+  }, [teams, search, resolveLabel])
 
   const showSearch = teams.length >= searchThreshold
 

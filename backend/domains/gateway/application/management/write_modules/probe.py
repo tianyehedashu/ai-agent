@@ -119,30 +119,10 @@ class ProbeWritesMixin:
     ) -> uuid.UUID | None:
         if actor_user_id is not None:
             return actor_user_id
-        # 延迟导入避免 application 层循环依赖（tenancy ↔ gateway）
-        from domains.tenancy.application.team_service import TeamService
-
-        team = await TeamService(self._session).get_team(tenant_id)
+        team = await self._teams.get_team(tenant_id)
         if team is not None and team.kind == "personal":
             return team.owner_user_id
         return None
-
-    def _probe_litellm_kwargs(
-        self,
-        base: dict[str, Any],
-        *,
-        tenant_id: uuid.UUID,
-        actor_user_id: uuid.UUID | None,
-        target: ProbeTarget,
-        credential_name: str,
-    ) -> dict[str, Any]:
-        return merge_probe_litellm_kwargs(
-            base,
-            tenant_id=tenant_id,
-            actor_user_id=actor_user_id,
-            target=target,
-            credential_name=credential_name,
-        )
 
     async def test_gateway_model(
         self,
@@ -194,14 +174,13 @@ class ProbeWritesMixin:
         ensure_gateway_callbacks()
         from litellm import acompletion, aembedding, aimage_generation, avideo_generation
 
-        def _litellm_kw(base: dict[str, Any]) -> dict[str, Any]:
-            return self._probe_litellm_kwargs(
-                base,
-                tenant_id=tenant_id,
-                actor_user_id=probe_actor_id,
-                target=target,
-                credential_name=credential.name,
-            )
+        _litellm_kw = lambda base: merge_probe_litellm_kwargs(
+            base,
+            tenant_id=tenant_id,
+            actor_user_id=probe_actor_id,
+            target=target,
+            credential_name=credential.name,
+        )
 
         try:
             if capability == "chat":

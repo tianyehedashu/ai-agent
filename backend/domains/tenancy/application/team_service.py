@@ -52,6 +52,7 @@ class TeamService:
         self._members = TeamMemberRepository(session)
         self._membership = membership or TenancyMembershipAdapter()
         self._user_role_lookup = user_role_lookup or user_platform_role_lookup_for_session(session)
+        self._users = UserUseCase(session)
 
     async def _filter_platform_admin_teams(
         self,
@@ -265,7 +266,7 @@ class TeamService:
                 if team.kind == "personal" and team.owner_user_id != viewer_user_id
             ]
             if foreign_owner_ids:
-                summaries = await UserUseCase(self._session).list_summary_views_by_ids(
+                summaries = await self._users.list_summary_views_by_ids(
                     foreign_owner_ids
                 )
                 for owner_id, summary in summaries.items():

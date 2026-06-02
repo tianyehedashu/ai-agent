@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Protocol
 from uuid import UUID
 
@@ -85,14 +86,11 @@ def _assert_can_mutate_model_on_credential(
     actor_user_id: UUID | None,
     team_role: str,
     is_platform_admin: bool,
+    can_mutate_fn: Callable[..., bool],
     resource_name: str,
 ) -> None:
-    """可复用的模型 mutation 断言体（create/update 共用）。
-
-    当前 create/update 权限等价，统一走 ``can_create_model_on_team_credential``；
-    若未来分离，请分别传入对应的 can_* 函数。
-    """
-    if not can_create_model_on_team_credential(
+    """可复用的模型 mutation 断言体（create/update/delete 共用）。"""
+    if not can_mutate_fn(
         credential,
         actor_user_id=actor_user_id,
         team_role=team_role,
@@ -113,6 +111,7 @@ def assert_can_create_model_on_team_credential(
         actor_user_id=actor_user_id,
         team_role=team_role,
         is_platform_admin=is_platform_admin,
+        can_mutate_fn=can_create_model_on_team_credential,
         resource_name="credential",
     )
 
@@ -129,6 +128,7 @@ def assert_can_update_team_model_on_credential(
         actor_user_id=actor_user_id,
         team_role=team_role,
         is_platform_admin=is_platform_admin,
+        can_mutate_fn=can_update_team_model_on_credential,
         resource_name="model",
     )
 

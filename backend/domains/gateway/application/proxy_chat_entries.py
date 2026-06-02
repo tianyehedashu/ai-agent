@@ -94,6 +94,26 @@ async def estimate_anthropic_input_tokens(body: dict[str, Any], model: str) -> i
     return estimate_anthropic_request_tokens(body)
 
 
+def _collect_ttfb_stream(
+    original: Any,
+    metadata: dict[str, Any],
+    started_at: float,
+) -> Any:
+    """流式响应包装器：首 chunk 时记录 TTFB 到 metadata，供 CustomLogger 落库。"""
+    _first = True
+
+    async def _inner() -> Any:
+        nonlocal _first
+        async for chunk in original:
+            if _first:
+                _first = False
+                ttfb = max(0, int((time.perf_counter() - started_at) * 1000))
+                metadata["gateway_ttfb_ms"] = ttfb
+            yield chunk
+
+    return _inner()
+
+
 class ProxyChatMixin:
     """``ProxyUseCase`` 的对话类能力入口（mixin）。"""
 
@@ -143,6 +163,7 @@ class ProxyChatMixin:
             router_call=_router,
         )
         if prepared.stream:
+            response = _collect_ttfb_stream(response, prepared.metadata, upstream_started)
             if prepared.timings is not None:
                 apply_timing_to_metadata(prepared.metadata, prepared.timings)
                 ctx.proxy_timing = GatewayProxyTiming.from_prepare(prepared.timings)
@@ -243,6 +264,7 @@ class ProxyChatMixin:
             router_call=_router,
         )
         if prepared.stream:
+            response = _collect_ttfb_stream(response, prepared.metadata, upstream_started)
             if prepared.timings is not None:
                 apply_timing_to_metadata(prepared.metadata, prepared.timings)
                 ctx.proxy_timing = GatewayProxyTiming.from_prepare(prepared.timings)

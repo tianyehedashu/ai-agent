@@ -10,7 +10,7 @@ from decimal import Decimal
 from typing import Annotated
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 
 from domains.gateway.application.management.usage_reads import (
     UsageStatisticsBreakdownSummary,
@@ -45,7 +45,7 @@ from domains.gateway.presentation.schemas.common import (
     UsageStatisticsResponse,
 )
 from libs.api.pagination import PageParams, page_query_params
-from libs.exceptions import PermissionDeniedError
+from libs.exceptions import PermissionDeniedError, ValidationError
 
 from ._common import MgmtReads
 
@@ -123,7 +123,7 @@ async def dashboard_summary(
     if start is None:
         start = end - timedelta(days=days)
     if start > end:
-        raise HTTPException(status_code=422, detail="start must be before or equal to end")
+        raise ValidationError("start must be before or equal to end")
     summary = await reads.aggregate_request_log_summary(
         team,
         start,
@@ -174,11 +174,6 @@ async def dashboard_statistics(
     group_by: UsageStatisticsGroupBy = Query(UsageStatisticsGroupBy.CREDENTIAL),
     credential_id: uuid.UUID | None = None,
     user_id: uuid.UUID | None = None,
-    team_id: uuid.UUID | None = Query(
-        default=None,
-        deprecated=True,
-        description="已废弃，请使用 filter_team_id",
-    ),
     filter_team_id: uuid.UUID | None = Query(
         default=None,
         description="按租户团队筛选（与路径 {team_id} 工作区上下文无关）",
@@ -200,7 +195,7 @@ async def dashboard_statistics(
         filters=UsageStatisticsFilters(
             credential_id=credential_id,
             user_id=user_id,
-            team_id=filter_team_id or team_id,
+            team_id=filter_team_id,
             model=model.strip() if model else None,
             provider=provider.strip() if provider else None,
             capability=capability.strip() if capability else None,
@@ -263,11 +258,6 @@ async def dashboard_statistics_breakdown(
     top_n: int = Query(3, ge=1, le=32),
     credential_id: uuid.UUID | None = None,
     user_id: uuid.UUID | None = None,
-    team_id: uuid.UUID | None = Query(
-        default=None,
-        deprecated=True,
-        description="已废弃，请使用 filter_team_id",
-    ),
     filter_team_id: uuid.UUID | None = Query(
         default=None,
         description="按租户团队筛选（与路径 {team_id} 工作区上下文无关）",
@@ -288,7 +278,7 @@ async def dashboard_statistics_breakdown(
         filters=UsageStatisticsFilters(
             credential_id=credential_id,
             user_id=user_id,
-            team_id=filter_team_id or team_id,
+            team_id=filter_team_id,
             model=model.strip() if model else None,
             provider=provider.strip() if provider else None,
             capability=capability.strip() if capability else None,

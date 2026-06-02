@@ -72,6 +72,8 @@ import {
 import { coalesceMoney, formatMoney } from '@/lib/money'
 import { cn } from '@/lib/utils'
 
+import { resolveDateRange, isValidDateRangeValue, type DateRangeValue } from './logs-utils'
+
 const PAGE_SIZE_OPTIONS = [50, 100, 200] as const
 
 const STATUS_FILTERS: readonly { value: string; label: string }[] = [
@@ -100,11 +102,9 @@ const DATE_RANGE_FILTERS: readonly { value: DateRangeValue; label: string }[] = 
   { value: '30d', label: '最近30天' },
 ]
 
-type DateRangeValue = '1h' | 'today' | '7d' | '30d'
-
 /** 表头与行共用，避免列宽漂移 */
 const LOG_GRID_COLS =
-  'grid grid-cols-[156px_178px_142px_104px_108px_104px_92px_92px_minmax(240px,1fr)]'
+  'grid grid-cols-[156px_178px_142px_104px_108px_104px_92px_92px_88px_minmax(200px,1fr)]'
 
 interface LogsLocationState {
   usageStatsFilters?: {
@@ -112,26 +112,6 @@ interface LogsLocationState {
     status?: string
     capability?: string
   }
-}
-
-function resolveDateRange(value: DateRangeValue): { start: Date; end: Date } {
-  const end = new Date()
-  const start = new Date(end)
-  if (value === '1h') {
-    start.setHours(start.getHours() - 1)
-  } else if (value === 'today') {
-    start.setHours(0, 0, 0, 0)
-  } else if (value === '7d') {
-    start.setDate(start.getDate() - 7)
-  } else {
-    // '30d'
-    start.setDate(start.getDate() - 30)
-  }
-  return { start, end }
-}
-
-function isValidDateRangeValue(value: string | null): value is DateRangeValue {
-  return value === '1h' || value === 'today' || value === '7d' || value === '30d'
 }
 
 export default function GatewayLogsPage(): React.JSX.Element {
@@ -617,7 +597,7 @@ export default function GatewayLogsPage(): React.JSX.Element {
 
       <Card className="overflow-hidden">
         <div className="overflow-x-auto">
-          <div className="min-w-[1220px]">
+          <div className="min-w-[1320px]">
             <div
               className={`${LOG_GRID_COLS} border-b bg-muted/30 px-3 py-2 text-xs font-medium text-muted-foreground`}
             >
@@ -629,6 +609,7 @@ export default function GatewayLogsPage(): React.JSX.Element {
               <div className="text-right">Tokens</div>
               <div className="text-right">成本</div>
               <div className="text-right">延迟</div>
+              <div className="text-right">首字节</div>
               <div>请求 ID</div>
             </div>
             <div ref={parentRef} className="h-[560px] overflow-auto">
@@ -908,6 +889,7 @@ function LogRow({
       </div>
       <div className="text-right tabular-nums">{formatLogMoney(item)}</div>
       <div className="text-right tabular-nums">{formatMs(item.latency_ms)}</div>
+      <div className="text-right tabular-nums text-muted-foreground">{formatMs(item.ttfb_ms)}</div>
       <div className="truncate font-mono text-muted-foreground">{item.request_id ?? item.id}</div>
     </button>
   )
@@ -935,7 +917,7 @@ function ListState({
 
 function LogMetricGrid({ log }: Readonly<{ log: GatewayLogItem }>): React.JSX.Element {
   return (
-    <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+    <div className="grid grid-cols-2 gap-2 md:grid-cols-5">
       <MetricTile icon={<Receipt className="h-4 w-4" />} label="计费" value={formatLogMoney(log)} />
       <MetricTile
         icon={<Zap className="h-4 w-4" />}
@@ -947,6 +929,16 @@ function LogMetricGrid({ log }: Readonly<{ log: GatewayLogItem }>): React.JSX.El
         icon={<Clock className="h-4 w-4" />}
         label="延迟"
         value={formatMs(log.latency_ms)}
+      />
+      <MetricTile
+        icon={<Clock className="h-4 w-4" />}
+        label="首字节"
+        value={formatMs(log.ttfb_ms)}
+        caption={
+          typeof log.ttfb_ms === 'number' && log.latency_ms > 0
+            ? `占 ${String(Math.round((log.ttfb_ms / log.latency_ms) * 100))}%`
+            : undefined
+        }
       />
       <MetricTile
         icon={<Server className="h-4 w-4" />}
