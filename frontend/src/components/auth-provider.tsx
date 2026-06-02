@@ -22,10 +22,12 @@ import { userApi } from '@/api/user'
 import {
   clearSsoAttempt,
   clearStaleGiikinSession,
+  getSsoAttemptCount,
   initiateSsoLogin,
   isHybridMode,
   isSsoMode,
   isWithinSsoCooldown,
+  SSO_MAX_ATTEMPTS,
 } from '@/config/auth'
 import { useToast } from '@/hooks/use-toast'
 import { getAuthToken } from '@/stores/auth'
@@ -116,6 +118,14 @@ export function AuthProvider({ children }: Readonly<AuthProviderProps>): React.J
     if (!isSessionInvalid || sessionUser) {
       return
     }
+    const attemptCount = getSsoAttemptCount()
+    console.warn(
+      `[SSO] AuthProvider cooldown retry, attemptCount=${String(attemptCount)}/${String(SSO_MAX_ATTEMPTS)}`
+    )
+    if (attemptCount >= SSO_MAX_ATTEMPTS) {
+      // 断路器触发：不再自动重试，直接展示错误页
+      return
+    }
     ssoPostLoginRetryDone.current = true
     setSsoPostLoginRetrying(true)
     void (async () => {
@@ -160,6 +170,7 @@ export function AuthProvider({ children }: Readonly<AuthProviderProps>): React.J
    * 不应自动跳 SSO（JWT 过期走 refresh 机制，而非 SSO 重定向）。
    */
   const hasLocalJwt = !!getAuthToken()
+  const ssoAttemptCount = getSsoAttemptCount()
   const shouldStartSso =
     isSsoMode &&
     !sessionUser &&
@@ -167,6 +178,7 @@ export function AuthProvider({ children }: Readonly<AuthProviderProps>): React.J
     !isOnPublicPath &&
     isSessionInvalid &&
     !ssoCooldownActive &&
+    ssoAttemptCount < SSO_MAX_ATTEMPTS &&
     !(isHybridMode && hasLocalJwt)
 
   useEffect(() => {
@@ -282,6 +294,38 @@ export function AuthProvider({ children }: Readonly<AuthProviderProps>): React.J
                 className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
               >
                 重试
+              </button>
+            </div>
+          </div>
+        )
+      }
+      // 断路器触发：连续多次 SSO 登录均失败，停止自动重定向，展示手动重试页
+      if (ssoAttemptCount >= SSO_MAX_ATTEMPTS) {
+        return (
+          <div className="flex h-screen items-center justify-center bg-background">
+            <div className="flex flex-col items-center gap-4 text-center">
+              <AlertCircle className="h-12 w-12 text-destructive" />
+              <div>
+                <p className="font-medium text-foreground">登录已过期</p>
+                <p className="mt-1 max-w-md text-sm text-muted-foreground">
+                  连续 {String(SSO_MAX_ATTEMPTS)} 次单点登录后仍无法获取身份，可能是 guard_token
+                  Cookie 未正确设置。 请联系管理员检查 HiGress giikin-auth-bridge 配置。
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  void (async () => {
+                    await clearStaleGiikinSession()
+                    clearSsoAttempt()
+                    ssoRedirectStarted.current = false
+                    ssoStaleRecoveryStarted.current = false
+                    ssoPostLoginRetryDone.current = false
+                    await initiateSsoLogin(location.pathname)
+                  })()
+                }}
+                className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+              >
+                重新登录
               </button>
             </div>
           </div>

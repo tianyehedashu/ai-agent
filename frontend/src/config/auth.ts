@@ -39,6 +39,9 @@ export const SSO_ATTEMPT_AT_KEY = 'ai_agent_sso_attempt_at'
 /** SSO 冷却期：此时间内 auth/me 仍 401 则展示错误页，不再自动跳 SSO */
 export const SSO_COOLDOWN_MS = 120_000
 
+/** SSO 最大连续尝试次数（跨页面，cookie 持久化）；超过后停止自动重定向，展示手动重试页 */
+export const SSO_MAX_ATTEMPTS = 3
+
 // ---------------------------------------------------------------------------
 // 双存储层：sessionStorage + SameSite=Lax cookie
 //
@@ -114,6 +117,33 @@ function dualStorage(sessionKey: string, cookieName: string, cookieMaxAgeSec: nu
 const ssoAttemptStore = dualStorage(SSO_ATTEMPT_AT_KEY, 'ai_agent_sso_ts', 3600)
 const ssoReturnPathStore = dualStorage(SSO_RETURN_PATH_KEY, 'ai_agent_sso_rp', 600)
 
+// ---------------------------------------------------------------------------
+// SSO 尝试计数器：纯 cookie 实现，跨页面重定向持久化。
+// 用于断路器：防止 guard_token 始终无法建立时的无限重定向循环。
+// ---------------------------------------------------------------------------
+
+const SSO_ATTEMPT_COUNT_COOKIE = 'ai_agent_sso_cnt'
+
+/** 读取 SSO 连续尝试次数 */
+export function getSsoAttemptCount(): number {
+  const raw = getCookie(SSO_ATTEMPT_COUNT_COOKIE)
+  if (!raw) return 0
+  const n = Number(raw)
+  return Number.isFinite(n) ? n : 0
+}
+
+/** 递增 SSO 尝试计数并返回新值 */
+export function incrementSsoAttemptCount(): number {
+  const count = getSsoAttemptCount() + 1
+  setCookie(SSO_ATTEMPT_COUNT_COOKIE, String(count), 3600)
+  return count
+}
+
+/** 重置 SSO 尝试计数（登录成功后调用） */
+export function resetSsoAttemptCount(): void {
+  removeCookie(SSO_ATTEMPT_COUNT_COOKIE)
+}
+
 /**
  * 清除浏览器中可能已过期的 guard_token（HttpOnly，仅 IAM logout 可清）。
  * 用于 auth/me 401 且 Redis session 已失效时的自愈，避免 stale Cookie 阻塞 SSO。
@@ -132,6 +162,7 @@ export function markSsoAttempt(): void {
 
 export function clearSsoAttempt(): void {
   ssoAttemptStore.clear()
+  resetSsoAttemptCount()
 }
 
 export function isWithinSsoCooldown(): boolean {
@@ -195,6 +226,9 @@ export async function initiateSsoLogin(returnPath: string): Promise<void> {
     window.location.href = '/login'
     return
   }
+
+  const attemptCount = incrementSsoAttemptCount()
+  console.warn(`[SSO] initiateSsoLogin attempt #${String(attemptCount)}, returnPath=${returnPath}`)
 
   ssoReturnPathStore.write(returnPath)
   markSsoAttempt()

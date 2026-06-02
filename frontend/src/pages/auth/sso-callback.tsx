@@ -17,8 +17,10 @@ import {
   clearSsoAttempt,
   clearStaleGiikinSession,
   consumeSsoReturnPath,
+  getSsoAttemptCount,
   initiateSsoLogin,
   markSsoAttempt,
+  SSO_MAX_ATTEMPTS,
 } from '@/config/auth'
 import { hrefToRouterPath } from '@/lib/ui-overlay/overlay-nav-bridge'
 
@@ -111,13 +113,25 @@ export default function SsoCallbackPage(): React.JSX.Element {
       try {
         await fetchCurrentUserWithRetry(queryClient)
         clearSsoAttempt()
+        console.warn('[SSO] callback: auth/me succeeded, navigating to', navigateTarget)
         navigate(navigateTarget, { replace: true })
       } catch {
+        const attemptCount = getSsoAttemptCount()
+        console.warn(
+          `[SSO] callback: fetchCurrentUserWithRetry failed, attemptCount=${String(attemptCount)}/${String(SSO_MAX_ATTEMPTS)}`
+        )
+        if (attemptCount >= SSO_MAX_ATTEMPTS) {
+          clearSsoAttempt()
+          setCallbackError(
+            `连续 ${String(SSO_MAX_ATTEMPTS)} 次 SSO 登录后仍无法获取身份，可能原因：guard_token Cookie 未正确设置。请联系管理员检查 HiGress giikin-auth-bridge 配置。`
+          )
+          return
+        }
         // 与 AuthProvider 对称：先清 stale Cookie，再自动重新发起 SSO；失败才落到手动重试页
         setAutoRecovering(true)
         await clearStaleGiikinSession()
-        clearSsoAttempt()
-        // initiateSsoLogin 内部已双写 returnPath 到 sessionStorage + cookie，无需手动回写
+        // 注意：此处不清除 clearSsoAttempt()，因为 initiateSsoLogin 内部会 markSsoAttempt()
+        // 保持尝试计数器不被重置，以便断路器生效
         try {
           await initiateSsoLogin(target)
         } catch (err: unknown) {
