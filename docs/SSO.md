@@ -104,7 +104,7 @@ flowchart LR
 | **`AuthProvider`** | `[ai-agent]` 前端 | `frontend/src/components/auth-provider.tsx`，挂载于 `App.tsx` | 全局认证守卫：除公开页外阻塞渲染、调 `auth/me`、401 跳 SSO、冷却期重试 |
 | **`SsoCallbackPage`** | `[ai-agent]` 前端 | `frontend/src/pages/auth/sso-callback.tsx` | SSO 回调页；Router 路径 `/sso-callback`，公网 URL **`/ai-agent/sso-callback`** |
 | **`auth.ts` 工具** | `[ai-agent]` 前端 | `frontend/src/config/auth.ts` | `initiateSsoLogin`、`clearStaleGiikinSession`、冷却期 `markSsoAttempt`、`isHybridMode`、`showLocalLogin` 等 |
-| **`plus-ui /sso-callback`** | `[giikin]` 前端 | `giikin-iam-plus-ui` | 网关根路径 **`/sso-callback`**（无 `/ai-agent` 前缀）；ticket 换 token、写 Cookie |
+| **`plus-ui /sso-callback`** | `[giikin]` 前端 | `giikin-iam-plus-ui` | 网关根路径 **`/sso-callback`**（无 `/ai-agent` 前缀）；plus-ui 自身 SSO 入口；ai-agent 不再依赖此页换票 |
 | **`giikin-iam`** | `[giikin]` 后端 | IAM 服务 | binding、login、logout；`UserActionListener` 写 Redis + Cookie |
 | **`giikin-auth-bridge`** | `[HiGress]` Wasm | `giikin/plugins/giikin-auth-bridge/` | 读 Cookie → 查 IAM Redis → 注入 `X-Giikin-*` |
 | **`ai-agent backend`** | `[ai-agent]` 后端 | FastAPI | SSO: 只读 Header + Internal-Key；hybrid: Bearer JWT 优先 |
@@ -113,8 +113,8 @@ flowchart LR
 
 | 公网路径 | 归属 | 用途 |
 |----------|------|------|
-| `/ai-agent/sso-callback` | ai-agent SPA | IAM 带 `ticket` 的首跳；换票完成后二次回调、`auth/me` 校验 |
-| `/sso-callback` | plus-ui | ai-agent 桥接换票；`POST /api/auth/login` 在此页触发 |
+| `/ai-agent/sso-callback` | ai-agent SPA | IAM 带 `ticket` 的首跳；`SsoCallbackPage` 调后端换票后重载校验 `auth/me` |
+| `/sso-callback` | plus-ui | plus-ui 自身 SSO 入口；ai-agent 不再调用此路径 |
 
 ---
 
@@ -230,39 +230,48 @@ sequenceDiagram
 #### 2.2.2 阶段 B：ticket 换票 → guard_token → 进入应用
 
 1. **`/ai-agent/sso-callback?ticket=T`**：**`[ai-agent] AuthProvider`** 对该 Router 路径 **defer** `auth/me`（Query `enabled: false`），由 **`SsoCallbackPage`** 接管
-2. 有 `ticket` → `markSsoAttempt()` → **整页**跳转 **`/sso-callback?...`**（**`[giikin]` plus-ui**，网关根路径，见 §1.1）
-3. plus-ui 调用 `POST /api/auth/login`（`grantType=company_sso`，body **api-decrypt 加密**）
+2. 有 `ticket` → `markSsoAttempt()` → **`SsoCallbackPage`** 调用 **`POST /ai-agent/api/v1/auth/sso-exchange`**，将 ticket 发给 ai-agent 后端
+3. ai-agent 后端通过 HiGress 网关调用 **`POST /api/auth/login`**（`grantType=company_sso`，**JSON 明文**，不加密）
 4. **`[giikin]` IAM** `UserActionListener.doLogin`：写 Sa-Token、**`user:session:{token}`**（TTL 与 client.timeout 对齐）、`Set-Cookie: guard_token`
-5. **`[giikin]` plus-ui** ~1s 后 `location.href = redirect` → 回到 **`/ai-agent/sso-callback`**（无 ticket）
-6. **`SsoCallbackPage`** `fetchCurrentUserWithRetry`：**最多 10 次 × 500ms** 调 `auth/me`；成功则 `clearSsoAttempt()`，`navigate` 到 `sessionStorage` 中的 returnPath
+5. IAM 响应经 HiGress 返回 ai-agent 后端，后端从响应头提取 `guard_token` 值 → **以无 Domain 方式重新 `Set-Cookie: guard_token`**，使 Cookie 落在 `gateway.giimallai.com` 域下
+6. ai-agent 后端返回 `{"ok":true}` → `SsoCallbackPage` **整页重载** `/ai-agent/sso-callback`（无 ticket）
+7. **`SsoCallbackPage`** `fetchCurrentUserWithRetry`：**最多 10 次 × 500ms** 调 `auth/me`；成功则 `clearSsoAttempt()`，`navigate` 到 `sessionStorage` 中的 returnPath
+
+> **为何绕过 plus-ui `/sso-callback`？**
+> 原架构依赖 plus-ui 在同域 `gateway.giimallai.com/sso-callback` 完成 `POST /api/auth/login` 换票，IAM 返回的 `Set-Cookie` 经 HiGress 转发到浏览器时应落在 `gateway.giimallai.com`。
+> 但实际部署中 IAM 配置了 `sessionCookieDomain=.giikin.com`（Nacos `spring.higress.session-cookie-domain`），导致浏览器收到 `Domain=.giikin.com` 的 `Set-Cookie` 却被拒绝（因响应来自 `gateway.giimallai.com` 而非 `.giikin.com` 子域）。
+> 现由 ai-agent 后端接管换票，从 IAM 响应中提取 `guard_token` 并以无 Domain 方式重设，确保 Cookie 落在正确的 `gateway.giimallai.com` 域下。
 
 ```mermaid
 sequenceDiagram
     autonumber
     participant B as 浏览器
     participant CB as [ai-agent]<br/>SsoCallbackPage
-    participant PU as [giikin]<br/>plus-ui /sso-callback
+    participant BE as [ai-agent]<br/>backend
+    participant HG as [HiGress]<br/>auth-bridge Wasm
     participant IAM as [giikin]<br/>giikin-iam
     participant R as IAM Redis
-    participant HG as [HiGress]<br/>auth-bridge Wasm
-    participant BE as [ai-agent]<br/>backend
 
     B->>CB: GET /ai-agent/sso-callback?ticket=T
     Note over CB: [ai-agent] AuthProvider<br/>对本页 defer auth/me
     CB->>CB: markSsoAttempt()
-    CB->>B: replace → /sso-callback?ticket=T<br/>&redirect=.../ai-agent/sso-callback
+    CB->>BE: POST /ai-agent/api/v1/auth/sso-exchange<br/>{"ticket":"T"}
 
-    B->>PU: 加载 plus-ui /sso-callback
-    PU->>IAM: POST /api/auth/login (company_sso)
+    BE->>HG: POST /api/auth/login (company_sso, 明文 JSON)
+    HG->>IAM: 转发 login
     IAM->>R: SET user:session:{jwt}
     IAM->>IAM: Sa-Token 会话
-    IAM-->>B: Set-Cookie guard_token=jwt
-    IAM-->>PU: 200 access_token
-    PU->>B: ~1s 后 redirect → /ai-agent/sso-callback
+    IAM-->>HG: Set-Cookie guard_token (Domain=.giikin.com)<br/>200 access_token
+    HG-->>BE: 转发（headers 保留）
 
+    BE->>BE: 提取 guard_token 值，<br/>以无 Domain 方式重新 Set-Cookie
+    BE-->>B: Set-Cookie guard_token (无 Domain)<br/>{"ok":true}
+    B->>B: Cookie 落在 gateway.giimallai.com
+
+    CB->>B: location.replace → /ai-agent/sso-callback（无 ticket）
     B->>CB: GET /ai-agent/sso-callback（无 ticket）
     loop 最多 10 次，间隔 500ms
-        CB->>HG: GET /ai-agent/api/v1/auth/me
+        CB->>HG: GET /ai-agent/api/v1/auth/me<br/>Cookie: guard_token
         HG->>R: GET user:session:{jwt}
         R-->>HG: session JSON
         HG->>BE: X-Giikin-* + Internal-Key
@@ -460,6 +469,7 @@ curl -s -b 'guard_token=YOUR_TOKEN' http://gateway.giimallai.com/ai-agent/api/v1
 | 难以区分「网关未注入 Header」与「backend 内部 401」 | API 路由 Wasm 仍为 `FAIL_OPEN` | 建议为 `ai-agent-api` 单独配 `failStrategy: FAIL_CLOSED`（见 §3.1） |
 | hybrid 下邮箱登录后刷新仍以 SSO 身份进入 | JWT 过期后 fallback 到网关 Header，Cookie 仍有效 | 正常行为（Bearer 优先，JWT 过期才 fallback）；若需切换身份，先登出再登录 |
 | hybrid 下 `/auth/register` 返回 404 | `ALLOW_REGISTER=false` | 通过管理员接口或脚本创建邮箱用户 |
+| SSO 后 auth/me 始终 401、无 guard_token（网关域） | IAM 配置了 `session-cookie-domain=.giikin.com`，导致 `guard_token` Domain 与 `gateway.giimallai.com` 不匹配 | ai-agent 后端已接管换票（`/api/v1/auth/sso-exchange`），从 IAM 响应提取 `guard_token` 并以无 Domain 方式重设 Cookie |
 
 ---
 
@@ -473,6 +483,7 @@ curl -s -b 'guard_token=YOUR_TOKEN' http://gateway.giimallai.com/ai-agent/api/v1
 | 登录页 | `[ai-agent]` 前端 | [`frontend/src/pages/auth/login.tsx`](../frontend/src/pages/auth/login.tsx)（hybrid: SSO 按钮 + 折叠邮箱表单） |
 | 登出 | `[ai-agent]` 前端 | [`frontend/src/stores/user.ts`](../frontend/src/stores/user.ts) `logout` |
 | 身份解析 | `[ai-agent]` 后端 | [`backend/domains/identity/application/principal_service.py`](../backend/domains/identity/application/principal_service.py)（hybrid: Bearer 优先 → fallback 网关 Header） |
+| **SSO 换票** | `[ai-agent]` 后端 | [`backend/domains/identity/presentation/router.py`](../backend/domains/identity/presentation/router.py) `/api/v1/auth/sso-exchange`（后端调用 IAM login → 提取 guard_token → 无 Domain 重设 Cookie） |
 | Header 解析 | `[ai-agent]` 后端 | [`backend/domains/identity/infrastructure/auth/giikin_gateway.py`](../backend/domains/identity/infrastructure/auth/giikin_gateway.py) |
 | JIT 用户 | `[ai-agent]` 后端 | [`backend/domains/identity/application/giikin_identity_service.py`](../backend/domains/identity/application/giikin_identity_service.py) |
 | 认证模式配置 | `[ai-agent]` 后端 | [`backend/bootstrap/config.py`](../backend/bootstrap/config.py)（`auth_mode`、`allow_register`） |

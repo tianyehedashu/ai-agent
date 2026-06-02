@@ -2,9 +2,12 @@
 Identity API - 用户认证接口
 """
 
+from __future__ import annotations
+
 from typing import Annotated
 
-from fastapi import APIRouter, Body, Depends, status
+from fastapi import APIRouter, Body, Depends, Response, status
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from bootstrap.config import settings
@@ -18,6 +21,7 @@ from domains.identity.presentation.deps import get_current_user
 from domains.identity.presentation.schemas import (
     CurrentUser,
     RefreshTokenRequest,
+    SsoExchangeRequest,
     TokenResponse,
     UserCreate,
     UserLogin,
@@ -95,6 +99,83 @@ async def change_password(
 async def logout() -> None:
     """退出登录（本地 JWT 由前端清除；SSO 登出走 giikin-iam）。"""
     return None
+
+
+# =============================================================================
+# SSO 换票端点（旁路 HiGress 未透传 Set-Cookie 到 gateway.giimallai.com 的问题）
+# =============================================================================
+
+
+@router.post("/sso-exchange")
+async def sso_ticket_exchange(data: SsoExchangeRequest, response: Response) -> JSONResponse:
+    """SSO ticket 换票：调用 IAM 登录 API，将 guard_token 重新设置到网关域。
+
+    HiGress 在 proxy IAM API 响应时未透传 Set-Cookie，导致 guard_token 的
+    Domain=.giikin.com 在 gateway.giimallai.com 下无法被浏览器接受。
+    本端点从 IAM 响应中提取 guard_token，以无 Domain 的方式重新 Set-Cookie，
+    使其落在 gateway.giimallai.com 域下，后续请求 HiGress 可正常注入 X-Giikin-*。
+    """
+    import httpx
+
+    iam_payload = {
+        "grantType": "company_sso",
+        "ticket": data.ticket,
+        "tenantId": data.tenant_id,
+        "source": "company_sso",
+        "callbackOrigin": f"http://gateway.giimallai.com",
+        "clientId": data.client_id,
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(15.0)) as client:
+            iam_resp = await client.post(
+                "http://gateway.giimallai.com/api/auth/login",
+                json=iam_payload,
+                headers={"Content-Type": "application/json"},
+            )
+    except httpx.RequestError as exc:
+        logger.error("[SSO exchange] IAM login request failed: %s", exc)
+        return JSONResponse(
+            status_code=502,
+            content={"detail": "无法连接 SSO 认证服务，请稍后重试"},
+        )
+
+    if iam_resp.status_code != 200:
+        logger.error(
+            "[SSO exchange] IAM login returned %d: %s",
+            iam_resp.status_code,
+            iam_resp.text[:500],
+        )
+        return JSONResponse(
+            status_code=502,
+            content={"detail": f"SSO 认证失败（{iam_resp.status_code}），请重试"},
+        )
+
+    # 从 IAM 响应中提取 guard_token（Domain=.giikin.com），
+    # 以无 Domain 的方式重新 Set-Cookie 到 gateway.giimallai.com
+    set_cookie_headers = iam_resp.headers.get("set-cookie", "")
+    guard_token_value = None
+    for cookie_str in (set_cookie_headers or "").split(","):
+        cookie_str = cookie_str.strip()
+        if cookie_str.startswith("guard_token="):
+            guard_token_value = cookie_str.split(";")[0].split("=", 1)[1]
+            break
+
+    if guard_token_value:
+        response.set_cookie(
+            key="guard_token",
+            value=guard_token_value,
+            path="/",
+            httponly=True,
+            samesite="lax",
+            secure=False,
+            max_age=2592000,  # 30 天，与 IAM 默认一致
+        )
+        logger.info("[SSO exchange] guard_token re-set on gateway domain")
+    else:
+        logger.warning("[SSO exchange] IAM response missing guard_token Set-Cookie")
+
+    return JSONResponse(content={"ok": True})
 
 
 # =============================================================================
