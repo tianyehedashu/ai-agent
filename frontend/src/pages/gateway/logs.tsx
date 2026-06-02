@@ -3,7 +3,7 @@
  */
 
 import type { ReactNode } from 'react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { useVirtualizer, type VirtualItem } from '@tanstack/react-virtual'
@@ -380,6 +380,10 @@ export default function GatewayLogsPage(): React.JSX.Element {
     [items, selectedId]
   )
 
+  const handleRowSelect = useCallback((id: string) => {
+    setSelectedId(id)
+  }, [])
+
   const { data: detail } = useQuery({
     queryKey: ['gateway', 'log', teamId, selectedId, usageAggregation],
     queryFn: () => {
@@ -652,9 +656,7 @@ export default function GatewayLogsPage(): React.JSX.Element {
                         row={row}
                         item={item}
                         selected={item.id === selectedId}
-                        onSelect={() => {
-                          setSelectedId(item.id)
-                        }}
+                        onSelect={handleRowSelect}
                       />
                     )
                   })}
@@ -832,7 +834,7 @@ export default function GatewayLogsPage(): React.JSX.Element {
   )
 }
 
-function LogRow({
+const LogRow = memo(function LogRow({
   row,
   item,
   selected,
@@ -841,7 +843,7 @@ function LogRow({
   row: VirtualItem
   item: GatewayLogItem
   selected: boolean
-  onSelect: () => void
+  onSelect: (id: string) => void
 }>): React.JSX.Element {
   return (
     <button
@@ -859,7 +861,9 @@ function LogRow({
         selected ? 'bg-primary/5 ring-1 ring-inset ring-primary/20' : ''
       )}
       type="button"
-      onClick={onSelect}
+      onClick={() => {
+        onSelect(item.id)
+      }}
     >
       <div className="truncate text-muted-foreground">{formatDateTime(item.created_at)}</div>
       <div className="truncate font-mono" title={item.real_model ?? item.route_name ?? undefined}>
@@ -883,7 +887,7 @@ function LogRow({
       <div className="truncate font-mono text-muted-foreground">{item.request_id ?? item.id}</div>
     </button>
   )
-}
+})
 
 function ListState({
   icon,
