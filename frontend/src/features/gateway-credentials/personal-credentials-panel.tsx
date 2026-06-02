@@ -17,7 +17,6 @@ import {
 } from '@/api/gateway'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   Dialog,
   DialogContent,
@@ -37,7 +36,6 @@ import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { useToast } from '@/hooks/use-toast'
 import { lazyWithReload } from '@/lib/lazy-with-reload'
 import { Key, Loader2, Pencil, Plus, Trash2 } from '@/lib/lucide-icons'
-import { useAuthStore } from '@/stores/auth'
 import { useUserStore } from '@/stores/user'
 
 import { USER_GATEWAY_CREDENTIAL_PROVIDER_IDS, credentialProviderLabel } from './constants'
@@ -67,10 +65,9 @@ export function PersonalCredentialsPanel({
   useProviderProfilesCatalog()
   const queryClient = useQueryClient()
   const { toast } = useToast()
-  const token = useAuthStore((s) => s.token)
-  const hasAuthSession = Boolean(token)
-  const teamId = useGatewayTeamId()
   const { currentUser } = useUserStore()
+  const hasAuthSession = currentUser !== null
+  const teamId = useGatewayTeamId()
   const [editCred, setEditCred] = useState<ProviderCredential | null>(null)
   const [addModelsCred, setAddModelsCred] = useState<ProviderCredential | null>(null)
   const [credentialPendingDelete, setCredentialPendingDelete] = useState<ProviderCredential | null>(
@@ -192,54 +189,27 @@ export function PersonalCredentialsPanel({
 
   const outerClass = 'space-y-4'
 
-  const credentialsBody = useMemo(
+  const providerSections = useMemo(
     () => (
       <>
-        {hasAuthSession ? (
-          <div className="flex flex-wrap items-center justify-end gap-2 border-b pb-3">
-            <Label htmlFor="show-full-masked-list" className="cursor-pointer text-xs font-normal">
-              显示掩码
-            </Label>
-            <Switch
-              id="show-full-masked-list"
-              checked={showFullMaskedInList}
-              onCheckedChange={setShowFullMaskedInList}
-              aria-label="在列表中显示完整 API Key 掩码"
-            />
-          </div>
-        ) : (
-          <p className="text-sm text-muted-foreground">请先登录</p>
-        )}
         {USER_GATEWAY_CREDENTIAL_PROVIDER_IDS.map((provider) => {
           const rows = byProvider.get(provider) ?? []
           return (
-            <div key={provider} className="flex flex-col gap-3 rounded-lg border p-4">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="flex min-w-0 items-center gap-2">
-                  <Key className="h-4 w-4 shrink-0 text-muted-foreground" />
-                  <span className="font-medium">{credentialProviderLabel(provider)}</span>
+            <section key={provider} className="rounded-lg border">
+              <div className="flex flex-wrap items-center justify-between gap-2 bg-muted/30 px-4 py-2.5">
+                <div className="flex items-center gap-2">
+                  <Key className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm font-medium">{credentialProviderLabel(provider)}</span>
                   <Badge variant={rows.length > 0 ? 'secondary' : 'outline'}>
                     {rows.length > 0 ? rows.length : '—'}
                   </Badge>
                 </div>
-                <div className="flex flex-wrap gap-2">
-                  {onAddCredential ? (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={!hasAuthSession}
-                      onClick={() => {
-                        onAddCredential(provider)
-                      }}
-                    >
-                      添加账号
-                    </Button>
-                  ) : null}
+                <div className="flex items-center gap-1">
                   {rows.length > 0 ? (
                     <Button
-                      variant="outline"
+                      variant="ghost"
                       size="sm"
-                      disabled={!hasAuthSession || testIsPending}
+                      disabled={testIsPending}
                       onClick={() => {
                         const active = rows.find((row) => row.is_active) ?? rows[0]
                         testMutate(active.id)
@@ -248,51 +218,58 @@ export function PersonalCredentialsPanel({
                       {testIsPending ? '验证中…' : '验证'}
                     </Button>
                   ) : null}
+                  {onAddCredential ? (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        onAddCredential(provider)
+                      }}
+                    >
+                      <Plus className="mr-1 h-3.5 w-3.5" />
+                      添加
+                    </Button>
+                  ) : null}
                 </div>
               </div>
               {rows.length > 0 ? (
-                <ul className="divide-y rounded-md border">
+                <div className="divide-y">
                   {rows.map((c) => (
-                    <li key={c.id} className="border-b last:border-0">
-                      <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm">
+                    <div key={c.id}>
+                      <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 text-sm">
                         <div className="min-w-0 flex-1">
-                          <span className="font-medium">{c.name}</span>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="font-medium">{c.name}</span>
+                            {!c.is_active ? (
+                              <Badge variant="outline" className="text-[11px]">
+                                已停用
+                              </Badge>
+                            ) : null}
+                          </div>
                           <div className="mt-0.5 font-mono text-[11px] text-muted-foreground">
-                            {displayListApiKeyMasked(
-                              showFullMaskedInList,
-                              hasAuthSession,
-                              c.api_key_masked
-                            )}
+                            {displayListApiKeyMasked(showFullMaskedInList, true, c.api_key_masked)}
                           </div>
                           {c.api_base ? (
-                            <span className="mt-0.5 block truncate text-muted-foreground">
+                            <span className="mt-0.5 block truncate text-[11px] text-muted-foreground">
                               {c.api_base}
                             </span>
                           ) : null}
-                          {!c.is_active ? (
-                            <Badge variant="outline" className="ml-2">
-                              已停用
-                            </Badge>
-                          ) : null}
                         </div>
                         <div className="flex gap-1">
-                          {hasAuthSession ? (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-8 px-2 text-xs"
-                              onClick={() => {
-                                setAddModelsCred(c)
-                              }}
-                            >
-                              <Plus className="mr-1 h-3.5 w-3.5" />
-                              模型
-                            </Button>
-                          ) : null}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 px-2 text-xs"
+                            onClick={() => {
+                              setAddModelsCred(c)
+                            }}
+                          >
+                            <Plus className="mr-1 h-3.5 w-3.5" />
+                            模型
+                          </Button>
                           <Button
                             variant="ghost"
                             size="icon"
-                            disabled={!hasAuthSession}
                             onClick={() => {
                               openEdit(c)
                             }}
@@ -300,24 +277,22 @@ export function PersonalCredentialsPanel({
                           >
                             <Pencil className="h-4 w-4" />
                           </Button>
-                          {hasAuthSession ? (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="text-destructive hover:text-destructive"
-                              disabled={deleteMutation.isPending}
-                              onClick={() => {
-                                setCredentialPendingDelete(c)
-                              }}
-                              aria-label="删除凭据"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          ) : null}
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="text-destructive hover:text-destructive"
+                            disabled={deleteMutation.isPending}
+                            onClick={() => {
+                              setCredentialPendingDelete(c)
+                            }}
+                            aria-label="删除凭据"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
                         </div>
                       </div>
                       {currentUser?.id ? (
-                        <div className="border-t bg-muted/10 px-3 py-2">
+                        <div className="border-t bg-muted/10 px-4 py-2">
                           <p className="mb-1 text-[11px] text-muted-foreground">平台预算</p>
                           <PersonalCredentialBudgetInline
                             credentialId={c.id}
@@ -327,17 +302,18 @@ export function PersonalCredentialsPanel({
                           />
                         </div>
                       ) : null}
-                    </li>
+                    </div>
                   ))}
-                </ul>
-              ) : null}
-            </div>
+                </div>
+              ) : (
+                <div className="px-4 py-8 text-center text-sm text-muted-foreground">暂无凭据</div>
+              )}
+            </section>
           )
         })}
       </>
     ),
     [
-      hasAuthSession,
       showFullMaskedInList,
       byProvider,
       testIsPending,
@@ -352,6 +328,15 @@ export function PersonalCredentialsPanel({
     ]
   )
 
+  if (!hasAuthSession) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-3 rounded-lg border py-12">
+        <Key className="h-8 w-8 text-muted-foreground/60" />
+        <p className="text-sm text-muted-foreground">请先登录以管理个人凭据</p>
+      </div>
+    )
+  }
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center p-12">
@@ -362,19 +347,39 @@ export function PersonalCredentialsPanel({
 
   return (
     <div className={outerClass}>
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-base">提供商凭据</CardTitle>
-          {hasAuthSession ? (
-            <GatewayRefreshButton
-              isFetching={isRefreshing}
-              ariaLabel="刷新个人凭据"
-              onRefresh={handleRefresh}
-            />
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <Label htmlFor="show-full-masked-list" className="cursor-pointer text-xs font-normal">
+            显示掩码
+          </Label>
+          <Switch
+            id="show-full-masked-list"
+            checked={showFullMaskedInList}
+            onCheckedChange={setShowFullMaskedInList}
+            aria-label="在列表中显示完整 API Key 掩码"
+          />
+        </div>
+        <div className="flex items-center gap-2">
+          <GatewayRefreshButton
+            isFetching={isRefreshing}
+            ariaLabel="刷新个人凭据"
+            onRefresh={handleRefresh}
+          />
+          {onAddCredential ? (
+            <Button
+              size="sm"
+              onClick={() => {
+                onAddCredential()
+              }}
+            >
+              <Plus className="mr-1.5 h-4 w-4" />
+              添加账号
+            </Button>
           ) : null}
-        </CardHeader>
-        <CardContent className="space-y-4">{credentialsBody}</CardContent>
-      </Card>
+        </div>
+      </div>
+
+      {providerSections}
 
       <Dialog
         open={editCred !== null}
