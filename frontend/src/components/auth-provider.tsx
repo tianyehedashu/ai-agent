@@ -19,7 +19,13 @@ import { Navigate, useLocation } from 'react-router-dom'
 
 import { ApiError } from '@/api/client'
 import { userApi } from '@/api/user'
-import { clearSsoAttempt, initiateSsoLogin, isSsoMode, isWithinSsoCooldown } from '@/config/auth'
+import {
+  clearSsoAttempt,
+  clearStaleGiikinSession,
+  initiateSsoLogin,
+  isSsoMode,
+  isWithinSsoCooldown,
+} from '@/config/auth'
 import { useToast } from '@/hooks/use-toast'
 import { useUserStore } from '@/stores/user'
 
@@ -36,8 +42,10 @@ export function AuthProvider({ children }: Readonly<AuthProviderProps>): React.J
   const location = useLocation()
   const ssoRedirectStarted = useRef(false)
   const ssoPostLoginRetryDone = useRef(false)
+  const ssoStaleRecoveryStarted = useRef(false)
   const [ssoRedirectFailed, setSsoRedirectFailed] = useState(false)
   const [ssoPostLoginRetrying, setSsoPostLoginRetrying] = useState(false)
+  const [ssoStaleRecovering, setSsoStaleRecovering] = useState(false)
 
   const isOnSsoCallback = location.pathname === '/sso-callback'
   /** 回调页由 SsoCallbackPage 负责换票与 auth/me，避免抢先 401 触发冷却期 */
@@ -113,8 +121,27 @@ export function AuthProvider({ children }: Readonly<AuthProviderProps>): React.J
         })
       }
       setSsoPostLoginRetrying(false)
+      if (ssoStaleRecoveryStarted.current) {
+        return
+      }
+      ssoStaleRecoveryStarted.current = true
+      setSsoStaleRecovering(true)
+      await clearStaleGiikinSession()
+      clearSsoAttempt()
+      ssoRedirectStarted.current = false
+      try {
+        await initiateSsoLogin(location.pathname)
+      } catch (err: unknown) {
+        setSsoStaleRecovering(false)
+        const message = err instanceof Error ? err.message : 'SSO 登录初始化失败'
+        toast({
+          variant: 'destructive',
+          title: '登录已过期',
+          description: message,
+        })
+      }
     })()
-  }, [deferAuthMe, isSessionInvalid, queryClient, refetch, sessionUser])
+  }, [deferAuthMe, isSessionInvalid, location.pathname, queryClient, refetch, sessionUser, toast])
 
   const isOnPublicPath = PUBLIC_PATHS.includes(location.pathname)
   const ssoCooldownActive = isWithinSsoCooldown()
@@ -183,12 +210,14 @@ export function AuthProvider({ children }: Readonly<AuthProviderProps>): React.J
   // 未认证 + 不在公开页面
   if (!sessionUser && isFetched && !isOnPublicPath) {
     if (isSsoMode && isSessionInvalid && ssoCooldownActive) {
-      if (ssoPostLoginRetrying) {
+      if (ssoPostLoginRetrying || ssoStaleRecovering) {
         return (
           <div className="flex h-screen items-center justify-center bg-background">
             <div className="flex flex-col items-center gap-3">
               <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-              <p className="text-sm text-muted-foreground">正在确认登录态...</p>
+              <p className="text-sm text-muted-foreground">
+                {ssoStaleRecovering ? '登录已过期，正在重新登录…' : '正在确认登录态...'}
+              </p>
             </div>
           </div>
         )
@@ -198,21 +227,26 @@ export function AuthProvider({ children }: Readonly<AuthProviderProps>): React.J
           <div className="flex flex-col items-center gap-4 text-center">
             <AlertCircle className="h-12 w-12 text-destructive" />
             <div>
-              <p className="font-medium text-foreground">无法识别 Giikin 登录态</p>
+              <p className="font-medium text-foreground">登录已过期</p>
               <p className="mt-1 max-w-md text-sm text-muted-foreground">
-                SSO 已完成但 ai-agent 仍未识别身份。请确认 gateway 上 giikin-auth-bridge 已绑定
-                ai-agent-spa/api，且 GIIKIN_INTERNAL_KEY 与插件 internal_key 一致（见
-                docs/SSO.md）。
+                浏览器中的登录凭证已失效。请重新登录；若仍失败，请联系管理员检查网关
+                giikin-auth-bridge 配置（见 docs/SSO.md）。
               </p>
             </div>
             <button
               onClick={() => {
-                clearSsoAttempt()
-                void refetch()
+                void (async () => {
+                  await clearStaleGiikinSession()
+                  clearSsoAttempt()
+                  ssoRedirectStarted.current = false
+                  ssoStaleRecoveryStarted.current = false
+                  ssoPostLoginRetryDone.current = false
+                  await initiateSsoLogin(location.pathname)
+                })()
               }}
               className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
             >
-              重试
+              重新登录
             </button>
           </div>
         </div>

@@ -13,7 +13,12 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 
 import { APP_ROOT } from '@/api/paths'
 import { userApi } from '@/api/user'
-import { clearSsoAttempt, markSsoAttempt, SSO_RETURN_PATH_KEY } from '@/config/auth'
+import {
+  clearSsoAttempt,
+  clearStaleGiikinSession,
+  markSsoAttempt,
+  SSO_RETURN_PATH_KEY,
+} from '@/config/auth'
 import { hrefToRouterPath } from '@/lib/ui-overlay/overlay-nav-bridge'
 
 /** React Router 路径（如 /chat）→ 浏览器 URL 路径（如 /ai-agent/chat） */
@@ -107,9 +112,8 @@ export default function SsoCallbackPage(): React.JSX.Element {
         navigate(navigateTarget, { replace: true })
       } catch {
         markSsoAttempt()
-        setCallbackError(
-          '登录回调已完成，但 ai-agent 未能识别身份。请稍后重试或联系管理员检查网关配置。'
-        )
+        await clearStaleGiikinSession()
+        setCallbackError('登录凭证已失效，请点击下方按钮重新登录。')
       }
     })()
   }, [navigate, queryClient, searchParams])
@@ -124,16 +128,16 @@ export default function SsoCallbackPage(): React.JSX.Element {
             type="button"
             onClick={() => {
               setCallbackError(null)
-              void fetchCurrentUserWithRetry(queryClient)
-                .then(() => {
-                  clearSsoAttempt()
+              void (async () => {
+                await clearStaleGiikinSession()
+                clearSsoAttempt()
+                try {
+                  await fetchCurrentUserWithRetry(queryClient)
                   navigate('/', { replace: true })
-                })
-                .catch(() => {
-                  setCallbackError(
-                    '仍无法识别登录态，请确认 HiGress giikin-auth-bridge 已正确配置。'
-                  )
-                })
+                } catch {
+                  setCallbackError('仍无法识别登录态，请从登录页重新发起 SSO。')
+                }
+              })()
             }}
             className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
           >

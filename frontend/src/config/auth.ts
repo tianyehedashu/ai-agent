@@ -29,6 +29,18 @@ export const SSO_ATTEMPT_AT_KEY = 'ai_agent_sso_attempt_at'
 /** SSO 冷却期：此时间内 auth/me 仍 401 则展示错误页，不再自动跳 SSO */
 export const SSO_COOLDOWN_MS = 120_000
 
+/**
+ * 清除浏览器中可能已过期的 guard_token（HttpOnly，仅 IAM logout 可清）。
+ * 用于 auth/me 401 且 Redis session 已失效时的自愈，避免 stale Cookie 阻塞 SSO。
+ */
+export async function clearStaleGiikinSession(): Promise<void> {
+  try {
+    await fetch(resolveSsoLogoutUrl(), { method: 'POST', credentials: 'include' })
+  } catch {
+    // 忽略网络错误，后续 SSO 仍会尝试
+  }
+}
+
 export function markSsoAttempt(): void {
   if (typeof sessionStorage === 'undefined') {
     return
