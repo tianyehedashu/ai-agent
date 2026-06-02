@@ -12,6 +12,7 @@ from domains.gateway.application.entitlement_model_status import (
 )
 from domains.gateway.application.gateway_model_listing import (
     GatewayRegistryModelRow,
+    _registry_row_deployable,
     list_merged_models_for_tenant,
 )
 from domains.gateway.application.internal_bridge_actor import resolve_internal_gateway_team_id
@@ -100,6 +101,8 @@ async def list_available_models_page(
     for row in system_rows:
         if not is_connectivity_requestable(row.last_test_status):
             continue
+        if not await _registry_row_deployable(session, row):
+            continue
         item = gateway_model_to_selector_item(row)
         if ability_filter and not selector_item_matches_ability_filter(item, ability_filter):
             continue
@@ -144,6 +147,8 @@ async def list_available_models_page(
         )
         for row in personal_rows:
             if not is_connectivity_requestable(row.last_test_status):
+                continue
+            if not await _registry_row_deployable(session, row):
                 continue
             item = gateway_model_to_selector_user_item(row)
             if ability_filter and not selector_item_matches_ability_filter(item, ability_filter):
