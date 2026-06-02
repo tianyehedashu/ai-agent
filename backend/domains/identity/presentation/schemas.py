@@ -8,6 +8,7 @@ from datetime import datetime
 from typing import Self
 import uuid
 
+from fastapi import Response
 from fastapi_users.schemas import BaseUser, BaseUserCreate
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
 
@@ -131,6 +132,16 @@ class RefreshTokenRequest(BaseModel):
     refresh_token: str = Field(..., description="刷新令牌")
 
 
+class SsoExchangeRequest(BaseModel):
+    """SSO ticket 换票请求（供 SsoCallbackPage 调用）。"""
+
+    model_config = ConfigDict(strict=True)
+
+    ticket: str = Field(..., description="IAM 回调携带的 ticket")
+    tenant_id: str = Field(default="000000", description="租户 ID")
+    client_id: str = Field(default="e5cd7e4891bf95d1d19206ce24a7b32e", description="OAuth 客户端 ID")
+
+
 # =============================================================================
 # 平台用户管理（Admin API）
 # =============================================================================
@@ -199,6 +210,7 @@ __all__ = [
     "PlatformUserSummaryResponse",
     "RefreshTokenRequest",
     "SetPlatformRoleBody",
+    "SsoExchangeRequest",
     "TokenResponse",
     "UserCreate",
     "UserLogin",
