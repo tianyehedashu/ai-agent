@@ -1093,6 +1093,7 @@ class DashboardSummaryResponse(BaseModel):
     success_count: int
     failure_count: int
     avg_latency_ms: float
+    avg_ttfb_ms: float
     success_rate: float
     by_client_type: list[DashboardClientTypeBreakdown] = Field(default_factory=list)
 
@@ -1115,6 +1116,7 @@ class UsageStatisticsMetricResponse(BaseModel):
     total_tokens: int
     cost_usd: Decimal
     avg_latency_ms: float
+    avg_ttfb_ms: float
     cache_hit_count: int
     success_rate: float
     cache_hit_rate: float

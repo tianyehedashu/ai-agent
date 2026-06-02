@@ -68,6 +68,7 @@ def _usage_stats_metric_response(
         total_tokens=metric.total_tokens,
         cost_usd=metric.cost_usd if show_cost else Decimal("0"),
         avg_latency_ms=metric.avg_latency_ms,
+        avg_ttfb_ms=metric.avg_ttfb_ms,
         cache_hit_count=metric.cache_hit_count,
         success_rate=metric.success_rate,
         cache_hit_rate=metric.cache_hit_rate,
@@ -94,6 +95,7 @@ def _usage_statistics_item_response(
         total_tokens=metric.total_tokens,
         cost_usd=metric.cost_usd,
         avg_latency_ms=metric.avg_latency_ms,
+        avg_ttfb_ms=metric.avg_ttfb_ms,
         cache_hit_count=metric.cache_hit_count,
         success_rate=metric.success_rate,
         cache_hit_rate=metric.cache_hit_rate,
@@ -156,6 +158,7 @@ async def dashboard_summary(
         success_count=success,
         failure_count=summary["failure"],
         avg_latency_ms=summary["avg_latency_ms"],
+        avg_ttfb_ms=summary["avg_ttfb_ms"],
         success_rate=(success / total) if total else 0.0,
         by_client_type=by_client,
     )

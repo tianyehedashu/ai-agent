@@ -206,6 +206,7 @@ class GatewayUsageLogReadMixin:
             cached_tokens=row.cached_tokens,
             cost_usd=row.cost_usd,
             avg_latency_ms=row.avg_latency_ms,
+            avg_ttfb_ms=row.avg_ttfb_ms,
             cache_hit_count=row.cache_hit_count,
         )
 
@@ -224,6 +225,7 @@ class GatewayUsageLogReadMixin:
             cached_tokens=row.cached_tokens,
             cost_usd=row.cost_usd,
             avg_latency_ms=row.avg_latency_ms,
+            avg_ttfb_ms=row.avg_ttfb_ms,
             cache_hit_count=row.cache_hit_count,
         )
 
@@ -358,6 +360,7 @@ class GatewayUsageLogReadMixin:
                     cached_tokens=row.cached_tokens,
                     cost_usd=row.cost_usd,
                     avg_latency_ms=row.avg_latency_ms,
+                    avg_ttfb_ms=row.avg_ttfb_ms,
                     cache_hit_count=row.cache_hit_count,
                 )
             )

@@ -70,6 +70,7 @@ export interface DashboardSummary {
   success_count: number
   failure_count: number
   avg_latency_ms: number
+  avg_ttfb_ms: number
   success_rate: number
 }
 

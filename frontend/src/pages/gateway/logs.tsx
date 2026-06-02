@@ -5,7 +5,7 @@
 import type { ReactNode } from 'react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
+import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { useVirtualizer, type VirtualItem } from '@tanstack/react-virtual'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 
@@ -15,6 +15,7 @@ import {
   type GatewayLogItem,
   type GatewayUsageAggregation,
 } from '@/api/gateway'
+import { PaginationControls } from '@/components/pagination-controls'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -132,6 +133,10 @@ export default function GatewayLogsPage(): React.JSX.Element {
     const v = Number(searchParams.get('size'))
     return PAGE_SIZE_OPTIONS.includes(v as (typeof PAGE_SIZE_OPTIONS)[number]) ? v : 100
   })
+  const [page, setPage] = useState(() => {
+    const v = Number(searchParams.get('page'))
+    return v >= 1 ? v : 1
+  })
 
   // 筛选状态：优先从 URL 恢复，否则用默认值
   const [statusFilter, setStatusFilter] = useState(() => {
@@ -202,6 +207,7 @@ export default function GatewayLogsPage(): React.JSX.Element {
         if (vkeyFilter !== GATEWAY_FILTER_ALL) next.set('vkey', vkeyFilter)
         if (modelFilter !== GATEWAY_FILTER_ALL) next.set('model', modelFilter)
         if (pageSize !== 100) next.set('size', String(pageSize))
+        if (page > 1) next.set('page', String(page))
         return next
       },
       { replace: true }
@@ -217,6 +223,7 @@ export default function GatewayLogsPage(): React.JSX.Element {
     vkeyFilter,
     modelFilter,
     pageSize,
+    page,
   ])
 
   // 浏览器前进/后退：URL 外部变化时同步回组件状态
@@ -261,6 +268,10 @@ export default function GatewayLogsPage(): React.JSX.Element {
       ? vSize
       : 100
     if (nextSize !== pageSize) setPageSize(nextSize)
+
+    const vPage = Number(searchParams.get('page'))
+    const nextPage = vPage >= 1 ? vPage : 1
+    if (nextPage !== page) setPage(nextPage)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams])
 
@@ -293,6 +304,7 @@ export default function GatewayLogsPage(): React.JSX.Element {
 
   const resetListPosition = (): void => {
     setSelectedId(null)
+    setPage(1)
     parentRef.current?.scrollTo({ top: 0 })
   }
 
@@ -330,16 +342,15 @@ export default function GatewayLogsPage(): React.JSX.Element {
     ]
   )
 
-  const { data, fetchNextPage, hasNextPage, isFetching, isLoading, refetch } = useInfiniteQuery({
-    queryKey: ['gateway', 'logs', teamId, queryFilters, pageSize],
-    initialPageParam: 1,
-    queryFn: ({ pageParam }: { pageParam: number }) =>
+  const { data, isFetching, isLoading, refetch } = useQuery({
+    queryKey: ['gateway', 'logs', teamId, queryFilters, pageSize, page],
+    queryFn: () =>
       gatewayApi.listLogs(teamId, {
         ...queryFilters,
-        page: pageParam,
+        page,
         page_size: pageSize,
       }),
-    getNextPageParam: (lastPage) => (lastPage.has_next ? lastPage.page + 1 : undefined),
+    placeholderData: keepPreviousData,
   })
 
   // 汇总统计
@@ -352,26 +363,17 @@ export default function GatewayLogsPage(): React.JSX.Element {
     enabled: !!teamId,
   })
 
-  const items = useMemo<GatewayLogItem[]>(() => data?.pages.flatMap((p) => p.items) ?? [], [data])
-  const totalCount = data?.pages[0]?.total ?? 0
+  const items = useMemo(() => data?.items ?? [], [data?.items])
+  const totalCount = data?.total ?? 0
 
   const virtualizer = useVirtualizer({
-    count: items.length + (hasNextPage ? 1 : 0),
+    count: items.length,
     getScrollElement: () => parentRef.current,
     estimateSize: () => 48,
     overscan: 8,
   })
 
   const virtualItems = virtualizer.getVirtualItems()
-  const lastVisibleIndex =
-    virtualItems.length > 0 ? (virtualItems[virtualItems.length - 1]?.index ?? -1) : -1
-
-  useEffect(() => {
-    if (items.length === 0 || !hasNextPage || isFetching) return
-    if (lastVisibleIndex >= items.length - 1) {
-      void fetchNextPage()
-    }
-  }, [lastVisibleIndex, items.length, hasNextPage, isFetching, fetchNextPage])
 
   const selectedItem = useMemo(
     () => items.find((item) => item.id === selectedId),
@@ -422,8 +424,7 @@ export default function GatewayLogsPage(): React.JSX.Element {
         <div className="min-w-0">
           <h2 className="text-2xl font-semibold tracking-tight">调用日志</h2>
           <p className="text-sm text-muted-foreground">
-            {usageAggregationScopeLabel(usageAggregation)} · 已载入 {items.length.toLocaleString()}{' '}
-            / {totalCount.toLocaleString()} 条
+            {usageAggregationScopeLabel(usageAggregation)} · 共 {totalCount.toLocaleString()} 条
           </p>
         </div>
         <UsageAggregationToggle
@@ -438,7 +439,7 @@ export default function GatewayLogsPage(): React.JSX.Element {
 
       {/* 汇总统计卡片 */}
       {summary ? (
-        <div className="grid grid-cols-2 gap-2 md:grid-cols-5">
+        <div className="grid grid-cols-2 gap-2 md:grid-cols-6">
           <MetricTile
             icon={<Receipt className="h-4 w-4" />}
             label="总请求"
@@ -468,6 +469,11 @@ export default function GatewayLogsPage(): React.JSX.Element {
             icon={<Clock className="h-4 w-4" />}
             label="平均延迟"
             value={`${Math.round(summary.avg_latency_ms).toLocaleString()}ms`}
+          />
+          <MetricTile
+            icon={<Clock className="h-4 w-4" />}
+            label="平均首字节"
+            value={`${Math.round(summary.avg_ttfb_ms).toLocaleString()}ms`}
           />
         </div>
       ) : null}
@@ -638,27 +644,8 @@ export default function GatewayLogsPage(): React.JSX.Element {
                     position: 'relative',
                   }}
                 >
-                  {virtualItems.map((row: VirtualItem) => {
-                    if (row.index >= items.length) {
-                      return (
-                        <div
-                          key={row.key}
-                          style={{
-                            position: 'absolute',
-                            top: 0,
-                            left: 0,
-                            width: '100%',
-                            height: `${row.size.toString()}px`,
-                            transform: `translateY(${row.start.toString()}px)`,
-                          }}
-                          className="flex items-center justify-center px-3 text-xs text-muted-foreground"
-                        >
-                          加载更多...
-                        </div>
-                      )
-                    }
-                    const item = row.index < items.length ? items[row.index] : undefined
-                    if (item === undefined) return null
+                  {virtualItems.map((row) => {
+                    const item = items[row.index]
                     return (
                       <LogRow
                         key={row.key}
@@ -676,20 +663,22 @@ export default function GatewayLogsPage(): React.JSX.Element {
             </div>
           </div>
         </div>
-        <div className="flex items-center justify-between gap-2 border-t px-3 py-2 text-xs text-muted-foreground">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t px-3 py-2">
+          <PaginationControls
+            page={data?.page ?? page}
+            page_size={pageSize}
+            total={totalCount}
+            has_next={data?.has_next ?? false}
+            has_prev={data?.has_prev ?? false}
+            onPageChange={(next) => {
+              setPage(next)
+              parentRef.current?.scrollTo({ top: 0 })
+            }}
+            className="text-xs"
+          />
           <div className="flex items-center gap-2">
-            <span>{isFetching && !isLoading ? '正在同步...' : ' '}</span>
-          </div>
-          <div className="flex items-center gap-2">
-            {hasNextPage ? (
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => void fetchNextPage()}
-                disabled={isFetching}
-              >
-                {isFetching ? '加载中...' : '加载更多'}
-              </Button>
+            {isFetching && !isLoading ? (
+              <span className="text-xs text-muted-foreground">正在同步...</span>
             ) : null}
             <Select
               value={String(pageSize)}
@@ -697,7 +686,8 @@ export default function GatewayLogsPage(): React.JSX.Element {
                 const size = Number(next)
                 if (PAGE_SIZE_OPTIONS.includes(size as (typeof PAGE_SIZE_OPTIONS)[number])) {
                   setPageSize(size)
-                  resetListPosition()
+                  setPage(1)
+                  parentRef.current?.scrollTo({ top: 0 })
                 }
               }}
             >

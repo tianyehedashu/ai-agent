@@ -33,6 +33,7 @@ export interface GatewayUsageStatsMetric {
   total_tokens: number
   cost_usd: number | string
   avg_latency_ms: number
+  avg_ttfb_ms: number
   cache_hit_count: number
   success_rate: number
   cache_hit_rate: number

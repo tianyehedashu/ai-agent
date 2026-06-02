@@ -70,6 +70,7 @@ class RequestLogUsageAggregateRow:
     cached_tokens: int = 0
     cost_usd: Decimal = Decimal("0")
     avg_latency_ms: float = 0.0
+    avg_ttfb_ms: float = 0.0
     cache_hit_count: int = 0
 
 
@@ -85,6 +86,7 @@ class RequestLogUsageTotals:
     cached_tokens: int
     cost_usd: Decimal
     avg_latency_ms: float
+    avg_ttfb_ms: float
     cache_hit_count: int
 
 
@@ -307,6 +309,7 @@ class RequestLogRepository:
             func.sum(case((GatewayRequestLog.status == "success", 1), else_=0)).label("success"),
             func.sum(case((GatewayRequestLog.status != "success", 1), else_=0)).label("failure"),
             func.avg(GatewayRequestLog.latency_ms).label("avg_latency"),
+            func.avg(GatewayRequestLog.ttfb_ms).label("avg_ttfb"),
         ).where(_sql_and(*clauses))
         row = (await self._session.execute(stmt)).one()
         return {
@@ -317,6 +320,7 @@ class RequestLogRepository:
             "success": int(row.success or 0),
             "failure": int(row.failure or 0),
             "avg_latency_ms": float(row.avg_latency or 0),
+            "avg_ttfb_ms": float(row.avg_ttfb or 0),
         }
 
     async def aggregate_by_client_type(
@@ -780,6 +784,7 @@ class RequestLogRepository:
                 func.sum(GatewayRequestLog.cached_tokens).label("cached_tokens"),
                 func.sum(GatewayRequestLog.cost_usd).label("cost_usd"),
                 func.avg(GatewayRequestLog.latency_ms).label("avg_latency_ms"),
+                func.avg(GatewayRequestLog.ttfb_ms).label("avg_ttfb_ms"),
                 func.sum(cache_hit_case).label("cache_hit_count"),
             ]
         )
@@ -818,6 +823,7 @@ class RequestLogRepository:
                     cached_tokens=int(row.cached_tokens or 0),
                     cost_usd=Decimal(row.cost_usd or 0),
                     avg_latency_ms=float(row.avg_latency_ms or 0),
+                    avg_ttfb_ms=float(row.avg_ttfb_ms or 0),
                     cache_hit_count=int(row.cache_hit_count or 0),
                 )
             )
@@ -831,6 +837,7 @@ class RequestLogRepository:
             func.sum(GatewayRequestLog.cached_tokens).label("cached_tokens"),
             func.sum(GatewayRequestLog.cost_usd).label("cost_usd"),
             func.avg(GatewayRequestLog.latency_ms).label("avg_latency_ms"),
+            func.avg(GatewayRequestLog.ttfb_ms).label("avg_ttfb_ms"),
             func.sum(cache_hit_case).label("cache_hit_count"),
         ).where(_sql_and(*clauses))
         total_row = (await self._session.execute(totals_stmt)).one()
@@ -843,6 +850,7 @@ class RequestLogRepository:
             cached_tokens=int(total_row.cached_tokens or 0),
             cost_usd=Decimal(total_row.cost_usd or 0),
             avg_latency_ms=float(total_row.avg_latency_ms or 0),
+            avg_ttfb_ms=float(total_row.avg_ttfb_ms or 0),
             cache_hit_count=int(total_row.cache_hit_count or 0),
         )
         return items, totals, group_total

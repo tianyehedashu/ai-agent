@@ -71,6 +71,7 @@ class UsageStatisticsMetric:
     cached_tokens: int
     cost_usd: Decimal
     avg_latency_ms: float
+    avg_ttfb_ms: float
     cache_hit_count: int
 
     @property

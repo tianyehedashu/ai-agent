@@ -29,6 +29,7 @@ describe('statsApi usageStats query', () => {
             total_tokens: 0,
             cost_usd: 0,
             avg_latency_ms: 0,
+            avg_ttfb_ms: 0,
             cache_hit_count: 0,
             success_rate: 0,
             cache_hit_rate: 0,
