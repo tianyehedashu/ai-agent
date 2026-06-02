@@ -39,6 +39,81 @@ export const SSO_ATTEMPT_AT_KEY = 'ai_agent_sso_attempt_at'
 /** SSO 冷却期：此时间内 auth/me 仍 401 则展示错误页，不再自动跳 SSO */
 export const SSO_COOLDOWN_MS = 120_000
 
+// ---------------------------------------------------------------------------
+// 双存储层：sessionStorage + SameSite=Lax cookie
+//
+// 无痕模式下 sessionStorage 可能在跨域重定向链中被浏览器静默清理，
+// cookie 作为可靠备份。读写均通过 dualStorage 抽象，避免重复模式。
+// ---------------------------------------------------------------------------
+
+function getCookie(name: string): string | null {
+  const match = document.cookie.split('; ').find((c) => c.startsWith(`${name}=`))
+  return match ? decodeURIComponent(match.slice(name.length + 1)) : null
+}
+
+function setCookie(name: string, value: string, maxAgeSec: number): void {
+  document.cookie = `${name}=${encodeURIComponent(value)};path=/;max-age=${String(maxAgeSec)};SameSite=Lax`
+}
+
+function removeCookie(name: string): void {
+  document.cookie = `${name}=;path=/;max-age=0;SameSite=Lax`
+}
+
+/**
+ * 双存储对：写入时 sessionStorage + cookie 双写，
+ * 读取时优先 sessionStorage、降级到 cookie，清理时同时清除。
+ */
+function dualStorage(sessionKey: string, cookieName: string, cookieMaxAgeSec: number) {
+  return {
+    write(value: string): void {
+      try {
+        sessionStorage.setItem(sessionKey, value)
+      } catch {
+        // 无痕模式可能抛 QuotaExceededError 或 SecurityError
+      }
+      setCookie(cookieName, value, cookieMaxAgeSec)
+    },
+    /** 优先 sessionStorage，降级到 cookie；不清理 */
+    read(): string | null {
+      try {
+        return sessionStorage.getItem(sessionKey)
+      } catch {
+        // ignore
+      }
+      return getCookie(cookieName)
+    },
+    /** 一次性消费：读取并同时清理双存储 */
+    consume(): string | null {
+      let value: string | null = null
+      try {
+        value = sessionStorage.getItem(sessionKey)
+        sessionStorage.removeItem(sessionKey)
+      } catch {
+        // ignore
+      }
+      // sessionStorage 已有值时跳过 cookie 读取，但仍需清理 cookie
+      if (value !== null) {
+        removeCookie(cookieName)
+        return value
+      }
+      value = getCookie(cookieName)
+      removeCookie(cookieName)
+      return value
+    },
+    clear(): void {
+      try {
+        sessionStorage.removeItem(sessionKey)
+      } catch {
+        // ignore
+      }
+      removeCookie(cookieName)
+    },
+  }
+}
+
+const ssoAttemptStore = dualStorage(SSO_ATTEMPT_AT_KEY, 'ai_agent_sso_ts', 3600)
+const ssoReturnPathStore = dualStorage(SSO_RETURN_PATH_KEY, 'ai_agent_sso_rp', 600)
+
 /**
  * 清除浏览器中可能已过期的 guard_token（HttpOnly，仅 IAM logout 可清）。
  * 用于 auth/me 401 且 Redis session 已失效时的自愈，避免 stale Cookie 阻塞 SSO。
@@ -52,24 +127,15 @@ export async function clearStaleGiikinSession(): Promise<void> {
 }
 
 export function markSsoAttempt(): void {
-  if (typeof sessionStorage === 'undefined') {
-    return
-  }
-  sessionStorage.setItem(SSO_ATTEMPT_AT_KEY, String(Date.now()))
+  ssoAttemptStore.write(String(Date.now()))
 }
 
 export function clearSsoAttempt(): void {
-  if (typeof sessionStorage === 'undefined') {
-    return
-  }
-  sessionStorage.removeItem(SSO_ATTEMPT_AT_KEY)
+  ssoAttemptStore.clear()
 }
 
 export function isWithinSsoCooldown(): boolean {
-  if (typeof sessionStorage === 'undefined') {
-    return false
-  }
-  const raw = sessionStorage.getItem(SSO_ATTEMPT_AT_KEY)
+  const raw = ssoAttemptStore.read()
   if (!raw) {
     return false
   }
@@ -130,7 +196,7 @@ export async function initiateSsoLogin(returnPath: string): Promise<void> {
     return
   }
 
-  sessionStorage.setItem(SSO_RETURN_PATH_KEY, returnPath)
+  ssoReturnPathStore.write(returnPath)
   markSsoAttempt()
 
   const response = await fetch(bindingUrl.toString(), { credentials: 'include' })
@@ -159,6 +225,14 @@ export function buildSsoLoginUrl(returnPath: string): string {
 
 /** 生产默认同域 IAM 登出（清除 guard_token + Redis 会话） */
 const DEFAULT_SSO_LOGOUT_URL = 'http://gateway.giimallai.com/api/auth/logout'
+
+/**
+ * 读取 SSO 返回路径：优先 sessionStorage，降级到 cookie。
+ * 读取后自动清理（一次性消费）。
+ */
+export function consumeSsoReturnPath(): string | null {
+  return ssoReturnPathStore.consume()
+}
 
 /**
  * IAM 登出地址：SSO 模式须调用此接口才能真正清除 guard_token Cookie。

@@ -16,9 +16,9 @@ import { userApi } from '@/api/user'
 import {
   clearSsoAttempt,
   clearStaleGiikinSession,
+  consumeSsoReturnPath,
   initiateSsoLogin,
   markSsoAttempt,
-  SSO_RETURN_PATH_KEY,
 } from '@/config/auth'
 import { hrefToRouterPath } from '@/lib/ui-overlay/overlay-nav-bridge'
 
@@ -94,8 +94,8 @@ export default function SsoCallbackPage(): React.JSX.Element {
       return
     }
 
-    const stored = sessionStorage.getItem(SSO_RETURN_PATH_KEY)
-    sessionStorage.removeItem(SSO_RETURN_PATH_KEY)
+    // 优先 sessionStorage，降级到 cookie（无痕模式下 sessionStorage 可能被清理）
+    const stored = consumeSsoReturnPath()
     const target = resolveReturnPath(searchParams.get('redirect') ?? stored ?? `${APP_ROOT}/`)
     const navigateTarget = (() => {
       try {
@@ -117,8 +117,7 @@ export default function SsoCallbackPage(): React.JSX.Element {
         setAutoRecovering(true)
         await clearStaleGiikinSession()
         clearSsoAttempt()
-        // 回写 returnPath，使 SSO 完成后能跳回原目标
-        sessionStorage.setItem(SSO_RETURN_PATH_KEY, target)
+        // initiateSsoLogin 内部已双写 returnPath 到 sessionStorage + cookie，无需手动回写
         try {
           await initiateSsoLogin(target)
         } catch (err: unknown) {
