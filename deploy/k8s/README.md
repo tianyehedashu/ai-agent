@@ -163,7 +163,7 @@ curl -s -o /dev/null -w '%{http_code}\n' -b 'guard_token=invalid' \
 # 期望 401
 ```
 
-若集群曾应用 [`patch-backend-sso-hotfix.yaml`](patch-backend-sso-hotfix.yaml)，须撤销挂载：
+若集群曾挂载 `ai-agent-sso-hotfix` ConfigMap，须撤销挂载：
 
 ```bash
 kubectl -n test patch deployment backend --type=json \

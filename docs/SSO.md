@@ -16,7 +16,7 @@ HiGress（Ingress 路由 + 超时 + 路径）
   │
   ├─ WasmPlugin: giikin-auth-bridge（仅命中 /ai-agent/api 等需鉴权路由）
   │     · 读 guard_token
-  │     · 查 IAM Redis（user:session:{token}，Redisson 前缀 giikin:）
+  │     · 查 IAM Redis（user:session:{token}，与 IAM 写入 key 一致）
   │     · 注入 X-Giikin-User-JSON / X-Giikin-User-Id / X-Giikin-Internal-Key
   │
   ▼
@@ -142,7 +142,8 @@ curl -s -b 'guard_token=YOUR_TOKEN' http://gateway.giimallai.com/ai-agent/api/v1
 | 现象 | 可能原因 | 处理 |
 |------|----------|------|
 | 已登录仍跳 SSO | auth-bridge 未命中 `/ai-agent/api` | 检查 WasmPlugin `matchRules` |
-| 有 Cookie 但 auth/me 401，页面提示「无法识别 Giikin 登录态」 | 有 Cookie 无 Header | 启用 auth-bridge；勿开 cookie 回退 |
+| 有 Cookie 但 auth/me 401 /「登录已过期」 | 浏览器 `guard_token` 与 Redis `user:session` 不同步（过期、顶号、TTL 漂移） | 前端会 logout 后重走 SSO；IAM 须对齐 Cookie 与 session TTL（见 giikin `UserActionListener`） |
+| 有 Cookie 无 Header（Wasm 未注入） | auth-bridge 未命中或未配置 | 检查 WasmPlugin `matchRules`；勿开 cookie 回退 |
 | 第一次访问显示 binding JSON | 前端整页打开 binding URL | 已修复：`initiateSsoLogin` fetch 后跳转 |
 | SSO 后落到 `/index` | 回调走 plus-ui `/sso-callback` | IAM 优先 `callbackOrigin`；完成后手动进 `/ai-agent/` |
 | 401 Invalid gateway internal key | internal_key 不一致 | 对齐 WasmPlugin 与 Secret |
