@@ -89,6 +89,8 @@ export type GatewayLogsQuery = {
   end?: string
   vkey_id?: string
   credential_id?: string
+  user_id?: string
+  model?: string
 }
 
 /** GET /logs 响应 */
@@ -105,6 +107,17 @@ export const logsApi = {
   /** 大盘汇总（次/吞吐/成本/成功率/延迟） */
   dashboard: (
     teamId: string,
-    params?: { days?: number; usage_aggregation?: GatewayUsageAggregation }
+    params?: {
+      days?: number
+      usage_aggregation?: GatewayUsageAggregation
+      start?: string
+      end?: string
+      status?: string
+      capability?: string
+      vkey_id?: string
+      credential_id?: string
+      user_id?: string
+      model?: string
+    }
   ) => apiClient.get<DashboardSummary>(teamGatewayPath(teamId, '/dashboard/summary'), params),
 } as const

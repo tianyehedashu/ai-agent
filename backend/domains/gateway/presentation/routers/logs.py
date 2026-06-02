@@ -48,6 +48,8 @@ async def list_logs(
     capability: str | None = None,
     vkey_id: uuid.UUID | None = None,
     credential_id: uuid.UUID | None = None,
+    user_id: uuid.UUID | None = None,
+    model: str | None = Query(default=None, min_length=1, max_length=200),
 ) -> RequestLogListResponse:
     items, total = await reads.list_request_logs(
         team,
@@ -60,6 +62,8 @@ async def list_logs(
         capability=capability,
         vkey_id=vkey_id,
         credential_id=credential_id,
+        user_id=user_id,
+        model=model.strip() if model else None,
     )
     log_items = [RequestLogResponse.model_validate(request_log_to_dict(i, team)) for i in items]
     return build_request_log_list_response(

@@ -7,7 +7,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { useVirtualizer, type VirtualItem } from '@tanstack/react-virtual'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 
 import {
   gatewayApi,
@@ -39,12 +39,17 @@ import {
   credentialDisplayText,
   credentialDisplayTitle,
 } from '@/features/gateway-usage/credential-display'
+import {
+  GATEWAY_FILTER_ALL,
+  GatewayFilterCombobox,
+} from '@/features/gateway-usage/gateway-filter-combobox'
 import { LogPricingBreakdown } from '@/features/gateway-usage/log-pricing-breakdown'
 import {
   gatewayUsageAggregationOptions,
   usageAggregationScopeLabel,
 } from '@/features/gateway-usage/usage-aggregation'
 import { UsageAggregationToggle } from '@/features/gateway-usage/usage-aggregation-toggle'
+import { useLogFilterCatalog } from '@/features/gateway-usage/use-log-filter-catalog'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import {
@@ -67,7 +72,7 @@ import {
 import { coalesceMoney, formatMoney } from '@/lib/money'
 import { cn } from '@/lib/utils'
 
-const PAGE_SIZE = 100
+const PAGE_SIZE_OPTIONS = [50, 100, 200] as const
 
 const STATUS_FILTERS: readonly { value: string; label: string }[] = [
   { value: 'all', label: '全部状态' },
@@ -88,6 +93,15 @@ const CAPABILITY_FILTERS: readonly { value: string; label: string }[] = [
   { value: 'rerank', label: 'Rerank' },
 ]
 
+const DATE_RANGE_FILTERS: readonly { value: DateRangeValue; label: string }[] = [
+  { value: '1h', label: '最近1小时' },
+  { value: 'today', label: '今天' },
+  { value: '7d', label: '最近7天' },
+  { value: '30d', label: '最近30天' },
+]
+
+type DateRangeValue = '1h' | 'today' | '7d' | '30d'
+
 /** 表头与行共用，避免列宽漂移 */
 const LOG_GRID_COLS =
   'grid grid-cols-[156px_178px_142px_104px_108px_104px_92px_92px_minmax(240px,1fr)]'
@@ -100,6 +114,26 @@ interface LogsLocationState {
   }
 }
 
+function resolveDateRange(value: DateRangeValue): { start: Date; end: Date } {
+  const end = new Date()
+  const start = new Date(end)
+  if (value === '1h') {
+    start.setHours(start.getHours() - 1)
+  } else if (value === 'today') {
+    start.setHours(0, 0, 0, 0)
+  } else if (value === '7d') {
+    start.setDate(start.getDate() - 7)
+  } else {
+    // '30d'
+    start.setDate(start.getDate() - 30)
+  }
+  return { start, end }
+}
+
+function isValidDateRangeValue(value: string | null): value is DateRangeValue {
+  return value === '1h' || value === 'today' || value === '7d' || value === '30d'
+}
+
 export default function GatewayLogsPage(): React.JSX.Element {
   const teamId = useGatewayTeamId()
   const { isPlatformAdmin } = useGatewayPermission()
@@ -109,14 +143,148 @@ export default function GatewayLogsPage(): React.JSX.Element {
   )
   const location = useLocation()
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
   const parentRef = useRef<HTMLDivElement>(null)
   const consumedStatsNavigationRef = useRef(false)
   const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [statusFilter, setStatusFilter] = useState('all')
-  const [capabilityFilter, setCapabilityFilter] = useState('all')
-  const [usageAggregation, setUsageAggregation] = useState<GatewayUsageAggregation>('user')
   const [copiedRequestId, setCopiedRequestId] = useState(false)
+  const [pageSize, setPageSize] = useState(() => {
+    const v = Number(searchParams.get('size'))
+    return PAGE_SIZE_OPTIONS.includes(v as (typeof PAGE_SIZE_OPTIONS)[number]) ? v : 100
+  })
 
+  // 筛选状态：优先从 URL 恢复，否则用默认值
+  const [statusFilter, setStatusFilter] = useState(() => {
+    const v = searchParams.get('status')
+    const found = STATUS_FILTERS.find((f) => f.value === v)
+    return found ? found.value : 'all'
+  })
+  const [capabilityFilter, setCapabilityFilter] = useState(() => {
+    const v = searchParams.get('capability')
+    const found = CAPABILITY_FILTERS.find((f) => f.value === v)
+    return found ? found.value : 'all'
+  })
+  const [dateRange, setDateRange] = useState<DateRangeValue>(() => {
+    const v = searchParams.get('range')
+    return isValidDateRangeValue(v) ? v : 'today'
+  })
+  const [usageAggregation, setUsageAggregation] = useState<GatewayUsageAggregation>(() => {
+    const v = searchParams.get('agg') as GatewayUsageAggregation | null
+    return v === 'workspace' || v === 'user' || v === 'platform' ? v : 'user'
+  })
+  const [userFilter, setUserFilter] = useState(() => {
+    const v = searchParams.get('user')
+    return v && v !== GATEWAY_FILTER_ALL ? v : GATEWAY_FILTER_ALL
+  })
+  const [credentialFilter, setCredentialFilter] = useState(() => {
+    const v = searchParams.get('credential')
+    return v && v !== GATEWAY_FILTER_ALL ? v : GATEWAY_FILTER_ALL
+  })
+  const [vkeyFilter, setVkeyFilter] = useState(() => {
+    const v = searchParams.get('vkey')
+    return v && v !== GATEWAY_FILTER_ALL ? v : GATEWAY_FILTER_ALL
+  })
+  const [modelFilter, setModelFilter] = useState(() => {
+    const v = searchParams.get('model')
+    return v && v !== GATEWAY_FILTER_ALL ? v : GATEWAY_FILTER_ALL
+  })
+
+  // 筛选目录数据
+  const { credentialOptions, memberOptions, keyOptions, modelOptions } = useLogFilterCatalog({
+    teamId,
+  })
+
+  // URL 同步：筛选变化时更新 query params（保留非日志相关参数）
+  useEffect(() => {
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev)
+        const logKeys = [
+          'status',
+          'capability',
+          'range',
+          'agg',
+          'user',
+          'credential',
+          'vkey',
+          'model',
+          'size',
+        ]
+        for (const key of logKeys) {
+          next.delete(key)
+        }
+        if (statusFilter !== 'all') next.set('status', statusFilter)
+        if (capabilityFilter !== 'all') next.set('capability', capabilityFilter)
+        if (dateRange !== 'today') next.set('range', dateRange)
+        if (usageAggregation !== 'user') next.set('agg', usageAggregation)
+        if (userFilter !== GATEWAY_FILTER_ALL) next.set('user', userFilter)
+        if (credentialFilter !== GATEWAY_FILTER_ALL) next.set('credential', credentialFilter)
+        if (vkeyFilter !== GATEWAY_FILTER_ALL) next.set('vkey', vkeyFilter)
+        if (modelFilter !== GATEWAY_FILTER_ALL) next.set('model', modelFilter)
+        if (pageSize !== 100) next.set('size', String(pageSize))
+        return next
+      },
+      { replace: true }
+    )
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    statusFilter,
+    capabilityFilter,
+    dateRange,
+    usageAggregation,
+    userFilter,
+    credentialFilter,
+    vkeyFilter,
+    modelFilter,
+    pageSize,
+  ])
+
+  // 浏览器前进/后退：URL 外部变化时同步回组件状态
+  useEffect(() => {
+    const vStatus = searchParams.get('status')
+    const foundStatus = STATUS_FILTERS.find((f) => f.value === vStatus)
+    const nextStatus = foundStatus ? foundStatus.value : 'all'
+    if (nextStatus !== statusFilter) setStatusFilter(nextStatus)
+
+    const vCapability = searchParams.get('capability')
+    const foundCapability = CAPABILITY_FILTERS.find((f) => f.value === vCapability)
+    const nextCapability = foundCapability ? foundCapability.value : 'all'
+    if (nextCapability !== capabilityFilter) setCapabilityFilter(nextCapability)
+
+    const vRange = searchParams.get('range')
+    const nextRange = isValidDateRangeValue(vRange) ? vRange : 'today'
+    if (nextRange !== dateRange) setDateRange(nextRange)
+
+    const vAgg = searchParams.get('agg') as GatewayUsageAggregation | null
+    const nextAgg = vAgg === 'workspace' || vAgg === 'user' || vAgg === 'platform' ? vAgg : 'user'
+    if (nextAgg !== usageAggregation) setUsageAggregation(nextAgg)
+
+    const vUser = searchParams.get('user')
+    const nextUser = vUser && vUser !== GATEWAY_FILTER_ALL ? vUser : GATEWAY_FILTER_ALL
+    if (nextUser !== userFilter) setUserFilter(nextUser)
+
+    const vCredential = searchParams.get('credential')
+    const nextCredential =
+      vCredential && vCredential !== GATEWAY_FILTER_ALL ? vCredential : GATEWAY_FILTER_ALL
+    if (nextCredential !== credentialFilter) setCredentialFilter(nextCredential)
+
+    const vVkey = searchParams.get('vkey')
+    const nextVkey = vVkey && vVkey !== GATEWAY_FILTER_ALL ? vVkey : GATEWAY_FILTER_ALL
+    if (nextVkey !== vkeyFilter) setVkeyFilter(nextVkey)
+
+    const vModel = searchParams.get('model')
+    const nextModel = vModel && vModel !== GATEWAY_FILTER_ALL ? vModel : GATEWAY_FILTER_ALL
+    if (nextModel !== modelFilter) setModelFilter(nextModel)
+
+    const vSize = Number(searchParams.get('size'))
+    const nextSize = PAGE_SIZE_OPTIONS.includes(vSize as (typeof PAGE_SIZE_OPTIONS)[number])
+      ? vSize
+      : 100
+    if (nextSize !== pageSize) setPageSize(nextSize)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams])
+
+  // 从统计页导航过来的状态恢复
   useEffect(() => {
     if (consumedStatsNavigationRef.current) return
     const state = location.state as LogsLocationState | null
@@ -138,28 +306,74 @@ export default function GatewayLogsPage(): React.JSX.Element {
     )
   }, [location.pathname, location.search, location.state, navigate])
 
+  const { start: rangeStart, end: rangeEnd } = useMemo(
+    () => resolveDateRange(dateRange),
+    [dateRange]
+  )
+
   const resetListPosition = (): void => {
     setSelectedId(null)
     parentRef.current?.scrollTo({ top: 0 })
   }
 
+  const hasFilters =
+    statusFilter !== 'all' ||
+    capabilityFilter !== 'all' ||
+    dateRange !== 'today' ||
+    userFilter !== GATEWAY_FILTER_ALL ||
+    credentialFilter !== GATEWAY_FILTER_ALL ||
+    vkeyFilter !== GATEWAY_FILTER_ALL ||
+    modelFilter !== GATEWAY_FILTER_ALL
+
+  const queryFilters = useMemo(
+    () => ({
+      usage_aggregation: usageAggregation,
+      status: statusFilter === 'all' ? undefined : statusFilter,
+      capability: capabilityFilter === 'all' ? undefined : capabilityFilter,
+      start: rangeStart.toISOString(),
+      end: rangeEnd.toISOString(),
+      user_id: userFilter === GATEWAY_FILTER_ALL ? undefined : userFilter,
+      credential_id: credentialFilter === GATEWAY_FILTER_ALL ? undefined : credentialFilter,
+      vkey_id: vkeyFilter === GATEWAY_FILTER_ALL ? undefined : vkeyFilter,
+      model: modelFilter === GATEWAY_FILTER_ALL ? undefined : modelFilter,
+    }),
+    [
+      usageAggregation,
+      statusFilter,
+      capabilityFilter,
+      rangeStart,
+      rangeEnd,
+      userFilter,
+      credentialFilter,
+      vkeyFilter,
+      modelFilter,
+    ]
+  )
+
   const { data, fetchNextPage, hasNextPage, isFetching, isLoading, refetch } = useInfiniteQuery({
-    queryKey: ['gateway', 'logs', teamId, usageAggregation, statusFilter, capabilityFilter],
+    queryKey: ['gateway', 'logs', teamId, queryFilters, pageSize],
     initialPageParam: 1,
     queryFn: ({ pageParam }: { pageParam: number }) =>
       gatewayApi.listLogs(teamId, {
-        usage_aggregation: usageAggregation,
+        ...queryFilters,
         page: pageParam,
-        page_size: PAGE_SIZE,
-        status: statusFilter === 'all' ? undefined : statusFilter,
-        capability: capabilityFilter === 'all' ? undefined : capabilityFilter,
+        page_size: pageSize,
       }),
     getNextPageParam: (lastPage) => (lastPage.has_next ? lastPage.page + 1 : undefined),
   })
 
+  // 汇总统计
+  const { data: summary } = useQuery({
+    queryKey: ['gateway', 'log-summary', teamId, queryFilters],
+    queryFn: () =>
+      gatewayApi.dashboard(teamId, {
+        ...queryFilters,
+      }),
+    enabled: !!teamId,
+  })
+
   const items = useMemo<GatewayLogItem[]>(() => data?.pages.flatMap((p) => p.items) ?? [], [data])
   const totalCount = data?.pages[0]?.total ?? 0
-  const hasFilters = statusFilter !== 'all' || capabilityFilter !== 'all'
 
   const virtualizer = useVirtualizer({
     count: items.length + (hasNextPage ? 1 : 0),
@@ -200,6 +414,11 @@ export default function GatewayLogsPage(): React.JSX.Element {
   const clearFilters = (): void => {
     setStatusFilter('all')
     setCapabilityFilter('all')
+    setDateRange('today')
+    setUserFilter(GATEWAY_FILTER_ALL)
+    setCredentialFilter(GATEWAY_FILTER_ALL)
+    setVkeyFilter(GATEWAY_FILTER_ALL)
+    setModelFilter(GATEWAY_FILTER_ALL)
     resetListPosition()
   }
 
@@ -237,8 +456,66 @@ export default function GatewayLogsPage(): React.JSX.Element {
         />
       </div>
 
+      {/* 汇总统计卡片 */}
+      {summary ? (
+        <div className="grid grid-cols-2 gap-2 md:grid-cols-5">
+          <MetricTile
+            icon={<Receipt className="h-4 w-4" />}
+            label="总请求"
+            value={summary.total_requests.toLocaleString()}
+          />
+          <MetricTile
+            icon={<Zap className="h-4 w-4" />}
+            label="Tokens"
+            value={(summary.total_input_tokens + summary.total_output_tokens).toLocaleString()}
+            caption={`${summary.total_input_tokens.toLocaleString()} in / ${summary.total_output_tokens.toLocaleString()} out`}
+          />
+          <MetricTile
+            icon={<Receipt className="h-4 w-4" />}
+            label="成本"
+            value={formatMoney(coalesceMoney(summary.total_cost_usd), {
+              currency: GATEWAY_DISPLAY_CURRENCY,
+              precision: 4,
+            })}
+          />
+          <MetricTile
+            icon={<CheckCircle2 className="h-4 w-4" />}
+            label="成功率"
+            value={`${(summary.success_rate * 100).toFixed(1)}%`}
+            caption={`${summary.success_count.toLocaleString()} / ${summary.failure_count.toLocaleString()}`}
+          />
+          <MetricTile
+            icon={<Clock className="h-4 w-4" />}
+            label="平均延迟"
+            value={`${Math.round(summary.avg_latency_ms).toLocaleString()}ms`}
+          />
+        </div>
+      ) : null}
+
+      {/* 筛选栏 */}
       <div className="flex flex-col gap-2 rounded-lg border bg-background p-3 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex flex-wrap items-center gap-2">
+          <Select
+            value={dateRange}
+            onValueChange={(next) => {
+              if (isValidDateRangeValue(next)) {
+                setDateRange(next)
+                resetListPosition()
+              }
+            }}
+          >
+            <SelectTrigger className="h-9 w-[132px]" aria-label="按时间范围筛选">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {DATE_RANGE_FILTERS.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
           <Select
             value={statusFilter}
             onValueChange={(next) => {
@@ -246,7 +523,7 @@ export default function GatewayLogsPage(): React.JSX.Element {
               resetListPosition()
             }}
           >
-            <SelectTrigger className="h-9 w-[136px]" aria-label="按状态筛选">
+            <SelectTrigger className="h-9 w-[120px]" aria-label="按状态筛选">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -265,7 +542,7 @@ export default function GatewayLogsPage(): React.JSX.Element {
               resetListPosition()
             }}
           >
-            <SelectTrigger className="h-9 w-[152px]" aria-label="按能力筛选">
+            <SelectTrigger className="h-9 w-[136px]" aria-label="按能力筛选">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -276,6 +553,51 @@ export default function GatewayLogsPage(): React.JSX.Element {
               ))}
             </SelectContent>
           </Select>
+
+          <GatewayFilterCombobox
+            value={userFilter}
+            onChange={(next) => {
+              setUserFilter(next)
+              resetListPosition()
+            }}
+            options={memberOptions}
+            placeholder="用户"
+            active={userFilter !== GATEWAY_FILTER_ALL}
+          />
+
+          <GatewayFilterCombobox
+            value={credentialFilter}
+            onChange={(next) => {
+              setCredentialFilter(next)
+              resetListPosition()
+            }}
+            options={credentialOptions}
+            placeholder="凭据"
+            active={credentialFilter !== GATEWAY_FILTER_ALL}
+          />
+
+          <GatewayFilterCombobox
+            value={vkeyFilter}
+            onChange={(next) => {
+              setVkeyFilter(next)
+              resetListPosition()
+            }}
+            options={keyOptions}
+            placeholder="虚拟 Key"
+            active={vkeyFilter !== GATEWAY_FILTER_ALL}
+          />
+
+          <GatewayFilterCombobox
+            value={modelFilter}
+            onChange={(next) => {
+              setModelFilter(next)
+              resetListPosition()
+            }}
+            options={modelOptions}
+            placeholder="模型"
+            menuWidth="wide"
+            active={modelFilter !== GATEWAY_FILTER_ALL}
+          />
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
@@ -374,17 +696,42 @@ export default function GatewayLogsPage(): React.JSX.Element {
           </div>
         </div>
         <div className="flex items-center justify-between gap-2 border-t px-3 py-2 text-xs text-muted-foreground">
-          <span>{isFetching && !isLoading ? '正在同步...' : ' '}</span>
-          {hasNextPage ? (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => void fetchNextPage()}
-              disabled={isFetching}
+          <div className="flex items-center gap-2">
+            <span>{isFetching && !isLoading ? '正在同步...' : ' '}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            {hasNextPage ? (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => void fetchNextPage()}
+                disabled={isFetching}
+              >
+                {isFetching ? '加载中...' : '加载更多'}
+              </Button>
+            ) : null}
+            <Select
+              value={String(pageSize)}
+              onValueChange={(next) => {
+                const size = Number(next)
+                if (PAGE_SIZE_OPTIONS.includes(size as (typeof PAGE_SIZE_OPTIONS)[number])) {
+                  setPageSize(size)
+                  resetListPosition()
+                }
+              }}
             >
-              {isFetching ? '加载中...' : '加载更多'}
-            </Button>
-          ) : null}
+              <SelectTrigger className="h-8 w-[72px] text-xs" aria-label="每页条数">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {PAGE_SIZE_OPTIONS.map((size) => (
+                  <SelectItem key={size} value={String(size)}>
+                    {size} 条/页
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
       </Card>
 

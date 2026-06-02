@@ -93,6 +93,8 @@ class GatewayUsageLogReadMixin:
         capability: str | None,
         vkey_id: UUID | None,
         credential_id: UUID | None = None,
+        user_id: UUID | None = None,
+        model: str | None = None,
     ) -> tuple[list[Any], int]:
         axis = self._resolve_usage_axis(ctx, usage_aggregation, vkey_id=vkey_id)
         return await self._logs.list_by_axis(
@@ -103,6 +105,8 @@ class GatewayUsageLogReadMixin:
             capability=capability,
             vkey_id=vkey_id,
             credential_id=credential_id,
+            user_id=user_id,
+            model=model,
             page=page,
             page_size=page_size,
         )
@@ -155,10 +159,36 @@ class GatewayUsageLogReadMixin:
         end: datetime,
         *,
         usage_aggregation: UsageAggregation,
+        status_filter: str | None = None,
+        capability: str | None = None,
+        vkey_id: UUID | None = None,
+        credential_id: UUID | None = None,
+        user_id: UUID | None = None,
+        model: str | None = None,
     ) -> dict[str, Any]:
         axis = self._resolve_usage_axis(ctx, usage_aggregation)
-        summary = await self._logs.aggregate_summary_by_axis(axis, start, end)
-        summary["by_client_type"] = await self._logs.aggregate_by_client_type(axis, start, end)
+        summary = await self._logs.aggregate_summary_by_axis(
+            axis,
+            start,
+            end,
+            status=status_filter,
+            capability=capability,
+            vkey_id=vkey_id,
+            credential_id=credential_id,
+            user_id=user_id,
+            model=model,
+        )
+        summary["by_client_type"] = await self._logs.aggregate_by_client_type(
+            axis,
+            start,
+            end,
+            status=status_filter,
+            capability=capability,
+            vkey_id=vkey_id,
+            credential_id=credential_id,
+            user_id=user_id,
+            model=model,
+        )
         return summary
 
     @staticmethod

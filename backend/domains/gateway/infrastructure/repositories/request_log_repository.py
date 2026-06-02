@@ -186,6 +186,8 @@ class RequestLogRepository:
         capability: str | None = None,
         vkey_id: UUID | None = None,
         credential_id: UUID | None = None,
+        user_id: UUID | None = None,
+        model: str | None = None,
         page: int = 1,
         page_size: int = 50,
     ) -> tuple[list[GatewayRequestLog], int]:
@@ -194,14 +196,16 @@ class RequestLogRepository:
             clauses.append(GatewayRequestLog.created_at >= start)
         if end:
             clauses.append(GatewayRequestLog.created_at <= end)
-        if status:
-            clauses.append(GatewayRequestLog.status == status)
-        if capability:
-            clauses.append(GatewayRequestLog.capability == capability)
-        if vkey_id:
-            clauses.append(GatewayRequestLog.vkey_id == vkey_id)
-        if credential_id:
-            clauses.append(GatewayRequestLog.credential_id == credential_id)
+        clauses.extend(
+            self._list_filter_clauses(
+                status=status,
+                capability=capability,
+                vkey_id=vkey_id,
+                credential_id=credential_id,
+                user_id=user_id,
+                model=model,
+            )
+        )
 
         count_stmt = select(func.count()).select_from(GatewayRequestLog).where(_sql_and(*clauses))
         total = (await self._session.execute(count_stmt)).scalar_one()
@@ -237,16 +241,63 @@ class RequestLogRepository:
         result = await self._session.execute(stmt)
         return result.scalar_one_or_none()
 
+    @staticmethod
+    def _list_filter_clauses(
+        *,
+        status: str | None = None,
+        capability: str | None = None,
+        vkey_id: UUID | None = None,
+        credential_id: UUID | None = None,
+        user_id: UUID | None = None,
+        model: str | None = None,
+    ) -> list[ColumnElement[bool]]:
+        """构建日志列表/汇总通用的筛选条件子句（与 ``list_by_axis`` 保持一致）。"""
+        clauses: list[ColumnElement[bool]] = []
+        if status:
+            clauses.append(GatewayRequestLog.status == status)
+        if capability:
+            clauses.append(GatewayRequestLog.capability == capability)
+        if vkey_id:
+            clauses.append(GatewayRequestLog.vkey_id == vkey_id)
+        if credential_id:
+            clauses.append(GatewayRequestLog.credential_id == credential_id)
+        if user_id:
+            clauses.append(GatewayRequestLog.user_id == user_id)
+        if model:
+            clauses.append(
+                or_(
+                    GatewayRequestLog.deployment_model_name == model,
+                    GatewayRequestLog.route_name == model,
+                    GatewayRequestLog.real_model == model,
+                )
+            )
+        return clauses
+
     async def aggregate_summary_by_axis(
         self,
         axis: UsageAxis,
         start: datetime,
         end: datetime,
+        *,
+        status: str | None = None,
+        capability: str | None = None,
+        vkey_id: UUID | None = None,
+        credential_id: UUID | None = None,
+        user_id: UUID | None = None,
+        model: str | None = None,
     ) -> dict[str, Any]:
         clauses = [
             *usage_axis_base_clauses(axis),
             GatewayRequestLog.created_at >= start,
             GatewayRequestLog.created_at <= end,
+            *self._list_filter_clauses(
+                status=status,
+                capability=capability,
+                vkey_id=vkey_id,
+                credential_id=credential_id,
+                user_id=user_id,
+                model=model,
+            ),
         ]
         stmt = select(
             func.count(GatewayRequestLog.id).label("total"),
@@ -273,11 +324,26 @@ class RequestLogRepository:
         axis: UsageAxis,
         start: datetime,
         end: datetime,
+        *,
+        status: str | None = None,
+        capability: str | None = None,
+        vkey_id: UUID | None = None,
+        credential_id: UUID | None = None,
+        user_id: UUID | None = None,
+        model: str | None = None,
     ) -> list[dict[str, Any]]:
         clauses = [
             *usage_axis_base_clauses(axis),
             GatewayRequestLog.created_at >= start,
             GatewayRequestLog.created_at <= end,
+            *self._list_filter_clauses(
+                status=status,
+                capability=capability,
+                vkey_id=vkey_id,
+                credential_id=credential_id,
+                user_id=user_id,
+                model=model,
+            ),
         ]
         client_type_expr = func.coalesce(GatewayRequestLog.client_type, "unknown")
         stmt = (
