@@ -474,14 +474,18 @@ flowchart TD
 
 登录 / 续期 / 登出时，**`[giikin]` IAM** 须保持 **Sa-Token、`user:session:{token}`、`guard_token` Cookie** 三者一致（`UserActionListener`、`HigressUserSessionRedisServiceImpl`）。
 
-> **Cookie Domain 约束**（详见 §1.2）：IAM 的 `HigressGuardTokenCookieService.buildCookieHeader()` 按 Nacos 配置 `session-cookie-domain` 拼接 `Domain=` 属性。该值必须为空字符串（host-only）或 `gateway.giimallai.com`；**勿**设为 `.giikin.com`（浏览器在 giimallai.com 域下拒绝设置）。
+> **Cookie Domain 约束**（详见 §1.2）：IAM 的 `HigressGuardTokenCookieService` 按 Nacos 配置 `session-cookie-domain` 拼接 `Domain=` 属性。该值必须为空字符串（host-only）或 `gateway.giimallai.com`；**勿**设为 `.giikin.com`（浏览器在 giimallai.com 域下拒绝设置）。
+
+> **Undertow Cookie 写入约束**：IAM 运行在 Undertow（非 Tomcat）上，`addCookie()` 与 `addHeader("Set-Cookie")` 会冲突——Undertow 提交响应时内部 cookie 管理会覆盖 header map 中的 `Set-Cookie`。因此 `HigressGuardTokenCookieService` 必须仅用 `addHeader("Set-Cookie")` 直写完整 cookie 字符串，**不可**使用 `addCookie()`。
+
+> **doLogout Cookie 清除约束**：Sa-Token 互斥登录时，`doLogin`（新会话）与 `doLogout`（踢旧会话）在同一请求中触发。`doLogout` 必须使用 `clearGuardTokenCookieIfMatches(tokenValue)`，仅清除与被登出 token 匹配的 cookie，**不可**无条件调用 `clearGuardTokenCookie()`，否则会误清刚写入的新 token cookie。
 
 ```mermaid
 stateDiagram-v2
     [*] --> 未登录
     未登录 --> 已登录: doLogin<br/>SET user:session TTL=client.timeout<br/>Set-Cookie guard_token Max-Age 同源
     已登录 --> 已登录: doRenewTimeout<br/>EXPIRE user:session 延长
-    已登录 --> 未登录: doLogout<br/>DEL session + 清 Cookie
+    已登录 --> 未登录: doLogout<br/>DEL session + 若 Cookie 匹配则清 Cookie
     已登录 --> 未登录: doKickout / doReplaced<br/>DEL session + 若 Cookie 匹配则清 Cookie
     note right of 已登录
         Wasm 只读 user:session:{token}
@@ -592,6 +596,8 @@ curl -s -b 'guard_token=YOUR_TOKEN' http://gateway.giimallai.com/ai-agent/api/v1
 | hybrid 下邮箱登录后刷新仍以 SSO 身份进入 | JWT 过期后 fallback 到网关 Header，Cookie 仍有效 | 正常行为（Bearer 优先，JWT 过期才 fallback）；若需切换身份，先登出再登录 |
 | hybrid 下 `/auth/register` 返回 404 | `ALLOW_REGISTER=false` | 通过管理员接口或脚本创建邮箱用户 |
 | auth/me 始终 401 且浏览器无 guard_token | Nacos `session-cookie-domain` 误设为 `.giikin.com`，浏览器在 giimallai.com 下拒绝设置 Cookie | 改为空字符串 `""`（host-only），重启 IAM（详见 §1.2 Cookie Domain 约束） |
+| 清 cookie 后首次 SSO 登录循环失败 | Sa-Token 互斥登录：`doLogin` 写入新 `guard_token` 后，踢旧会话触发 `doLogout`，无条件 `clearGuardTokenCookie()` 误清了刚写入的新 cookie | `UserActionListener.doLogout` 改用 `clearGuardTokenCookieIfMatches(tokenValue)`，只清除与被登出 token 匹配的 cookie（commit `d9f51aa`） |
+| IAM 日志显示 cookie written 但浏览器收不到 Set-Cookie | IAM 运行在 Undertow 上，`addCookie()` 与 `addHeader("Set-Cookie")` 冲突：Undertow 内部 cookie 管理覆盖 header map 中的 Set-Cookie | `HigressGuardTokenCookieService` 仅用 `addHeader("Set-Cookie")` 直写完整 cookie 字符串，不使用 `addCookie()` |
 
 ---
 
