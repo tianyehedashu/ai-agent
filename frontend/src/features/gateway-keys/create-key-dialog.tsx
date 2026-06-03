@@ -19,6 +19,7 @@ import { GatewayTeamCombobox } from '@/features/gateway-teams/gateway-team-combo
 import { gatewayWorkspaceLabel } from '@/features/gateway-teams/gateway-team-display'
 import { useToast } from '@/hooks/use-toast'
 import { Copy } from '@/lib/lucide-icons'
+import { copyToClipboard } from '@/lib/utils'
 import { useUserStore } from '@/stores/user'
 
 export interface CreateKeyValues {
@@ -105,7 +106,7 @@ export function CreateKeyDialog({
                 variant="outline"
                 onClick={async () => {
                   try {
-                    await navigator.clipboard.writeText(plaintext)
+                    await copyToClipboard(plaintext)
                     toast({ title: '已复制' })
                   } catch {
                     toast({ title: '复制失败，请手动选择文本复制', variant: 'destructive' })

@@ -55,7 +55,7 @@ import { UsageAggregationToggle } from '@/features/gateway-usage/usage-aggregati
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { Copy, ExternalLink, Info, Loader2, RefreshCw, Trash2, Zap } from '@/lib/lucide-icons'
-import { cn } from '@/lib/utils'
+import { cn, copyToClipboard } from '@/lib/utils'
 import { useUserStore } from '@/stores/user'
 
 import { ModelCapabilityBadges } from './model-capability-badges'
@@ -206,7 +206,7 @@ const ModelInspectorPanel = memo(function ModelInspectorPanel({
   async function copyReason(): Promise<void> {
     const text = model.last_test_reason?.trim()
     if (!text) return
-    await navigator.clipboard.writeText(text)
+    await copyToClipboard(text)
     setCopied(true)
     window.setTimeout(() => {
       setCopied(false)

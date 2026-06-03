@@ -71,7 +71,7 @@ import {
   Zap,
 } from '@/lib/lucide-icons'
 import { coalesceMoney, formatMoney } from '@/lib/money'
-import { cn } from '@/lib/utils'
+import { cn, copyToClipboard } from '@/lib/utils'
 
 import { resolveDateRange, isValidDateRangeValue, type DateRangeValue } from './logs-utils'
 
@@ -409,8 +409,7 @@ export default function GatewayLogsPage(): React.JSX.Element {
   }
 
   const copyRequestId = (value: string): void => {
-    void navigator.clipboard
-      .writeText(value)
+    void copyToClipboard(value)
       .then(() => {
         setCopiedRequestId(true)
         window.setTimeout(() => {

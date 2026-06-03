@@ -4,6 +4,8 @@
 
 import { useState, useCallback, useEffect, useRef } from 'react'
 
+import { copyToClipboard } from '@/lib/utils'
+
 const COPIED_RESET_MS = 1500
 
 /** 单次复制，返回 [copy, copied] */
@@ -20,7 +22,7 @@ export function useCopyToClipboard(): [(text: string) => Promise<void>, boolean]
   }, [])
 
   const copy = useCallback(async (text: string) => {
-    await navigator.clipboard.writeText(text)
+    await copyToClipboard(text)
     if (resetTimerRef.current !== null) {
       clearTimeout(resetTimerRef.current)
     }
@@ -50,7 +52,7 @@ export function useCopyToClipboardKeyed<K = number>(): [
   }, [])
 
   const copy = useCallback(async (text: string, key: K) => {
-    await navigator.clipboard.writeText(text)
+    await copyToClipboard(text)
     if (resetTimerRef.current !== null) {
       clearTimeout(resetTimerRef.current)
     }

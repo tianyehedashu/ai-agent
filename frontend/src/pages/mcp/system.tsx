@@ -40,6 +40,7 @@ import {
 } from '@/components/ui/sheet'
 import { Textarea } from '@/components/ui/textarea'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { copyToClipboard } from '@/lib/utils'
 import { useUserStore } from '@/stores/user'
 import type {
   ClientDirectMCPServer,
@@ -58,9 +59,8 @@ function scopeToCursorName(scope: string): string {
   return SCOPE_TO_CURSOR_NAME[scope] ?? scope.replace(/-/g, '_')
 }
 
-function copyToClipboard(text: string): void {
-  navigator.clipboard
-    .writeText(text)
+function copyWithToast(text: string): void {
+  copyToClipboard(text)
     .then(() => toast.success('已复制到剪贴板'))
     .catch(() => toast.error('复制失败，请手动选择文本复制'))
 }
@@ -184,7 +184,7 @@ function ServerConfigCard({
               variant="outline"
               size="sm"
               onClick={() => {
-                copyToClipboard(snippetJson)
+                copyWithToast(snippetJson)
               }}
               className="gap-1"
             >

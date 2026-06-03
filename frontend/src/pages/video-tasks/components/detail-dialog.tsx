@@ -20,7 +20,7 @@ import { videoTaskApi } from '@/api/videoTask'
 import { Button } from '@/components/ui/button'
 import { VIDEO_TASK_MARKETPLACES } from '@/constants/video-task'
 import { useToast } from '@/hooks/use-toast'
-import { cn } from '@/lib/utils'
+import { cn, copyToClipboard } from '@/lib/utils'
 import type { VideoGenTask, VideoTaskStatus } from '@/types/video-task'
 
 interface VideoTaskDetailDialogProps {
@@ -132,8 +132,8 @@ export default function VideoTaskDetailDialog({
     },
   })
 
-  const copyToClipboard = (text: string): void => {
-    void navigator.clipboard.writeText(text)
+  const copyWithToast = (text: string): void => {
+    void copyToClipboard(text)
     toast({ title: '已复制' })
   }
 
@@ -221,7 +221,7 @@ export default function VideoTaskDetailDialog({
                         size="sm"
                         className="gap-2"
                         onClick={() => {
-                          copyToClipboard(task.videoUrl ?? '')
+                          copyWithToast(task.videoUrl ?? '')
                         }}
                       >
                         <Copy className="h-4 w-4" />
@@ -399,22 +399,17 @@ export default function VideoTaskDetailDialog({
                     <span className="transition-transform group-open:rotate-90">→</span>
                   </summary>
                   <div className="mt-4 space-y-3 rounded-2xl bg-muted/20 p-4 text-xs">
-                    <InfoRow label="任务 ID" value={task.id} copyable onCopy={copyToClipboard} />
+                    <InfoRow label="任务 ID" value={task.id} copyable onCopy={copyWithToast} />
                     {task.workflowId && (
                       <InfoRow
                         label="Workflow ID"
                         value={task.workflowId}
                         copyable
-                        onCopy={copyToClipboard}
+                        onCopy={copyWithToast}
                       />
                     )}
                     {task.runId && (
-                      <InfoRow
-                        label="Run ID"
-                        value={task.runId}
-                        copyable
-                        onCopy={copyToClipboard}
-                      />
+                      <InfoRow label="Run ID" value={task.runId} copyable onCopy={copyWithToast} />
                     )}
                     <InfoRow label="模型" value={task.model} />
                     <InfoRow label="时长" value={`${String(task.duration)}秒`} />
@@ -449,7 +444,7 @@ export default function VideoTaskDetailDialog({
                           ]
                             .filter(Boolean)
                             .join('\n')
-                          copyToClipboard(info)
+                          copyWithToast(info)
                         }}
                         className="flex items-center gap-1.5 text-muted-foreground/70 transition-colors hover:text-muted-foreground"
                       >

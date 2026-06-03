@@ -44,6 +44,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { ApiKeyGrantEditor, type GrantDraft } from '@/features/api-key-gateway/api-key-grant-editor'
 import { grantsToRequests } from '@/features/api-key-gateway/api-key-grant-editor-utils'
 import { applyApiFieldErrors, apiErrorFormMessage } from '@/lib/api-form-errors'
+import { copyToClipboard } from '@/lib/utils'
 import type { ApiKeyScope } from '@/types/api-key'
 import {
   API_KEY_SCOPE_GROUPS,
@@ -390,7 +391,7 @@ export function ApiKeyCreateDialog({
                   className="flex-1"
                   variant={copied ? 'default' : 'outline'}
                   onClick={() => {
-                    void navigator.clipboard.writeText(createdKey)
+                    void copyToClipboard(createdKey)
                     setCopied(true)
                     toast.success('已复制到剪贴板')
                   }}

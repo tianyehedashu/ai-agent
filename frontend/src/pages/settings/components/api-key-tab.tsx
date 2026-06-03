@@ -24,6 +24,7 @@ import {
   resolveGatewayTeamLabel,
   useGatewayTeamNameMap,
 } from '@/features/api-key-gateway/use-gateway-teams'
+import { copyToClipboard } from '@/lib/utils'
 import { useUserStore } from '@/stores/user'
 
 import { ApiKeyCard } from './api-key-card'
@@ -328,7 +329,7 @@ export function ApiKeyTab(): React.ReactElement {
                         size="icon"
                         className="shrink-0"
                         onClick={() => {
-                          void navigator.clipboard.writeText(fullKey)
+                          void copyToClipboard(fullKey)
                           setCopied(true)
                           setTimeout(() => {
                             setCopied(false)

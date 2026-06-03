@@ -19,6 +19,7 @@ import {
 import { useToast } from '@/hooks/use-toast'
 import { formatGatewayManagementError } from '@/lib/gateway-api-error'
 import { Check, Copy } from '@/lib/lucide-icons'
+import { copyToClipboard } from '@/lib/utils'
 
 export interface VirtualKeyRevealTarget {
   id: string
@@ -112,7 +113,7 @@ export function VirtualKeyRevealDialog({
                     aria-label="复制完整 Key"
                     onClick={async () => {
                       try {
-                        await navigator.clipboard.writeText(plainKey)
+                        await copyToClipboard(plainKey)
                         setCopied(true)
                         setTimeout(() => {
                           setCopied(false)
