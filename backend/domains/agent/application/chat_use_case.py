@@ -212,6 +212,7 @@ class ChatUseCase(ChatImageGenMixin, ChatAgentRunMixin):
                     content=message,
                     metadata=user_metadata,
                 )
+                await self.db.commit()
 
             if mode == "image_gen":
                 async for evt in self._run_image_gen_mode(
