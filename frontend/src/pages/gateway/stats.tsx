@@ -685,7 +685,7 @@ export default function GatewayStatsPage(): React.JSX.Element {
       </div>
 
       <div
-        className={`grid grid-cols-1 gap-3 md:grid-cols-2 ${isAdmin ? 'xl:grid-cols-6' : 'xl:grid-cols-5'}`}
+        className={`grid grid-cols-1 gap-3 md:grid-cols-2 ${isAdmin ? 'xl:grid-cols-7' : 'xl:grid-cols-6'}`}
       >
         <MetricCard title="请求" value={formatCompact(totals?.requests ?? 0)} />
         <MetricCard title="成功率" value={formatPercent(totals?.success_rate ?? 0)} />
@@ -703,6 +703,10 @@ export default function GatewayStatsPage(): React.JSX.Element {
         <MetricCard
           title="平均延迟"
           value={`${Math.round(asNumber(totals?.avg_latency_ms)).toString()}ms`}
+        />
+        <MetricCard
+          title="平均首字节"
+          value={`${Math.round(asNumber(totals?.avg_ttfb_ms)).toString()}ms`}
         />
       </div>
 
