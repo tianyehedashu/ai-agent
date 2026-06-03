@@ -86,29 +86,13 @@ export default function SsoCallbackPage(): React.JSX.Element {
 
   useEffect(() => {
     const ticket = searchParams.get('ticket')
-    // IAM 回调带 ticket：调用 ai-agent 后端 sso-exchange 换票，
-    // 由后端将 guard_token Cookie 以无 Domain 方式设置到 gateway.giimallai.com
-    // （HiGress 未透传 IAM 的 Set-Cookie 导致 Domain=.giikin.com 在 giimallai.com 下不可用）
+    // IAM 回调带 ticket：同域 plus-ui /sso-callback 完成 ticket→guard_token（登录接口需加密）
     if (ticket) {
       markSsoAttempt()
-      const exchangeTicket = async (): Promise<void> => {
-        try {
-          const resp = await fetch(`${APP_ROOT}/api/v1/auth/sso-exchange`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ ticket }),
-          })
-          if (!resp.ok) {
-            throw new Error(`SSO 换票失败 (${String(resp.status)})`)
-          }
-          // 换票成功：guard_token Cookie 已落网关域，重新加载本页校验 auth/me
-          window.location.replace(`${window.location.origin}${toPublicPath('/sso-callback')}`)
-        } catch (err: unknown) {
-          const message = err instanceof Error ? err.message : 'SSO 换票异常'
-          setCallbackError(message)
-        }
-      }
-      void exchangeTicket()
+      const qs = new URLSearchParams(searchParams)
+      // 换票完成后须回到本页校验 auth/me，不可直跳业务页（Cookie 写入与 auth/me 存在竞态）
+      qs.set('redirect', `${window.location.origin}${toPublicPath('/sso-callback')}`)
+      window.location.replace(`${window.location.origin}/sso-callback?${qs.toString()}`)
       return
     }
 
