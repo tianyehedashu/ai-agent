@@ -670,6 +670,19 @@ async def _persist_event(
             ttfb_ms = int(ttfb_ms)
 
     cache_hit = bool(metadata.get("gateway_cache_hit") or kwargs.get("cache_hit"))
+
+    # SLO (LiteLLM StandardLoggingPayload) 备选：部分 provider（如 Volcengine
+    # DeepSeek、ZhipuAI GLM）在 response_obj.usage 中不返回 prompt_tokens_details，
+    # 但 LiteLLM 的 SLO 会统一规范化 cache_hit / cache_read_input_tokens。
+    slo = kwargs.get("standard_logging_object")
+    if isinstance(slo, dict):
+        if not cache_hit:
+            cache_hit = bool(slo.get("cache_hit"))
+        if cached_tokens == 0:
+            slo_cached = slo.get("cache_read_input_tokens")
+            if isinstance(slo_cached, int) and slo_cached > 0:
+                cached_tokens = slo_cached
+
     fallback_chain = _normalized_fallback_entries(metadata)
 
     request_id = metadata.get("gateway_request_id") or kwargs.get("litellm_call_id")

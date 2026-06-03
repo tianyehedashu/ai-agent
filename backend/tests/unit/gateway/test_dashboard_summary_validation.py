@@ -37,6 +37,7 @@ def fake_reads():
             "success": 8,
             "failure": 2,
             "avg_latency_ms": 150.0,
+            "avg_ttfb_ms": 42.0,
             "by_client_type": [],
         }
     )
