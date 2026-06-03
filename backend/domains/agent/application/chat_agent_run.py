@@ -261,6 +261,7 @@ class ChatAgentRunMixin:
             metadata=metadata,
             token_count=token_count,
         )
+        await self.db.commit()
 
         if self.simplemem and session:
             conversation_messages = [
