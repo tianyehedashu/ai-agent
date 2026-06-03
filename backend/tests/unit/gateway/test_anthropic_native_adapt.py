@@ -47,6 +47,30 @@ def test_usage_total_tokens() -> None:
     assert anthropic_usage_total_tokens({"input_tokens": 3, "output_tokens": 2}) == 5
 
 
+def test_usage_total_tokens_includes_cache() -> None:
+    """cached tokens 应纳入 total_tokens（Anthropic input_tokens 仅指非缓存部分）。"""
+    usage = {
+        "input_tokens": 100,
+        "cache_read_input_tokens": 5000,
+        "cache_creation_input_tokens": 200,
+        "output_tokens": 50,
+    }
+    assert anthropic_usage_total_tokens(usage) == 5350
+
+
+def test_usage_total_tokens_object_path() -> None:
+    """非 dict 对象也应正确包含 cache tokens。"""
+    from types import SimpleNamespace
+
+    usage = SimpleNamespace(
+        input_tokens=10,
+        output_tokens=5,
+        cache_read_input_tokens=100,
+        cache_creation_input_tokens=0,
+    )
+    assert anthropic_usage_total_tokens(usage) == 115
+
+
 def test_stream_chunk_dict_to_sse() -> None:
     chunk = {
         "type": "content_block_delta",

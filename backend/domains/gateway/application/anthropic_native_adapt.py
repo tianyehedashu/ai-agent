@@ -59,16 +59,24 @@ def estimate_anthropic_request_tokens(body: Mapping[str, Any]) -> int:
 
 
 def anthropic_usage_total_tokens(usage: Any) -> int:
-    """从 Anthropic ``usage`` 对象或 dict 得到结算用 token 总数（input + output）。"""
+    """从 Anthropic ``usage`` 对象或 dict 得到结算用 token 总数。
+
+    Anthropic 的 ``input_tokens`` **仅**为非缓存部分；实际输入 token 总数需加上
+    ``cache_read_input_tokens`` + ``cache_creation_input_tokens``。
+    """
     if usage is None:
         return 0
     if isinstance(usage, Mapping):
         inp = int(usage.get("input_tokens") or 0)
         out = int(usage.get("output_tokens") or 0)
-        return inp + out
+        cache_read = int(usage.get("cache_read_input_tokens") or 0)
+        cache_create = int(usage.get("cache_creation_input_tokens") or 0)
+        return inp + cache_read + cache_create + out
     inp = int(getattr(usage, "input_tokens", 0) or 0)
     out = int(getattr(usage, "output_tokens", 0) or 0)
-    return inp + out
+    cache_read = int(getattr(usage, "cache_read_input_tokens", 0) or 0)
+    cache_create = int(getattr(usage, "cache_creation_input_tokens", 0) or 0)
+    return inp + cache_read + cache_create + out
 
 
 def anthropic_response_to_dict(response: Any) -> dict[str, Any]:
@@ -142,7 +150,7 @@ def extract_usage_from_anthropic_stream_event(data: Mapping[str, Any]) -> dict[s
     - ``cache_creation_input_tokens`` / ``cache_read_input_tokens``
 
     注意：调用方不可假设固定键集；预算 token 计数应通过
-    ``anthropic_usage_total_tokens`` 计算（仅累加 input + output，不重复计 cache）。
+    ``anthropic_usage_total_tokens`` 计算（input + cache_read + cache_create + output）。
     无 usage 时返回 ``None``。
     """
     et = data.get("type")
