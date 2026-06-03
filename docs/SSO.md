@@ -116,12 +116,137 @@ flowchart LR
 | `/ai-agent/sso-callback` | ai-agent SPA | IAM 带 `ticket` 的首跳；换票完成后二次回调、`auth/me` 校验 |
 | `/sso-callback` | plus-ui | ai-agent 桥接换票；`POST /api/auth/login` 在此页触发 |
 
+
+### 1.2 全链路流程（端到端）
+
+```mermaid
+sequenceDiagram
+    autonumber
+
+    box 浏览器
+        participant B
+    end
+    box HiGress 网关（gateway.giimallai.com）
+        participant HG
+        participant AB as "giikin-auth-bridge<br/>（Wasm 插件）"
+    end
+    box ai-agent（K8s test namespace）
+        participant FE as "[ai-agent] AuthProvider<br/>+ SsoCallbackPage"
+        participant NG as "[ai-agent] Nginx"
+        participant BE as "[ai-agent] FastAPI"
+    end
+    box giikin-iam（manage.giikin.com / 119.23.46.236）
+        participant AD as "giikin-iam<br/>（Spring Boot）"
+        participant R as "IAM Redis<br/>user:session:{token}"
+        participant PU as "plus-ui<br/>/sso-callback"
+    end
+
+    Note over B,BE: ═══ 阶段 1: auth/me 检测 ═══
+
+    B->>FE: 访问 /ai-agent/chat（受保护页）
+    FE->>HG: GET /ai-agent/api/v1/auth/me<br/>credentials: include
+    Note over AB: 无 guard_token Cookie<br/>FailStrategy: FAIL_OPEN<br/>不注入 X-Giikin-*
+    HG->>FE: 401 Unauthorized
+
+    Note over B,AD: ═══ 阶段 2: Binding 获取 SSO 授权地址 ═══
+
+    FE->>FE: sessionStorage + Cookie 写 returnPath<br/>markSsoAttempt() 标记冷却期
+    FE->>AD: fetch GET /api/auth/binding/company_sso<br/>?callbackOrigin=http://gateway.../ai-agent<br/>&domain=admin&tenantId=000000
+    AD-->>FE: { code:200, data: "https://manage.giikin.com/guard/sso/public/dingtalk/auth?..." }
+    FE->>B: window.location.href = authorizeUrl
+
+    Note over B,AD: ═══ 阶段 3: 公司 SSO 授权（钉钉） ═══
+
+    B->>AD: https://manage.giikin.com/guard/sso/public/dingtalk/auth?code=...
+    Note over AD: 钉钉 OAuth 回调<br/>生成 ticket + state
+    AD->>B: 302 Location: /ai-agent/sso-callback?ticket=T&state=S
+
+    Note over B,PU: ═══ 阶段 4: ticket 回到 ai-agent，桥接 plus-ui ═══
+
+    B->>FE: GET /ai-agent/sso-callback?ticket=T
+    Note over FE: AuthProvider 对本页 defer auth/me<br/>SsoCallbackPage 接管
+    FE->>FE: markSsoAttempt()
+    FE->>B: window.location.replace<br/>→ /sso-callback?ticket=T&redirect=.../ai-agent/sso-callback
+
+    B->>PU: 加载 plus-ui /sso-callback
+    Note over PU: sso-callback.vue onMounted<br/>构造 LoginData { ticket, grantType, source, ... }
+
+    Note over B,AD: ═══ 阶段 5: plus-ui 换票（RSA+AES 双层加密） ═══
+
+    PU->>PU: 生成随机 AES Key（32位）<br/>RSA 公钥加密 AES Key → encrypt-key Header<br/>AES 加密请求体 JSON
+    PU->>AD: POST /api/auth/login<br/>Headers: { encrypt-key, isEncrypt:true }<br/>Body: AES_CBC("grantType=company_sso&ticket=T&...")
+    AD->>AD: RSA 私钥解密 encrypt-key → AES Key<br/>AES 解密 Body → LoginData
+
+    Note over AD,R: ═══ 阶段 6: IAM 写会话 + 发 Cookie ═══
+
+    AD->>AD: SysLoginService.companySsoLogin(ticket)<br/>→ Sa-Token login → tokenValue=jwt
+    AD->>R: SET user:session:{jwt}<br/>{ user_id, org_code, shop_id, name }
+    AD->>R: SET Sa-Token 会话
+    AD->>B: Set-Cookie: guard_token=jwt; Path=/; HttpOnly; SameSite=Lax<br/>（Domain 取决于 Nacos session-cookie-domain）<br/>200 { code, data: { access_token } }
+    AD-->>PU: 200 { access_token }
+
+    Note over B,PU: ═══ 阶段 7: plus-ui 跳回 ai-agent ═══
+
+    PU->>PU: setToken(access_token)<br/>清空 roles
+    PU->>B: ~1s 后 location.href = redirect<br/>→ /ai-agent/sso-callback
+
+    Note over B,BE: ═══ 阶段 8: Cookie 校验 + auth/me ═══
+
+    B->>FE: GET /ai-agent/sso-callback（无 ticket）
+    FE->>FE: consumeSsoReturnPath() → target="/chat"
+    loop fetchCurrentUserWithRetry 最多 10 次 × 500ms
+        FE->>HG: GET /ai-agent/api/v1/auth/me<br/>Cookie: guard_token=jwt
+        AB->>AB: 读 Cookie guard_token → jwt
+        AB->>R: GET user:session:{jwt}
+        R-->>AB: { user_id, org_code, shop_id, name }
+        AB->>NG: 注入 Headers:<br/>X-Giikin-User-JSON (base64)<br/>X-Giikin-User-Id<br/>X-Giikin-Internal-Key
+        NG->>BE: proxy_set_header 透传 X-Giikin-*
+        BE->>BE: parse_gateway_identity<br/>校验 Internal-Key<br/>Base64 解码 → GiikinGatewayClaims
+        BE->>BE: GiikinIdentityService<br/>resolve_or_provision JIT 用户
+        BE-->>FE: 200 CurrentUser
+    end
+
+    FE->>FE: clearSsoAttempt()
+    FE->>B: navigate → /chat（业务页）
+```
+
+**关键数据流转（按编号）**：
+
+| # | 数据 | 方向 | 载体 / 格式 |
+|---|------|------|------------|
+| 3 | `ticket` | IAM → 浏览器 | URL query `?ticket=T`（302 Location） |
+| 4 | `ticket` + `redirect` | SsoCallbackPage → plus-ui | URL query（`window.location.replace`） |
+| 5 | `LoginData` | plus-ui → IAM | AES 加密 JSON body（RSA 加密的 encrypt-key 在 Header） |
+| 6 | `guard_token=jwt` | IAM → 浏览器 | `Set-Cookie` 头，值 = Sa-Token tokenValue |
+| 6 | `user:session:{jwt}` | IAM → Redis | JSON: `{user_id, org_code, shop_id, name}` |
+| 6 | `access_token` | IAM → plus-ui | 响应 JSON `data.access_token` |
+| 8 | `guard_token=jwt` | 浏览器 → HiGress | `Cookie` 请求头 |
+| 8 | `user:session:{jwt}` | auth-bridge → Redis | `GET user:session:{jwt}` |
+| 8 | `X-Giikin-*` | auth-bridge → backend | HTTP Headers（Nginx 显式 `proxy_set_header`） |
+| 8 | `CurrentUser` | backend → 浏览器 | JSON（FastAPI 响应） |
+
+**Cookie Domain 约束（重要）**：
+
+```
+IAM 的 HigressGuardTokenCookieService.buildCookieHeader():
+  session-cookie-domain 为空 → host-only Cookie → 落在响应来源域名（gateway.giimallai.com） ✓
+  session-cookie-domain=.giikin.com → 浏览器拒绝（origin giimallai.com ≠ domain .giikin.com） ✗
+```
+
+| Nacos 配置值 | 浏览器行为 | 结果 |
+|-------------|-----------|------|
+| `""`（空 = host-only） | 绑定到 `gateway.giimallai.com` | auth-bridge 读得到，正常工作 |
+| `.giikin.com` | 浏览器拒绝设置（跨域） | auth-bridge 读不到，SSO 失败 |
+| `"gateway.giimallai.com"` | 显式绑定（同域） | auth-bridge 读得到，正常工作 |
+
 ---
 
 ## 2. 用户流程
 
 > 下列时序与 §1.1 术语表中的组件一致。  
 > **公开页**（`[ai-agent] AuthProvider` 不触发自动 SSO）：Router `/login`、`/register`、`/sso-callback` → 公网 `/ai-agent/login` 等；其中 **`/sso-callback` 由 `SsoCallbackPage` 自行处理**。
+> 
+> **全链路总图**见 §1.2（8 阶段 mermaid 时序 + 关键数据流转 + Cookie Domain 约束）。以下 §2.0–§2.5 为各场景拆解。
 
 ### 2.0 场景一览
 
@@ -192,7 +317,7 @@ sequenceDiagram
 
 ### 2.2 未登录（冷启动 SSO）
 
-分两阶段：**A** 从 401 到公司 SSO 并带回 `ticket`；**B** 在 ai-agent 内换票、写 Cookie、确认 `auth/me`。
+分两阶段：**A** 从 401 到公司 SSO 并带回 `ticket`；**B** 在 ai-agent 内换票、写 Cookie、确认 `auth/me`。完整链路见 §1.2。
 
 #### 2.2.1 阶段 A：401 → 公司 SSO 授权
 
@@ -228,6 +353,8 @@ sequenceDiagram
 ```
 
 #### 2.2.2 阶段 B：ticket 换票 → guard_token → 进入应用
+
+> **加密细节**（plus-ui → IAM）：`POST /api/auth/login` 的请求体经 RSA+AES 双层加密：前端生成随机 AES 密钥 → RSA 公钥加密后放入 `encrypt-key` Header → AES 加密 JSON body（`crypto-js` ECB/Pkcs7）。IAM 端用 RSA 私钥解密得 AES 密钥再解密 body。该加密由 `VITE_APP_ENCRYPT=true` 控制，`/auth/login` 的 `isEncrypt: true` 指定。
 
 1. **`/ai-agent/sso-callback?ticket=T`**：**`[ai-agent] AuthProvider`** 对该 Router 路径 **defer** `auth/me`（Query `enabled: false`），由 **`SsoCallbackPage`** 接管
 2. 有 `ticket` → `markSsoAttempt()` → **整页**跳转 **`/sso-callback?...`**（**`[giikin]` plus-ui**，网关根路径，见 §1.1）
@@ -347,6 +474,8 @@ flowchart TD
 
 登录 / 续期 / 登出时，**`[giikin]` IAM** 须保持 **Sa-Token、`user:session:{token}`、`guard_token` Cookie** 三者一致（`UserActionListener`、`HigressUserSessionRedisServiceImpl`）。
 
+> **Cookie Domain 约束**（详见 §1.2）：IAM 的 `HigressGuardTokenCookieService.buildCookieHeader()` 按 Nacos 配置 `session-cookie-domain` 拼接 `Domain=` 属性。该值必须为空字符串（host-only）或 `gateway.giimallai.com`；**勿**设为 `.giikin.com`（浏览器在 giimallai.com 域下拒绝设置）。
+
 ```mermaid
 stateDiagram-v2
     [*] --> 未登录
@@ -420,7 +549,9 @@ matchRules:
 | 配置 | 说明 |
 |------|------|
 | `spring.higress.session-cookie-enabled: true` | 登录下发 `guard_token` |
+| `spring.higress.session-cookie-domain` | **须为空字符串 `""`**（host-only）；**勿**设为 `.giikin.com` 等跨域值，否则浏览器拒绝设置 Cookie（详见 §1.2 Cookie Domain 约束） |
 | `spring.higress.session-cookie-path: /` | 同域子路径可用 |
+| `spring.higress.session-cookie-same-site` | `Lax` = 允许同站 top-level 导航携带 Cookie |
 | `company.sso.redirect-uri` | 留空或低优先级；**binding 带 `callbackOrigin` 时应优先** `callbackOrigin/sso-callback` |
 
 ---
@@ -460,6 +591,7 @@ curl -s -b 'guard_token=YOUR_TOKEN' http://gateway.giimallai.com/ai-agent/api/v1
 | 难以区分「网关未注入 Header」与「backend 内部 401」 | API 路由 Wasm 仍为 `FAIL_OPEN` | 建议为 `ai-agent-api` 单独配 `failStrategy: FAIL_CLOSED`（见 §3.1） |
 | hybrid 下邮箱登录后刷新仍以 SSO 身份进入 | JWT 过期后 fallback 到网关 Header，Cookie 仍有效 | 正常行为（Bearer 优先，JWT 过期才 fallback）；若需切换身份，先登出再登录 |
 | hybrid 下 `/auth/register` 返回 404 | `ALLOW_REGISTER=false` | 通过管理员接口或脚本创建邮箱用户 |
+| auth/me 始终 401 且浏览器无 guard_token | Nacos `session-cookie-domain` 误设为 `.giikin.com`，浏览器在 giimallai.com 下拒绝设置 Cookie | 改为空字符串 `""`（host-only），重启 IAM（详见 §1.2 Cookie Domain 约束） |
 
 ---
 
