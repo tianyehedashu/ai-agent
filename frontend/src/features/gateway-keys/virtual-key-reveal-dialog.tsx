@@ -110,13 +110,17 @@ export function VirtualKeyRevealDialog({
                     size="icon"
                     className="shrink-0"
                     aria-label="复制完整 Key"
-                    onClick={() => {
-                      void navigator.clipboard.writeText(plainKey)
-                      setCopied(true)
-                      setTimeout(() => {
-                        setCopied(false)
-                      }, 2000)
-                      toast({ title: '已复制到剪贴板' })
+                    onClick={async () => {
+                      try {
+                        await navigator.clipboard.writeText(plainKey)
+                        setCopied(true)
+                        setTimeout(() => {
+                          setCopied(false)
+                        }, 2000)
+                        toast({ title: '已复制到剪贴板' })
+                      } catch {
+                        toast({ title: '复制失败，请手动选择文本复制', variant: 'destructive' })
+                      }
                     }}
                   >
                     {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}

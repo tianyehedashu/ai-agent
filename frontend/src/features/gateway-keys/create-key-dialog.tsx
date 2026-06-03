@@ -103,9 +103,13 @@ export function CreateKeyDialog({
               <Button
                 size="icon"
                 variant="outline"
-                onClick={() => {
-                  void navigator.clipboard.writeText(plaintext)
-                  toast({ title: '已复制' })
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(plaintext)
+                    toast({ title: '已复制' })
+                  } catch {
+                    toast({ title: '复制失败，请手动选择文本复制', variant: 'destructive' })
+                  }
                 }}
               >
                 <Copy className="h-4 w-4" />
