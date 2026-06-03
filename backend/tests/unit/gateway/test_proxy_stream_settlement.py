@@ -27,8 +27,8 @@ def test_stream_usage_token_total_anthropic() -> None:
         "output_tokens": 5,
         "cache_read_input_tokens": 2,
     }
-    # 预算 token 计数与 anthropic_usage_total_tokens 一致（不含 cache 重复计）
-    assert stream_usage_token_total(usage) == 15
+    # 预算 token 计数：input + cache_read + cache_create + output
+    assert stream_usage_token_total(usage) == 17
 
 
 def test_resolve_stream_budget_cost_uses_metadata_rate() -> None:

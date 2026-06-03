@@ -137,6 +137,7 @@ async def test_aggregate_summary_by_axis_passes_filter_clauses() -> None:
         success=4,
         failure=1,
         avg_latency=100.0,
+        avg_ttfb=42.0,
     )
     result = MagicMock()
     result.one.return_value = row

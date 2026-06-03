@@ -144,6 +144,7 @@ async def test_aggregate_usage_statistics_by_axis_maps_items_and_totals() -> Non
         cached_tokens=4,
         cost_usd=Decimal("0.03"),
         avg_latency_ms=123.4,
+        avg_ttfb_ms=42.0,
         cache_hit_count=1,
     )
     total_row = SimpleNamespace(
@@ -155,6 +156,7 @@ async def test_aggregate_usage_statistics_by_axis_maps_items_and_totals() -> Non
         cached_tokens=4,
         cost_usd=Decimal("0.03"),
         avg_latency_ms=123.4,
+        avg_ttfb_ms=42.0,
         cache_hit_count=1,
     )
     count_result = MagicMock()
