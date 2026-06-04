@@ -1,0 +1,758 @@
+{
+  "batchIndex": 4,
+  "totalBatches": 111,
+  "filesAnalyzed": 22,
+  "filesSkipped": [],
+  "nodes": [
+    {
+      "id": "file:.agents/skills/vercel-react-best-practices/rules1/rendering-svg-precision.md",
+      "type": "document",
+      "name": "rendering-svg-precision.md",
+      "summary": "markdown 文档，28 行，包含 1 个章节",
+      "filePath": ".agents/skills/vercel-react-best-practices/rules1/rendering-svg-precision.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 28,
+      "sectionCount": 1,
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 1
+      }
+    },
+    {
+      "id": "section:.agents/skills/vercel-react-best-practices/rules1/rendering-svg-precision.md:Optimize SVG Precision",
+      "type": "section",
+      "name": "Optimize SVG Precision",
+      "summary": "章节: Optimize SVG Precision",
+      "filePath": ".agents/skills/vercel-react-best-practices/rules1/rendering-svg-precision.md",
+      "line": 8,
+      "level": 2
+    },
+    {
+      "id": "file:.agents/skills/vercel-react-best-practices/rules1/rendering-usetransition-loading.md",
+      "type": "document",
+      "name": "rendering-usetransition-loading.md",
+      "summary": "markdown 文档，75 行，包含 1 个章节",
+      "filePath": ".agents/skills/vercel-react-best-practices/rules1/rendering-usetransition-loading.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 75,
+      "sectionCount": 1,
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 1
+      }
+    },
+    {
+      "id": "section:.agents/skills/vercel-react-best-practices/rules1/rendering-usetransition-loading.md:Use useTransition Over Manual Loading States",
+      "type": "section",
+      "name": "Use useTransition Over Manual Loading States",
+      "summary": "章节: Use useTransition Over Manual Loading States",
+      "filePath": ".agents/skills/vercel-react-best-practices/rules1/rendering-usetransition-loading.md",
+      "line": 8,
+      "level": 2
+    },
+    {
+      "id": "file:.agents/skills/vercel-react-best-practices/rules1/rerender-defer-reads.md",
+      "type": "document",
+      "name": "rerender-defer-reads.md",
+      "summary": "markdown 文档，39 行，包含 1 个章节",
+      "filePath": ".agents/skills/vercel-react-best-practices/rules1/rerender-defer-reads.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 39,
+      "sectionCount": 1,
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 1
+      }
+    },
+    {
+      "id": "section:.agents/skills/vercel-react-best-practices/rules1/rerender-defer-reads.md:Defer State Reads to Usage Point",
+      "type": "section",
+      "name": "Defer State Reads to Usage Point",
+      "summary": "章节: Defer State Reads to Usage Point",
+      "filePath": ".agents/skills/vercel-react-best-practices/rules1/rerender-defer-reads.md",
+      "line": 8,
+      "level": 2
+    },
+    {
+      "id": "file:.agents/skills/vercel-react-best-practices/rules1/rerender-dependencies.md",
+      "type": "document",
+      "name": "rerender-dependencies.md",
+      "summary": "markdown 文档，45 行，包含 1 个章节",
+      "filePath": ".agents/skills/vercel-react-best-practices/rules1/rerender-dependencies.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 45,
+      "sectionCount": 1,
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 1
+      }
+    },
+    {
+      "id": "section:.agents/skills/vercel-react-best-practices/rules1/rerender-dependencies.md:Narrow Effect Dependencies",
+      "type": "section",
+      "name": "Narrow Effect Dependencies",
+      "summary": "章节: Narrow Effect Dependencies",
+      "filePath": ".agents/skills/vercel-react-best-practices/rules1/rerender-dependencies.md",
+      "line": 8,
+      "level": 2
+    },
+    {
+      "id": "file:.agents/skills/vercel-react-best-practices/rules1/rerender-derived-state-no-effect.md",
+      "type": "document",
+      "name": "rerender-derived-state-no-effect.md",
+      "summary": "markdown 文档，40 行，包含 1 个章节",
+      "filePath": ".agents/skills/vercel-react-best-practices/rules1/rerender-derived-state-no-effect.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 40,
+      "sectionCount": 1,
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 1
+      }
+    },
+    {
+      "id": "section:.agents/skills/vercel-react-best-practices/rules1/rerender-derived-state-no-effect.md:Calculate Derived State During Rendering",
+      "type": "section",
+      "name": "Calculate Derived State During Rendering",
+      "summary": "章节: Calculate Derived State During Rendering",
+      "filePath": ".agents/skills/vercel-react-best-practices/rules1/rerender-derived-state-no-effect.md",
+      "line": 8,
+      "level": 2
+    },
+    {
+      "id": "file:.agents/skills/vercel-react-best-practices/rules1/rerender-derived-state.md",
+      "type": "document",
+      "name": "rerender-derived-state.md",
+      "summary": "markdown 文档，29 行，包含 1 个章节",
+      "filePath": ".agents/skills/vercel-react-best-practices/rules1/rerender-derived-state.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 29,
+      "sectionCount": 1,
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 1
+      }
+    },
+    {
+      "id": "section:.agents/skills/vercel-react-best-practices/rules1/rerender-derived-state.md:Subscribe to Derived State",
+      "type": "section",
+      "name": "Subscribe to Derived State",
+      "summary": "章节: Subscribe to Derived State",
+      "filePath": ".agents/skills/vercel-react-best-practices/rules1/rerender-derived-state.md",
+      "line": 8,
+      "level": 2
+    },
+    {
+      "id": "file:.agents/skills/vercel-react-best-practices/rules1/rerender-functional-setstate.md",
+      "type": "document",
+      "name": "rerender-functional-setstate.md",
+      "summary": "markdown 文档，74 行，包含 1 个章节",
+      "filePath": ".agents/skills/vercel-react-best-practices/rules1/rerender-functional-setstate.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 74,
+      "sectionCount": 1,
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 1
+      }
+    },
+    {
+      "id": "section:.agents/skills/vercel-react-best-practices/rules1/rerender-functional-setstate.md:Use Functional setState Updates",
+      "type": "section",
+      "name": "Use Functional setState Updates",
+      "summary": "章节: Use Functional setState Updates",
+      "filePath": ".agents/skills/vercel-react-best-practices/rules1/rerender-functional-setstate.md",
+      "line": 8,
+      "level": 2
+    },
+    {
+      "id": "file:.agents/skills/vercel-react-best-practices/rules1/rerender-lazy-state-init.md",
+      "type": "document",
+      "name": "rerender-lazy-state-init.md",
+      "summary": "markdown 文档，58 行，包含 1 个章节",
+      "filePath": ".agents/skills/vercel-react-best-practices/rules1/rerender-lazy-state-init.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 58,
+      "sectionCount": 1,
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 1
+      }
+    },
+    {
+      "id": "section:.agents/skills/vercel-react-best-practices/rules1/rerender-lazy-state-init.md:Use Lazy State Initialization",
+      "type": "section",
+      "name": "Use Lazy State Initialization",
+      "summary": "章节: Use Lazy State Initialization",
+      "filePath": ".agents/skills/vercel-react-best-practices/rules1/rerender-lazy-state-init.md",
+      "line": 8,
+      "level": 2
+    },
+    {
+      "id": "file:.agents/skills/vercel-react-best-practices/rules1/rerender-memo-with-default-value.md",
+      "type": "document",
+      "name": "rerender-memo-with-default-value.md",
+      "summary": "markdown 文档，38 行，包含 1 个章节",
+      "filePath": ".agents/skills/vercel-react-best-practices/rules1/rerender-memo-with-default-value.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 38,
+      "sectionCount": 1,
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 1
+      }
+    },
+    {
+      "id": "section:.agents/skills/vercel-react-best-practices/rules1/rerender-memo-with-default-value.md:Extract Default Non-primitive Parameter Value from Memoized Component to Constant",
+      "type": "section",
+      "name": "Extract Default Non-primitive Parameter Value from Memoized Component to Constant",
+      "summary": "章节: Extract Default Non-primitive Parameter Value from Memoized Component to Constant",
+      "filePath": ".agents/skills/vercel-react-best-practices/rules1/rerender-memo-with-default-value.md",
+      "line": 10,
+      "level": 2
+    },
+    {
+      "id": "file:.agents/skills/vercel-react-best-practices/rules1/rerender-memo.md",
+      "type": "document",
+      "name": "rerender-memo.md",
+      "summary": "markdown 文档，44 行，包含 1 个章节",
+      "filePath": ".agents/skills/vercel-react-best-practices/rules1/rerender-memo.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 44,
+      "sectionCount": 1,
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 1
+      }
+    },
+    {
+      "id": "section:.agents/skills/vercel-react-best-practices/rules1/rerender-memo.md:Extract to Memoized Components",
+      "type": "section",
+      "name": "Extract to Memoized Components",
+      "summary": "章节: Extract to Memoized Components",
+      "filePath": ".agents/skills/vercel-react-best-practices/rules1/rerender-memo.md",
+      "line": 8,
+      "level": 2
+    },
+    {
+      "id": "file:.agents/skills/vercel-react-best-practices/rules1/rerender-move-effect-to-event.md",
+      "type": "document",
+      "name": "rerender-move-effect-to-event.md",
+      "summary": "markdown 文档，45 行，包含 1 个章节",
+      "filePath": ".agents/skills/vercel-react-best-practices/rules1/rerender-move-effect-to-event.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 45,
+      "sectionCount": 1,
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 1
+      }
+    },
+    {
+      "id": "section:.agents/skills/vercel-react-best-practices/rules1/rerender-move-effect-to-event.md:Put Interaction Logic in Event Handlers",
+      "type": "section",
+      "name": "Put Interaction Logic in Event Handlers",
+      "summary": "章节: Put Interaction Logic in Event Handlers",
+      "filePath": ".agents/skills/vercel-react-best-practices/rules1/rerender-move-effect-to-event.md",
+      "line": 8,
+      "level": 2
+    },
+    {
+      "id": "file:.agents/skills/vercel-react-best-practices/rules1/rerender-no-inline-components.md",
+      "type": "document",
+      "name": "rerender-no-inline-components.md",
+      "summary": "markdown 文档，82 行，包含 1 个章节",
+      "filePath": ".agents/skills/vercel-react-best-practices/rules1/rerender-no-inline-components.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 82,
+      "sectionCount": 1,
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 1
+      }
+    },
+    {
+      "id": "section:.agents/skills/vercel-react-best-practices/rules1/rerender-no-inline-components.md:Don't Define Components Inside Components",
+      "type": "section",
+      "name": "Don't Define Components Inside Components",
+      "summary": "章节: Don't Define Components Inside Components",
+      "filePath": ".agents/skills/vercel-react-best-practices/rules1/rerender-no-inline-components.md",
+      "line": 8,
+      "level": 2
+    },
+    {
+      "id": "file:.agents/skills/vercel-react-best-practices/rules1/rerender-simple-expression-in-memo.md",
+      "type": "document",
+      "name": "rerender-simple-expression-in-memo.md",
+      "summary": "markdown 文档，35 行，包含 1 个章节",
+      "filePath": ".agents/skills/vercel-react-best-practices/rules1/rerender-simple-expression-in-memo.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 35,
+      "sectionCount": 1,
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 1
+      }
+    },
+    {
+      "id": "section:.agents/skills/vercel-react-best-practices/rules1/rerender-simple-expression-in-memo.md:Do not wrap a simple expression with a primitive result type in useMemo",
+      "type": "section",
+      "name": "Do not wrap a simple expression with a primitive result type in useMemo",
+      "summary": "章节: Do not wrap a simple expression with a primitive result type in useMemo",
+      "filePath": ".agents/skills/vercel-react-best-practices/rules1/rerender-simple-expression-in-memo.md",
+      "line": 8,
+      "level": 2
+    },
+    {
+      "id": "file:.agents/skills/vercel-react-best-practices/rules1/rerender-split-combined-hooks.md",
+      "type": "document",
+      "name": "rerender-split-combined-hooks.md",
+      "summary": "markdown 文档，64 行，包含 1 个章节",
+      "filePath": ".agents/skills/vercel-react-best-practices/rules1/rerender-split-combined-hooks.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 64,
+      "sectionCount": 1,
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 1
+      }
+    },
+    {
+      "id": "section:.agents/skills/vercel-react-best-practices/rules1/rerender-split-combined-hooks.md:Split Combined Hook Computations",
+      "type": "section",
+      "name": "Split Combined Hook Computations",
+      "summary": "章节: Split Combined Hook Computations",
+      "filePath": ".agents/skills/vercel-react-best-practices/rules1/rerender-split-combined-hooks.md",
+      "line": 8,
+      "level": 2
+    },
+    {
+      "id": "file:.agents/skills/vercel-react-best-practices/rules1/rerender-transitions.md",
+      "type": "document",
+      "name": "rerender-transitions.md",
+      "summary": "markdown 文档，40 行，包含 1 个章节",
+      "filePath": ".agents/skills/vercel-react-best-practices/rules1/rerender-transitions.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 40,
+      "sectionCount": 1,
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 1
+      }
+    },
+    {
+      "id": "section:.agents/skills/vercel-react-best-practices/rules1/rerender-transitions.md:Use Transitions for Non-Urgent Updates",
+      "type": "section",
+      "name": "Use Transitions for Non-Urgent Updates",
+      "summary": "章节: Use Transitions for Non-Urgent Updates",
+      "filePath": ".agents/skills/vercel-react-best-practices/rules1/rerender-transitions.md",
+      "line": 8,
+      "level": 2
+    },
+    {
+      "id": "file:.agents/skills/vercel-react-best-practices/rules1/rerender-use-deferred-value.md",
+      "type": "document",
+      "name": "rerender-use-deferred-value.md",
+      "summary": "markdown 文档，59 行，包含 1 个章节",
+      "filePath": ".agents/skills/vercel-react-best-practices/rules1/rerender-use-deferred-value.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 59,
+      "sectionCount": 1,
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 1
+      }
+    },
+    {
+      "id": "section:.agents/skills/vercel-react-best-practices/rules1/rerender-use-deferred-value.md:Use useDeferredValue for Expensive Derived Renders",
+      "type": "section",
+      "name": "Use useDeferredValue for Expensive Derived Renders",
+      "summary": "章节: Use useDeferredValue for Expensive Derived Renders",
+      "filePath": ".agents/skills/vercel-react-best-practices/rules1/rerender-use-deferred-value.md",
+      "line": 8,
+      "level": 2
+    },
+    {
+      "id": "file:.agents/skills/vercel-react-best-practices/rules1/rerender-use-ref-transient-values.md",
+      "type": "document",
+      "name": "rerender-use-ref-transient-values.md",
+      "summary": "markdown 文档，73 行，包含 1 个章节",
+      "filePath": ".agents/skills/vercel-react-best-practices/rules1/rerender-use-ref-transient-values.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 73,
+      "sectionCount": 1,
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 1
+      }
+    },
+    {
+      "id": "section:.agents/skills/vercel-react-best-practices/rules1/rerender-use-ref-transient-values.md:Use useRef for Transient Values",
+      "type": "section",
+      "name": "Use useRef for Transient Values",
+      "summary": "章节: Use useRef for Transient Values",
+      "filePath": ".agents/skills/vercel-react-best-practices/rules1/rerender-use-ref-transient-values.md",
+      "line": 8,
+      "level": 2
+    },
+    {
+      "id": "file:.agents/skills/vercel-react-best-practices/rules1/server-after-nonblocking.md",
+      "type": "document",
+      "name": "server-after-nonblocking.md",
+      "summary": "markdown 文档，73 行，包含 1 个章节",
+      "filePath": ".agents/skills/vercel-react-best-practices/rules1/server-after-nonblocking.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 73,
+      "sectionCount": 1,
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 1
+      }
+    },
+    {
+      "id": "section:.agents/skills/vercel-react-best-practices/rules1/server-after-nonblocking.md:Use after() for Non-Blocking Operations",
+      "type": "section",
+      "name": "Use after() for Non-Blocking Operations",
+      "summary": "章节: Use after() for Non-Blocking Operations",
+      "filePath": ".agents/skills/vercel-react-best-practices/rules1/server-after-nonblocking.md",
+      "line": 8,
+      "level": 2
+    },
+    {
+      "id": "file:.agents/skills/vercel-react-best-practices/rules1/server-auth-actions.md",
+      "type": "document",
+      "name": "server-auth-actions.md",
+      "summary": "markdown 文档，96 行，包含 1 个章节",
+      "filePath": ".agents/skills/vercel-react-best-practices/rules1/server-auth-actions.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 96,
+      "sectionCount": 1,
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 1
+      }
+    },
+    {
+      "id": "section:.agents/skills/vercel-react-best-practices/rules1/server-auth-actions.md:Authenticate Server Actions Like API Routes",
+      "type": "section",
+      "name": "Authenticate Server Actions Like API Routes",
+      "summary": "章节: Authenticate Server Actions Like API Routes",
+      "filePath": ".agents/skills/vercel-react-best-practices/rules1/server-auth-actions.md",
+      "line": 8,
+      "level": 2
+    },
+    {
+      "id": "file:.agents/skills/vercel-react-best-practices/rules1/server-cache-lru.md",
+      "type": "document",
+      "name": "server-cache-lru.md",
+      "summary": "markdown 文档，41 行，包含 1 个章节",
+      "filePath": ".agents/skills/vercel-react-best-practices/rules1/server-cache-lru.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 41,
+      "sectionCount": 1,
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 1
+      }
+    },
+    {
+      "id": "section:.agents/skills/vercel-react-best-practices/rules1/server-cache-lru.md:Cross-Request LRU Caching",
+      "type": "section",
+      "name": "Cross-Request LRU Caching",
+      "summary": "章节: Cross-Request LRU Caching",
+      "filePath": ".agents/skills/vercel-react-best-practices/rules1/server-cache-lru.md",
+      "line": 8,
+      "level": 2
+    },
+    {
+      "id": "file:.agents/skills/vercel-react-best-practices/rules1/server-cache-react.md",
+      "type": "document",
+      "name": "server-cache-react.md",
+      "summary": "markdown 文档，76 行，包含 1 个章节",
+      "filePath": ".agents/skills/vercel-react-best-practices/rules1/server-cache-react.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 76,
+      "sectionCount": 1,
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 1
+      }
+    },
+    {
+      "id": "section:.agents/skills/vercel-react-best-practices/rules1/server-cache-react.md:Per-Request Deduplication with React.cache()",
+      "type": "section",
+      "name": "Per-Request Deduplication with React.cache()",
+      "summary": "章节: Per-Request Deduplication with React.cache()",
+      "filePath": ".agents/skills/vercel-react-best-practices/rules1/server-cache-react.md",
+      "line": 8,
+      "level": 2
+    },
+    {
+      "id": "file:.agents/skills/vercel-react-best-practices/rules1/server-dedup-props.md",
+      "type": "document",
+      "name": "server-dedup-props.md",
+      "summary": "markdown 文档，65 行，包含 1 个章节",
+      "filePath": ".agents/skills/vercel-react-best-practices/rules1/server-dedup-props.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 65,
+      "sectionCount": 1,
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 1
+      }
+    },
+    {
+      "id": "section:.agents/skills/vercel-react-best-practices/rules1/server-dedup-props.md:Avoid Duplicate Serialization in RSC Props",
+      "type": "section",
+      "name": "Avoid Duplicate Serialization in RSC Props",
+      "summary": "章节: Avoid Duplicate Serialization in RSC Props",
+      "filePath": ".agents/skills/vercel-react-best-practices/rules1/server-dedup-props.md",
+      "line": 8,
+      "level": 2
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:.agents/skills/vercel-react-best-practices/rules1/rendering-svg-precision.md",
+      "target": "section:.agents/skills/vercel-react-best-practices/rules1/rendering-svg-precision.md:Optimize SVG Precision",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "file:.agents/skills/vercel-react-best-practices/rules1/rendering-usetransition-loading.md",
+      "target": "section:.agents/skills/vercel-react-best-practices/rules1/rendering-usetransition-loading.md:Use useTransition Over Manual Loading States",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "file:.agents/skills/vercel-react-best-practices/rules1/rerender-defer-reads.md",
+      "target": "section:.agents/skills/vercel-react-best-practices/rules1/rerender-defer-reads.md:Defer State Reads to Usage Point",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "file:.agents/skills/vercel-react-best-practices/rules1/rerender-dependencies.md",
+      "target": "section:.agents/skills/vercel-react-best-practices/rules1/rerender-dependencies.md:Narrow Effect Dependencies",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "file:.agents/skills/vercel-react-best-practices/rules1/rerender-derived-state-no-effect.md",
+      "target": "section:.agents/skills/vercel-react-best-practices/rules1/rerender-derived-state-no-effect.md:Calculate Derived State During Rendering",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "file:.agents/skills/vercel-react-best-practices/rules1/rerender-derived-state.md",
+      "target": "section:.agents/skills/vercel-react-best-practices/rules1/rerender-derived-state.md:Subscribe to Derived State",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "file:.agents/skills/vercel-react-best-practices/rules1/rerender-functional-setstate.md",
+      "target": "section:.agents/skills/vercel-react-best-practices/rules1/rerender-functional-setstate.md:Use Functional setState Updates",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "file:.agents/skills/vercel-react-best-practices/rules1/rerender-lazy-state-init.md",
+      "target": "section:.agents/skills/vercel-react-best-practices/rules1/rerender-lazy-state-init.md:Use Lazy State Initialization",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "file:.agents/skills/vercel-react-best-practices/rules1/rerender-memo-with-default-value.md",
+      "target": "section:.agents/skills/vercel-react-best-practices/rules1/rerender-memo-with-default-value.md:Extract Default Non-primitive Parameter Value from Memoized Component to Constant",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "file:.agents/skills/vercel-react-best-practices/rules1/rerender-memo.md",
+      "target": "section:.agents/skills/vercel-react-best-practices/rules1/rerender-memo.md:Extract to Memoized Components",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "file:.agents/skills/vercel-react-best-practices/rules1/rerender-move-effect-to-event.md",
+      "target": "section:.agents/skills/vercel-react-best-practices/rules1/rerender-move-effect-to-event.md:Put Interaction Logic in Event Handlers",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "file:.agents/skills/vercel-react-best-practices/rules1/rerender-no-inline-components.md",
+      "target": "section:.agents/skills/vercel-react-best-practices/rules1/rerender-no-inline-components.md:Don't Define Components Inside Components",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "file:.agents/skills/vercel-react-best-practices/rules1/rerender-simple-expression-in-memo.md",
+      "target": "section:.agents/skills/vercel-react-best-practices/rules1/rerender-simple-expression-in-memo.md:Do not wrap a simple expression with a primitive result type in useMemo",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "file:.agents/skills/vercel-react-best-practices/rules1/rerender-split-combined-hooks.md",
+      "target": "section:.agents/skills/vercel-react-best-practices/rules1/rerender-split-combined-hooks.md:Split Combined Hook Computations",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "file:.agents/skills/vercel-react-best-practices/rules1/rerender-transitions.md",
+      "target": "section:.agents/skills/vercel-react-best-practices/rules1/rerender-transitions.md:Use Transitions for Non-Urgent Updates",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "file:.agents/skills/vercel-react-best-practices/rules1/rerender-use-deferred-value.md",
+      "target": "section:.agents/skills/vercel-react-best-practices/rules1/rerender-use-deferred-value.md:Use useDeferredValue for Expensive Derived Renders",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "file:.agents/skills/vercel-react-best-practices/rules1/rerender-use-ref-transient-values.md",
+      "target": "section:.agents/skills/vercel-react-best-practices/rules1/rerender-use-ref-transient-values.md:Use useRef for Transient Values",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "file:.agents/skills/vercel-react-best-practices/rules1/server-after-nonblocking.md",
+      "target": "section:.agents/skills/vercel-react-best-practices/rules1/server-after-nonblocking.md:Use after() for Non-Blocking Operations",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "file:.agents/skills/vercel-react-best-practices/rules1/server-auth-actions.md",
+      "target": "section:.agents/skills/vercel-react-best-practices/rules1/server-auth-actions.md:Authenticate Server Actions Like API Routes",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "file:.agents/skills/vercel-react-best-practices/rules1/server-cache-lru.md",
+      "target": "section:.agents/skills/vercel-react-best-practices/rules1/server-cache-lru.md:Cross-Request LRU Caching",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "file:.agents/skills/vercel-react-best-practices/rules1/server-cache-react.md",
+      "target": "section:.agents/skills/vercel-react-best-practices/rules1/server-cache-react.md:Per-Request Deduplication with React.cache()",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    },
+    {
+      "source": "file:.agents/skills/vercel-react-best-practices/rules1/server-dedup-props.md",
+      "target": "section:.agents/skills/vercel-react-best-practices/rules1/server-dedup-props.md:Avoid Duplicate Serialization in RSC Props",
+      "type": "contains",
+      "weight": 1,
+      "direction": "forward"
+    }
+  ]
+}

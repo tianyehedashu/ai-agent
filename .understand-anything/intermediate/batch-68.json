@@ -1,0 +1,349 @@
+{
+  "nodes": [
+    {
+      "id": "file:b68_backend/domains/gateway/presentation/schemas/__init__.py",
+      "type": "file",
+      "label": "__init__.py",
+      "path": "backend/domains/gateway/presentation/schemas/__init__.py",
+      "language": "python",
+      "lines": 1,
+      "summary": "Gateway Pydantic 请求/响应模型包入口",
+      "tags": [
+        "gateway",
+        "schema",
+        "python"
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 0
+      },
+      "complexity": "low",
+      "name": "b68_backend/domains/gateway/presentation/schemas/__init__.py"
+    },
+    {
+      "id": "file:b68_backend/domains/gateway/presentation/schemas/common.py",
+      "type": "file",
+      "label": "common.py",
+      "path": "backend/domains/gateway/presentation/schemas/common.py",
+      "language": "python",
+      "lines": 1456,
+      "summary": "Gateway 通用 Pydantic Schema，涵盖虚拟密钥、凭据、模型、路由、预算、配额、日志、仪表盘、告警及套餐等 DTO",
+      "tags": [
+        "gateway",
+        "schema",
+        "python"
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 0
+      },
+      "complexity": "high",
+      "name": "b68_backend/domains/gateway/presentation/schemas/common.py"
+    },
+    {
+      "id": "file:b68_backend/domains/gateway/presentation/schemas/credential_upstream_catalog.py",
+      "type": "file",
+      "label": "credential_upstream_catalog.py",
+      "path": "backend/domains/gateway/presentation/schemas/credential_upstream_catalog.py",
+      "language": "python",
+      "lines": 117,
+      "summary": "凭据上游探测与批量导入 API 的 Pydantic 契约",
+      "tags": [
+        "gateway",
+        "schema",
+        "python"
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 0
+      },
+      "complexity": "moderate",
+      "name": "b68_backend/domains/gateway/presentation/schemas/credential_upstream_catalog.py"
+    },
+    {
+      "id": "file:b68_backend/domains/gateway/presentation/schemas/pricing.py",
+      "type": "file",
+      "label": "pricing.py",
+      "path": "backend/domains/gateway/presentation/schemas/pricing.py",
+      "language": "python",
+      "lines": 208,
+      "summary": "定价目录 API Schema，包含上下游定价、费率视图与同步报告 DTO",
+      "tags": [
+        "gateway",
+        "schema",
+        "python"
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 0
+      },
+      "complexity": "moderate",
+      "name": "b68_backend/domains/gateway/presentation/schemas/pricing.py"
+    },
+    {
+      "id": "file:b68_backend/domains/gateway/presentation/schemas/provider_profiles.py",
+      "type": "file",
+      "label": "provider_profiles.py",
+      "path": "backend/domains/gateway/presentation/schemas/provider_profiles.py",
+      "language": "python",
+      "lines": 0,
+      "summary": "上游方案 SSOT API 响应模型",
+      "tags": [
+        "gateway",
+        "schema",
+        "python"
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 0
+      },
+      "complexity": "low",
+      "name": "b68_backend/domains/gateway/presentation/schemas/provider_profiles.py"
+    },
+    {
+      "id": "file:b68_backend/domains/gateway/presentation/tenant_scoped_response.py",
+      "type": "file",
+      "label": "tenant_scoped_response.py",
+      "path": "backend/domains/gateway/presentation/tenant_scoped_response.py",
+      "language": "python",
+      "lines": 37,
+      "summary": "租户作用域 ORM 到 API dict 投影工具，处理 tenant_id/team_id 镜像兼容",
+      "tags": [
+        "gateway",
+        "python"
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 0
+      },
+      "complexity": "low",
+      "name": "b68_backend/domains/gateway/presentation/tenant_scoped_response.py"
+    },
+    {
+      "id": "file:b68_backend/domains/identity/__init__.py",
+      "type": "file",
+      "label": "__init__.py",
+      "path": "backend/domains/identity/__init__.py",
+      "language": "python",
+      "lines": 0,
+      "summary": "Identity 领域包入口，导出 RBAC 角色与权限",
+      "tags": [
+        "identity",
+        "python"
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 0
+      },
+      "complexity": "low",
+      "name": "b68_backend/domains/identity/__init__.py"
+    },
+    {
+      "id": "file:b68_backend/domains/identity/application/__init__.py",
+      "type": "file",
+      "label": "__init__.py",
+      "path": "backend/domains/identity/application/__init__.py",
+      "language": "python",
+      "lines": 43,
+      "summary": "Identity 应用层延迟导出入口，避免循环导入",
+      "tags": [
+        "identity",
+        "python"
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 0
+      },
+      "complexity": "low",
+      "name": "b68_backend/domains/identity/application/__init__.py"
+    },
+    {
+      "id": "file:b68_backend/domains/identity/application/api_key_use_case.py",
+      "type": "file",
+      "label": "api_key_use_case.py",
+      "path": "backend/domains/identity/application/api_key_use_case.py",
+      "language": "python",
+      "lines": 605,
+      "summary": "API Key 用例服务，编排 CRUD、验证、解密、使用日志及 Gateway 授权校验",
+      "tags": [
+        "identity",
+        "api-key",
+        "use-case",
+        "python"
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 0
+      },
+      "complexity": "high",
+      "name": "b68_backend/domains/identity/application/api_key_use_case.py"
+    },
+    {
+      "id": "file:b68_backend/domains/identity/application/giikin_identity_service.py",
+      "type": "file",
+      "label": "giikin_identity_service.py",
+      "path": "backend/domains/identity/application/giikin_identity_service.py",
+      "language": "python",
+      "lines": 92,
+      "summary": "giikin SSO 身份 JIT 映射服务，首次访问时自动创建本地用户并开通个人团队",
+      "tags": [
+        "identity",
+        "service",
+        "python"
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 0
+      },
+      "complexity": "moderate",
+      "name": "b68_backend/domains/identity/application/giikin_identity_service.py"
+    },
+    {
+      "id": "file:b68_backend/domains/identity/application/permission_context_composer.py",
+      "type": "file",
+      "label": "permission_context_composer.py",
+      "path": "backend/domains/identity/application/permission_context_composer.py",
+      "language": "python",
+      "lines": 86,
+      "summary": "PermissionContext 组装入口，支持从 Principal、用户 ID 或 Gateway 虚拟密钥构建上下文",
+      "tags": [
+        "identity",
+        "iam",
+        "python"
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 0
+      },
+      "complexity": "moderate",
+      "name": "b68_backend/domains/identity/application/permission_context_composer.py"
+    },
+    {
+      "id": "file:b68_backend/domains/identity/application/permission_context_factory.py",
+      "type": "file",
+      "label": "permission_context_factory.py",
+      "path": "backend/domains/identity/application/permission_context_factory.py",
+      "language": "python",
+      "lines": 35,
+      "summary": "构建带 team_ids 的 PermissionContext，用于后台任务与无 HTTP 入口场景",
+      "tags": [
+        "identity",
+        "iam",
+        "python"
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 0
+      },
+      "complexity": "low",
+      "name": "b68_backend/domains/identity/application/permission_context_factory.py"
+    },
+    {
+      "id": "file:b68_backend/domains/identity/application/ports.py",
+      "type": "file",
+      "label": "ports.py",
+      "path": "backend/domains/identity/application/ports.py",
+      "language": "python",
+      "lines": 128,
+      "summary": "Identity 应用层对外端口定义，包括用户摘要查询、平台角色查找、API Key 验证等跨域契约",
+      "tags": [
+        "identity",
+        "python"
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 0
+      },
+      "complexity": "moderate",
+      "name": "b68_backend/domains/identity/application/ports.py"
+    },
+    {
+      "id": "file:b68_backend/domains/identity/application/principal_service.py",
+      "type": "file",
+      "label": "principal_service.py",
+      "path": "backend/domains/identity/application/principal_service.py",
+      "language": "python",
+      "lines": 96,
+      "summary": "统一身份解析服务，支持 SSO 模式与本地 JWT 模式",
+      "tags": [
+        "identity",
+        "iam",
+        "service",
+        "python"
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 0
+      },
+      "complexity": "moderate",
+      "name": "b68_backend/domains/identity/application/principal_service.py"
+    },
+    {
+      "id": "file:b68_backend/domains/identity/application/token_service.py",
+      "type": "file",
+      "label": "token_service.py",
+      "path": "backend/domains/identity/application/token_service.py",
+      "language": "python",
+      "lines": 44,
+      "summary": "JWT Token 应用服务，负责生成与校验访问令牌和刷新令牌",
+      "tags": [
+        "identity",
+        "jwt",
+        "service",
+        "python"
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 0
+      },
+      "complexity": "low",
+      "name": "b68_backend/domains/identity/application/token_service.py"
+    }
+  ],
+  "edges": []
+}

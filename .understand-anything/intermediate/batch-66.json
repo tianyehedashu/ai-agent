@@ -1,0 +1,194 @@
+{
+  "nodes": [
+    {
+      "id": "file:.agents/skills/vercel-react-best-practices/rules1/rerender-use-deferred-value.md",
+      "type": "file",
+      "label": "rerender-use-deferred-value.md",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/rerender-use-deferred-value.md",
+      "language": "markdown",
+      "summary": "React 性能优化规则：在昂贵的派生渲染中使用 useDeferredValue 来延迟非紧急更新，避免阻塞主线程。",
+      "tags": ["react", "性能优化", "useDeferredValue", "渲染优化", "前端"],
+      "metrics": { "totalLines": 59, "nonEmptyLines": 47, "sectionCount": 1 }
+    },
+    {
+      "id": "file:.agents/skills/vercel-react-best-practices/rules1/rerender-use-ref-transient-values.md",
+      "type": "file",
+      "label": "rerender-use-ref-transient-values.md",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/rerender-use-ref-transient-values.md",
+      "language": "markdown",
+      "summary": "React 性能规则：使用 useRef 存储临时值（瞬态值），避免触发不必要的重渲染。",
+      "tags": ["react", "useRef", "瞬态值", "性能优化", "前端"],
+      "metrics": { "totalLines": 73, "nonEmptyLines": 63, "sectionCount": 1 }
+    },
+    {
+      "id": "file:.agents/skills/vercel-react-best-practices/rules1/server-after-nonblocking.md",
+      "type": "file",
+      "label": "server-after-nonblocking.md",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/server-after-nonblocking.md",
+      "language": "markdown",
+      "summary": "Next.js 服务端规则：使用 after() 执行非阻塞操作，避免延长请求响应时间。",
+      "tags": ["next.js", "服务端", "after", "非阻塞", "性能优化", "前端"],
+      "metrics": { "totalLines": 73, "nonEmptyLines": 54, "sectionCount": 1 }
+    },
+    {
+      "id": "file:.agents/skills/vercel-react-best-practices/rules1/server-auth-actions.md",
+      "type": "file",
+      "label": "server-auth-actions.md",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/server-auth-actions.md",
+      "language": "markdown",
+      "summary": "Next.js 安全规则：像保护 API 路由一样对 Server Actions 进行身份验证，防止未授权调用。",
+      "tags": ["next.js", "server-actions", "身份验证", "安全", "前端"],
+      "metrics": { "totalLines": 96, "nonEmptyLines": 72, "sectionCount": 1 }
+    },
+    {
+      "id": "file:.agents/skills/vercel-react-best-practices/rules1/server-cache-lru.md",
+      "type": "file",
+      "label": "server-cache-lru.md",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/server-cache-lru.md",
+      "language": "markdown",
+      "summary": "Next.js 服务端缓存规则：跨请求使用 LRU 缓存策略，提升重复数据获取的性能。",
+      "tags": ["next.js", "缓存", "LRU", "服务端", "性能优化", "前端"],
+      "metrics": { "totalLines": 41, "nonEmptyLines": 29, "sectionCount": 1 }
+    },
+    {
+      "id": "file:.agents/skills/vercel-react-best-practices/rules1/server-cache-react.md",
+      "type": "file",
+      "label": "server-cache-react.md",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/server-cache-react.md",
+      "language": "markdown",
+      "summary": "Next.js 服务端规则：使用 React.cache() 实现单次请求内的去重，避免重复数据获取。",
+      "tags": ["next.js", "react.cache", "去重", "服务端", "性能优化", "前端"],
+      "metrics": { "totalLines": 76, "nonEmptyLines": 55, "sectionCount": 1 }
+    },
+    {
+      "id": "file:.agents/skills/vercel-react-best-practices/rules1/server-dedup-props.md",
+      "type": "file",
+      "label": "server-dedup-props.md",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/server-dedup-props.md",
+      "language": "markdown",
+      "summary": "React Server Components 规则：避免在 RSC Props 中重复序列化，减少数据传输开销。",
+      "tags": ["react", "server-components", "RSC", "序列化", "性能优化", "前端"],
+      "metrics": { "totalLines": 65, "nonEmptyLines": 46, "sectionCount": 1 }
+    },
+    {
+      "id": "file:.agents/skills/vercel-react-best-practices/rules1/server-hoist-static-io.md",
+      "type": "file",
+      "label": "server-hoist-static-io.md",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/server-hoist-static-io.md",
+      "language": "markdown",
+      "summary": "Next.js 服务端规则：将静态 I/O 操作提升到模块级别，避免每次请求重复执行。",
+      "tags": ["next.js", "静态I/O", "模块级别", "性能优化", "服务端", "前端"],
+      "metrics": { "totalLines": 149, "nonEmptyLines": 115, "sectionCount": 1 }
+    },
+    {
+      "id": "file:.agents/skills/vercel-react-best-practices/rules1/server-no-shared-module-state.md",
+      "type": "file",
+      "label": "server-no-shared-module-state.md",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/server-no-shared-module-state.md",
+      "language": "markdown",
+      "summary": "Next.js 服务端规则：避免使用共享模块状态存储请求数据，防止请求间数据污染。",
+      "tags": ["next.js", "服务端", "状态管理", "数据隔离", "安全", "前端"],
+      "metrics": { "totalLines": 50, "nonEmptyLines": 36, "sectionCount": 1 }
+    },
+    {
+      "id": "file:.agents/skills/vercel-react-best-practices/rules1/server-parallel-fetching.md",
+      "type": "file",
+      "label": "server-parallel-fetching.md",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/server-parallel-fetching.md",
+      "language": "markdown",
+      "summary": "Next.js 数据获取规则：通过组件组合实现并行数据获取，减少瀑布式请求延迟。",
+      "tags": ["next.js", "并行获取", "数据获取", "组件组合", "性能优化", "前端"],
+      "metrics": { "totalLines": 83, "nonEmptyLines": 69, "sectionCount": 1 }
+    },
+    {
+      "id": "file:.agents/skills/vercel-react-best-practices/rules1/server-parallel-nested-fetching.md",
+      "type": "file",
+      "label": "server-parallel-nested-fetching.md",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/server-parallel-nested-fetching.md",
+      "language": "markdown",
+      "summary": "Next.js 数据获取规则：嵌套组件中的并行数据获取模式，优化嵌套层级下的请求效率。",
+      "tags": ["next.js", "并行获取", "嵌套组件", "数据获取", "性能优化", "前端"],
+      "metrics": { "totalLines": 34, "nonEmptyLines": 25, "sectionCount": 1 }
+    },
+    {
+      "id": "file:.agents/skills/vercel-react-best-practices/rules1/server-serialization.md",
+      "type": "file",
+      "label": "server-serialization.md",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/server-serialization.md",
+      "language": "markdown",
+      "summary": "React Server Components 规则：在 RSC 边界最小化序列化操作，降低服务端到客户端的数据传输成本。",
+      "tags": ["react", "server-components", "RSC", "序列化", "性能优化", "前端"],
+      "metrics": { "totalLines": 38, "nonEmptyLines": 30, "sectionCount": 1 }
+    },
+    {
+      "id": "dir:.agents/skills/vercel-react-best-practices/rules1",
+      "type": "directory",
+      "label": "rules1",
+      "path": ".agents/skills/vercel-react-best-practices/rules1",
+      "summary": "Vercel React 最佳实践规则集第一部分，涵盖服务端渲染、数据获取、缓存和性能优化等规则。",
+      "tags": ["vercel", "react", "最佳实践", "规则集", "前端"]
+    }
+  ],
+  "edges": [
+    {
+      "source": "dir:.agents/skills/vercel-react-best-practices/rules1",
+      "target": "file:.agents/skills/vercel-react-best-practices/rules1/rerender-use-deferred-value.md",
+      "type": "contains"
+    },
+    {
+      "source": "dir:.agents/skills/vercel-react-best-practices/rules1",
+      "target": "file:.agents/skills/vercel-react-best-practices/rules1/rerender-use-ref-transient-values.md",
+      "type": "contains"
+    },
+    {
+      "source": "dir:.agents/skills/vercel-react-best-practices/rules1",
+      "target": "file:.agents/skills/vercel-react-best-practices/rules1/server-after-nonblocking.md",
+      "type": "contains"
+    },
+    {
+      "source": "dir:.agents/skills/vercel-react-best-practices/rules1",
+      "target": "file:.agents/skills/vercel-react-best-practices/rules1/server-auth-actions.md",
+      "type": "contains"
+    },
+    {
+      "source": "dir:.agents/skills/vercel-react-best-practices/rules1",
+      "target": "file:.agents/skills/vercel-react-best-practices/rules1/server-cache-lru.md",
+      "type": "contains"
+    },
+    {
+      "source": "dir:.agents/skills/vercel-react-best-practices/rules1",
+      "target": "file:.agents/skills/vercel-react-best-practices/rules1/server-cache-react.md",
+      "type": "contains"
+    },
+    {
+      "source": "dir:.agents/skills/vercel-react-best-practices/rules1",
+      "target": "file:.agents/skills/vercel-react-best-practices/rules1/server-dedup-props.md",
+      "type": "contains"
+    },
+    {
+      "source": "dir:.agents/skills/vercel-react-best-practices/rules1",
+      "target": "file:.agents/skills/vercel-react-best-practices/rules1/server-hoist-static-io.md",
+      "type": "contains"
+    },
+    {
+      "source": "dir:.agents/skills/vercel-react-best-practices/rules1",
+      "target": "file:.agents/skills/vercel-react-best-practices/rules1/server-no-shared-module-state.md",
+      "type": "contains"
+    },
+    {
+      "source": "dir:.agents/skills/vercel-react-best-practices/rules1",
+      "target": "file:.agents/skills/vercel-react-best-practices/rules1/server-parallel-fetching.md",
+      "type": "contains"
+    },
+    {
+      "source": "dir:.agents/skills/vercel-react-best-practices/rules1",
+      "target": "file:.agents/skills/vercel-react-best-practices/rules1/server-parallel-nested-fetching.md",
+      "type": "contains"
+    },
+    {
+      "source": "dir:.agents/skills/vercel-react-best-practices/rules1",
+      "target": "file:.agents/skills/vercel-react-best-practices/rules1/server-serialization.md",
+      "type": "contains"
+    }
+  ]
+}

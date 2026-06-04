@@ -1,0 +1,1174 @@
+{
+  "nodes": [
+    {
+      "id": "file:b62_.agents/skills/vercel-react-best-practices/rules1/_sections.md",
+      "type": "document",
+      "label": "_sections.md",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/_sections.md",
+      "language": "markdown",
+      "lines": 46,
+      "summary": "Sections",
+      "tags": [
+        "最佳实践",
+        "docs",
+        "markdown"
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 9
+      },
+      "complexity": "moderate",
+      "name": "b62_.agents/skills/vercel-react-best-practices/rules1/_sections.md"
+    },
+    {
+      "id": "file:b62_.agents/skills/vercel-react-best-practices/rules1/_sections.md#Sections",
+      "type": "section",
+      "label": "Sections",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/_sections.md",
+      "language": "markdown",
+      "lines": 0,
+      "summary": "Sections",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b62_.agents/skills/vercel-react-best-practices/rules1/_sections.md",
+      "complexity": "moderate",
+      "name": "b62_.agents/skills/vercel-react-best-practices/rules1/_sections.md#Sections"
+    },
+    {
+      "id": "file:b62_.agents/skills/vercel-react-best-practices/rules1/_sections.md#1. Eliminating Waterfalls (async)",
+      "type": "section",
+      "label": "1. Eliminating Waterfalls (async)",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/_sections.md",
+      "language": "markdown",
+      "lines": 0,
+      "summary": "1. Eliminating Waterfalls (async)",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b62_.agents/skills/vercel-react-best-practices/rules1/_sections.md",
+      "complexity": "moderate",
+      "name": "b62_.agents/skills/vercel-react-best-practices/rules1/_sections.md#1. Eliminating Waterfalls (async)"
+    },
+    {
+      "id": "file:b62_.agents/skills/vercel-react-best-practices/rules1/_sections.md#2. Bundle Size Optimization (bundle)",
+      "type": "section",
+      "label": "2. Bundle Size Optimization (bundle)",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/_sections.md",
+      "language": "markdown",
+      "lines": 0,
+      "summary": "2. Bundle Size Optimization (bundle)",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b62_.agents/skills/vercel-react-best-practices/rules1/_sections.md",
+      "complexity": "moderate",
+      "name": "b62_.agents/skills/vercel-react-best-practices/rules1/_sections.md#2. Bundle Size Optimization (bundle)"
+    },
+    {
+      "id": "file:b62_.agents/skills/vercel-react-best-practices/rules1/_sections.md#3. Server-Side Performance (server)",
+      "type": "section",
+      "label": "3. Server-Side Performance (server)",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/_sections.md",
+      "language": "markdown",
+      "lines": 0,
+      "summary": "3. Server-Side Performance (server)",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b62_.agents/skills/vercel-react-best-practices/rules1/_sections.md",
+      "complexity": "moderate",
+      "name": "b62_.agents/skills/vercel-react-best-practices/rules1/_sections.md#3. Server-Side Performance (server)"
+    },
+    {
+      "id": "file:b62_.agents/skills/vercel-react-best-practices/rules1/_sections.md#4. Client-Side Data Fetching (client)",
+      "type": "section",
+      "label": "4. Client-Side Data Fetching (client)",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/_sections.md",
+      "language": "markdown",
+      "lines": 0,
+      "summary": "4. Client-Side Data Fetching (client)",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b62_.agents/skills/vercel-react-best-practices/rules1/_sections.md",
+      "complexity": "moderate",
+      "name": "b62_.agents/skills/vercel-react-best-practices/rules1/_sections.md#4. Client-Side Data Fetching (client)"
+    },
+    {
+      "id": "file:b62_.agents/skills/vercel-react-best-practices/rules1/_sections.md#5. Re-render Optimization (rerender)",
+      "type": "section",
+      "label": "5. Re-render Optimization (rerender)",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/_sections.md",
+      "language": "markdown",
+      "lines": 0,
+      "summary": "5. Re-render Optimization (rerender)",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b62_.agents/skills/vercel-react-best-practices/rules1/_sections.md",
+      "complexity": "moderate",
+      "name": "b62_.agents/skills/vercel-react-best-practices/rules1/_sections.md#5. Re-render Optimization (rerender)"
+    },
+    {
+      "id": "file:b62_.agents/skills/vercel-react-best-practices/rules1/_sections.md#6. Rendering Performance (rendering)",
+      "type": "section",
+      "label": "6. Rendering Performance (rendering)",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/_sections.md",
+      "language": "markdown",
+      "lines": 0,
+      "summary": "6. Rendering Performance (rendering)",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b62_.agents/skills/vercel-react-best-practices/rules1/_sections.md",
+      "complexity": "moderate",
+      "name": "b62_.agents/skills/vercel-react-best-practices/rules1/_sections.md#6. Rendering Performance (rendering)"
+    },
+    {
+      "id": "file:b62_.agents/skills/vercel-react-best-practices/rules1/_sections.md#7. JavaScript Performance (js)",
+      "type": "section",
+      "label": "7. JavaScript Performance (js)",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/_sections.md",
+      "language": "markdown",
+      "lines": 0,
+      "summary": "7. JavaScript Performance (js)",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b62_.agents/skills/vercel-react-best-practices/rules1/_sections.md",
+      "complexity": "moderate",
+      "name": "b62_.agents/skills/vercel-react-best-practices/rules1/_sections.md#7. JavaScript Performance (js)"
+    },
+    {
+      "id": "file:b62_.agents/skills/vercel-react-best-practices/rules1/_sections.md#8. Advanced Patterns (advanced)",
+      "type": "section",
+      "label": "8. Advanced Patterns (advanced)",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/_sections.md",
+      "language": "markdown",
+      "lines": 0,
+      "summary": "8. Advanced Patterns (advanced)",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b62_.agents/skills/vercel-react-best-practices/rules1/_sections.md",
+      "complexity": "moderate",
+      "name": "b62_.agents/skills/vercel-react-best-practices/rules1/_sections.md#8. Advanced Patterns (advanced)"
+    },
+    {
+      "id": "file:b62_.agents/skills/vercel-react-best-practices/rules1/_template.md",
+      "type": "document",
+      "label": "_template.md",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/_template.md",
+      "language": "markdown",
+      "lines": 28,
+      "summary": "Rule Title Here",
+      "tags": [
+        "最佳实践",
+        "docs",
+        "markdown"
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 1
+      },
+      "complexity": "moderate",
+      "name": "b62_.agents/skills/vercel-react-best-practices/rules1/_template.md"
+    },
+    {
+      "id": "file:b62_.agents/skills/vercel-react-best-practices/rules1/_template.md#Rule Title Here",
+      "type": "section",
+      "label": "Rule Title Here",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/_template.md",
+      "language": "markdown",
+      "lines": 0,
+      "summary": "Rule Title Here",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b62_.agents/skills/vercel-react-best-practices/rules1/_template.md",
+      "complexity": "moderate",
+      "name": "b62_.agents/skills/vercel-react-best-practices/rules1/_template.md#Rule Title Here"
+    },
+    {
+      "id": "file:b62_.agents/skills/vercel-react-best-practices/rules1/advanced-effect-event-deps.md",
+      "type": "document",
+      "label": "advanced-effect-event-deps.md",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/advanced-effect-event-deps.md",
+      "language": "markdown",
+      "lines": 56,
+      "summary": "Do Not Put Effect Events in Dependency Arrays",
+      "tags": [
+        "最佳实践",
+        "docs",
+        "高级模式",
+        "markdown"
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 1
+      },
+      "complexity": "moderate",
+      "name": "b62_.agents/skills/vercel-react-best-practices/rules1/advanced-effect-event-deps.md"
+    },
+    {
+      "id": "file:b62_.agents/skills/vercel-react-best-practices/rules1/advanced-effect-event-deps.md#Do Not Put Effect Events in Dependency Arrays",
+      "type": "section",
+      "label": "Do Not Put Effect Events in Dependency Arrays",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/advanced-effect-event-deps.md",
+      "language": "markdown",
+      "lines": 0,
+      "summary": "Do Not Put Effect Events in Dependency Arrays",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b62_.agents/skills/vercel-react-best-practices/rules1/advanced-effect-event-deps.md",
+      "complexity": "moderate",
+      "name": "b62_.agents/skills/vercel-react-best-practices/rules1/advanced-effect-event-deps.md#Do Not Put Effect Events in Dependency Arrays"
+    },
+    {
+      "id": "file:b62_.agents/skills/vercel-react-best-practices/rules1/advanced-event-handler-refs.md",
+      "type": "document",
+      "label": "advanced-event-handler-refs.md",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/advanced-event-handler-refs.md",
+      "language": "markdown",
+      "lines": 55,
+      "summary": "Store Event Handlers in Refs",
+      "tags": [
+        "最佳实践",
+        "docs",
+        "高级模式",
+        "markdown"
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 1
+      },
+      "complexity": "moderate",
+      "name": "b62_.agents/skills/vercel-react-best-practices/rules1/advanced-event-handler-refs.md"
+    },
+    {
+      "id": "file:b62_.agents/skills/vercel-react-best-practices/rules1/advanced-event-handler-refs.md#Store Event Handlers in Refs",
+      "type": "section",
+      "label": "Store Event Handlers in Refs",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/advanced-event-handler-refs.md",
+      "language": "markdown",
+      "lines": 0,
+      "summary": "Store Event Handlers in Refs",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b62_.agents/skills/vercel-react-best-practices/rules1/advanced-event-handler-refs.md",
+      "complexity": "moderate",
+      "name": "b62_.agents/skills/vercel-react-best-practices/rules1/advanced-event-handler-refs.md#Store Event Handlers in Refs"
+    },
+    {
+      "id": "file:b62_.agents/skills/vercel-react-best-practices/rules1/advanced-init-once.md",
+      "type": "document",
+      "label": "advanced-init-once.md",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/advanced-init-once.md",
+      "language": "markdown",
+      "lines": 42,
+      "summary": "Initialize App Once, Not Per Mount",
+      "tags": [
+        "最佳实践",
+        "docs",
+        "高级模式",
+        "markdown"
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 1
+      },
+      "complexity": "moderate",
+      "name": "b62_.agents/skills/vercel-react-best-practices/rules1/advanced-init-once.md"
+    },
+    {
+      "id": "file:b62_.agents/skills/vercel-react-best-practices/rules1/advanced-init-once.md#Initialize App Once, Not Per Mount",
+      "type": "section",
+      "label": "Initialize App Once, Not Per Mount",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/advanced-init-once.md",
+      "language": "markdown",
+      "lines": 0,
+      "summary": "Initialize App Once, Not Per Mount",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b62_.agents/skills/vercel-react-best-practices/rules1/advanced-init-once.md",
+      "complexity": "moderate",
+      "name": "b62_.agents/skills/vercel-react-best-practices/rules1/advanced-init-once.md#Initialize App Once, Not Per Mount"
+    },
+    {
+      "id": "file:b62_.agents/skills/vercel-react-best-practices/rules1/advanced-use-latest.md",
+      "type": "document",
+      "label": "advanced-use-latest.md",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/advanced-use-latest.md",
+      "language": "markdown",
+      "lines": 39,
+      "summary": "useEffectEvent for Stable Callback Refs",
+      "tags": [
+        "最佳实践",
+        "docs",
+        "高级模式",
+        "markdown"
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 1
+      },
+      "complexity": "moderate",
+      "name": "b62_.agents/skills/vercel-react-best-practices/rules1/advanced-use-latest.md"
+    },
+    {
+      "id": "file:b62_.agents/skills/vercel-react-best-practices/rules1/advanced-use-latest.md#useEffectEvent for Stable Callback Refs",
+      "type": "section",
+      "label": "useEffectEvent for Stable Callback Refs",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/advanced-use-latest.md",
+      "language": "markdown",
+      "lines": 0,
+      "summary": "useEffectEvent for Stable Callback Refs",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b62_.agents/skills/vercel-react-best-practices/rules1/advanced-use-latest.md",
+      "complexity": "moderate",
+      "name": "b62_.agents/skills/vercel-react-best-practices/rules1/advanced-use-latest.md#useEffectEvent for Stable Callback Refs"
+    },
+    {
+      "id": "file:b62_.agents/skills/vercel-react-best-practices/rules1/async-api-routes.md",
+      "type": "document",
+      "label": "async-api-routes.md",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/async-api-routes.md",
+      "language": "markdown",
+      "lines": 38,
+      "summary": "Prevent Waterfall Chains in API Routes",
+      "tags": [
+        "最佳实践",
+        "异步",
+        "docs",
+        "markdown"
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 1
+      },
+      "complexity": "moderate",
+      "name": "b62_.agents/skills/vercel-react-best-practices/rules1/async-api-routes.md"
+    },
+    {
+      "id": "file:b62_.agents/skills/vercel-react-best-practices/rules1/async-api-routes.md#Prevent Waterfall Chains in API Routes",
+      "type": "section",
+      "label": "Prevent Waterfall Chains in API Routes",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/async-api-routes.md",
+      "language": "markdown",
+      "lines": 0,
+      "summary": "Prevent Waterfall Chains in API Routes",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b62_.agents/skills/vercel-react-best-practices/rules1/async-api-routes.md",
+      "complexity": "moderate",
+      "name": "b62_.agents/skills/vercel-react-best-practices/rules1/async-api-routes.md#Prevent Waterfall Chains in API Routes"
+    },
+    {
+      "id": "file:b62_.agents/skills/vercel-react-best-practices/rules1/async-cheap-condition-before-await.md",
+      "type": "document",
+      "label": "async-cheap-condition-before-await.md",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/async-cheap-condition-before-await.md",
+      "language": "markdown",
+      "lines": 37,
+      "summary": "Check Cheap Conditions Before Async Flags",
+      "tags": [
+        "最佳实践",
+        "异步",
+        "docs",
+        "markdown"
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 1
+      },
+      "complexity": "moderate",
+      "name": "b62_.agents/skills/vercel-react-best-practices/rules1/async-cheap-condition-before-await.md"
+    },
+    {
+      "id": "file:b62_.agents/skills/vercel-react-best-practices/rules1/async-cheap-condition-before-await.md#Check Cheap Conditions Before Async Flags",
+      "type": "section",
+      "label": "Check Cheap Conditions Before Async Flags",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/async-cheap-condition-before-await.md",
+      "language": "markdown",
+      "lines": 0,
+      "summary": "Check Cheap Conditions Before Async Flags",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b62_.agents/skills/vercel-react-best-practices/rules1/async-cheap-condition-before-await.md",
+      "complexity": "moderate",
+      "name": "b62_.agents/skills/vercel-react-best-practices/rules1/async-cheap-condition-before-await.md#Check Cheap Conditions Before Async Flags"
+    },
+    {
+      "id": "file:b62_.agents/skills/vercel-react-best-practices/rules1/async-defer-await.md",
+      "type": "document",
+      "label": "async-defer-await.md",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/async-defer-await.md",
+      "language": "markdown",
+      "lines": 82,
+      "summary": "Defer Await Until Needed",
+      "tags": [
+        "最佳实践",
+        "异步",
+        "docs",
+        "markdown"
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 1
+      },
+      "complexity": "moderate",
+      "name": "b62_.agents/skills/vercel-react-best-practices/rules1/async-defer-await.md"
+    },
+    {
+      "id": "file:b62_.agents/skills/vercel-react-best-practices/rules1/async-defer-await.md#Defer Await Until Needed",
+      "type": "section",
+      "label": "Defer Await Until Needed",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/async-defer-await.md",
+      "language": "markdown",
+      "lines": 0,
+      "summary": "Defer Await Until Needed",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b62_.agents/skills/vercel-react-best-practices/rules1/async-defer-await.md",
+      "complexity": "moderate",
+      "name": "b62_.agents/skills/vercel-react-best-practices/rules1/async-defer-await.md#Defer Await Until Needed"
+    },
+    {
+      "id": "file:b62_.agents/skills/vercel-react-best-practices/rules1/async-dependencies.md",
+      "type": "document",
+      "label": "async-dependencies.md",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/async-dependencies.md",
+      "language": "markdown",
+      "lines": 51,
+      "summary": "Dependency-Based Parallelization",
+      "tags": [
+        "最佳实践",
+        "异步",
+        "docs",
+        "markdown"
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 1
+      },
+      "complexity": "moderate",
+      "name": "b62_.agents/skills/vercel-react-best-practices/rules1/async-dependencies.md"
+    },
+    {
+      "id": "file:b62_.agents/skills/vercel-react-best-practices/rules1/async-dependencies.md#Dependency-Based Parallelization",
+      "type": "section",
+      "label": "Dependency-Based Parallelization",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/async-dependencies.md",
+      "language": "markdown",
+      "lines": 0,
+      "summary": "Dependency-Based Parallelization",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b62_.agents/skills/vercel-react-best-practices/rules1/async-dependencies.md",
+      "complexity": "moderate",
+      "name": "b62_.agents/skills/vercel-react-best-practices/rules1/async-dependencies.md#Dependency-Based Parallelization"
+    },
+    {
+      "id": "file:b62_.agents/skills/vercel-react-best-practices/rules1/async-parallel.md",
+      "type": "document",
+      "label": "async-parallel.md",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/async-parallel.md",
+      "language": "markdown",
+      "lines": 28,
+      "summary": "Promise.all() for Independent Operations",
+      "tags": [
+        "最佳实践",
+        "异步",
+        "docs",
+        "markdown"
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 1
+      },
+      "complexity": "moderate",
+      "name": "b62_.agents/skills/vercel-react-best-practices/rules1/async-parallel.md"
+    },
+    {
+      "id": "file:b62_.agents/skills/vercel-react-best-practices/rules1/async-parallel.md#Promise.all() for Independent Operations",
+      "type": "section",
+      "label": "Promise.all() for Independent Operations",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/async-parallel.md",
+      "language": "markdown",
+      "lines": 0,
+      "summary": "Promise.all() for Independent Operations",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b62_.agents/skills/vercel-react-best-practices/rules1/async-parallel.md",
+      "complexity": "moderate",
+      "name": "b62_.agents/skills/vercel-react-best-practices/rules1/async-parallel.md#Promise.all() for Independent Operations"
+    },
+    {
+      "id": "file:b62_.agents/skills/vercel-react-best-practices/rules1/async-suspense-boundaries.md",
+      "type": "document",
+      "label": "async-suspense-boundaries.md",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/async-suspense-boundaries.md",
+      "language": "markdown",
+      "lines": 99,
+      "summary": "Strategic Suspense Boundaries",
+      "tags": [
+        "最佳实践",
+        "异步",
+        "docs",
+        "markdown"
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 1
+      },
+      "complexity": "moderate",
+      "name": "b62_.agents/skills/vercel-react-best-practices/rules1/async-suspense-boundaries.md"
+    },
+    {
+      "id": "file:b62_.agents/skills/vercel-react-best-practices/rules1/async-suspense-boundaries.md#Strategic Suspense Boundaries",
+      "type": "section",
+      "label": "Strategic Suspense Boundaries",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/async-suspense-boundaries.md",
+      "language": "markdown",
+      "lines": 0,
+      "summary": "Strategic Suspense Boundaries",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b62_.agents/skills/vercel-react-best-practices/rules1/async-suspense-boundaries.md",
+      "complexity": "moderate",
+      "name": "b62_.agents/skills/vercel-react-best-practices/rules1/async-suspense-boundaries.md#Strategic Suspense Boundaries"
+    },
+    {
+      "id": "file:b62_.agents/skills/vercel-react-best-practices/rules1/bundle-analyzable-paths.md",
+      "type": "document",
+      "label": "bundle-analyzable-paths.md",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/bundle-analyzable-paths.md",
+      "language": "markdown",
+      "lines": 63,
+      "summary": "Prefer Statically Analyzable Paths",
+      "tags": [
+        "最佳实践",
+        "docs",
+        "markdown",
+        "打包优化"
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 3
+      },
+      "complexity": "moderate",
+      "name": "b62_.agents/skills/vercel-react-best-practices/rules1/bundle-analyzable-paths.md"
+    },
+    {
+      "id": "file:b62_.agents/skills/vercel-react-best-practices/rules1/bundle-analyzable-paths.md#Prefer Statically Analyzable Paths",
+      "type": "section",
+      "label": "Prefer Statically Analyzable Paths",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/bundle-analyzable-paths.md",
+      "language": "markdown",
+      "lines": 0,
+      "summary": "Prefer Statically Analyzable Paths",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b62_.agents/skills/vercel-react-best-practices/rules1/bundle-analyzable-paths.md",
+      "complexity": "moderate",
+      "name": "b62_.agents/skills/vercel-react-best-practices/rules1/bundle-analyzable-paths.md#Prefer Statically Analyzable Paths"
+    },
+    {
+      "id": "file:b62_.agents/skills/vercel-react-best-practices/rules1/bundle-analyzable-paths.md#Import Paths",
+      "type": "section",
+      "label": "Import Paths",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/bundle-analyzable-paths.md",
+      "language": "markdown",
+      "lines": 0,
+      "summary": "Import Paths",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b62_.agents/skills/vercel-react-best-practices/rules1/bundle-analyzable-paths.md",
+      "complexity": "moderate",
+      "name": "b62_.agents/skills/vercel-react-best-practices/rules1/bundle-analyzable-paths.md#Import Paths"
+    },
+    {
+      "id": "file:b62_.agents/skills/vercel-react-best-practices/rules1/bundle-analyzable-paths.md#File-System Paths",
+      "type": "section",
+      "label": "File-System Paths",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/bundle-analyzable-paths.md",
+      "language": "markdown",
+      "lines": 0,
+      "summary": "File-System Paths",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b62_.agents/skills/vercel-react-best-practices/rules1/bundle-analyzable-paths.md",
+      "complexity": "moderate",
+      "name": "b62_.agents/skills/vercel-react-best-practices/rules1/bundle-analyzable-paths.md#File-System Paths"
+    },
+    {
+      "id": "file:b62_.agents/skills/vercel-react-best-practices/rules1/bundle-barrel-imports.md",
+      "type": "document",
+      "label": "bundle-barrel-imports.md",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/bundle-barrel-imports.md",
+      "language": "markdown",
+      "lines": 60,
+      "summary": "Avoid Barrel File Imports",
+      "tags": [
+        "最佳实践",
+        "docs",
+        "markdown",
+        "打包优化"
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 1
+      },
+      "complexity": "moderate",
+      "name": "b62_.agents/skills/vercel-react-best-practices/rules1/bundle-barrel-imports.md"
+    },
+    {
+      "id": "file:b62_.agents/skills/vercel-react-best-practices/rules1/bundle-barrel-imports.md#Avoid Barrel File Imports",
+      "type": "section",
+      "label": "Avoid Barrel File Imports",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/bundle-barrel-imports.md",
+      "language": "markdown",
+      "lines": 0,
+      "summary": "Avoid Barrel File Imports",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b62_.agents/skills/vercel-react-best-practices/rules1/bundle-barrel-imports.md",
+      "complexity": "moderate",
+      "name": "b62_.agents/skills/vercel-react-best-practices/rules1/bundle-barrel-imports.md#Avoid Barrel File Imports"
+    },
+    {
+      "id": "file:b62_.agents/skills/vercel-react-best-practices/rules1/bundle-conditional.md",
+      "type": "document",
+      "label": "bundle-conditional.md",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/bundle-conditional.md",
+      "language": "markdown",
+      "lines": 31,
+      "summary": "Conditional Module Loading",
+      "tags": [
+        "最佳实践",
+        "docs",
+        "markdown",
+        "打包优化"
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 1
+      },
+      "complexity": "moderate",
+      "name": "b62_.agents/skills/vercel-react-best-practices/rules1/bundle-conditional.md"
+    },
+    {
+      "id": "file:b62_.agents/skills/vercel-react-best-practices/rules1/bundle-conditional.md#Conditional Module Loading",
+      "type": "section",
+      "label": "Conditional Module Loading",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/bundle-conditional.md",
+      "language": "markdown",
+      "lines": 0,
+      "summary": "Conditional Module Loading",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b62_.agents/skills/vercel-react-best-practices/rules1/bundle-conditional.md",
+      "complexity": "moderate",
+      "name": "b62_.agents/skills/vercel-react-best-practices/rules1/bundle-conditional.md#Conditional Module Loading"
+    },
+    {
+      "id": "file:b62_.agents/skills/vercel-react-best-practices/rules1/bundle-defer-third-party.md",
+      "type": "document",
+      "label": "bundle-defer-third-party.md",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/bundle-defer-third-party.md",
+      "language": "markdown",
+      "lines": 49,
+      "summary": "Defer Non-Critical Third-Party Libraries",
+      "tags": [
+        "最佳实践",
+        "docs",
+        "markdown",
+        "打包优化"
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 1
+      },
+      "complexity": "moderate",
+      "name": "b62_.agents/skills/vercel-react-best-practices/rules1/bundle-defer-third-party.md"
+    },
+    {
+      "id": "file:b62_.agents/skills/vercel-react-best-practices/rules1/bundle-defer-third-party.md#Defer Non-Critical Third-Party Libraries",
+      "type": "section",
+      "label": "Defer Non-Critical Third-Party Libraries",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/bundle-defer-third-party.md",
+      "language": "markdown",
+      "lines": 0,
+      "summary": "Defer Non-Critical Third-Party Libraries",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b62_.agents/skills/vercel-react-best-practices/rules1/bundle-defer-third-party.md",
+      "complexity": "moderate",
+      "name": "b62_.agents/skills/vercel-react-best-practices/rules1/bundle-defer-third-party.md#Defer Non-Critical Third-Party Libraries"
+    },
+    {
+      "id": "file:b62_.agents/skills/vercel-react-best-practices/rules1/bundle-dynamic-imports.md",
+      "type": "document",
+      "label": "bundle-dynamic-imports.md",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/bundle-dynamic-imports.md",
+      "language": "markdown",
+      "lines": 35,
+      "summary": "Dynamic Imports for Heavy Components",
+      "tags": [
+        "最佳实践",
+        "docs",
+        "markdown",
+        "打包优化"
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 1
+      },
+      "complexity": "moderate",
+      "name": "b62_.agents/skills/vercel-react-best-practices/rules1/bundle-dynamic-imports.md"
+    },
+    {
+      "id": "file:b62_.agents/skills/vercel-react-best-practices/rules1/bundle-dynamic-imports.md#Dynamic Imports for Heavy Components",
+      "type": "section",
+      "label": "Dynamic Imports for Heavy Components",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/bundle-dynamic-imports.md",
+      "language": "markdown",
+      "lines": 0,
+      "summary": "Dynamic Imports for Heavy Components",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b62_.agents/skills/vercel-react-best-practices/rules1/bundle-dynamic-imports.md",
+      "complexity": "moderate",
+      "name": "b62_.agents/skills/vercel-react-best-practices/rules1/bundle-dynamic-imports.md#Dynamic Imports for Heavy Components"
+    },
+    {
+      "id": "file:b62_.agents/skills/vercel-react-best-practices/rules1/bundle-preload.md",
+      "type": "document",
+      "label": "bundle-preload.md",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/bundle-preload.md",
+      "language": "markdown",
+      "lines": 50,
+      "summary": "Preload Based on User Intent",
+      "tags": [
+        "最佳实践",
+        "docs",
+        "markdown",
+        "打包优化"
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 1
+      },
+      "complexity": "moderate",
+      "name": "b62_.agents/skills/vercel-react-best-practices/rules1/bundle-preload.md"
+    },
+    {
+      "id": "file:b62_.agents/skills/vercel-react-best-practices/rules1/bundle-preload.md#Preload Based on User Intent",
+      "type": "section",
+      "label": "Preload Based on User Intent",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/bundle-preload.md",
+      "language": "markdown",
+      "lines": 0,
+      "summary": "Preload Based on User Intent",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b62_.agents/skills/vercel-react-best-practices/rules1/bundle-preload.md",
+      "complexity": "moderate",
+      "name": "b62_.agents/skills/vercel-react-best-practices/rules1/bundle-preload.md#Preload Based on User Intent"
+    },
+    {
+      "id": "file:b62_.agents/skills/vercel-react-best-practices/rules1/client-event-listeners.md",
+      "type": "document",
+      "label": "client-event-listeners.md",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/client-event-listeners.md",
+      "language": "markdown",
+      "lines": 74,
+      "summary": "Deduplicate Global Event Listeners",
+      "tags": [
+        "最佳实践",
+        "docs",
+        "客户端",
+        "markdown"
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 1
+      },
+      "complexity": "moderate",
+      "name": "b62_.agents/skills/vercel-react-best-practices/rules1/client-event-listeners.md"
+    },
+    {
+      "id": "file:b62_.agents/skills/vercel-react-best-practices/rules1/client-event-listeners.md#Deduplicate Global Event Listeners",
+      "type": "section",
+      "label": "Deduplicate Global Event Listeners",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/client-event-listeners.md",
+      "language": "markdown",
+      "lines": 0,
+      "summary": "Deduplicate Global Event Listeners",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b62_.agents/skills/vercel-react-best-practices/rules1/client-event-listeners.md",
+      "complexity": "moderate",
+      "name": "b62_.agents/skills/vercel-react-best-practices/rules1/client-event-listeners.md#Deduplicate Global Event Listeners"
+    },
+    {
+      "id": "file:b62_.agents/skills/vercel-react-best-practices/rules1/client-localstorage-schema.md",
+      "type": "document",
+      "label": "client-localstorage-schema.md",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/client-localstorage-schema.md",
+      "language": "markdown",
+      "lines": 71,
+      "summary": "Version and Minimize localStorage Data",
+      "tags": [
+        "最佳实践",
+        "docs",
+        "客户端",
+        "markdown"
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 1
+      },
+      "complexity": "moderate",
+      "name": "b62_.agents/skills/vercel-react-best-practices/rules1/client-localstorage-schema.md"
+    },
+    {
+      "id": "file:b62_.agents/skills/vercel-react-best-practices/rules1/client-localstorage-schema.md#Version and Minimize localStorage Data",
+      "type": "section",
+      "label": "Version and Minimize localStorage Data",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/client-localstorage-schema.md",
+      "language": "markdown",
+      "lines": 0,
+      "summary": "Version and Minimize localStorage Data",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b62_.agents/skills/vercel-react-best-practices/rules1/client-localstorage-schema.md",
+      "complexity": "moderate",
+      "name": "b62_.agents/skills/vercel-react-best-practices/rules1/client-localstorage-schema.md#Version and Minimize localStorage Data"
+    }
+  ],
+  "edges": [
+    {
+      "id": "b62_.agents/skills/vercel-react-best-practices/rules1/_sections.md--contains--b62_.agents/skills/vercel-react-best-practices/rules1/_sections.md#Sections",
+      "source": "file:b62_.agents/skills/vercel-react-best-practices/rules1/_sections.md",
+      "target": "file:b62_.agents/skills/vercel-react-best-practices/rules1/_sections.md#Sections",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    },
+    {
+      "id": "b62_.agents/skills/vercel-react-best-practices/rules1/_sections.md--contains--b62_.agents/skills/vercel-react-best-practices/rules1/_sections.md#1. Eliminating Waterfalls (async)",
+      "source": "file:b62_.agents/skills/vercel-react-best-practices/rules1/_sections.md",
+      "target": "file:b62_.agents/skills/vercel-react-best-practices/rules1/_sections.md#1. Eliminating Waterfalls (async)",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    },
+    {
+      "id": "b62_.agents/skills/vercel-react-best-practices/rules1/_sections.md--contains--b62_.agents/skills/vercel-react-best-practices/rules1/_sections.md#2. Bundle Size Optimization (bundle)",
+      "source": "file:b62_.agents/skills/vercel-react-best-practices/rules1/_sections.md",
+      "target": "file:b62_.agents/skills/vercel-react-best-practices/rules1/_sections.md#2. Bundle Size Optimization (bundle)",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    },
+    {
+      "id": "b62_.agents/skills/vercel-react-best-practices/rules1/_sections.md--contains--b62_.agents/skills/vercel-react-best-practices/rules1/_sections.md#3. Server-Side Performance (server)",
+      "source": "file:b62_.agents/skills/vercel-react-best-practices/rules1/_sections.md",
+      "target": "file:b62_.agents/skills/vercel-react-best-practices/rules1/_sections.md#3. Server-Side Performance (server)",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    },
+    {
+      "id": "b62_.agents/skills/vercel-react-best-practices/rules1/_sections.md--contains--b62_.agents/skills/vercel-react-best-practices/rules1/_sections.md#4. Client-Side Data Fetching (client)",
+      "source": "file:b62_.agents/skills/vercel-react-best-practices/rules1/_sections.md",
+      "target": "file:b62_.agents/skills/vercel-react-best-practices/rules1/_sections.md#4. Client-Side Data Fetching (client)",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    },
+    {
+      "id": "b62_.agents/skills/vercel-react-best-practices/rules1/_sections.md--contains--b62_.agents/skills/vercel-react-best-practices/rules1/_sections.md#5. Re-render Optimization (rerender)",
+      "source": "file:b62_.agents/skills/vercel-react-best-practices/rules1/_sections.md",
+      "target": "file:b62_.agents/skills/vercel-react-best-practices/rules1/_sections.md#5. Re-render Optimization (rerender)",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    },
+    {
+      "id": "b62_.agents/skills/vercel-react-best-practices/rules1/_sections.md--contains--b62_.agents/skills/vercel-react-best-practices/rules1/_sections.md#6. Rendering Performance (rendering)",
+      "source": "file:b62_.agents/skills/vercel-react-best-practices/rules1/_sections.md",
+      "target": "file:b62_.agents/skills/vercel-react-best-practices/rules1/_sections.md#6. Rendering Performance (rendering)",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    },
+    {
+      "id": "b62_.agents/skills/vercel-react-best-practices/rules1/_sections.md--contains--b62_.agents/skills/vercel-react-best-practices/rules1/_sections.md#7. JavaScript Performance (js)",
+      "source": "file:b62_.agents/skills/vercel-react-best-practices/rules1/_sections.md",
+      "target": "file:b62_.agents/skills/vercel-react-best-practices/rules1/_sections.md#7. JavaScript Performance (js)",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    },
+    {
+      "id": "b62_.agents/skills/vercel-react-best-practices/rules1/_sections.md--contains--b62_.agents/skills/vercel-react-best-practices/rules1/_sections.md#8. Advanced Patterns (advanced)",
+      "source": "file:b62_.agents/skills/vercel-react-best-practices/rules1/_sections.md",
+      "target": "file:b62_.agents/skills/vercel-react-best-practices/rules1/_sections.md#8. Advanced Patterns (advanced)",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    },
+    {
+      "id": "b62_.agents/skills/vercel-react-best-practices/rules1/_template.md--contains--b62_.agents/skills/vercel-react-best-practices/rules1/_template.md#Rule Title Here",
+      "source": "file:b62_.agents/skills/vercel-react-best-practices/rules1/_template.md",
+      "target": "file:b62_.agents/skills/vercel-react-best-practices/rules1/_template.md#Rule Title Here",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    },
+    {
+      "id": "b62_.agents/skills/vercel-react-best-practices/rules1/advanced-effect-event-deps.md--contains--b62_.agents/skills/vercel-react-best-practices/rules1/advanced-effect-event-deps.md#Do Not Put Effect Events in Dependency Arrays",
+      "source": "file:b62_.agents/skills/vercel-react-best-practices/rules1/advanced-effect-event-deps.md",
+      "target": "file:b62_.agents/skills/vercel-react-best-practices/rules1/advanced-effect-event-deps.md#Do Not Put Effect Events in Dependency Arrays",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    },
+    {
+      "id": "b62_.agents/skills/vercel-react-best-practices/rules1/advanced-event-handler-refs.md--contains--b62_.agents/skills/vercel-react-best-practices/rules1/advanced-event-handler-refs.md#Store Event Handlers in Refs",
+      "source": "file:b62_.agents/skills/vercel-react-best-practices/rules1/advanced-event-handler-refs.md",
+      "target": "file:b62_.agents/skills/vercel-react-best-practices/rules1/advanced-event-handler-refs.md#Store Event Handlers in Refs",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    },
+    {
+      "id": "b62_.agents/skills/vercel-react-best-practices/rules1/advanced-init-once.md--contains--b62_.agents/skills/vercel-react-best-practices/rules1/advanced-init-once.md#Initialize App Once, Not Per Mount",
+      "source": "file:b62_.agents/skills/vercel-react-best-practices/rules1/advanced-init-once.md",
+      "target": "file:b62_.agents/skills/vercel-react-best-practices/rules1/advanced-init-once.md#Initialize App Once, Not Per Mount",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    },
+    {
+      "id": "b62_.agents/skills/vercel-react-best-practices/rules1/advanced-use-latest.md--contains--b62_.agents/skills/vercel-react-best-practices/rules1/advanced-use-latest.md#useEffectEvent for Stable Callback Refs",
+      "source": "file:b62_.agents/skills/vercel-react-best-practices/rules1/advanced-use-latest.md",
+      "target": "file:b62_.agents/skills/vercel-react-best-practices/rules1/advanced-use-latest.md#useEffectEvent for Stable Callback Refs",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    },
+    {
+      "id": "b62_.agents/skills/vercel-react-best-practices/rules1/async-api-routes.md--contains--b62_.agents/skills/vercel-react-best-practices/rules1/async-api-routes.md#Prevent Waterfall Chains in API Routes",
+      "source": "file:b62_.agents/skills/vercel-react-best-practices/rules1/async-api-routes.md",
+      "target": "file:b62_.agents/skills/vercel-react-best-practices/rules1/async-api-routes.md#Prevent Waterfall Chains in API Routes",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    },
+    {
+      "id": "b62_.agents/skills/vercel-react-best-practices/rules1/async-cheap-condition-before-await.md--contains--b62_.agents/skills/vercel-react-best-practices/rules1/async-cheap-condition-before-await.md#Check Cheap Conditions Before Async Flags",
+      "source": "file:b62_.agents/skills/vercel-react-best-practices/rules1/async-cheap-condition-before-await.md",
+      "target": "file:b62_.agents/skills/vercel-react-best-practices/rules1/async-cheap-condition-before-await.md#Check Cheap Conditions Before Async Flags",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    },
+    {
+      "id": "b62_.agents/skills/vercel-react-best-practices/rules1/async-defer-await.md--contains--b62_.agents/skills/vercel-react-best-practices/rules1/async-defer-await.md#Defer Await Until Needed",
+      "source": "file:b62_.agents/skills/vercel-react-best-practices/rules1/async-defer-await.md",
+      "target": "file:b62_.agents/skills/vercel-react-best-practices/rules1/async-defer-await.md#Defer Await Until Needed",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    },
+    {
+      "id": "b62_.agents/skills/vercel-react-best-practices/rules1/async-dependencies.md--contains--b62_.agents/skills/vercel-react-best-practices/rules1/async-dependencies.md#Dependency-Based Parallelization",
+      "source": "file:b62_.agents/skills/vercel-react-best-practices/rules1/async-dependencies.md",
+      "target": "file:b62_.agents/skills/vercel-react-best-practices/rules1/async-dependencies.md#Dependency-Based Parallelization",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    },
+    {
+      "id": "b62_.agents/skills/vercel-react-best-practices/rules1/async-parallel.md--contains--b62_.agents/skills/vercel-react-best-practices/rules1/async-parallel.md#Promise.all() for Independent Operations",
+      "source": "file:b62_.agents/skills/vercel-react-best-practices/rules1/async-parallel.md",
+      "target": "file:b62_.agents/skills/vercel-react-best-practices/rules1/async-parallel.md#Promise.all() for Independent Operations",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    },
+    {
+      "id": "b62_.agents/skills/vercel-react-best-practices/rules1/async-suspense-boundaries.md--contains--b62_.agents/skills/vercel-react-best-practices/rules1/async-suspense-boundaries.md#Strategic Suspense Boundaries",
+      "source": "file:b62_.agents/skills/vercel-react-best-practices/rules1/async-suspense-boundaries.md",
+      "target": "file:b62_.agents/skills/vercel-react-best-practices/rules1/async-suspense-boundaries.md#Strategic Suspense Boundaries",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    },
+    {
+      "id": "b62_.agents/skills/vercel-react-best-practices/rules1/bundle-analyzable-paths.md--contains--b62_.agents/skills/vercel-react-best-practices/rules1/bundle-analyzable-paths.md#Prefer Statically Analyzable Paths",
+      "source": "file:b62_.agents/skills/vercel-react-best-practices/rules1/bundle-analyzable-paths.md",
+      "target": "file:b62_.agents/skills/vercel-react-best-practices/rules1/bundle-analyzable-paths.md#Prefer Statically Analyzable Paths",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    },
+    {
+      "id": "b62_.agents/skills/vercel-react-best-practices/rules1/bundle-analyzable-paths.md--contains--b62_.agents/skills/vercel-react-best-practices/rules1/bundle-analyzable-paths.md#Import Paths",
+      "source": "file:b62_.agents/skills/vercel-react-best-practices/rules1/bundle-analyzable-paths.md",
+      "target": "file:b62_.agents/skills/vercel-react-best-practices/rules1/bundle-analyzable-paths.md#Import Paths",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    },
+    {
+      "id": "b62_.agents/skills/vercel-react-best-practices/rules1/bundle-analyzable-paths.md--contains--b62_.agents/skills/vercel-react-best-practices/rules1/bundle-analyzable-paths.md#File-System Paths",
+      "source": "file:b62_.agents/skills/vercel-react-best-practices/rules1/bundle-analyzable-paths.md",
+      "target": "file:b62_.agents/skills/vercel-react-best-practices/rules1/bundle-analyzable-paths.md#File-System Paths",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    },
+    {
+      "id": "b62_.agents/skills/vercel-react-best-practices/rules1/bundle-barrel-imports.md--contains--b62_.agents/skills/vercel-react-best-practices/rules1/bundle-barrel-imports.md#Avoid Barrel File Imports",
+      "source": "file:b62_.agents/skills/vercel-react-best-practices/rules1/bundle-barrel-imports.md",
+      "target": "file:b62_.agents/skills/vercel-react-best-practices/rules1/bundle-barrel-imports.md#Avoid Barrel File Imports",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    },
+    {
+      "id": "b62_.agents/skills/vercel-react-best-practices/rules1/bundle-conditional.md--contains--b62_.agents/skills/vercel-react-best-practices/rules1/bundle-conditional.md#Conditional Module Loading",
+      "source": "file:b62_.agents/skills/vercel-react-best-practices/rules1/bundle-conditional.md",
+      "target": "file:b62_.agents/skills/vercel-react-best-practices/rules1/bundle-conditional.md#Conditional Module Loading",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    },
+    {
+      "id": "b62_.agents/skills/vercel-react-best-practices/rules1/bundle-defer-third-party.md--contains--b62_.agents/skills/vercel-react-best-practices/rules1/bundle-defer-third-party.md#Defer Non-Critical Third-Party Libraries",
+      "source": "file:b62_.agents/skills/vercel-react-best-practices/rules1/bundle-defer-third-party.md",
+      "target": "file:b62_.agents/skills/vercel-react-best-practices/rules1/bundle-defer-third-party.md#Defer Non-Critical Third-Party Libraries",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    },
+    {
+      "id": "b62_.agents/skills/vercel-react-best-practices/rules1/bundle-dynamic-imports.md--contains--b62_.agents/skills/vercel-react-best-practices/rules1/bundle-dynamic-imports.md#Dynamic Imports for Heavy Components",
+      "source": "file:b62_.agents/skills/vercel-react-best-practices/rules1/bundle-dynamic-imports.md",
+      "target": "file:b62_.agents/skills/vercel-react-best-practices/rules1/bundle-dynamic-imports.md#Dynamic Imports for Heavy Components",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    },
+    {
+      "id": "b62_.agents/skills/vercel-react-best-practices/rules1/bundle-preload.md--contains--b62_.agents/skills/vercel-react-best-practices/rules1/bundle-preload.md#Preload Based on User Intent",
+      "source": "file:b62_.agents/skills/vercel-react-best-practices/rules1/bundle-preload.md",
+      "target": "file:b62_.agents/skills/vercel-react-best-practices/rules1/bundle-preload.md#Preload Based on User Intent",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    },
+    {
+      "id": "b62_.agents/skills/vercel-react-best-practices/rules1/client-event-listeners.md--contains--b62_.agents/skills/vercel-react-best-practices/rules1/client-event-listeners.md#Deduplicate Global Event Listeners",
+      "source": "file:b62_.agents/skills/vercel-react-best-practices/rules1/client-event-listeners.md",
+      "target": "file:b62_.agents/skills/vercel-react-best-practices/rules1/client-event-listeners.md#Deduplicate Global Event Listeners",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    },
+    {
+      "id": "b62_.agents/skills/vercel-react-best-practices/rules1/client-localstorage-schema.md--contains--b62_.agents/skills/vercel-react-best-practices/rules1/client-localstorage-schema.md#Version and Minimize localStorage Data",
+      "source": "file:b62_.agents/skills/vercel-react-best-practices/rules1/client-localstorage-schema.md",
+      "target": "file:b62_.agents/skills/vercel-react-best-practices/rules1/client-localstorage-schema.md#Version and Minimize localStorage Data",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    }
+  ]
+}

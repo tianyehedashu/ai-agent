@@ -54,6 +54,7 @@ from domains.gateway.application.model_list_pipeline import (
     ModelListIdsResult,
     ModelListPageResult,
     ModelListQuery,
+    _filter_merged_rows_deployable,
     list_gateway_model_ids,
     list_gateway_models_page,
     list_personal_models_page,
@@ -77,6 +78,7 @@ from domains.gateway.domain.policies.model_registry_scope import (
     exclude_user_scope_credentials_for_registry,
     filter_system_registry_rows,
     is_requestable_registry_scope,
+    uses_merged_registry_list,
 )
 from domains.gateway.domain.policies.quota_rule_visibility import (
     member_user_budget_visible_in_team,
@@ -557,7 +559,9 @@ class GatewayManagementReadService(GatewayUsageLogReadMixin):
         if registry_scope == "system_requestable":
             merged = filter_system_registry_rows(merged)
         if is_requestable_registry_scope(registry_scope):
-            return [row for row in merged if is_connectivity_requestable(row.last_test_status)]
+            merged = [row for row in merged if is_connectivity_requestable(row.last_test_status)]
+        if uses_merged_registry_list(registry_scope):
+            merged = await _filter_merged_rows_deployable(self._session, merged)
         return merged
 
     async def map_system_credentials_by_id(

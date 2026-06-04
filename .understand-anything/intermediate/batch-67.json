@@ -1,0 +1,109 @@
+{
+  "nodes": [
+    {
+      "id": "file:README.md",
+      "type": "file",
+      "label": "README.md",
+      "path": ".agents/skills/vercel-react-view-transitions/README.md",
+      "language": "markdown",
+      "summary": "React View Transitions Skill 的入口说明文档，概述该 Skill 涵盖的动画能力（ViewTransition 组件、addTransitionType、共享元素过渡、Next.js 集成等）、目录结构、安装方式及相关资源链接。",
+      "tags": ["文档", "Skill", "React", "ViewTransition", "动画", "Next.js"],
+      "metrics": { "lines": 42, "sections": 5 }
+    },
+    {
+      "id": "file:SKILL.md",
+      "type": "file",
+      "label": "SKILL.md",
+      "path": ".agents/skills/vercel-react-view-transitions/SKILL.md",
+      "language": "markdown",
+      "summary": "React View Transitions Skill 的核心文档，系统讲解 React View Transition API 的实现方法。涵盖动画触发时机、ViewTransition 组件用法、CSS 伪元素样式、Transition Types、共享元素过渡、常见模式（进入/退出、列表重排、Suspense 回退）、多个 VT 的交互规则、Next.js 集成及无障碍支持。",
+      "tags": ["文档", "Skill", "React", "ViewTransition", "动画", "CSS", "Next.js", "无障碍"],
+      "metrics": { "lines": 320, "sections": 30 }
+    },
+    {
+      "id": "file:metadata.json",
+      "type": "file",
+      "label": "metadata.json",
+      "path": ".agents/skills/vercel-react-view-transitions/metadata.json",
+      "language": "json",
+      "summary": "Skill 元数据配置文件，包含版本号（1.0.0）、组织（Vercel Engineering）、发布日期（2026年3月）、摘要及外部参考链接。",
+      "tags": ["配置", "Skill", "元数据", "Vercel"],
+      "metrics": { "lines": 12, "sections": 5 }
+    },
+    {
+      "id": "symbol:DirectionalTransition",
+      "type": "function",
+      "label": "DirectionalTransition",
+      "path": ".agents/skills/vercel-react-view-transitions/SKILL.md",
+      "language": "jsx",
+      "summary": "可复用的方向性过渡包装组件示例，根据导航方向（nav-forward / nav-back）应用不同的进入/退出动画类，默认禁用动画。",
+      "tags": ["组件", "React", "ViewTransition", "动画"],
+      "parent": "file:SKILL.md"
+    }
+  ],
+  "edges": [
+    {
+      "id": "edge:README-contains-structure",
+      "type": "contains",
+      "source": "file:README.md",
+      "target": "file:SKILL.md",
+      "label": "引用核心文档"
+    },
+    {
+      "id": "edge:README-contains-metadata",
+      "type": "contains",
+      "source": "file:README.md",
+      "target": "file:metadata.json",
+      "label": "同级目录"
+    },
+    {
+      "id": "edge:SKILL-contains-symbol",
+      "type": "contains",
+      "source": "file:SKILL.md",
+      "target": "symbol:DirectionalTransition",
+      "label": "包含组件示例"
+    },
+    {
+      "id": "edge:SKILL-ref-css-recipes",
+      "type": "imports",
+      "source": "file:SKILL.md",
+      "target": "references/css-recipes.md",
+      "label": "引用 CSS 动画配方"
+    },
+    {
+      "id": "edge:SKILL-ref-implementation",
+      "type": "imports",
+      "source": "file:SKILL.md",
+      "target": "references/implementation.md",
+      "label": "引用实现工作流"
+    },
+    {
+      "id": "edge:SKILL-ref-patterns",
+      "type": "imports",
+      "source": "file:SKILL.md",
+      "target": "references/patterns.md",
+      "label": "引用模式与事件 API"
+    },
+    {
+      "id": "edge:SKILL-ref-nextjs",
+      "type": "imports",
+      "source": "file:SKILL.md",
+      "target": "references/nextjs.md",
+      "label": "引用 Next.js 集成"
+    },
+    {
+      "id": "edge:SKILL-ref-agents",
+      "type": "imports",
+      "source": "file:SKILL.md",
+      "target": "AGENTS.md",
+      "label": "引用完整编译文档"
+    },
+    {
+      "id": "edge:metadata-describes-skill",
+      "type": "contains",
+      "source": "file:metadata.json",
+      "target": "file:SKILL.md",
+      "label": "描述"
+    }
+  ]
+}

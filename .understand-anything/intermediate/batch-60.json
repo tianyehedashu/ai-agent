@@ -1,0 +1,574 @@
+{
+  "nodes": [
+    {
+      "id": "file:b60_.agents/skills/vercel-composition-patterns/rules1/_sections.md",
+      "type": "document",
+      "label": "_sections.md",
+      "path": ".agents/skills/vercel-composition-patterns/rules1/_sections.md",
+      "language": "markdown",
+      "lines": 29,
+      "summary": "Sections",
+      "tags": [
+        "组合模式",
+        "docs",
+        "设计模式",
+        "markdown"
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 5
+      },
+      "complexity": "moderate",
+      "name": "b60_.agents/skills/vercel-composition-patterns/rules1/_sections.md"
+    },
+    {
+      "id": "file:b60_.agents/skills/vercel-composition-patterns/rules1/_sections.md#Sections",
+      "type": "section",
+      "label": "Sections",
+      "path": ".agents/skills/vercel-composition-patterns/rules1/_sections.md",
+      "language": "markdown",
+      "lines": 0,
+      "summary": "Sections",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b60_.agents/skills/vercel-composition-patterns/rules1/_sections.md",
+      "complexity": "moderate",
+      "name": "b60_.agents/skills/vercel-composition-patterns/rules1/_sections.md#Sections"
+    },
+    {
+      "id": "file:b60_.agents/skills/vercel-composition-patterns/rules1/_sections.md#1. Component Architecture (architecture)",
+      "type": "section",
+      "label": "1. Component Architecture (architecture)",
+      "path": ".agents/skills/vercel-composition-patterns/rules1/_sections.md",
+      "language": "markdown",
+      "lines": 0,
+      "summary": "1. Component Architecture (architecture)",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b60_.agents/skills/vercel-composition-patterns/rules1/_sections.md",
+      "complexity": "moderate",
+      "name": "b60_.agents/skills/vercel-composition-patterns/rules1/_sections.md#1. Component Architecture (architecture)"
+    },
+    {
+      "id": "file:b60_.agents/skills/vercel-composition-patterns/rules1/_sections.md#2. State Management (state)",
+      "type": "section",
+      "label": "2. State Management (state)",
+      "path": ".agents/skills/vercel-composition-patterns/rules1/_sections.md",
+      "language": "markdown",
+      "lines": 0,
+      "summary": "2. State Management (state)",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b60_.agents/skills/vercel-composition-patterns/rules1/_sections.md",
+      "complexity": "moderate",
+      "name": "b60_.agents/skills/vercel-composition-patterns/rules1/_sections.md#2. State Management (state)"
+    },
+    {
+      "id": "file:b60_.agents/skills/vercel-composition-patterns/rules1/_sections.md#3. Implementation Patterns (patterns)",
+      "type": "section",
+      "label": "3. Implementation Patterns (patterns)",
+      "path": ".agents/skills/vercel-composition-patterns/rules1/_sections.md",
+      "language": "markdown",
+      "lines": 0,
+      "summary": "3. Implementation Patterns (patterns)",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b60_.agents/skills/vercel-composition-patterns/rules1/_sections.md",
+      "complexity": "moderate",
+      "name": "b60_.agents/skills/vercel-composition-patterns/rules1/_sections.md#3. Implementation Patterns (patterns)"
+    },
+    {
+      "id": "file:b60_.agents/skills/vercel-composition-patterns/rules1/_sections.md#4. React 19 APIs (react19)",
+      "type": "section",
+      "label": "4. React 19 APIs (react19)",
+      "path": ".agents/skills/vercel-composition-patterns/rules1/_sections.md",
+      "language": "markdown",
+      "lines": 0,
+      "summary": "4. React 19 APIs (react19)",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b60_.agents/skills/vercel-composition-patterns/rules1/_sections.md",
+      "complexity": "moderate",
+      "name": "b60_.agents/skills/vercel-composition-patterns/rules1/_sections.md#4. React 19 APIs (react19)"
+    },
+    {
+      "id": "file:b60_.agents/skills/vercel-composition-patterns/rules1/_template.md",
+      "type": "document",
+      "label": "_template.md",
+      "path": ".agents/skills/vercel-composition-patterns/rules1/_template.md",
+      "language": "markdown",
+      "lines": 24,
+      "summary": "Rule Title Here",
+      "tags": [
+        "组合模式",
+        "docs",
+        "设计模式",
+        "markdown"
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 1
+      },
+      "complexity": "moderate",
+      "name": "b60_.agents/skills/vercel-composition-patterns/rules1/_template.md"
+    },
+    {
+      "id": "file:b60_.agents/skills/vercel-composition-patterns/rules1/_template.md#Rule Title Here",
+      "type": "section",
+      "label": "Rule Title Here",
+      "path": ".agents/skills/vercel-composition-patterns/rules1/_template.md",
+      "language": "markdown",
+      "lines": 0,
+      "summary": "Rule Title Here",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b60_.agents/skills/vercel-composition-patterns/rules1/_template.md",
+      "complexity": "moderate",
+      "name": "b60_.agents/skills/vercel-composition-patterns/rules1/_template.md#Rule Title Here"
+    },
+    {
+      "id": "file:b60_.agents/skills/vercel-composition-patterns/rules1/architecture-avoid-boolean-props.md",
+      "type": "document",
+      "label": "architecture-avoid-boolean-props.md",
+      "path": ".agents/skills/vercel-composition-patterns/rules1/architecture-avoid-boolean-props.md",
+      "language": "markdown",
+      "lines": 100,
+      "summary": "Avoid Boolean Prop Proliferation",
+      "tags": [
+        "组合模式",
+        "架构",
+        "markdown",
+        "docs",
+        "设计模式"
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 1
+      },
+      "complexity": "moderate",
+      "name": "b60_.agents/skills/vercel-composition-patterns/rules1/architecture-avoid-boolean-props.md"
+    },
+    {
+      "id": "file:b60_.agents/skills/vercel-composition-patterns/rules1/architecture-avoid-boolean-props.md#Avoid Boolean Prop Proliferation",
+      "type": "section",
+      "label": "Avoid Boolean Prop Proliferation",
+      "path": ".agents/skills/vercel-composition-patterns/rules1/architecture-avoid-boolean-props.md",
+      "language": "markdown",
+      "lines": 0,
+      "summary": "Avoid Boolean Prop Proliferation",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b60_.agents/skills/vercel-composition-patterns/rules1/architecture-avoid-boolean-props.md",
+      "complexity": "moderate",
+      "name": "b60_.agents/skills/vercel-composition-patterns/rules1/architecture-avoid-boolean-props.md#Avoid Boolean Prop Proliferation"
+    },
+    {
+      "id": "file:b60_.agents/skills/vercel-composition-patterns/rules1/architecture-compound-components.md",
+      "type": "document",
+      "label": "architecture-compound-components.md",
+      "path": ".agents/skills/vercel-composition-patterns/rules1/architecture-compound-components.md",
+      "language": "markdown",
+      "lines": 112,
+      "summary": "Use Compound Components",
+      "tags": [
+        "组合模式",
+        "架构",
+        "markdown",
+        "docs",
+        "设计模式"
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 1
+      },
+      "complexity": "moderate",
+      "name": "b60_.agents/skills/vercel-composition-patterns/rules1/architecture-compound-components.md"
+    },
+    {
+      "id": "file:b60_.agents/skills/vercel-composition-patterns/rules1/architecture-compound-components.md#Use Compound Components",
+      "type": "section",
+      "label": "Use Compound Components",
+      "path": ".agents/skills/vercel-composition-patterns/rules1/architecture-compound-components.md",
+      "language": "markdown",
+      "lines": 0,
+      "summary": "Use Compound Components",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b60_.agents/skills/vercel-composition-patterns/rules1/architecture-compound-components.md",
+      "complexity": "moderate",
+      "name": "b60_.agents/skills/vercel-composition-patterns/rules1/architecture-compound-components.md#Use Compound Components"
+    },
+    {
+      "id": "file:b60_.agents/skills/vercel-composition-patterns/rules1/patterns-children-over-render-props.md",
+      "type": "document",
+      "label": "patterns-children-over-render-props.md",
+      "path": ".agents/skills/vercel-composition-patterns/rules1/patterns-children-over-render-props.md",
+      "language": "markdown",
+      "lines": 87,
+      "summary": "Prefer Children Over Render Props",
+      "tags": [
+        "组合模式",
+        "docs",
+        "设计模式",
+        "markdown"
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 1
+      },
+      "complexity": "moderate",
+      "name": "b60_.agents/skills/vercel-composition-patterns/rules1/patterns-children-over-render-props.md"
+    },
+    {
+      "id": "file:b60_.agents/skills/vercel-composition-patterns/rules1/patterns-children-over-render-props.md#Prefer Children Over Render Props",
+      "type": "section",
+      "label": "Prefer Children Over Render Props",
+      "path": ".agents/skills/vercel-composition-patterns/rules1/patterns-children-over-render-props.md",
+      "language": "markdown",
+      "lines": 0,
+      "summary": "Prefer Children Over Render Props",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b60_.agents/skills/vercel-composition-patterns/rules1/patterns-children-over-render-props.md",
+      "complexity": "moderate",
+      "name": "b60_.agents/skills/vercel-composition-patterns/rules1/patterns-children-over-render-props.md#Prefer Children Over Render Props"
+    },
+    {
+      "id": "file:b60_.agents/skills/vercel-composition-patterns/rules1/patterns-explicit-variants.md",
+      "type": "document",
+      "label": "patterns-explicit-variants.md",
+      "path": ".agents/skills/vercel-composition-patterns/rules1/patterns-explicit-variants.md",
+      "language": "markdown",
+      "lines": 100,
+      "summary": "Create Explicit Component Variants",
+      "tags": [
+        "组合模式",
+        "docs",
+        "设计模式",
+        "markdown"
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 1
+      },
+      "complexity": "moderate",
+      "name": "b60_.agents/skills/vercel-composition-patterns/rules1/patterns-explicit-variants.md"
+    },
+    {
+      "id": "file:b60_.agents/skills/vercel-composition-patterns/rules1/patterns-explicit-variants.md#Create Explicit Component Variants",
+      "type": "section",
+      "label": "Create Explicit Component Variants",
+      "path": ".agents/skills/vercel-composition-patterns/rules1/patterns-explicit-variants.md",
+      "language": "markdown",
+      "lines": 0,
+      "summary": "Create Explicit Component Variants",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b60_.agents/skills/vercel-composition-patterns/rules1/patterns-explicit-variants.md",
+      "complexity": "moderate",
+      "name": "b60_.agents/skills/vercel-composition-patterns/rules1/patterns-explicit-variants.md#Create Explicit Component Variants"
+    },
+    {
+      "id": "file:b60_.agents/skills/vercel-composition-patterns/rules1/react19-no-forwardref.md",
+      "type": "document",
+      "label": "react19-no-forwardref.md",
+      "path": ".agents/skills/vercel-composition-patterns/rules1/react19-no-forwardref.md",
+      "language": "markdown",
+      "lines": 42,
+      "summary": "React 19 API Changes",
+      "tags": [
+        "组合模式",
+        "React 19",
+        "markdown",
+        "docs",
+        "设计模式"
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 1
+      },
+      "complexity": "moderate",
+      "name": "b60_.agents/skills/vercel-composition-patterns/rules1/react19-no-forwardref.md"
+    },
+    {
+      "id": "file:b60_.agents/skills/vercel-composition-patterns/rules1/react19-no-forwardref.md#React 19 API Changes",
+      "type": "section",
+      "label": "React 19 API Changes",
+      "path": ".agents/skills/vercel-composition-patterns/rules1/react19-no-forwardref.md",
+      "language": "markdown",
+      "lines": 0,
+      "summary": "React 19 API Changes",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b60_.agents/skills/vercel-composition-patterns/rules1/react19-no-forwardref.md",
+      "complexity": "moderate",
+      "name": "b60_.agents/skills/vercel-composition-patterns/rules1/react19-no-forwardref.md#React 19 API Changes"
+    },
+    {
+      "id": "file:b60_.agents/skills/vercel-composition-patterns/rules1/state-context-interface.md",
+      "type": "document",
+      "label": "state-context-interface.md",
+      "path": ".agents/skills/vercel-composition-patterns/rules1/state-context-interface.md",
+      "language": "markdown",
+      "lines": 191,
+      "summary": "Define Generic Context Interfaces for Dependency Injection",
+      "tags": [
+        "组合模式",
+        "markdown",
+        "docs",
+        "设计模式",
+        "状态管理"
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 1
+      },
+      "complexity": "moderate",
+      "name": "b60_.agents/skills/vercel-composition-patterns/rules1/state-context-interface.md"
+    },
+    {
+      "id": "file:b60_.agents/skills/vercel-composition-patterns/rules1/state-context-interface.md#Define Generic Context Interfaces for Dependency Injection",
+      "type": "section",
+      "label": "Define Generic Context Interfaces for Dependency Injection",
+      "path": ".agents/skills/vercel-composition-patterns/rules1/state-context-interface.md",
+      "language": "markdown",
+      "lines": 0,
+      "summary": "Define Generic Context Interfaces for Dependency Injection",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b60_.agents/skills/vercel-composition-patterns/rules1/state-context-interface.md",
+      "complexity": "moderate",
+      "name": "b60_.agents/skills/vercel-composition-patterns/rules1/state-context-interface.md#Define Generic Context Interfaces for Dependency Injection"
+    },
+    {
+      "id": "file:b60_.agents/skills/vercel-composition-patterns/rules1/state-decouple-implementation.md",
+      "type": "document",
+      "label": "state-decouple-implementation.md",
+      "path": ".agents/skills/vercel-composition-patterns/rules1/state-decouple-implementation.md",
+      "language": "markdown",
+      "lines": 113,
+      "summary": "Decouple State Management from UI",
+      "tags": [
+        "组合模式",
+        "markdown",
+        "docs",
+        "设计模式",
+        "状态管理"
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 1
+      },
+      "complexity": "moderate",
+      "name": "b60_.agents/skills/vercel-composition-patterns/rules1/state-decouple-implementation.md"
+    },
+    {
+      "id": "file:b60_.agents/skills/vercel-composition-patterns/rules1/state-decouple-implementation.md#Decouple State Management from UI",
+      "type": "section",
+      "label": "Decouple State Management from UI",
+      "path": ".agents/skills/vercel-composition-patterns/rules1/state-decouple-implementation.md",
+      "language": "markdown",
+      "lines": 0,
+      "summary": "Decouple State Management from UI",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b60_.agents/skills/vercel-composition-patterns/rules1/state-decouple-implementation.md",
+      "complexity": "moderate",
+      "name": "b60_.agents/skills/vercel-composition-patterns/rules1/state-decouple-implementation.md#Decouple State Management from UI"
+    },
+    {
+      "id": "file:b60_.agents/skills/vercel-composition-patterns/rules1/state-lift-state.md",
+      "type": "document",
+      "label": "state-lift-state.md",
+      "path": ".agents/skills/vercel-composition-patterns/rules1/state-lift-state.md",
+      "language": "markdown",
+      "lines": 125,
+      "summary": "Lift State into Provider Components",
+      "tags": [
+        "组合模式",
+        "markdown",
+        "docs",
+        "设计模式",
+        "状态管理"
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 1
+      },
+      "complexity": "moderate",
+      "name": "b60_.agents/skills/vercel-composition-patterns/rules1/state-lift-state.md"
+    },
+    {
+      "id": "file:b60_.agents/skills/vercel-composition-patterns/rules1/state-lift-state.md#Lift State into Provider Components",
+      "type": "section",
+      "label": "Lift State into Provider Components",
+      "path": ".agents/skills/vercel-composition-patterns/rules1/state-lift-state.md",
+      "language": "markdown",
+      "lines": 0,
+      "summary": "Lift State into Provider Components",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b60_.agents/skills/vercel-composition-patterns/rules1/state-lift-state.md",
+      "complexity": "moderate",
+      "name": "b60_.agents/skills/vercel-composition-patterns/rules1/state-lift-state.md#Lift State into Provider Components"
+    }
+  ],
+  "edges": [
+    {
+      "id": "b60_.agents/skills/vercel-composition-patterns/rules1/_sections.md--contains--b60_.agents/skills/vercel-composition-patterns/rules1/_sections.md#Sections",
+      "source": "file:b60_.agents/skills/vercel-composition-patterns/rules1/_sections.md",
+      "target": "file:b60_.agents/skills/vercel-composition-patterns/rules1/_sections.md#Sections",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    },
+    {
+      "id": "b60_.agents/skills/vercel-composition-patterns/rules1/_sections.md--contains--b60_.agents/skills/vercel-composition-patterns/rules1/_sections.md#1. Component Architecture (architecture)",
+      "source": "file:b60_.agents/skills/vercel-composition-patterns/rules1/_sections.md",
+      "target": "file:b60_.agents/skills/vercel-composition-patterns/rules1/_sections.md#1. Component Architecture (architecture)",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    },
+    {
+      "id": "b60_.agents/skills/vercel-composition-patterns/rules1/_sections.md--contains--b60_.agents/skills/vercel-composition-patterns/rules1/_sections.md#2. State Management (state)",
+      "source": "file:b60_.agents/skills/vercel-composition-patterns/rules1/_sections.md",
+      "target": "file:b60_.agents/skills/vercel-composition-patterns/rules1/_sections.md#2. State Management (state)",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    },
+    {
+      "id": "b60_.agents/skills/vercel-composition-patterns/rules1/_sections.md--contains--b60_.agents/skills/vercel-composition-patterns/rules1/_sections.md#3. Implementation Patterns (patterns)",
+      "source": "file:b60_.agents/skills/vercel-composition-patterns/rules1/_sections.md",
+      "target": "file:b60_.agents/skills/vercel-composition-patterns/rules1/_sections.md#3. Implementation Patterns (patterns)",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    },
+    {
+      "id": "b60_.agents/skills/vercel-composition-patterns/rules1/_sections.md--contains--b60_.agents/skills/vercel-composition-patterns/rules1/_sections.md#4. React 19 APIs (react19)",
+      "source": "file:b60_.agents/skills/vercel-composition-patterns/rules1/_sections.md",
+      "target": "file:b60_.agents/skills/vercel-composition-patterns/rules1/_sections.md#4. React 19 APIs (react19)",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    },
+    {
+      "id": "b60_.agents/skills/vercel-composition-patterns/rules1/_template.md--contains--b60_.agents/skills/vercel-composition-patterns/rules1/_template.md#Rule Title Here",
+      "source": "file:b60_.agents/skills/vercel-composition-patterns/rules1/_template.md",
+      "target": "file:b60_.agents/skills/vercel-composition-patterns/rules1/_template.md#Rule Title Here",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    },
+    {
+      "id": "b60_.agents/skills/vercel-composition-patterns/rules1/architecture-avoid-boolean-props.md--contains--b60_.agents/skills/vercel-composition-patterns/rules1/architecture-avoid-boolean-props.md#Avoid Boolean Prop Proliferation",
+      "source": "file:b60_.agents/skills/vercel-composition-patterns/rules1/architecture-avoid-boolean-props.md",
+      "target": "file:b60_.agents/skills/vercel-composition-patterns/rules1/architecture-avoid-boolean-props.md#Avoid Boolean Prop Proliferation",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    },
+    {
+      "id": "b60_.agents/skills/vercel-composition-patterns/rules1/architecture-compound-components.md--contains--b60_.agents/skills/vercel-composition-patterns/rules1/architecture-compound-components.md#Use Compound Components",
+      "source": "file:b60_.agents/skills/vercel-composition-patterns/rules1/architecture-compound-components.md",
+      "target": "file:b60_.agents/skills/vercel-composition-patterns/rules1/architecture-compound-components.md#Use Compound Components",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    },
+    {
+      "id": "b60_.agents/skills/vercel-composition-patterns/rules1/patterns-children-over-render-props.md--contains--b60_.agents/skills/vercel-composition-patterns/rules1/patterns-children-over-render-props.md#Prefer Children Over Render Props",
+      "source": "file:b60_.agents/skills/vercel-composition-patterns/rules1/patterns-children-over-render-props.md",
+      "target": "file:b60_.agents/skills/vercel-composition-patterns/rules1/patterns-children-over-render-props.md#Prefer Children Over Render Props",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    },
+    {
+      "id": "b60_.agents/skills/vercel-composition-patterns/rules1/patterns-explicit-variants.md--contains--b60_.agents/skills/vercel-composition-patterns/rules1/patterns-explicit-variants.md#Create Explicit Component Variants",
+      "source": "file:b60_.agents/skills/vercel-composition-patterns/rules1/patterns-explicit-variants.md",
+      "target": "file:b60_.agents/skills/vercel-composition-patterns/rules1/patterns-explicit-variants.md#Create Explicit Component Variants",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    },
+    {
+      "id": "b60_.agents/skills/vercel-composition-patterns/rules1/react19-no-forwardref.md--contains--b60_.agents/skills/vercel-composition-patterns/rules1/react19-no-forwardref.md#React 19 API Changes",
+      "source": "file:b60_.agents/skills/vercel-composition-patterns/rules1/react19-no-forwardref.md",
+      "target": "file:b60_.agents/skills/vercel-composition-patterns/rules1/react19-no-forwardref.md#React 19 API Changes",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    },
+    {
+      "id": "b60_.agents/skills/vercel-composition-patterns/rules1/state-context-interface.md--contains--b60_.agents/skills/vercel-composition-patterns/rules1/state-context-interface.md#Define Generic Context Interfaces for Dependency Injection",
+      "source": "file:b60_.agents/skills/vercel-composition-patterns/rules1/state-context-interface.md",
+      "target": "file:b60_.agents/skills/vercel-composition-patterns/rules1/state-context-interface.md#Define Generic Context Interfaces for Dependency Injection",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    },
+    {
+      "id": "b60_.agents/skills/vercel-composition-patterns/rules1/state-decouple-implementation.md--contains--b60_.agents/skills/vercel-composition-patterns/rules1/state-decouple-implementation.md#Decouple State Management from UI",
+      "source": "file:b60_.agents/skills/vercel-composition-patterns/rules1/state-decouple-implementation.md",
+      "target": "file:b60_.agents/skills/vercel-composition-patterns/rules1/state-decouple-implementation.md#Decouple State Management from UI",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    },
+    {
+      "id": "b60_.agents/skills/vercel-composition-patterns/rules1/state-lift-state.md--contains--b60_.agents/skills/vercel-composition-patterns/rules1/state-lift-state.md#Lift State into Provider Components",
+      "source": "file:b60_.agents/skills/vercel-composition-patterns/rules1/state-lift-state.md",
+      "target": "file:b60_.agents/skills/vercel-composition-patterns/rules1/state-lift-state.md#Lift State into Provider Components",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    }
+  ]
+}

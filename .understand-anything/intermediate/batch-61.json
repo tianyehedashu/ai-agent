@@ -1,0 +1,604 @@
+{
+  "nodes": [
+    {
+      "id": "file:b61_.agents/skills/vercel-react-best-practices/README.md",
+      "type": "document",
+      "label": "README.md",
+      "path": ".agents/skills/vercel-react-best-practices/README.md",
+      "language": "markdown",
+      "lines": 123,
+      "summary": "React Best Practices",
+      "tags": [
+        "最佳实践",
+        "docs",
+        "markdown"
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 5
+      },
+      "complexity": "moderate",
+      "name": "b61_.agents/skills/vercel-react-best-practices/README.md"
+    },
+    {
+      "id": "file:b61_.agents/skills/vercel-react-best-practices/README.md#React Best Practices",
+      "type": "section",
+      "label": "React Best Practices",
+      "path": ".agents/skills/vercel-react-best-practices/README.md",
+      "language": "markdown",
+      "lines": 0,
+      "summary": "React Best Practices",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b61_.agents/skills/vercel-react-best-practices/README.md",
+      "complexity": "moderate",
+      "name": "b61_.agents/skills/vercel-react-best-practices/README.md#React Best Practices"
+    },
+    {
+      "id": "file:b61_.agents/skills/vercel-react-best-practices/README.md#Structure",
+      "type": "section",
+      "label": "Structure",
+      "path": ".agents/skills/vercel-react-best-practices/README.md",
+      "language": "markdown",
+      "lines": 0,
+      "summary": "Structure",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b61_.agents/skills/vercel-react-best-practices/README.md",
+      "complexity": "moderate",
+      "name": "b61_.agents/skills/vercel-react-best-practices/README.md#Structure"
+    },
+    {
+      "id": "file:b61_.agents/skills/vercel-react-best-practices/README.md#Getting Started",
+      "type": "section",
+      "label": "Getting Started",
+      "path": ".agents/skills/vercel-react-best-practices/README.md",
+      "language": "markdown",
+      "lines": 0,
+      "summary": "Getting Started",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b61_.agents/skills/vercel-react-best-practices/README.md",
+      "complexity": "moderate",
+      "name": "b61_.agents/skills/vercel-react-best-practices/README.md#Getting Started"
+    },
+    {
+      "id": "file:b61_.agents/skills/vercel-react-best-practices/README.md#Creating a New Rule",
+      "type": "section",
+      "label": "Creating a New Rule",
+      "path": ".agents/skills/vercel-react-best-practices/README.md",
+      "language": "markdown",
+      "lines": 0,
+      "summary": "Creating a New Rule",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b61_.agents/skills/vercel-react-best-practices/README.md",
+      "complexity": "moderate",
+      "name": "b61_.agents/skills/vercel-react-best-practices/README.md#Creating a New Rule"
+    },
+    {
+      "id": "file:b61_.agents/skills/vercel-react-best-practices/README.md#Rule File Structure",
+      "type": "section",
+      "label": "Rule File Structure",
+      "path": ".agents/skills/vercel-react-best-practices/README.md",
+      "language": "markdown",
+      "lines": 0,
+      "summary": "Rule File Structure",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b61_.agents/skills/vercel-react-best-practices/README.md",
+      "complexity": "moderate",
+      "name": "b61_.agents/skills/vercel-react-best-practices/README.md#Rule File Structure"
+    },
+    {
+      "id": "file:b61_.agents/skills/vercel-react-best-practices/SKILL.md",
+      "type": "document",
+      "label": "SKILL.md",
+      "path": ".agents/skills/vercel-react-best-practices/SKILL.md",
+      "language": "markdown",
+      "lines": 149,
+      "summary": "Vercel React Best Practices",
+      "tags": [
+        "最佳实践",
+        "docs",
+        "markdown"
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 14
+      },
+      "complexity": "moderate",
+      "name": "b61_.agents/skills/vercel-react-best-practices/SKILL.md"
+    },
+    {
+      "id": "file:b61_.agents/skills/vercel-react-best-practices/SKILL.md#Vercel React Best Practices",
+      "type": "section",
+      "label": "Vercel React Best Practices",
+      "path": ".agents/skills/vercel-react-best-practices/SKILL.md",
+      "language": "markdown",
+      "lines": 0,
+      "summary": "Vercel React Best Practices",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b61_.agents/skills/vercel-react-best-practices/SKILL.md",
+      "complexity": "moderate",
+      "name": "b61_.agents/skills/vercel-react-best-practices/SKILL.md#Vercel React Best Practices"
+    },
+    {
+      "id": "file:b61_.agents/skills/vercel-react-best-practices/SKILL.md#When to Apply",
+      "type": "section",
+      "label": "When to Apply",
+      "path": ".agents/skills/vercel-react-best-practices/SKILL.md",
+      "language": "markdown",
+      "lines": 0,
+      "summary": "When to Apply",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b61_.agents/skills/vercel-react-best-practices/SKILL.md",
+      "complexity": "moderate",
+      "name": "b61_.agents/skills/vercel-react-best-practices/SKILL.md#When to Apply"
+    },
+    {
+      "id": "file:b61_.agents/skills/vercel-react-best-practices/SKILL.md#Rule Categories by Priority",
+      "type": "section",
+      "label": "Rule Categories by Priority",
+      "path": ".agents/skills/vercel-react-best-practices/SKILL.md",
+      "language": "markdown",
+      "lines": 0,
+      "summary": "Rule Categories by Priority",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b61_.agents/skills/vercel-react-best-practices/SKILL.md",
+      "complexity": "moderate",
+      "name": "b61_.agents/skills/vercel-react-best-practices/SKILL.md#Rule Categories by Priority"
+    },
+    {
+      "id": "file:b61_.agents/skills/vercel-react-best-practices/SKILL.md#Quick Reference",
+      "type": "section",
+      "label": "Quick Reference",
+      "path": ".agents/skills/vercel-react-best-practices/SKILL.md",
+      "language": "markdown",
+      "lines": 0,
+      "summary": "Quick Reference",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b61_.agents/skills/vercel-react-best-practices/SKILL.md",
+      "complexity": "moderate",
+      "name": "b61_.agents/skills/vercel-react-best-practices/SKILL.md#Quick Reference"
+    },
+    {
+      "id": "file:b61_.agents/skills/vercel-react-best-practices/SKILL.md#1. Eliminating Waterfalls (CRITICAL)",
+      "type": "section",
+      "label": "1. Eliminating Waterfalls (CRITICAL)",
+      "path": ".agents/skills/vercel-react-best-practices/SKILL.md",
+      "language": "markdown",
+      "lines": 0,
+      "summary": "1. Eliminating Waterfalls (CRITICAL)",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b61_.agents/skills/vercel-react-best-practices/SKILL.md",
+      "complexity": "moderate",
+      "name": "b61_.agents/skills/vercel-react-best-practices/SKILL.md#1. Eliminating Waterfalls (CRITICAL)"
+    },
+    {
+      "id": "file:b61_.agents/skills/vercel-react-best-practices/SKILL.md#2. Bundle Size Optimization (CRITICAL)",
+      "type": "section",
+      "label": "2. Bundle Size Optimization (CRITICAL)",
+      "path": ".agents/skills/vercel-react-best-practices/SKILL.md",
+      "language": "markdown",
+      "lines": 0,
+      "summary": "2. Bundle Size Optimization (CRITICAL)",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b61_.agents/skills/vercel-react-best-practices/SKILL.md",
+      "complexity": "moderate",
+      "name": "b61_.agents/skills/vercel-react-best-practices/SKILL.md#2. Bundle Size Optimization (CRITICAL)"
+    },
+    {
+      "id": "file:b61_.agents/skills/vercel-react-best-practices/SKILL.md#3. Server-Side Performance (HIGH)",
+      "type": "section",
+      "label": "3. Server-Side Performance (HIGH)",
+      "path": ".agents/skills/vercel-react-best-practices/SKILL.md",
+      "language": "markdown",
+      "lines": 0,
+      "summary": "3. Server-Side Performance (HIGH)",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b61_.agents/skills/vercel-react-best-practices/SKILL.md",
+      "complexity": "moderate",
+      "name": "b61_.agents/skills/vercel-react-best-practices/SKILL.md#3. Server-Side Performance (HIGH)"
+    },
+    {
+      "id": "file:b61_.agents/skills/vercel-react-best-practices/SKILL.md#4. Client-Side Data Fetching (MEDIUM-HIGH)",
+      "type": "section",
+      "label": "4. Client-Side Data Fetching (MEDIUM-HIGH)",
+      "path": ".agents/skills/vercel-react-best-practices/SKILL.md",
+      "language": "markdown",
+      "lines": 0,
+      "summary": "4. Client-Side Data Fetching (MEDIUM-HIGH)",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b61_.agents/skills/vercel-react-best-practices/SKILL.md",
+      "complexity": "moderate",
+      "name": "b61_.agents/skills/vercel-react-best-practices/SKILL.md#4. Client-Side Data Fetching (MEDIUM-HIGH)"
+    },
+    {
+      "id": "file:b61_.agents/skills/vercel-react-best-practices/SKILL.md#5. Re-render Optimization (MEDIUM)",
+      "type": "section",
+      "label": "5. Re-render Optimization (MEDIUM)",
+      "path": ".agents/skills/vercel-react-best-practices/SKILL.md",
+      "language": "markdown",
+      "lines": 0,
+      "summary": "5. Re-render Optimization (MEDIUM)",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b61_.agents/skills/vercel-react-best-practices/SKILL.md",
+      "complexity": "moderate",
+      "name": "b61_.agents/skills/vercel-react-best-practices/SKILL.md#5. Re-render Optimization (MEDIUM)"
+    },
+    {
+      "id": "file:b61_.agents/skills/vercel-react-best-practices/SKILL.md#6. Rendering Performance (MEDIUM)",
+      "type": "section",
+      "label": "6. Rendering Performance (MEDIUM)",
+      "path": ".agents/skills/vercel-react-best-practices/SKILL.md",
+      "language": "markdown",
+      "lines": 0,
+      "summary": "6. Rendering Performance (MEDIUM)",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b61_.agents/skills/vercel-react-best-practices/SKILL.md",
+      "complexity": "moderate",
+      "name": "b61_.agents/skills/vercel-react-best-practices/SKILL.md#6. Rendering Performance (MEDIUM)"
+    },
+    {
+      "id": "file:b61_.agents/skills/vercel-react-best-practices/SKILL.md#7. JavaScript Performance (LOW-MEDIUM)",
+      "type": "section",
+      "label": "7. JavaScript Performance (LOW-MEDIUM)",
+      "path": ".agents/skills/vercel-react-best-practices/SKILL.md",
+      "language": "markdown",
+      "lines": 0,
+      "summary": "7. JavaScript Performance (LOW-MEDIUM)",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b61_.agents/skills/vercel-react-best-practices/SKILL.md",
+      "complexity": "moderate",
+      "name": "b61_.agents/skills/vercel-react-best-practices/SKILL.md#7. JavaScript Performance (LOW-MEDIUM)"
+    },
+    {
+      "id": "file:b61_.agents/skills/vercel-react-best-practices/SKILL.md#8. Advanced Patterns (LOW)",
+      "type": "section",
+      "label": "8. Advanced Patterns (LOW)",
+      "path": ".agents/skills/vercel-react-best-practices/SKILL.md",
+      "language": "markdown",
+      "lines": 0,
+      "summary": "8. Advanced Patterns (LOW)",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b61_.agents/skills/vercel-react-best-practices/SKILL.md",
+      "complexity": "moderate",
+      "name": "b61_.agents/skills/vercel-react-best-practices/SKILL.md#8. Advanced Patterns (LOW)"
+    },
+    {
+      "id": "file:b61_.agents/skills/vercel-react-best-practices/SKILL.md#How to Use",
+      "type": "section",
+      "label": "How to Use",
+      "path": ".agents/skills/vercel-react-best-practices/SKILL.md",
+      "language": "markdown",
+      "lines": 0,
+      "summary": "How to Use",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b61_.agents/skills/vercel-react-best-practices/SKILL.md",
+      "complexity": "moderate",
+      "name": "b61_.agents/skills/vercel-react-best-practices/SKILL.md#How to Use"
+    },
+    {
+      "id": "file:b61_.agents/skills/vercel-react-best-practices/SKILL.md#Full Compiled Document",
+      "type": "section",
+      "label": "Full Compiled Document",
+      "path": ".agents/skills/vercel-react-best-practices/SKILL.md",
+      "language": "markdown",
+      "lines": 0,
+      "summary": "Full Compiled Document",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b61_.agents/skills/vercel-react-best-practices/SKILL.md",
+      "complexity": "moderate",
+      "name": "b61_.agents/skills/vercel-react-best-practices/SKILL.md#Full Compiled Document"
+    },
+    {
+      "id": "file:b61_.agents/skills/vercel-react-best-practices/metadata.json#version",
+      "type": "section",
+      "label": "version",
+      "path": ".agents/skills/vercel-react-best-practices/metadata.json",
+      "language": "json",
+      "lines": 0,
+      "summary": "version",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b61_.agents/skills/vercel-react-best-practices/metadata.json",
+      "complexity": "moderate",
+      "name": "b61_.agents/skills/vercel-react-best-practices/metadata.json#version"
+    },
+    {
+      "id": "file:b61_.agents/skills/vercel-react-best-practices/metadata.json#organization",
+      "type": "section",
+      "label": "organization",
+      "path": ".agents/skills/vercel-react-best-practices/metadata.json",
+      "language": "json",
+      "lines": 0,
+      "summary": "organization",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b61_.agents/skills/vercel-react-best-practices/metadata.json",
+      "complexity": "moderate",
+      "name": "b61_.agents/skills/vercel-react-best-practices/metadata.json#organization"
+    },
+    {
+      "id": "file:b61_.agents/skills/vercel-react-best-practices/metadata.json#date",
+      "type": "section",
+      "label": "date",
+      "path": ".agents/skills/vercel-react-best-practices/metadata.json",
+      "language": "json",
+      "lines": 0,
+      "summary": "date",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b61_.agents/skills/vercel-react-best-practices/metadata.json",
+      "complexity": "moderate",
+      "name": "b61_.agents/skills/vercel-react-best-practices/metadata.json#date"
+    },
+    {
+      "id": "file:b61_.agents/skills/vercel-react-best-practices/metadata.json#abstract",
+      "type": "section",
+      "label": "abstract",
+      "path": ".agents/skills/vercel-react-best-practices/metadata.json",
+      "language": "json",
+      "lines": 0,
+      "summary": "abstract",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b61_.agents/skills/vercel-react-best-practices/metadata.json",
+      "complexity": "moderate",
+      "name": "b61_.agents/skills/vercel-react-best-practices/metadata.json#abstract"
+    },
+    {
+      "id": "file:b61_.agents/skills/vercel-react-best-practices/metadata.json#references",
+      "type": "section",
+      "label": "references",
+      "path": ".agents/skills/vercel-react-best-practices/metadata.json",
+      "language": "json",
+      "lines": 0,
+      "summary": "references",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b61_.agents/skills/vercel-react-best-practices/metadata.json",
+      "complexity": "moderate",
+      "name": "b61_.agents/skills/vercel-react-best-practices/metadata.json#references"
+    }
+  ],
+  "edges": [
+    {
+      "id": "b61_.agents/skills/vercel-react-best-practices/README.md--contains--b61_.agents/skills/vercel-react-best-practices/README.md#React Best Practices",
+      "source": "file:b61_.agents/skills/vercel-react-best-practices/README.md",
+      "target": "file:b61_.agents/skills/vercel-react-best-practices/README.md#React Best Practices",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    },
+    {
+      "id": "b61_.agents/skills/vercel-react-best-practices/README.md--contains--b61_.agents/skills/vercel-react-best-practices/README.md#Structure",
+      "source": "file:b61_.agents/skills/vercel-react-best-practices/README.md",
+      "target": "file:b61_.agents/skills/vercel-react-best-practices/README.md#Structure",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    },
+    {
+      "id": "b61_.agents/skills/vercel-react-best-practices/README.md--contains--b61_.agents/skills/vercel-react-best-practices/README.md#Getting Started",
+      "source": "file:b61_.agents/skills/vercel-react-best-practices/README.md",
+      "target": "file:b61_.agents/skills/vercel-react-best-practices/README.md#Getting Started",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    },
+    {
+      "id": "b61_.agents/skills/vercel-react-best-practices/README.md--contains--b61_.agents/skills/vercel-react-best-practices/README.md#Creating a New Rule",
+      "source": "file:b61_.agents/skills/vercel-react-best-practices/README.md",
+      "target": "file:b61_.agents/skills/vercel-react-best-practices/README.md#Creating a New Rule",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    },
+    {
+      "id": "b61_.agents/skills/vercel-react-best-practices/README.md--contains--b61_.agents/skills/vercel-react-best-practices/README.md#Rule File Structure",
+      "source": "file:b61_.agents/skills/vercel-react-best-practices/README.md",
+      "target": "file:b61_.agents/skills/vercel-react-best-practices/README.md#Rule File Structure",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    },
+    {
+      "id": "b61_.agents/skills/vercel-react-best-practices/SKILL.md--contains--b61_.agents/skills/vercel-react-best-practices/SKILL.md#Vercel React Best Practices",
+      "source": "file:b61_.agents/skills/vercel-react-best-practices/SKILL.md",
+      "target": "file:b61_.agents/skills/vercel-react-best-practices/SKILL.md#Vercel React Best Practices",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    },
+    {
+      "id": "b61_.agents/skills/vercel-react-best-practices/SKILL.md--contains--b61_.agents/skills/vercel-react-best-practices/SKILL.md#When to Apply",
+      "source": "file:b61_.agents/skills/vercel-react-best-practices/SKILL.md",
+      "target": "file:b61_.agents/skills/vercel-react-best-practices/SKILL.md#When to Apply",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    },
+    {
+      "id": "b61_.agents/skills/vercel-react-best-practices/SKILL.md--contains--b61_.agents/skills/vercel-react-best-practices/SKILL.md#Rule Categories by Priority",
+      "source": "file:b61_.agents/skills/vercel-react-best-practices/SKILL.md",
+      "target": "file:b61_.agents/skills/vercel-react-best-practices/SKILL.md#Rule Categories by Priority",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    },
+    {
+      "id": "b61_.agents/skills/vercel-react-best-practices/SKILL.md--contains--b61_.agents/skills/vercel-react-best-practices/SKILL.md#Quick Reference",
+      "source": "file:b61_.agents/skills/vercel-react-best-practices/SKILL.md",
+      "target": "file:b61_.agents/skills/vercel-react-best-practices/SKILL.md#Quick Reference",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    },
+    {
+      "id": "b61_.agents/skills/vercel-react-best-practices/SKILL.md--contains--b61_.agents/skills/vercel-react-best-practices/SKILL.md#1. Eliminating Waterfalls (CRITICAL)",
+      "source": "file:b61_.agents/skills/vercel-react-best-practices/SKILL.md",
+      "target": "file:b61_.agents/skills/vercel-react-best-practices/SKILL.md#1. Eliminating Waterfalls (CRITICAL)",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    },
+    {
+      "id": "b61_.agents/skills/vercel-react-best-practices/SKILL.md--contains--b61_.agents/skills/vercel-react-best-practices/SKILL.md#2. Bundle Size Optimization (CRITICAL)",
+      "source": "file:b61_.agents/skills/vercel-react-best-practices/SKILL.md",
+      "target": "file:b61_.agents/skills/vercel-react-best-practices/SKILL.md#2. Bundle Size Optimization (CRITICAL)",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    },
+    {
+      "id": "b61_.agents/skills/vercel-react-best-practices/SKILL.md--contains--b61_.agents/skills/vercel-react-best-practices/SKILL.md#3. Server-Side Performance (HIGH)",
+      "source": "file:b61_.agents/skills/vercel-react-best-practices/SKILL.md",
+      "target": "file:b61_.agents/skills/vercel-react-best-practices/SKILL.md#3. Server-Side Performance (HIGH)",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    },
+    {
+      "id": "b61_.agents/skills/vercel-react-best-practices/SKILL.md--contains--b61_.agents/skills/vercel-react-best-practices/SKILL.md#4. Client-Side Data Fetching (MEDIUM-HIGH)",
+      "source": "file:b61_.agents/skills/vercel-react-best-practices/SKILL.md",
+      "target": "file:b61_.agents/skills/vercel-react-best-practices/SKILL.md#4. Client-Side Data Fetching (MEDIUM-HIGH)",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    },
+    {
+      "id": "b61_.agents/skills/vercel-react-best-practices/SKILL.md--contains--b61_.agents/skills/vercel-react-best-practices/SKILL.md#5. Re-render Optimization (MEDIUM)",
+      "source": "file:b61_.agents/skills/vercel-react-best-practices/SKILL.md",
+      "target": "file:b61_.agents/skills/vercel-react-best-practices/SKILL.md#5. Re-render Optimization (MEDIUM)",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    },
+    {
+      "id": "b61_.agents/skills/vercel-react-best-practices/SKILL.md--contains--b61_.agents/skills/vercel-react-best-practices/SKILL.md#6. Rendering Performance (MEDIUM)",
+      "source": "file:b61_.agents/skills/vercel-react-best-practices/SKILL.md",
+      "target": "file:b61_.agents/skills/vercel-react-best-practices/SKILL.md#6. Rendering Performance (MEDIUM)",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    },
+    {
+      "id": "b61_.agents/skills/vercel-react-best-practices/SKILL.md--contains--b61_.agents/skills/vercel-react-best-practices/SKILL.md#7. JavaScript Performance (LOW-MEDIUM)",
+      "source": "file:b61_.agents/skills/vercel-react-best-practices/SKILL.md",
+      "target": "file:b61_.agents/skills/vercel-react-best-practices/SKILL.md#7. JavaScript Performance (LOW-MEDIUM)",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    },
+    {
+      "id": "b61_.agents/skills/vercel-react-best-practices/SKILL.md--contains--b61_.agents/skills/vercel-react-best-practices/SKILL.md#8. Advanced Patterns (LOW)",
+      "source": "file:b61_.agents/skills/vercel-react-best-practices/SKILL.md",
+      "target": "file:b61_.agents/skills/vercel-react-best-practices/SKILL.md#8. Advanced Patterns (LOW)",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    },
+    {
+      "id": "b61_.agents/skills/vercel-react-best-practices/SKILL.md--contains--b61_.agents/skills/vercel-react-best-practices/SKILL.md#How to Use",
+      "source": "file:b61_.agents/skills/vercel-react-best-practices/SKILL.md",
+      "target": "file:b61_.agents/skills/vercel-react-best-practices/SKILL.md#How to Use",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    },
+    {
+      "id": "b61_.agents/skills/vercel-react-best-practices/SKILL.md--contains--b61_.agents/skills/vercel-react-best-practices/SKILL.md#Full Compiled Document",
+      "source": "file:b61_.agents/skills/vercel-react-best-practices/SKILL.md",
+      "target": "file:b61_.agents/skills/vercel-react-best-practices/SKILL.md#Full Compiled Document",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    },
+    {
+      "id": "b61_.agents/skills/vercel-react-best-practices/metadata.json--contains--b61_.agents/skills/vercel-react-best-practices/metadata.json#version",
+      "source": "config:b61_.agents/skills/vercel-react-best-practices/metadata.json",
+      "target": "file:b61_.agents/skills/vercel-react-best-practices/metadata.json#version",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    },
+    {
+      "id": "b61_.agents/skills/vercel-react-best-practices/metadata.json--contains--b61_.agents/skills/vercel-react-best-practices/metadata.json#organization",
+      "source": "config:b61_.agents/skills/vercel-react-best-practices/metadata.json",
+      "target": "file:b61_.agents/skills/vercel-react-best-practices/metadata.json#organization",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    },
+    {
+      "id": "b61_.agents/skills/vercel-react-best-practices/metadata.json--contains--b61_.agents/skills/vercel-react-best-practices/metadata.json#date",
+      "source": "config:b61_.agents/skills/vercel-react-best-practices/metadata.json",
+      "target": "file:b61_.agents/skills/vercel-react-best-practices/metadata.json#date",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    },
+    {
+      "id": "b61_.agents/skills/vercel-react-best-practices/metadata.json--contains--b61_.agents/skills/vercel-react-best-practices/metadata.json#abstract",
+      "source": "config:b61_.agents/skills/vercel-react-best-practices/metadata.json",
+      "target": "file:b61_.agents/skills/vercel-react-best-practices/metadata.json#abstract",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    },
+    {
+      "id": "b61_.agents/skills/vercel-react-best-practices/metadata.json--contains--b61_.agents/skills/vercel-react-best-practices/metadata.json#references",
+      "source": "config:b61_.agents/skills/vercel-react-best-practices/metadata.json",
+      "target": "file:b61_.agents/skills/vercel-react-best-practices/metadata.json#references",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    }
+  ]
+}

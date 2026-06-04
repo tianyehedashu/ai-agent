@@ -11,6 +11,7 @@ from domains.gateway.application.gateway_model_listing import list_merged_models
 from domains.gateway.application.model_credential_enrichment import (
     build_credential_name_map_for_models,
 )
+from domains.gateway.domain.policies.model_selection import registry_kind_for_merged_row
 from domains.gateway.application.model_list_readable_credentials import (
     readable_team_credential_ids_for_tenant,
     readable_team_credential_ids_for_tenants,
@@ -421,6 +422,40 @@ async def list_gateway_models_for_tenants_page(
     )
 
 
+async def _filter_merged_rows_deployable(
+    session: AsyncSession,
+    rows: list[GatewayRegistryModelRow],
+) -> list[GatewayRegistryModelRow]:
+    """批量过滤：仅保留凭据存在且 active 的模型行（与 Router 注册条件对齐）。"""
+    if not rows:
+        return []
+    team_cred_ids: list[uuid.UUID] = []
+    system_cred_ids: list[uuid.UUID] = []
+    for row in rows:
+        if registry_kind_for_merged_row(row) == "team":
+            team_cred_ids.append(row.credential_id)
+        else:
+            system_cred_ids.append(row.credential_id)
+
+    active_ids: set[uuid.UUID] = set()
+    if team_cred_ids:
+        from domains.gateway.infrastructure.repositories.credential_repository import (
+            ProviderCredentialRepository,
+        )
+
+        creds = await ProviderCredentialRepository(session).list_by_ids(team_cred_ids)
+        active_ids.update(c.id for c in creds if c.is_active)
+    if system_cred_ids:
+        from domains.gateway.infrastructure.repositories.system_credential_repository import (
+            SystemProviderCredentialRepository,
+        )
+
+        creds = await SystemProviderCredentialRepository(session).list_by_ids(system_cred_ids)
+        active_ids.update(c.id for c in creds if c.is_active)
+
+    return [row for row in rows if row.credential_id in active_ids]
+
+
 async def _list_merged_page(
     session: AsyncSession,
     tenant_id: uuid.UUID,
@@ -443,6 +478,8 @@ async def _list_merged_page(
         merged = filter_system_registry_rows(merged)
     if is_requestable_registry_scope(registry_scope):
         merged = [row for row in merged if is_connectivity_requestable(row.last_test_status)]
+    if uses_merged_registry_list(registry_scope):
+        merged = await _filter_merged_rows_deployable(session, merged)
     summary_query = ModelListQuery(
         page_params=query.page_params,
         q=query.q,

@@ -1,0 +1,1278 @@
+{
+  "batchIndex": 65,
+  "totalBatches": null,
+  "filesAnalyzed": 15,
+  "filesSkipped": 0,
+  "nodes": [
+    {
+      "id": "file:b65_backend/domains/gateway/presentation/__init__.py",
+      "type": "file",
+      "name": "__init__.py",
+      "summary": "Gateway 表示层初始化模块，声明该包为路由与 Schema 的展示层。",
+      "filePath": "backend/domains/gateway/presentation/__init__.py",
+      "language": "python",
+      "fileCategory": "code",
+      "totalLines": 1,
+      "functionCount": 0,
+      "classCount": 0,
+      "tags": [
+        "gateway",
+        "presentation"
+      ]
+    },
+    {
+      "id": "file:b65_backend/domains/gateway/presentation/anthropic_compat_router.py",
+      "type": "file",
+      "name": "anthropic_compat_router.py",
+      "summary": "Anthropic Messages API 兼容路由，提供 /v1/messages 与 /v1/messages/count_tokens 端点，支持 SSE 流式响应。",
+      "filePath": "backend/domains/gateway/presentation/anthropic_compat_router.py",
+      "language": "python",
+      "fileCategory": "code",
+      "totalLines": 147,
+      "functionCount": 2,
+      "classCount": 0,
+      "tags": [
+        "gateway",
+        "presentation"
+      ]
+    },
+    {
+      "id": "function:b65_backend/domains/gateway/presentation/anthropic_compat_router.py:_anthropic_error",
+      "type": "function",
+      "name": "_anthropic_error",
+      "summary": "anthropic_compat_router.py 中的函数 _anthropic_error",
+      "filePath": "backend/domains/gateway/presentation/anthropic_compat_router.py",
+      "lineStart": 40,
+      "lineEnd": 40,
+      "parentId": "file:b65_backend/domains/gateway/presentation/anthropic_compat_router.py",
+      "tags": [
+        "gateway",
+        "presentation"
+      ]
+    },
+    {
+      "id": "function:b65_backend/domains/gateway/presentation/anthropic_compat_router.py:_wrap_anthropic_business_errors",
+      "type": "function",
+      "name": "_wrap_anthropic_business_errors",
+      "summary": "anthropic_compat_router.py 中的函数 _wrap_anthropic_business_errors",
+      "filePath": "backend/domains/gateway/presentation/anthropic_compat_router.py",
+      "lineStart": 52,
+      "lineEnd": 52,
+      "parentId": "file:b65_backend/domains/gateway/presentation/anthropic_compat_router.py",
+      "tags": [
+        "gateway",
+        "presentation"
+      ]
+    },
+    {
+      "id": "file:b65_backend/domains/gateway/presentation/credential_response.py",
+      "type": "file",
+      "name": "credential_response.py",
+      "summary": "凭据响应组装器，将 CredentialReadModel 转换为带掩码 API Key 的管理 API 响应 DTO。",
+      "filePath": "backend/domains/gateway/presentation/credential_response.py",
+      "language": "python",
+      "fileCategory": "code",
+      "totalLines": 253,
+      "functionCount": 10,
+      "classCount": 0,
+      "tags": [
+        "gateway",
+        "presentation"
+      ]
+    },
+    {
+      "id": "function:b65_backend/domains/gateway/presentation/credential_response.py:credential_api_bases_response",
+      "type": "function",
+      "name": "credential_api_bases_response",
+      "summary": "credential_response.py 中的函数 credential_api_bases_response",
+      "filePath": "backend/domains/gateway/presentation/credential_response.py",
+      "lineStart": 38,
+      "lineEnd": 38,
+      "parentId": "file:b65_backend/domains/gateway/presentation/credential_response.py",
+      "tags": [
+        "gateway",
+        "presentation"
+      ]
+    },
+    {
+      "id": "function:b65_backend/domains/gateway/presentation/credential_response.py:credential_api_bases_from_body",
+      "type": "function",
+      "name": "credential_api_bases_from_body",
+      "summary": "credential_response.py 中的函数 credential_api_bases_from_body",
+      "filePath": "backend/domains/gateway/presentation/credential_response.py",
+      "lineStart": 49,
+      "lineEnd": 49,
+      "parentId": "file:b65_backend/domains/gateway/presentation/credential_response.py",
+      "tags": [
+        "gateway",
+        "presentation"
+      ]
+    },
+    {
+      "id": "function:b65_backend/domains/gateway/presentation/credential_response.py:decrypt_credential_api_key_for_reveal",
+      "type": "function",
+      "name": "decrypt_credential_api_key_for_reveal",
+      "summary": "credential_response.py 中的函数 decrypt_credential_api_key_for_reveal",
+      "filePath": "backend/domains/gateway/presentation/credential_response.py",
+      "lineStart": 60,
+      "lineEnd": 60,
+      "parentId": "file:b65_backend/domains/gateway/presentation/credential_response.py",
+      "tags": [
+        "gateway",
+        "presentation"
+      ]
+    },
+    {
+      "id": "function:b65_backend/domains/gateway/presentation/credential_response.py:_resolved_effective_api_bases",
+      "type": "function",
+      "name": "_resolved_effective_api_bases",
+      "summary": "credential_response.py 中的函数 _resolved_effective_api_bases",
+      "filePath": "backend/domains/gateway/presentation/credential_response.py",
+      "lineStart": 77,
+      "lineEnd": 77,
+      "parentId": "file:b65_backend/domains/gateway/presentation/credential_response.py",
+      "tags": [
+        "gateway",
+        "presentation"
+      ]
+    },
+    {
+      "id": "function:b65_backend/domains/gateway/presentation/credential_response.py:_response_api_base",
+      "type": "function",
+      "name": "_response_api_base",
+      "summary": "credential_response.py 中的函数 _response_api_base",
+      "filePath": "backend/domains/gateway/presentation/credential_response.py",
+      "lineStart": 91,
+      "lineEnd": 91,
+      "parentId": "file:b65_backend/domains/gateway/presentation/credential_response.py",
+      "tags": [
+        "gateway",
+        "presentation"
+      ]
+    },
+    {
+      "id": "function:b65_backend/domains/gateway/presentation/credential_response.py:build_credential_response",
+      "type": "function",
+      "name": "build_credential_response",
+      "summary": "credential_response.py 中的函数 build_credential_response",
+      "filePath": "backend/domains/gateway/presentation/credential_response.py",
+      "lineStart": 99,
+      "lineEnd": 99,
+      "parentId": "file:b65_backend/domains/gateway/presentation/credential_response.py",
+      "tags": [
+        "gateway",
+        "presentation"
+      ]
+    },
+    {
+      "id": "function:b65_backend/domains/gateway/presentation/credential_response.py:build_credential_metadata_response",
+      "type": "function",
+      "name": "build_credential_metadata_response",
+      "summary": "credential_response.py 中的函数 build_credential_metadata_response",
+      "filePath": "backend/domains/gateway/presentation/credential_response.py",
+      "lineStart": 152,
+      "lineEnd": 152,
+      "parentId": "file:b65_backend/domains/gateway/presentation/credential_response.py",
+      "tags": [
+        "gateway",
+        "presentation"
+      ]
+    },
+    {
+      "id": "function:b65_backend/domains/gateway/presentation/credential_response.py:build_credential_response_for_team_workspace_list",
+      "type": "function",
+      "name": "build_credential_response_for_team_workspace_list",
+      "summary": "credential_response.py 中的函数 build_credential_response_for_team_workspace_list",
+      "filePath": "backend/domains/gateway/presentation/credential_response.py",
+      "lineStart": 190,
+      "lineEnd": 190,
+      "parentId": "file:b65_backend/domains/gateway/presentation/credential_response.py",
+      "tags": [
+        "gateway",
+        "presentation"
+      ]
+    },
+    {
+      "id": "function:b65_backend/domains/gateway/presentation/credential_response.py:build_credential_summary_response",
+      "type": "function",
+      "name": "build_credential_summary_response",
+      "summary": "credential_response.py 中的函数 build_credential_summary_response",
+      "filePath": "backend/domains/gateway/presentation/credential_response.py",
+      "lineStart": 212,
+      "lineEnd": 212,
+      "parentId": "file:b65_backend/domains/gateway/presentation/credential_response.py",
+      "tags": [
+        "gateway",
+        "presentation"
+      ]
+    },
+    {
+      "id": "function:b65_backend/domains/gateway/presentation/credential_response.py:build_playground_credential_summary_response",
+      "type": "function",
+      "name": "build_playground_credential_summary_response",
+      "summary": "credential_response.py 中的函数 build_playground_credential_summary_response",
+      "filePath": "backend/domains/gateway/presentation/credential_response.py",
+      "lineStart": 230,
+      "lineEnd": 230,
+      "parentId": "file:b65_backend/domains/gateway/presentation/credential_response.py",
+      "tags": [
+        "gateway",
+        "presentation"
+      ]
+    },
+    {
+      "id": "file:b65_backend/domains/gateway/presentation/deps.py",
+      "type": "file",
+      "name": "deps.py",
+      "summary": "Gateway 展示层依赖注入，提供 Bearer 虚拟 Key 与平台 API Key 的鉴权逻辑及团队上下文解析。",
+      "filePath": "backend/domains/gateway/presentation/deps.py",
+      "language": "python",
+      "fileCategory": "code",
+      "totalLines": 283,
+      "functionCount": 1,
+      "classCount": 2,
+      "tags": [
+        "gateway",
+        "presentation"
+      ]
+    },
+    {
+      "id": "function:b65_backend/domains/gateway/presentation/deps.py:pick_gateway_proxy_plain_token",
+      "type": "function",
+      "name": "pick_gateway_proxy_plain_token",
+      "summary": "deps.py 中的函数 pick_gateway_proxy_plain_token",
+      "filePath": "backend/domains/gateway/presentation/deps.py",
+      "lineStart": 84,
+      "lineEnd": 84,
+      "parentId": "file:b65_backend/domains/gateway/presentation/deps.py",
+      "tags": [
+        "gateway",
+        "presentation"
+      ]
+    },
+    {
+      "id": "class:b65_backend/domains/gateway/presentation/deps.py:GatewayPrincipal",
+      "type": "class",
+      "name": "GatewayPrincipal",
+      "summary": "deps.py 中的类 GatewayPrincipal",
+      "filePath": "backend/domains/gateway/presentation/deps.py",
+      "lineStart": 162,
+      "lineEnd": 162,
+      "parentId": "file:b65_backend/domains/gateway/presentation/deps.py",
+      "tags": [
+        "gateway",
+        "presentation"
+      ]
+    },
+    {
+      "id": "class:b65_backend/domains/gateway/presentation/deps.py:VkeyOrApikeyPrincipal",
+      "type": "class",
+      "name": "VkeyOrApikeyPrincipal",
+      "summary": "deps.py 中的类 VkeyOrApikeyPrincipal",
+      "filePath": "backend/domains/gateway/presentation/deps.py",
+      "lineStart": 186,
+      "lineEnd": 186,
+      "parentId": "file:b65_backend/domains/gateway/presentation/deps.py",
+      "tags": [
+        "gateway",
+        "presentation"
+      ]
+    },
+    {
+      "id": "file:b65_backend/domains/gateway/presentation/gateway_log_list_response.py",
+      "type": "file",
+      "name": "gateway_log_list_response.py",
+      "summary": "Gateway 请求日志分页响应组装函数。",
+      "filePath": "backend/domains/gateway/presentation/gateway_log_list_response.py",
+      "language": "python",
+      "fileCategory": "code",
+      "totalLines": 25,
+      "functionCount": 1,
+      "classCount": 0,
+      "tags": [
+        "gateway",
+        "presentation"
+      ]
+    },
+    {
+      "id": "function:b65_backend/domains/gateway/presentation/gateway_log_list_response.py:build_request_log_list_response",
+      "type": "function",
+      "name": "build_request_log_list_response",
+      "summary": "gateway_log_list_response.py 中的函数 build_request_log_list_response",
+      "filePath": "backend/domains/gateway/presentation/gateway_log_list_response.py",
+      "lineStart": 9,
+      "lineEnd": 9,
+      "parentId": "file:b65_backend/domains/gateway/presentation/gateway_log_list_response.py",
+      "tags": [
+        "gateway",
+        "presentation"
+      ]
+    },
+    {
+      "id": "file:b65_backend/domains/gateway/presentation/gateway_model_list_response.py",
+      "type": "file",
+      "name": "gateway_model_list_response.py",
+      "summary": "Gateway 模型分页列表响应组装，支持个人模型与网关模型两种列表格式。",
+      "filePath": "backend/domains/gateway/presentation/gateway_model_list_response.py",
+      "language": "python",
+      "fileCategory": "code",
+      "totalLines": 84,
+      "functionCount": 3,
+      "classCount": 0,
+      "tags": [
+        "gateway",
+        "presentation"
+      ]
+    },
+    {
+      "id": "function:b65_backend/domains/gateway/presentation/gateway_model_list_response.py:build_gateway_model_list_response",
+      "type": "function",
+      "name": "build_gateway_model_list_response",
+      "summary": "gateway_model_list_response.py 中的函数 build_gateway_model_list_response",
+      "filePath": "backend/domains/gateway/presentation/gateway_model_list_response.py",
+      "lineStart": 22,
+      "lineEnd": 22,
+      "parentId": "file:b65_backend/domains/gateway/presentation/gateway_model_list_response.py",
+      "tags": [
+        "gateway",
+        "presentation"
+      ]
+    },
+    {
+      "id": "function:b65_backend/domains/gateway/presentation/gateway_model_list_response.py:build_personal_model_list_response",
+      "type": "function",
+      "name": "build_personal_model_list_response",
+      "summary": "gateway_model_list_response.py 中的函数 build_personal_model_list_response",
+      "filePath": "backend/domains/gateway/presentation/gateway_model_list_response.py",
+      "lineStart": 50,
+      "lineEnd": 50,
+      "parentId": "file:b65_backend/domains/gateway/presentation/gateway_model_list_response.py",
+      "tags": [
+        "gateway",
+        "presentation"
+      ]
+    },
+    {
+      "id": "function:b65_backend/domains/gateway/presentation/gateway_model_list_response.py:build_paginated_selector_models",
+      "type": "function",
+      "name": "build_paginated_selector_models",
+      "summary": "gateway_model_list_response.py 中的函数 build_paginated_selector_models",
+      "filePath": "backend/domains/gateway/presentation/gateway_model_list_response.py",
+      "lineStart": 64,
+      "lineEnd": 64,
+      "parentId": "file:b65_backend/domains/gateway/presentation/gateway_model_list_response.py",
+      "tags": [
+        "gateway",
+        "presentation"
+      ]
+    },
+    {
+      "id": "file:b65_backend/domains/gateway/presentation/gateway_model_response.py",
+      "type": "file",
+      "name": "gateway_model_response.py",
+      "summary": "GatewayModel / SystemGatewayModel 转换为 HTTP GatewayModelResponse 的构建器。",
+      "filePath": "backend/domains/gateway/presentation/gateway_model_response.py",
+      "language": "python",
+      "fileCategory": "code",
+      "totalLines": 64,
+      "functionCount": 3,
+      "classCount": 0,
+      "tags": [
+        "gateway",
+        "presentation"
+      ]
+    },
+    {
+      "id": "function:b65_backend/domains/gateway/presentation/gateway_model_response.py:registry_kind_for_row",
+      "type": "function",
+      "name": "registry_kind_for_row",
+      "summary": "gateway_model_response.py 中的函数 registry_kind_for_row",
+      "filePath": "backend/domains/gateway/presentation/gateway_model_response.py",
+      "lineStart": 17,
+      "lineEnd": 17,
+      "parentId": "file:b65_backend/domains/gateway/presentation/gateway_model_response.py",
+      "tags": [
+        "gateway",
+        "presentation"
+      ]
+    },
+    {
+      "id": "function:b65_backend/domains/gateway/presentation/gateway_model_response.py:_system_credential_summary",
+      "type": "function",
+      "name": "_system_credential_summary",
+      "summary": "gateway_model_response.py 中的函数 _system_credential_summary",
+      "filePath": "backend/domains/gateway/presentation/gateway_model_response.py",
+      "lineStart": 21,
+      "lineEnd": 21,
+      "parentId": "file:b65_backend/domains/gateway/presentation/gateway_model_response.py",
+      "tags": [
+        "gateway",
+        "presentation"
+      ]
+    },
+    {
+      "id": "function:b65_backend/domains/gateway/presentation/gateway_model_response.py:build_gateway_model_response",
+      "type": "function",
+      "name": "build_gateway_model_response",
+      "summary": "gateway_model_response.py 中的函数 build_gateway_model_response",
+      "filePath": "backend/domains/gateway/presentation/gateway_model_response.py",
+      "lineStart": 33,
+      "lineEnd": 33,
+      "parentId": "file:b65_backend/domains/gateway/presentation/gateway_model_response.py",
+      "tags": [
+        "gateway",
+        "presentation"
+      ]
+    },
+    {
+      "id": "file:b65_backend/domains/gateway/presentation/gateway_proxy_business_error_classify.py",
+      "type": "file",
+      "name": "gateway_proxy_business_error_classify.py",
+      "summary": "ProxyUseCase 业务域异常分类器，将各种领域异常映射为 OpenAI / Anthropic 兼容的错误结构。",
+      "filePath": "backend/domains/gateway/presentation/gateway_proxy_business_error_classify.py",
+      "language": "python",
+      "fileCategory": "code",
+      "totalLines": 197,
+      "functionCount": 2,
+      "classCount": 1,
+      "tags": [
+        "gateway",
+        "presentation"
+      ]
+    },
+    {
+      "id": "function:b65_backend/domains/gateway/presentation/gateway_proxy_business_error_classify.py:_upstream_rate_limit_failure",
+      "type": "function",
+      "name": "_upstream_rate_limit_failure",
+      "summary": "gateway_proxy_business_error_classify.py 中的函数 _upstream_rate_limit_failure",
+      "filePath": "backend/domains/gateway/presentation/gateway_proxy_business_error_classify.py",
+      "lineStart": 42,
+      "lineEnd": 42,
+      "parentId": "file:b65_backend/domains/gateway/presentation/gateway_proxy_business_error_classify.py",
+      "tags": [
+        "gateway",
+        "presentation"
+      ]
+    },
+    {
+      "id": "function:b65_backend/domains/gateway/presentation/gateway_proxy_business_error_classify.py:classify_proxy_use_case_business_error",
+      "type": "function",
+      "name": "classify_proxy_use_case_business_error",
+      "summary": "gateway_proxy_business_error_classify.py 中的函数 classify_proxy_use_case_business_error",
+      "filePath": "backend/domains/gateway/presentation/gateway_proxy_business_error_classify.py",
+      "lineStart": 64,
+      "lineEnd": 64,
+      "parentId": "file:b65_backend/domains/gateway/presentation/gateway_proxy_business_error_classify.py",
+      "tags": [
+        "gateway",
+        "presentation"
+      ]
+    },
+    {
+      "id": "class:b65_backend/domains/gateway/presentation/gateway_proxy_business_error_classify.py:ProxyUseCaseBusinessFailure",
+      "type": "class",
+      "name": "ProxyUseCaseBusinessFailure",
+      "summary": "gateway_proxy_business_error_classify.py 中的类 ProxyUseCaseBusinessFailure",
+      "filePath": "backend/domains/gateway/presentation/gateway_proxy_business_error_classify.py",
+      "lineStart": 32,
+      "lineEnd": 32,
+      "parentId": "file:b65_backend/domains/gateway/presentation/gateway_proxy_business_error_classify.py",
+      "tags": [
+        "gateway",
+        "presentation"
+      ]
+    },
+    {
+      "id": "file:b65_backend/domains/gateway/presentation/gateway_proxy_context.py",
+      "type": "file",
+      "name": "gateway_proxy_context.py",
+      "summary": "从鉴权主体构造 ProxyContext 的辅助函数，供 OpenAI / Anthropic 对外代理路由共用。",
+      "filePath": "backend/domains/gateway/presentation/gateway_proxy_context.py",
+      "language": "python",
+      "fileCategory": "code",
+      "totalLines": 50,
+      "functionCount": 1,
+      "classCount": 0,
+      "tags": [
+        "gateway",
+        "presentation"
+      ]
+    },
+    {
+      "id": "function:b65_backend/domains/gateway/presentation/gateway_proxy_context.py:proxy_context_from_gateway_principal",
+      "type": "function",
+      "name": "proxy_context_from_gateway_principal",
+      "summary": "gateway_proxy_context.py 中的函数 proxy_context_from_gateway_principal",
+      "filePath": "backend/domains/gateway/presentation/gateway_proxy_context.py",
+      "lineStart": 12,
+      "lineEnd": 12,
+      "parentId": "file:b65_backend/domains/gateway/presentation/gateway_proxy_context.py",
+      "tags": [
+        "gateway",
+        "presentation"
+      ]
+    },
+    {
+      "id": "file:b65_backend/domains/gateway/presentation/gateway_usage_list_response.py",
+      "type": "file",
+      "name": "gateway_usage_list_response.py",
+      "summary": "Gateway 用量统计分页响应组装，包含模型用量、凭据用量等多维度统计。",
+      "filePath": "backend/domains/gateway/presentation/gateway_usage_list_response.py",
+      "language": "python",
+      "fileCategory": "code",
+      "totalLines": 113,
+      "functionCount": 4,
+      "classCount": 0,
+      "tags": [
+        "gateway",
+        "presentation"
+      ]
+    },
+    {
+      "id": "function:b65_backend/domains/gateway/presentation/gateway_usage_list_response.py:build_usage_statistics_response",
+      "type": "function",
+      "name": "build_usage_statistics_response",
+      "summary": "gateway_usage_list_response.py 中的函数 build_usage_statistics_response",
+      "filePath": "backend/domains/gateway/presentation/gateway_usage_list_response.py",
+      "lineStart": 22,
+      "lineEnd": 22,
+      "parentId": "file:b65_backend/domains/gateway/presentation/gateway_usage_list_response.py",
+      "tags": [
+        "gateway",
+        "presentation"
+      ]
+    },
+    {
+      "id": "function:b65_backend/domains/gateway/presentation/gateway_usage_list_response.py:build_gateway_model_usage_summary_response",
+      "type": "function",
+      "name": "build_gateway_model_usage_summary_response",
+      "summary": "gateway_usage_list_response.py 中的函数 build_gateway_model_usage_summary_response",
+      "filePath": "backend/domains/gateway/presentation/gateway_usage_list_response.py",
+      "lineStart": 48,
+      "lineEnd": 48,
+      "parentId": "file:b65_backend/domains/gateway/presentation/gateway_usage_list_response.py",
+      "tags": [
+        "gateway",
+        "presentation"
+      ]
+    },
+    {
+      "id": "function:b65_backend/domains/gateway/presentation/gateway_usage_list_response.py:build_managed_team_model_usage_summary_response",
+      "type": "function",
+      "name": "build_managed_team_model_usage_summary_response",
+      "summary": "gateway_usage_list_response.py 中的函数 build_managed_team_model_usage_summary_response",
+      "filePath": "backend/domains/gateway/presentation/gateway_usage_list_response.py",
+      "lineStart": 70,
+      "lineEnd": 70,
+      "parentId": "file:b65_backend/domains/gateway/presentation/gateway_usage_list_response.py",
+      "tags": [
+        "gateway",
+        "presentation"
+      ]
+    },
+    {
+      "id": "function:b65_backend/domains/gateway/presentation/gateway_usage_list_response.py:build_platform_credential_stat_list_response",
+      "type": "function",
+      "name": "build_platform_credential_stat_list_response",
+      "summary": "gateway_usage_list_response.py 中的函数 build_platform_credential_stat_list_response",
+      "filePath": "backend/domains/gateway/presentation/gateway_usage_list_response.py",
+      "lineStart": 92,
+      "lineEnd": 92,
+      "parentId": "file:b65_backend/domains/gateway/presentation/gateway_usage_list_response.py",
+      "tags": [
+        "gateway",
+        "presentation"
+      ]
+    },
+    {
+      "id": "file:b65_backend/domains/gateway/presentation/http_error_map.py",
+      "type": "file",
+      "name": "http_error_map.py",
+      "summary": "Gateway / 团队领域异常到 RFC 7807 ProblemContext 的映射表。",
+      "filePath": "backend/domains/gateway/presentation/http_error_map.py",
+      "language": "python",
+      "fileCategory": "code",
+      "totalLines": 285,
+      "functionCount": 3,
+      "classCount": 0,
+      "tags": [
+        "gateway",
+        "presentation"
+      ]
+    },
+    {
+      "id": "function:b65_backend/domains/gateway/presentation/http_error_map.py:_entitlement_exhausted_problem",
+      "type": "function",
+      "name": "_entitlement_exhausted_problem",
+      "summary": "http_error_map.py 中的函数 _entitlement_exhausted_problem",
+      "filePath": "backend/domains/gateway/presentation/http_error_map.py",
+      "lineStart": 66,
+      "lineEnd": 66,
+      "parentId": "file:b65_backend/domains/gateway/presentation/http_error_map.py",
+      "tags": [
+        "gateway",
+        "presentation"
+      ]
+    },
+    {
+      "id": "function:b65_backend/domains/gateway/presentation/http_error_map.py:_permission_denied_problem",
+      "type": "function",
+      "name": "_permission_denied_problem",
+      "summary": "http_error_map.py 中的函数 _permission_denied_problem",
+      "filePath": "backend/domains/gateway/presentation/http_error_map.py",
+      "lineStart": 86,
+      "lineEnd": 86,
+      "parentId": "file:b65_backend/domains/gateway/presentation/http_error_map.py",
+      "tags": [
+        "gateway",
+        "presentation"
+      ]
+    },
+    {
+      "id": "function:b65_backend/domains/gateway/presentation/http_error_map.py:problem_context_from_gateway_domain",
+      "type": "function",
+      "name": "problem_context_from_gateway_domain",
+      "summary": "http_error_map.py 中的函数 problem_context_from_gateway_domain",
+      "filePath": "backend/domains/gateway/presentation/http_error_map.py",
+      "lineStart": 269,
+      "lineEnd": 269,
+      "parentId": "file:b65_backend/domains/gateway/presentation/http_error_map.py",
+      "tags": [
+        "gateway",
+        "presentation"
+      ]
+    },
+    {
+      "id": "file:b65_backend/domains/gateway/presentation/managed_team_model_credential_filter_response.py",
+      "type": "file",
+      "name": "managed_team_model_credential_filter_response.py",
+      "summary": "跨团队模型凭据筛选列表的 API Schema 组装。",
+      "filePath": "backend/domains/gateway/presentation/managed_team_model_credential_filter_response.py",
+      "language": "python",
+      "fileCategory": "code",
+      "totalLines": 40,
+      "functionCount": 2,
+      "classCount": 0,
+      "tags": [
+        "gateway",
+        "presentation"
+      ]
+    },
+    {
+      "id": "function:b65_backend/domains/gateway/presentation/managed_team_model_credential_filter_response.py:managed_team_model_credential_filter_item",
+      "type": "function",
+      "name": "managed_team_model_credential_filter_item",
+      "summary": "managed_team_model_credential_filter_response.py 中的函数 managed_team_model_credential_filter_item",
+      "filePath": "backend/domains/gateway/presentation/managed_team_model_credential_filter_response.py",
+      "lineStart": 17,
+      "lineEnd": 17,
+      "parentId": "file:b65_backend/domains/gateway/presentation/managed_team_model_credential_filter_response.py",
+      "tags": [
+        "gateway",
+        "presentation"
+      ]
+    },
+    {
+      "id": "function:b65_backend/domains/gateway/presentation/managed_team_model_credential_filter_response.py:build_managed_team_model_credential_filter_list_response",
+      "type": "function",
+      "name": "build_managed_team_model_credential_filter_list_response",
+      "summary": "managed_team_model_credential_filter_response.py 中的函数 build_managed_team_model_credential_filter_list_response",
+      "filePath": "backend/domains/gateway/presentation/managed_team_model_credential_filter_response.py",
+      "lineStart": 28,
+      "lineEnd": 28,
+      "parentId": "file:b65_backend/domains/gateway/presentation/managed_team_model_credential_filter_response.py",
+      "tags": [
+        "gateway",
+        "presentation"
+      ]
+    },
+    {
+      "id": "file:b65_backend/domains/gateway/presentation/management_router.py",
+      "type": "file",
+      "name": "management_router.py",
+      "summary": "Gateway 管理面聚合路由，include_router 各子模块（team_scoped、my_credentials、playground 等）。",
+      "filePath": "backend/domains/gateway/presentation/management_router.py",
+      "language": "python",
+      "fileCategory": "code",
+      "totalLines": 50,
+      "functionCount": 0,
+      "classCount": 0,
+      "tags": [
+        "gateway",
+        "presentation"
+      ]
+    },
+    {
+      "id": "file:b65_backend/domains/gateway/presentation/model_list_query.py",
+      "type": "file",
+      "name": "model_list_query.py",
+      "summary": "Gateway 模型列表 HTTP Query 参数解析函数。",
+      "filePath": "backend/domains/gateway/presentation/model_list_query.py",
+      "language": "python",
+      "fileCategory": "code",
+      "totalLines": 73,
+      "functionCount": 1,
+      "classCount": 0,
+      "tags": [
+        "gateway",
+        "presentation"
+      ]
+    },
+    {
+      "id": "function:b65_backend/domains/gateway/presentation/model_list_query.py:parse_model_list_query",
+      "type": "function",
+      "name": "parse_model_list_query",
+      "summary": "model_list_query.py 中的函数 parse_model_list_query",
+      "filePath": "backend/domains/gateway/presentation/model_list_query.py",
+      "lineStart": 20,
+      "lineEnd": 20,
+      "parentId": "file:b65_backend/domains/gateway/presentation/model_list_query.py",
+      "tags": [
+        "gateway",
+        "presentation"
+      ]
+    },
+    {
+      "id": "file:b65_backend/domains/gateway/presentation/openai_compat_error_map.py",
+      "type": "file",
+      "name": "openai_compat_error_map.py",
+      "summary": "OpenAI 兼容路由错误映射，将 ProxyUseCase 业务异常转为 OpenAI 格式的 HTTPException。",
+      "filePath": "backend/domains/gateway/presentation/openai_compat_error_map.py",
+      "language": "python",
+      "fileCategory": "code",
+      "totalLines": 37,
+      "functionCount": 1,
+      "classCount": 0,
+      "tags": [
+        "gateway",
+        "presentation"
+      ]
+    },
+    {
+      "id": "function:b65_backend/domains/gateway/presentation/openai_compat_error_map.py:openai_http_exception_from_proxy_business_error",
+      "type": "function",
+      "name": "openai_http_exception_from_proxy_business_error",
+      "summary": "openai_compat_error_map.py 中的函数 openai_http_exception_from_proxy_business_error",
+      "filePath": "backend/domains/gateway/presentation/openai_compat_error_map.py",
+      "lineStart": 12,
+      "lineEnd": 12,
+      "parentId": "file:b65_backend/domains/gateway/presentation/openai_compat_error_map.py",
+      "tags": [
+        "gateway",
+        "presentation"
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:b65_backend/domains/gateway/presentation/anthropic_compat_router.py",
+      "target": "function:b65_backend/domains/gateway/presentation/anthropic_compat_router.py:_anthropic_error",
+      "relation": "contains"
+    },
+    {
+      "source": "file:b65_backend/domains/gateway/presentation/anthropic_compat_router.py",
+      "target": "function:b65_backend/domains/gateway/presentation/anthropic_compat_router.py:_wrap_anthropic_business_errors",
+      "relation": "contains"
+    },
+    {
+      "source": "file:b65_backend/domains/gateway/presentation/anthropic_compat_router.py",
+      "target": "module:domains.gateway.application.proxy_use_case",
+      "relation": "imports"
+    },
+    {
+      "source": "file:b65_backend/domains/gateway/presentation/anthropic_compat_router.py",
+      "target": "module:domains.gateway.domain.types",
+      "relation": "imports"
+    },
+    {
+      "source": "file:b65_backend/domains/gateway/presentation/anthropic_compat_router.py",
+      "target": "module:domains.gateway.presentation.deps",
+      "relation": "imports"
+    },
+    {
+      "source": "file:b65_backend/domains/gateway/presentation/anthropic_compat_router.py",
+      "target": "module:domains.gateway.presentation.gateway_proxy_business_error_classify",
+      "relation": "imports"
+    },
+    {
+      "source": "file:b65_backend/domains/gateway/presentation/anthropic_compat_router.py",
+      "target": "module:domains.gateway.presentation.proxy_request_context",
+      "relation": "imports"
+    },
+    {
+      "source": "file:b65_backend/domains/gateway/presentation/anthropic_compat_router.py",
+      "target": "module:libs.db.database",
+      "relation": "imports"
+    },
+    {
+      "source": "file:b65_backend/domains/gateway/presentation/anthropic_compat_router.py",
+      "target": "module:utils.logging",
+      "relation": "imports"
+    },
+    {
+      "source": "file:b65_backend/domains/gateway/presentation/credential_response.py",
+      "target": "function:b65_backend/domains/gateway/presentation/credential_response.py:credential_api_bases_response",
+      "relation": "contains"
+    },
+    {
+      "source": "file:b65_backend/domains/gateway/presentation/credential_response.py",
+      "target": "function:b65_backend/domains/gateway/presentation/credential_response.py:credential_api_bases_from_body",
+      "relation": "contains"
+    },
+    {
+      "source": "file:b65_backend/domains/gateway/presentation/credential_response.py",
+      "target": "function:b65_backend/domains/gateway/presentation/credential_response.py:decrypt_credential_api_key_for_reveal",
+      "relation": "contains"
+    },
+    {
+      "source": "file:b65_backend/domains/gateway/presentation/credential_response.py",
+      "target": "function:b65_backend/domains/gateway/presentation/credential_response.py:_resolved_effective_api_bases",
+      "relation": "contains"
+    },
+    {
+      "source": "file:b65_backend/domains/gateway/presentation/credential_response.py",
+      "target": "function:b65_backend/domains/gateway/presentation/credential_response.py:_response_api_base",
+      "relation": "contains"
+    },
+    {
+      "source": "file:b65_backend/domains/gateway/presentation/credential_response.py",
+      "target": "function:b65_backend/domains/gateway/presentation/credential_response.py:build_credential_response",
+      "relation": "contains"
+    },
+    {
+      "source": "file:b65_backend/domains/gateway/presentation/credential_response.py",
+      "target": "function:b65_backend/domains/gateway/presentation/credential_response.py:build_credential_metadata_response",
+      "relation": "contains"
+    },
+    {
+      "source": "file:b65_backend/domains/gateway/presentation/credential_response.py",
+      "target": "function:b65_backend/domains/gateway/presentation/credential_response.py:build_credential_response_for_team_workspace_list",
+      "relation": "contains"
+    },
+    {
+      "source": "file:b65_backend/domains/gateway/presentation/credential_response.py",
+      "target": "function:b65_backend/domains/gateway/presentation/credential_response.py:build_credential_summary_response",
+      "relation": "contains"
+    },
+    {
+      "source": "file:b65_backend/domains/gateway/presentation/credential_response.py",
+      "target": "function:b65_backend/domains/gateway/presentation/credential_response.py:build_playground_credential_summary_response",
+      "relation": "contains"
+    },
+    {
+      "source": "file:b65_backend/domains/gateway/presentation/credential_response.py",
+      "target": "module:domains.gateway.application.management.credential_read_model",
+      "relation": "imports"
+    },
+    {
+      "source": "file:b65_backend/domains/gateway/presentation/credential_response.py",
+      "target": "module:domains.gateway.domain.credential_display",
+      "relation": "imports"
+    },
+    {
+      "source": "file:b65_backend/domains/gateway/presentation/credential_response.py",
+      "target": "module:domains.gateway.domain.errors",
+      "relation": "imports"
+    },
+    {
+      "source": "file:b65_backend/domains/gateway/presentation/credential_response.py",
+      "target": "module:domains.gateway.domain.team_credential_access",
+      "relation": "imports"
+    },
+    {
+      "source": "file:b65_backend/domains/gateway/presentation/credential_response.py",
+      "target": "module:domains.gateway.domain.types",
+      "relation": "imports"
+    },
+    {
+      "source": "file:b65_backend/domains/gateway/presentation/credential_response.py",
+      "target": "module:domains.gateway.domain.upstream_endpoint",
+      "relation": "imports"
+    },
+    {
+      "source": "file:b65_backend/domains/gateway/presentation/credential_response.py",
+      "target": "module:domains.gateway.domain.upstream_profile_registry",
+      "relation": "imports"
+    },
+    {
+      "source": "file:b65_backend/domains/gateway/presentation/credential_response.py",
+      "target": "module:domains.gateway.domain.visibility",
+      "relation": "imports"
+    },
+    {
+      "source": "file:b65_backend/domains/gateway/presentation/credential_response.py",
+      "target": "module:domains.gateway.presentation.schemas.common",
+      "relation": "imports"
+    },
+    {
+      "source": "file:b65_backend/domains/gateway/presentation/credential_response.py",
+      "target": "module:libs.crypto",
+      "relation": "imports"
+    },
+    {
+      "source": "file:b65_backend/domains/gateway/presentation/credential_response.py",
+      "target": "module:utils.logging",
+      "relation": "imports"
+    },
+    {
+      "source": "file:b65_backend/domains/gateway/presentation/deps.py",
+      "target": "function:b65_backend/domains/gateway/presentation/deps.py:pick_gateway_proxy_plain_token",
+      "relation": "contains"
+    },
+    {
+      "source": "file:b65_backend/domains/gateway/presentation/deps.py",
+      "target": "class:b65_backend/domains/gateway/presentation/deps.py:GatewayPrincipal",
+      "relation": "contains"
+    },
+    {
+      "source": "file:b65_backend/domains/gateway/presentation/deps.py",
+      "target": "class:b65_backend/domains/gateway/presentation/deps.py:VkeyOrApikeyPrincipal",
+      "relation": "contains"
+    },
+    {
+      "source": "file:b65_backend/domains/gateway/presentation/deps.py",
+      "target": "module:domains.gateway.domain.types",
+      "relation": "imports"
+    },
+    {
+      "source": "file:b65_backend/domains/gateway/presentation/deps.py",
+      "target": "module:domains.gateway.domain.virtual_key_access",
+      "relation": "imports"
+    },
+    {
+      "source": "file:b65_backend/domains/gateway/presentation/deps.py",
+      "target": "module:domains.gateway.domain.virtual_key_service",
+      "relation": "imports"
+    },
+    {
+      "source": "file:b65_backend/domains/gateway/presentation/deps.py",
+      "target": "module:domains.gateway.presentation.platform_api_key_usage_middleware",
+      "relation": "imports"
+    },
+    {
+      "source": "file:b65_backend/domains/gateway/presentation/deps.py",
+      "target": "module:domains.identity.application.permission_context_composer",
+      "relation": "imports"
+    },
+    {
+      "source": "file:b65_backend/domains/gateway/presentation/deps.py",
+      "target": "module:domains.identity.application.user_display",
+      "relation": "imports"
+    },
+    {
+      "source": "file:b65_backend/domains/gateway/presentation/deps.py",
+      "target": "module:domains.tenancy.presentation.team_dependencies",
+      "relation": "imports"
+    },
+    {
+      "source": "file:b65_backend/domains/gateway/presentation/deps.py",
+      "target": "module:libs.db.database",
+      "relation": "imports"
+    },
+    {
+      "source": "file:b65_backend/domains/gateway/presentation/deps.py",
+      "target": "module:libs.exceptions",
+      "relation": "imports"
+    },
+    {
+      "source": "file:b65_backend/domains/gateway/presentation/deps.py",
+      "target": "module:libs.exceptions.codes",
+      "relation": "imports"
+    },
+    {
+      "source": "file:b65_backend/domains/gateway/presentation/deps.py",
+      "target": "module:utils.logging",
+      "relation": "imports"
+    },
+    {
+      "source": "file:b65_backend/domains/gateway/presentation/deps.py",
+      "target": "module:domains.gateway.application.gateway_access_factory",
+      "relation": "imports"
+    },
+    {
+      "source": "file:b65_backend/domains/gateway/presentation/deps.py",
+      "target": "module:domains.gateway.application.gateway_access_factory",
+      "relation": "imports"
+    },
+    {
+      "source": "file:b65_backend/domains/gateway/presentation/gateway_log_list_response.py",
+      "target": "function:b65_backend/domains/gateway/presentation/gateway_log_list_response.py:build_request_log_list_response",
+      "relation": "contains"
+    },
+    {
+      "source": "file:b65_backend/domains/gateway/presentation/gateway_log_list_response.py",
+      "target": "module:domains.gateway.presentation.schemas.common",
+      "relation": "imports"
+    },
+    {
+      "source": "file:b65_backend/domains/gateway/presentation/gateway_log_list_response.py",
+      "target": "module:libs.api.pagination",
+      "relation": "imports"
+    },
+    {
+      "source": "file:b65_backend/domains/gateway/presentation/gateway_model_list_response.py",
+      "target": "function:b65_backend/domains/gateway/presentation/gateway_model_list_response.py:build_gateway_model_list_response",
+      "relation": "contains"
+    },
+    {
+      "source": "file:b65_backend/domains/gateway/presentation/gateway_model_list_response.py",
+      "target": "function:b65_backend/domains/gateway/presentation/gateway_model_list_response.py:build_personal_model_list_response",
+      "relation": "contains"
+    },
+    {
+      "source": "file:b65_backend/domains/gateway/presentation/gateway_model_list_response.py",
+      "target": "function:b65_backend/domains/gateway/presentation/gateway_model_list_response.py:build_paginated_selector_models",
+      "relation": "contains"
+    },
+    {
+      "source": "file:b65_backend/domains/gateway/presentation/gateway_model_list_response.py",
+      "target": "module:domains.gateway.application.model_list_pipeline",
+      "relation": "imports"
+    },
+    {
+      "source": "file:b65_backend/domains/gateway/presentation/gateway_model_list_response.py",
+      "target": "module:domains.gateway.presentation.gateway_model_response",
+      "relation": "imports"
+    },
+    {
+      "source": "file:b65_backend/domains/gateway/presentation/gateway_model_list_response.py",
+      "target": "module:domains.gateway.presentation.schemas.common",
+      "relation": "imports"
+    },
+    {
+      "source": "file:b65_backend/domains/gateway/presentation/gateway_model_list_response.py",
+      "target": "module:libs.api.pagination",
+      "relation": "imports"
+    },
+    {
+      "source": "file:b65_backend/domains/gateway/presentation/gateway_model_list_response.py",
+      "target": "module:domains.gateway.infrastructure.models.system_gateway",
+      "relation": "imports"
+    },
+    {
+      "source": "file:b65_backend/domains/gateway/presentation/gateway_model_response.py",
+      "target": "function:b65_backend/domains/gateway/presentation/gateway_model_response.py:registry_kind_for_row",
+      "relation": "contains"
+    },
+    {
+      "source": "file:b65_backend/domains/gateway/presentation/gateway_model_response.py",
+      "target": "function:b65_backend/domains/gateway/presentation/gateway_model_response.py:_system_credential_summary",
+      "relation": "contains"
+    },
+    {
+      "source": "file:b65_backend/domains/gateway/presentation/gateway_model_response.py",
+      "target": "function:b65_backend/domains/gateway/presentation/gateway_model_response.py:build_gateway_model_response",
+      "relation": "contains"
+    },
+    {
+      "source": "file:b65_backend/domains/gateway/presentation/gateway_model_response.py",
+      "target": "module:domains.gateway.domain.policies.model_selection",
+      "relation": "imports"
+    },
+    {
+      "source": "file:b65_backend/domains/gateway/presentation/gateway_model_response.py",
+      "target": "module:domains.gateway.domain.visibility",
+      "relation": "imports"
+    },
+    {
+      "source": "file:b65_backend/domains/gateway/presentation/gateway_model_response.py",
+      "target": "module:domains.gateway.presentation.schemas.common",
+      "relation": "imports"
+    },
+    {
+      "source": "file:b65_backend/domains/gateway/presentation/gateway_model_response.py",
+      "target": "module:domains.gateway.presentation.tenant_scoped_response",
+      "relation": "imports"
+    },
+    {
+      "source": "file:b65_backend/domains/gateway/presentation/gateway_proxy_business_error_classify.py",
+      "target": "function:b65_backend/domains/gateway/presentation/gateway_proxy_business_error_classify.py:_upstream_rate_limit_failure",
+      "relation": "contains"
+    },
+    {
+      "source": "file:b65_backend/domains/gateway/presentation/gateway_proxy_business_error_classify.py",
+      "target": "function:b65_backend/domains/gateway/presentation/gateway_proxy_business_error_classify.py:classify_proxy_use_case_business_error",
+      "relation": "contains"
+    },
+    {
+      "source": "file:b65_backend/domains/gateway/presentation/gateway_proxy_business_error_classify.py",
+      "target": "class:b65_backend/domains/gateway/presentation/gateway_proxy_business_error_classify.py:ProxyUseCaseBusinessFailure",
+      "relation": "contains"
+    },
+    {
+      "source": "file:b65_backend/domains/gateway/presentation/gateway_proxy_business_error_classify.py",
+      "target": "module:domains.gateway.domain.errors",
+      "relation": "imports"
+    },
+    {
+      "source": "file:b65_backend/domains/gateway/presentation/gateway_proxy_business_error_classify.py",
+      "target": "module:domains.gateway.domain.proxy_policy",
+      "relation": "imports"
+    },
+    {
+      "source": "file:b65_backend/domains/gateway/presentation/gateway_proxy_business_error_classify.py",
+      "target": "module:libs.exceptions",
+      "relation": "imports"
+    },
+    {
+      "source": "file:b65_backend/domains/gateway/presentation/gateway_proxy_context.py",
+      "target": "function:b65_backend/domains/gateway/presentation/gateway_proxy_context.py:proxy_context_from_gateway_principal",
+      "relation": "contains"
+    },
+    {
+      "source": "file:b65_backend/domains/gateway/presentation/gateway_proxy_context.py",
+      "target": "module:domains.gateway.application.proxy_context",
+      "relation": "imports"
+    },
+    {
+      "source": "file:b65_backend/domains/gateway/presentation/gateway_proxy_context.py",
+      "target": "module:domains.gateway.domain.types",
+      "relation": "imports"
+    },
+    {
+      "source": "file:b65_backend/domains/gateway/presentation/gateway_proxy_context.py",
+      "target": "module:domains.gateway.presentation.deps",
+      "relation": "imports"
+    },
+    {
+      "source": "file:b65_backend/domains/gateway/presentation/gateway_usage_list_response.py",
+      "target": "function:b65_backend/domains/gateway/presentation/gateway_usage_list_response.py:build_usage_statistics_response",
+      "relation": "contains"
+    },
+    {
+      "source": "file:b65_backend/domains/gateway/presentation/gateway_usage_list_response.py",
+      "target": "function:b65_backend/domains/gateway/presentation/gateway_usage_list_response.py:build_gateway_model_usage_summary_response",
+      "relation": "contains"
+    },
+    {
+      "source": "file:b65_backend/domains/gateway/presentation/gateway_usage_list_response.py",
+      "target": "function:b65_backend/domains/gateway/presentation/gateway_usage_list_response.py:build_managed_team_model_usage_summary_response",
+      "relation": "contains"
+    },
+    {
+      "source": "file:b65_backend/domains/gateway/presentation/gateway_usage_list_response.py",
+      "target": "function:b65_backend/domains/gateway/presentation/gateway_usage_list_response.py:build_platform_credential_stat_list_response",
+      "relation": "contains"
+    },
+    {
+      "source": "file:b65_backend/domains/gateway/presentation/gateway_usage_list_response.py",
+      "target": "module:domains.gateway.domain.usage_read_model",
+      "relation": "imports"
+    },
+    {
+      "source": "file:b65_backend/domains/gateway/presentation/gateway_usage_list_response.py",
+      "target": "module:domains.gateway.presentation.schemas.common",
+      "relation": "imports"
+    },
+    {
+      "source": "file:b65_backend/domains/gateway/presentation/gateway_usage_list_response.py",
+      "target": "module:libs.api.pagination",
+      "relation": "imports"
+    },
+    {
+      "source": "file:b65_backend/domains/gateway/presentation/http_error_map.py",
+      "target": "function:b65_backend/domains/gateway/presentation/http_error_map.py:_entitlement_exhausted_problem",
+      "relation": "contains"
+    },
+    {
+      "source": "file:b65_backend/domains/gateway/presentation/http_error_map.py",
+      "target": "function:b65_backend/domains/gateway/presentation/http_error_map.py:_permission_denied_problem",
+      "relation": "contains"
+    },
+    {
+      "source": "file:b65_backend/domains/gateway/presentation/http_error_map.py",
+      "target": "function:b65_backend/domains/gateway/presentation/http_error_map.py:problem_context_from_gateway_domain",
+      "relation": "contains"
+    },
+    {
+      "source": "file:b65_backend/domains/gateway/presentation/http_error_map.py",
+      "target": "module:domains.gateway.domain.errors",
+      "relation": "imports"
+    },
+    {
+      "source": "file:b65_backend/domains/gateway/presentation/http_error_map.py",
+      "target": "module:libs.api.problem_details",
+      "relation": "imports"
+    },
+    {
+      "source": "file:b65_backend/domains/gateway/presentation/http_error_map.py",
+      "target": "module:libs.exceptions",
+      "relation": "imports"
+    },
+    {
+      "source": "file:b65_backend/domains/gateway/presentation/http_error_map.py",
+      "target": "module:libs.exceptions.codes",
+      "relation": "imports"
+    },
+    {
+      "source": "file:b65_backend/domains/gateway/presentation/http_error_map.py",
+      "target": "module:libs.iam.team_http",
+      "relation": "imports"
+    },
+    {
+      "source": "file:b65_backend/domains/gateway/presentation/http_error_map.py",
+      "target": "module:libs.exceptions.base",
+      "relation": "imports"
+    },
+    {
+      "source": "file:b65_backend/domains/gateway/presentation/managed_team_model_credential_filter_response.py",
+      "target": "function:b65_backend/domains/gateway/presentation/managed_team_model_credential_filter_response.py:managed_team_model_credential_filter_item",
+      "relation": "contains"
+    },
+    {
+      "source": "file:b65_backend/domains/gateway/presentation/managed_team_model_credential_filter_response.py",
+      "target": "function:b65_backend/domains/gateway/presentation/managed_team_model_credential_filter_response.py:build_managed_team_model_credential_filter_list_response",
+      "relation": "contains"
+    },
+    {
+      "source": "file:b65_backend/domains/gateway/presentation/managed_team_model_credential_filter_response.py",
+      "target": "module:domains.gateway.application.management.managed_team_model_credential_filter_reads",
+      "relation": "imports"
+    },
+    {
+      "source": "file:b65_backend/domains/gateway/presentation/managed_team_model_credential_filter_response.py",
+      "target": "module:domains.gateway.domain.team_registry_credential_display",
+      "relation": "imports"
+    },
+    {
+      "source": "file:b65_backend/domains/gateway/presentation/managed_team_model_credential_filter_response.py",
+      "target": "module:domains.gateway.presentation.schemas.common",
+      "relation": "imports"
+    },
+    {
+      "source": "file:b65_backend/domains/gateway/presentation/management_router.py",
+      "target": "module:domains.gateway.presentation.routers",
+      "relation": "imports"
+    },
+    {
+      "source": "file:b65_backend/domains/gateway/presentation/model_list_query.py",
+      "target": "function:b65_backend/domains/gateway/presentation/model_list_query.py:parse_model_list_query",
+      "relation": "contains"
+    },
+    {
+      "source": "file:b65_backend/domains/gateway/presentation/model_list_query.py",
+      "target": "module:domains.gateway.application.model_list_pipeline",
+      "relation": "imports"
+    },
+    {
+      "source": "file:b65_backend/domains/gateway/presentation/model_list_query.py",
+      "target": "module:domains.gateway.domain.policies.model_list_policy",
+      "relation": "imports"
+    },
+    {
+      "source": "file:b65_backend/domains/gateway/presentation/model_list_query.py",
+      "target": "module:libs.api.pagination",
+      "relation": "imports"
+    },
+    {
+      "source": "file:b65_backend/domains/gateway/presentation/openai_compat_error_map.py",
+      "target": "function:b65_backend/domains/gateway/presentation/openai_compat_error_map.py:openai_http_exception_from_proxy_business_error",
+      "relation": "contains"
+    },
+    {
+      "source": "file:b65_backend/domains/gateway/presentation/openai_compat_error_map.py",
+      "target": "module:domains.gateway.presentation.gateway_proxy_business_error_classify",
+      "relation": "imports"
+    }
+  ]
+}

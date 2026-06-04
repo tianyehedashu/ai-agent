@@ -1,0 +1,946 @@
+{
+  "nodes": [
+    {
+      "id": "file:b63_.agents/skills/vercel-react-best-practices/rules1/client-passive-event-listeners.md",
+      "type": "document",
+      "label": "client-passive-event-listeners.md",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/client-passive-event-listeners.md",
+      "language": "markdown",
+      "lines": 48,
+      "summary": "Use Passive Event Listeners for Scrolling Performance",
+      "tags": [
+        "最佳实践",
+        "docs",
+        "客户端",
+        "markdown"
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 1
+      },
+      "complexity": "moderate",
+      "name": "b63_.agents/skills/vercel-react-best-practices/rules1/client-passive-event-listeners.md"
+    },
+    {
+      "id": "file:b63_.agents/skills/vercel-react-best-practices/rules1/client-passive-event-listeners.md#Use Passive Event Listeners for Scrolling Performance",
+      "type": "section",
+      "label": "Use Passive Event Listeners for Scrolling Performance",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/client-passive-event-listeners.md",
+      "language": "markdown",
+      "lines": 0,
+      "summary": "Use Passive Event Listeners for Scrolling Performance",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b63_.agents/skills/vercel-react-best-practices/rules1/client-passive-event-listeners.md",
+      "complexity": "moderate",
+      "name": "b63_.agents/skills/vercel-react-best-practices/rules1/client-passive-event-listeners.md#Use Passive Event Listeners for Scrolling Performance"
+    },
+    {
+      "id": "file:b63_.agents/skills/vercel-react-best-practices/rules1/client-swr-dedup.md",
+      "type": "document",
+      "label": "client-swr-dedup.md",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/client-swr-dedup.md",
+      "language": "markdown",
+      "lines": 56,
+      "summary": "Use SWR for Automatic Deduplication",
+      "tags": [
+        "最佳实践",
+        "docs",
+        "客户端",
+        "markdown"
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 1
+      },
+      "complexity": "moderate",
+      "name": "b63_.agents/skills/vercel-react-best-practices/rules1/client-swr-dedup.md"
+    },
+    {
+      "id": "file:b63_.agents/skills/vercel-react-best-practices/rules1/client-swr-dedup.md#Use SWR for Automatic Deduplication",
+      "type": "section",
+      "label": "Use SWR for Automatic Deduplication",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/client-swr-dedup.md",
+      "language": "markdown",
+      "lines": 0,
+      "summary": "Use SWR for Automatic Deduplication",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b63_.agents/skills/vercel-react-best-practices/rules1/client-swr-dedup.md",
+      "complexity": "moderate",
+      "name": "b63_.agents/skills/vercel-react-best-practices/rules1/client-swr-dedup.md#Use SWR for Automatic Deduplication"
+    },
+    {
+      "id": "file:b63_.agents/skills/vercel-react-best-practices/rules1/js-batch-dom-css.md",
+      "type": "document",
+      "label": "js-batch-dom-css.md",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/js-batch-dom-css.md",
+      "language": "markdown",
+      "lines": 107,
+      "summary": "Avoid Layout Thrashing",
+      "tags": [
+        "最佳实践",
+        "docs",
+        "JavaScript 性能",
+        "markdown"
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 1
+      },
+      "complexity": "moderate",
+      "name": "b63_.agents/skills/vercel-react-best-practices/rules1/js-batch-dom-css.md"
+    },
+    {
+      "id": "file:b63_.agents/skills/vercel-react-best-practices/rules1/js-batch-dom-css.md#Avoid Layout Thrashing",
+      "type": "section",
+      "label": "Avoid Layout Thrashing",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/js-batch-dom-css.md",
+      "language": "markdown",
+      "lines": 0,
+      "summary": "Avoid Layout Thrashing",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b63_.agents/skills/vercel-react-best-practices/rules1/js-batch-dom-css.md",
+      "complexity": "moderate",
+      "name": "b63_.agents/skills/vercel-react-best-practices/rules1/js-batch-dom-css.md#Avoid Layout Thrashing"
+    },
+    {
+      "id": "file:b63_.agents/skills/vercel-react-best-practices/rules1/js-cache-function-results.md",
+      "type": "document",
+      "label": "js-cache-function-results.md",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/js-cache-function-results.md",
+      "language": "markdown",
+      "lines": 80,
+      "summary": "Cache Repeated Function Calls",
+      "tags": [
+        "最佳实践",
+        "docs",
+        "JavaScript 性能",
+        "markdown"
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 1
+      },
+      "complexity": "moderate",
+      "name": "b63_.agents/skills/vercel-react-best-practices/rules1/js-cache-function-results.md"
+    },
+    {
+      "id": "file:b63_.agents/skills/vercel-react-best-practices/rules1/js-cache-function-results.md#Cache Repeated Function Calls",
+      "type": "section",
+      "label": "Cache Repeated Function Calls",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/js-cache-function-results.md",
+      "language": "markdown",
+      "lines": 0,
+      "summary": "Cache Repeated Function Calls",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b63_.agents/skills/vercel-react-best-practices/rules1/js-cache-function-results.md",
+      "complexity": "moderate",
+      "name": "b63_.agents/skills/vercel-react-best-practices/rules1/js-cache-function-results.md#Cache Repeated Function Calls"
+    },
+    {
+      "id": "file:b63_.agents/skills/vercel-react-best-practices/rules1/js-cache-property-access.md",
+      "type": "document",
+      "label": "js-cache-property-access.md",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/js-cache-property-access.md",
+      "language": "markdown",
+      "lines": 28,
+      "summary": "Cache Property Access in Loops",
+      "tags": [
+        "最佳实践",
+        "docs",
+        "JavaScript 性能",
+        "markdown"
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 1
+      },
+      "complexity": "moderate",
+      "name": "b63_.agents/skills/vercel-react-best-practices/rules1/js-cache-property-access.md"
+    },
+    {
+      "id": "file:b63_.agents/skills/vercel-react-best-practices/rules1/js-cache-property-access.md#Cache Property Access in Loops",
+      "type": "section",
+      "label": "Cache Property Access in Loops",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/js-cache-property-access.md",
+      "language": "markdown",
+      "lines": 0,
+      "summary": "Cache Property Access in Loops",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b63_.agents/skills/vercel-react-best-practices/rules1/js-cache-property-access.md",
+      "complexity": "moderate",
+      "name": "b63_.agents/skills/vercel-react-best-practices/rules1/js-cache-property-access.md#Cache Property Access in Loops"
+    },
+    {
+      "id": "file:b63_.agents/skills/vercel-react-best-practices/rules1/js-cache-storage.md",
+      "type": "document",
+      "label": "js-cache-storage.md",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/js-cache-storage.md",
+      "language": "markdown",
+      "lines": 70,
+      "summary": "Cache Storage API Calls",
+      "tags": [
+        "最佳实践",
+        "docs",
+        "JavaScript 性能",
+        "markdown"
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 1
+      },
+      "complexity": "moderate",
+      "name": "b63_.agents/skills/vercel-react-best-practices/rules1/js-cache-storage.md"
+    },
+    {
+      "id": "file:b63_.agents/skills/vercel-react-best-practices/rules1/js-cache-storage.md#Cache Storage API Calls",
+      "type": "section",
+      "label": "Cache Storage API Calls",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/js-cache-storage.md",
+      "language": "markdown",
+      "lines": 0,
+      "summary": "Cache Storage API Calls",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b63_.agents/skills/vercel-react-best-practices/rules1/js-cache-storage.md",
+      "complexity": "moderate",
+      "name": "b63_.agents/skills/vercel-react-best-practices/rules1/js-cache-storage.md#Cache Storage API Calls"
+    },
+    {
+      "id": "file:b63_.agents/skills/vercel-react-best-practices/rules1/js-combine-iterations.md",
+      "type": "document",
+      "label": "js-combine-iterations.md",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/js-combine-iterations.md",
+      "language": "markdown",
+      "lines": 32,
+      "summary": "Combine Multiple Array Iterations",
+      "tags": [
+        "最佳实践",
+        "docs",
+        "JavaScript 性能",
+        "markdown"
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 1
+      },
+      "complexity": "moderate",
+      "name": "b63_.agents/skills/vercel-react-best-practices/rules1/js-combine-iterations.md"
+    },
+    {
+      "id": "file:b63_.agents/skills/vercel-react-best-practices/rules1/js-combine-iterations.md#Combine Multiple Array Iterations",
+      "type": "section",
+      "label": "Combine Multiple Array Iterations",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/js-combine-iterations.md",
+      "language": "markdown",
+      "lines": 0,
+      "summary": "Combine Multiple Array Iterations",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b63_.agents/skills/vercel-react-best-practices/rules1/js-combine-iterations.md",
+      "complexity": "moderate",
+      "name": "b63_.agents/skills/vercel-react-best-practices/rules1/js-combine-iterations.md#Combine Multiple Array Iterations"
+    },
+    {
+      "id": "file:b63_.agents/skills/vercel-react-best-practices/rules1/js-early-exit.md",
+      "type": "document",
+      "label": "js-early-exit.md",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/js-early-exit.md",
+      "language": "markdown",
+      "lines": 50,
+      "summary": "Early Return from Functions",
+      "tags": [
+        "最佳实践",
+        "docs",
+        "JavaScript 性能",
+        "markdown"
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 1
+      },
+      "complexity": "moderate",
+      "name": "b63_.agents/skills/vercel-react-best-practices/rules1/js-early-exit.md"
+    },
+    {
+      "id": "file:b63_.agents/skills/vercel-react-best-practices/rules1/js-early-exit.md#Early Return from Functions",
+      "type": "section",
+      "label": "Early Return from Functions",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/js-early-exit.md",
+      "language": "markdown",
+      "lines": 0,
+      "summary": "Early Return from Functions",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b63_.agents/skills/vercel-react-best-practices/rules1/js-early-exit.md",
+      "complexity": "moderate",
+      "name": "b63_.agents/skills/vercel-react-best-practices/rules1/js-early-exit.md#Early Return from Functions"
+    },
+    {
+      "id": "file:b63_.agents/skills/vercel-react-best-practices/rules1/js-flatmap-filter.md",
+      "type": "document",
+      "label": "js-flatmap-filter.md",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/js-flatmap-filter.md",
+      "language": "markdown",
+      "lines": 60,
+      "summary": "Use flatMap to Map and Filter in One Pass",
+      "tags": [
+        "最佳实践",
+        "docs",
+        "JavaScript 性能",
+        "markdown"
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 1
+      },
+      "complexity": "moderate",
+      "name": "b63_.agents/skills/vercel-react-best-practices/rules1/js-flatmap-filter.md"
+    },
+    {
+      "id": "file:b63_.agents/skills/vercel-react-best-practices/rules1/js-flatmap-filter.md#Use flatMap to Map and Filter in One Pass",
+      "type": "section",
+      "label": "Use flatMap to Map and Filter in One Pass",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/js-flatmap-filter.md",
+      "language": "markdown",
+      "lines": 0,
+      "summary": "Use flatMap to Map and Filter in One Pass",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b63_.agents/skills/vercel-react-best-practices/rules1/js-flatmap-filter.md",
+      "complexity": "moderate",
+      "name": "b63_.agents/skills/vercel-react-best-practices/rules1/js-flatmap-filter.md#Use flatMap to Map and Filter in One Pass"
+    },
+    {
+      "id": "file:b63_.agents/skills/vercel-react-best-practices/rules1/js-hoist-regexp.md",
+      "type": "document",
+      "label": "js-hoist-regexp.md",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/js-hoist-regexp.md",
+      "language": "markdown",
+      "lines": 45,
+      "summary": "Hoist RegExp Creation",
+      "tags": [
+        "最佳实践",
+        "docs",
+        "JavaScript 性能",
+        "markdown"
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 1
+      },
+      "complexity": "moderate",
+      "name": "b63_.agents/skills/vercel-react-best-practices/rules1/js-hoist-regexp.md"
+    },
+    {
+      "id": "file:b63_.agents/skills/vercel-react-best-practices/rules1/js-hoist-regexp.md#Hoist RegExp Creation",
+      "type": "section",
+      "label": "Hoist RegExp Creation",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/js-hoist-regexp.md",
+      "language": "markdown",
+      "lines": 0,
+      "summary": "Hoist RegExp Creation",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b63_.agents/skills/vercel-react-best-practices/rules1/js-hoist-regexp.md",
+      "complexity": "moderate",
+      "name": "b63_.agents/skills/vercel-react-best-practices/rules1/js-hoist-regexp.md#Hoist RegExp Creation"
+    },
+    {
+      "id": "file:b63_.agents/skills/vercel-react-best-practices/rules1/js-index-maps.md",
+      "type": "document",
+      "label": "js-index-maps.md",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/js-index-maps.md",
+      "language": "markdown",
+      "lines": 37,
+      "summary": "Build Index Maps for Repeated Lookups",
+      "tags": [
+        "最佳实践",
+        "docs",
+        "JavaScript 性能",
+        "markdown"
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 1
+      },
+      "complexity": "moderate",
+      "name": "b63_.agents/skills/vercel-react-best-practices/rules1/js-index-maps.md"
+    },
+    {
+      "id": "file:b63_.agents/skills/vercel-react-best-practices/rules1/js-index-maps.md#Build Index Maps for Repeated Lookups",
+      "type": "section",
+      "label": "Build Index Maps for Repeated Lookups",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/js-index-maps.md",
+      "language": "markdown",
+      "lines": 0,
+      "summary": "Build Index Maps for Repeated Lookups",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b63_.agents/skills/vercel-react-best-practices/rules1/js-index-maps.md",
+      "complexity": "moderate",
+      "name": "b63_.agents/skills/vercel-react-best-practices/rules1/js-index-maps.md#Build Index Maps for Repeated Lookups"
+    },
+    {
+      "id": "file:b63_.agents/skills/vercel-react-best-practices/rules1/js-length-check-first.md",
+      "type": "document",
+      "label": "js-length-check-first.md",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/js-length-check-first.md",
+      "language": "markdown",
+      "lines": 49,
+      "summary": "Early Length Check for Array Comparisons",
+      "tags": [
+        "最佳实践",
+        "docs",
+        "JavaScript 性能",
+        "markdown"
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 1
+      },
+      "complexity": "moderate",
+      "name": "b63_.agents/skills/vercel-react-best-practices/rules1/js-length-check-first.md"
+    },
+    {
+      "id": "file:b63_.agents/skills/vercel-react-best-practices/rules1/js-length-check-first.md#Early Length Check for Array Comparisons",
+      "type": "section",
+      "label": "Early Length Check for Array Comparisons",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/js-length-check-first.md",
+      "language": "markdown",
+      "lines": 0,
+      "summary": "Early Length Check for Array Comparisons",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b63_.agents/skills/vercel-react-best-practices/rules1/js-length-check-first.md",
+      "complexity": "moderate",
+      "name": "b63_.agents/skills/vercel-react-best-practices/rules1/js-length-check-first.md#Early Length Check for Array Comparisons"
+    },
+    {
+      "id": "file:b63_.agents/skills/vercel-react-best-practices/rules1/js-min-max-loop.md",
+      "type": "document",
+      "label": "js-min-max-loop.md",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/js-min-max-loop.md",
+      "language": "markdown",
+      "lines": 82,
+      "summary": "Use Loop for Min/Max Instead of Sort",
+      "tags": [
+        "最佳实践",
+        "docs",
+        "JavaScript 性能",
+        "markdown"
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 1
+      },
+      "complexity": "moderate",
+      "name": "b63_.agents/skills/vercel-react-best-practices/rules1/js-min-max-loop.md"
+    },
+    {
+      "id": "file:b63_.agents/skills/vercel-react-best-practices/rules1/js-min-max-loop.md#Use Loop for Min/Max Instead of Sort",
+      "type": "section",
+      "label": "Use Loop for Min/Max Instead of Sort",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/js-min-max-loop.md",
+      "language": "markdown",
+      "lines": 0,
+      "summary": "Use Loop for Min/Max Instead of Sort",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b63_.agents/skills/vercel-react-best-practices/rules1/js-min-max-loop.md",
+      "complexity": "moderate",
+      "name": "b63_.agents/skills/vercel-react-best-practices/rules1/js-min-max-loop.md#Use Loop for Min/Max Instead of Sort"
+    },
+    {
+      "id": "file:b63_.agents/skills/vercel-react-best-practices/rules1/js-request-idle-callback.md",
+      "type": "document",
+      "label": "js-request-idle-callback.md",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/js-request-idle-callback.md",
+      "language": "markdown",
+      "lines": 105,
+      "summary": "Defer Non-Critical Work with requestIdleCallback",
+      "tags": [
+        "最佳实践",
+        "docs",
+        "JavaScript 性能",
+        "markdown"
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 1
+      },
+      "complexity": "moderate",
+      "name": "b63_.agents/skills/vercel-react-best-practices/rules1/js-request-idle-callback.md"
+    },
+    {
+      "id": "file:b63_.agents/skills/vercel-react-best-practices/rules1/js-request-idle-callback.md#Defer Non-Critical Work with requestIdleCallback",
+      "type": "section",
+      "label": "Defer Non-Critical Work with requestIdleCallback",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/js-request-idle-callback.md",
+      "language": "markdown",
+      "lines": 0,
+      "summary": "Defer Non-Critical Work with requestIdleCallback",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b63_.agents/skills/vercel-react-best-practices/rules1/js-request-idle-callback.md",
+      "complexity": "moderate",
+      "name": "b63_.agents/skills/vercel-react-best-practices/rules1/js-request-idle-callback.md#Defer Non-Critical Work with requestIdleCallback"
+    },
+    {
+      "id": "file:b63_.agents/skills/vercel-react-best-practices/rules1/js-set-map-lookups.md",
+      "type": "document",
+      "label": "js-set-map-lookups.md",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/js-set-map-lookups.md",
+      "language": "markdown",
+      "lines": 24,
+      "summary": "Use Set/Map for O(1) Lookups",
+      "tags": [
+        "最佳实践",
+        "docs",
+        "JavaScript 性能",
+        "markdown"
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 1
+      },
+      "complexity": "moderate",
+      "name": "b63_.agents/skills/vercel-react-best-practices/rules1/js-set-map-lookups.md"
+    },
+    {
+      "id": "file:b63_.agents/skills/vercel-react-best-practices/rules1/js-set-map-lookups.md#Use Set/Map for O(1) Lookups",
+      "type": "section",
+      "label": "Use Set/Map for O(1) Lookups",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/js-set-map-lookups.md",
+      "language": "markdown",
+      "lines": 0,
+      "summary": "Use Set/Map for O(1) Lookups",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b63_.agents/skills/vercel-react-best-practices/rules1/js-set-map-lookups.md",
+      "complexity": "moderate",
+      "name": "b63_.agents/skills/vercel-react-best-practices/rules1/js-set-map-lookups.md#Use Set/Map for O(1) Lookups"
+    },
+    {
+      "id": "file:b63_.agents/skills/vercel-react-best-practices/rules1/js-tosorted-immutable.md",
+      "type": "document",
+      "label": "js-tosorted-immutable.md",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/js-tosorted-immutable.md",
+      "language": "markdown",
+      "lines": 57,
+      "summary": "Use toSorted() Instead of sort() for Immutability",
+      "tags": [
+        "最佳实践",
+        "docs",
+        "JavaScript 性能",
+        "markdown"
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 1
+      },
+      "complexity": "moderate",
+      "name": "b63_.agents/skills/vercel-react-best-practices/rules1/js-tosorted-immutable.md"
+    },
+    {
+      "id": "file:b63_.agents/skills/vercel-react-best-practices/rules1/js-tosorted-immutable.md#Use toSorted() Instead of sort() for Immutability",
+      "type": "section",
+      "label": "Use toSorted() Instead of sort() for Immutability",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/js-tosorted-immutable.md",
+      "language": "markdown",
+      "lines": 0,
+      "summary": "Use toSorted() Instead of sort() for Immutability",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b63_.agents/skills/vercel-react-best-practices/rules1/js-tosorted-immutable.md",
+      "complexity": "moderate",
+      "name": "b63_.agents/skills/vercel-react-best-practices/rules1/js-tosorted-immutable.md#Use toSorted() Instead of sort() for Immutability"
+    },
+    {
+      "id": "file:b63_.agents/skills/vercel-react-best-practices/rules1/rendering-activity.md",
+      "type": "document",
+      "label": "rendering-activity.md",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/rendering-activity.md",
+      "language": "markdown",
+      "lines": 26,
+      "summary": "Use Activity Component for Show/Hide",
+      "tags": [
+        "最佳实践",
+        "渲染性能",
+        "docs",
+        "markdown"
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 1
+      },
+      "complexity": "moderate",
+      "name": "b63_.agents/skills/vercel-react-best-practices/rules1/rendering-activity.md"
+    },
+    {
+      "id": "file:b63_.agents/skills/vercel-react-best-practices/rules1/rendering-activity.md#Use Activity Component for Show/Hide",
+      "type": "section",
+      "label": "Use Activity Component for Show/Hide",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/rendering-activity.md",
+      "language": "markdown",
+      "lines": 0,
+      "summary": "Use Activity Component for Show/Hide",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b63_.agents/skills/vercel-react-best-practices/rules1/rendering-activity.md",
+      "complexity": "moderate",
+      "name": "b63_.agents/skills/vercel-react-best-practices/rules1/rendering-activity.md#Use Activity Component for Show/Hide"
+    },
+    {
+      "id": "file:b63_.agents/skills/vercel-react-best-practices/rules1/rendering-animate-svg-wrapper.md",
+      "type": "document",
+      "label": "rendering-animate-svg-wrapper.md",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/rendering-animate-svg-wrapper.md",
+      "language": "markdown",
+      "lines": 47,
+      "summary": "Animate SVG Wrapper Instead of SVG Element",
+      "tags": [
+        "最佳实践",
+        "渲染性能",
+        "docs",
+        "markdown"
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 1
+      },
+      "complexity": "moderate",
+      "name": "b63_.agents/skills/vercel-react-best-practices/rules1/rendering-animate-svg-wrapper.md"
+    },
+    {
+      "id": "file:b63_.agents/skills/vercel-react-best-practices/rules1/rendering-animate-svg-wrapper.md#Animate SVG Wrapper Instead of SVG Element",
+      "type": "section",
+      "label": "Animate SVG Wrapper Instead of SVG Element",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/rendering-animate-svg-wrapper.md",
+      "language": "markdown",
+      "lines": 0,
+      "summary": "Animate SVG Wrapper Instead of SVG Element",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b63_.agents/skills/vercel-react-best-practices/rules1/rendering-animate-svg-wrapper.md",
+      "complexity": "moderate",
+      "name": "b63_.agents/skills/vercel-react-best-practices/rules1/rendering-animate-svg-wrapper.md#Animate SVG Wrapper Instead of SVG Element"
+    },
+    {
+      "id": "file:b63_.agents/skills/vercel-react-best-practices/rules1/rendering-conditional-render.md",
+      "type": "document",
+      "label": "rendering-conditional-render.md",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/rendering-conditional-render.md",
+      "language": "markdown",
+      "lines": 40,
+      "summary": "Use Explicit Conditional Rendering",
+      "tags": [
+        "最佳实践",
+        "渲染性能",
+        "docs",
+        "markdown"
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 1
+      },
+      "complexity": "moderate",
+      "name": "b63_.agents/skills/vercel-react-best-practices/rules1/rendering-conditional-render.md"
+    },
+    {
+      "id": "file:b63_.agents/skills/vercel-react-best-practices/rules1/rendering-conditional-render.md#Use Explicit Conditional Rendering",
+      "type": "section",
+      "label": "Use Explicit Conditional Rendering",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/rendering-conditional-render.md",
+      "language": "markdown",
+      "lines": 0,
+      "summary": "Use Explicit Conditional Rendering",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b63_.agents/skills/vercel-react-best-practices/rules1/rendering-conditional-render.md",
+      "complexity": "moderate",
+      "name": "b63_.agents/skills/vercel-react-best-practices/rules1/rendering-conditional-render.md#Use Explicit Conditional Rendering"
+    },
+    {
+      "id": "file:b63_.agents/skills/vercel-react-best-practices/rules1/rendering-content-visibility.md",
+      "type": "document",
+      "label": "rendering-content-visibility.md",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/rendering-content-visibility.md",
+      "language": "markdown",
+      "lines": 38,
+      "summary": "CSS content-visibility for Long Lists",
+      "tags": [
+        "最佳实践",
+        "渲染性能",
+        "docs",
+        "markdown"
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 1
+      },
+      "complexity": "moderate",
+      "name": "b63_.agents/skills/vercel-react-best-practices/rules1/rendering-content-visibility.md"
+    },
+    {
+      "id": "file:b63_.agents/skills/vercel-react-best-practices/rules1/rendering-content-visibility.md#CSS content-visibility for Long Lists",
+      "type": "section",
+      "label": "CSS content-visibility for Long Lists",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/rendering-content-visibility.md",
+      "language": "markdown",
+      "lines": 0,
+      "summary": "CSS content-visibility for Long Lists",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b63_.agents/skills/vercel-react-best-practices/rules1/rendering-content-visibility.md",
+      "complexity": "moderate",
+      "name": "b63_.agents/skills/vercel-react-best-practices/rules1/rendering-content-visibility.md#CSS content-visibility for Long Lists"
+    }
+  ],
+  "edges": [
+    {
+      "id": "b63_.agents/skills/vercel-react-best-practices/rules1/client-passive-event-listeners.md--contains--b63_.agents/skills/vercel-react-best-practices/rules1/client-passive-event-listeners.md#Use Passive Event Listeners for Scrolling Performance",
+      "source": "file:b63_.agents/skills/vercel-react-best-practices/rules1/client-passive-event-listeners.md",
+      "target": "file:b63_.agents/skills/vercel-react-best-practices/rules1/client-passive-event-listeners.md#Use Passive Event Listeners for Scrolling Performance",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    },
+    {
+      "id": "b63_.agents/skills/vercel-react-best-practices/rules1/client-swr-dedup.md--contains--b63_.agents/skills/vercel-react-best-practices/rules1/client-swr-dedup.md#Use SWR for Automatic Deduplication",
+      "source": "file:b63_.agents/skills/vercel-react-best-practices/rules1/client-swr-dedup.md",
+      "target": "file:b63_.agents/skills/vercel-react-best-practices/rules1/client-swr-dedup.md#Use SWR for Automatic Deduplication",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    },
+    {
+      "id": "b63_.agents/skills/vercel-react-best-practices/rules1/js-batch-dom-css.md--contains--b63_.agents/skills/vercel-react-best-practices/rules1/js-batch-dom-css.md#Avoid Layout Thrashing",
+      "source": "file:b63_.agents/skills/vercel-react-best-practices/rules1/js-batch-dom-css.md",
+      "target": "file:b63_.agents/skills/vercel-react-best-practices/rules1/js-batch-dom-css.md#Avoid Layout Thrashing",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    },
+    {
+      "id": "b63_.agents/skills/vercel-react-best-practices/rules1/js-cache-function-results.md--contains--b63_.agents/skills/vercel-react-best-practices/rules1/js-cache-function-results.md#Cache Repeated Function Calls",
+      "source": "file:b63_.agents/skills/vercel-react-best-practices/rules1/js-cache-function-results.md",
+      "target": "file:b63_.agents/skills/vercel-react-best-practices/rules1/js-cache-function-results.md#Cache Repeated Function Calls",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    },
+    {
+      "id": "b63_.agents/skills/vercel-react-best-practices/rules1/js-cache-property-access.md--contains--b63_.agents/skills/vercel-react-best-practices/rules1/js-cache-property-access.md#Cache Property Access in Loops",
+      "source": "file:b63_.agents/skills/vercel-react-best-practices/rules1/js-cache-property-access.md",
+      "target": "file:b63_.agents/skills/vercel-react-best-practices/rules1/js-cache-property-access.md#Cache Property Access in Loops",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    },
+    {
+      "id": "b63_.agents/skills/vercel-react-best-practices/rules1/js-cache-storage.md--contains--b63_.agents/skills/vercel-react-best-practices/rules1/js-cache-storage.md#Cache Storage API Calls",
+      "source": "file:b63_.agents/skills/vercel-react-best-practices/rules1/js-cache-storage.md",
+      "target": "file:b63_.agents/skills/vercel-react-best-practices/rules1/js-cache-storage.md#Cache Storage API Calls",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    },
+    {
+      "id": "b63_.agents/skills/vercel-react-best-practices/rules1/js-combine-iterations.md--contains--b63_.agents/skills/vercel-react-best-practices/rules1/js-combine-iterations.md#Combine Multiple Array Iterations",
+      "source": "file:b63_.agents/skills/vercel-react-best-practices/rules1/js-combine-iterations.md",
+      "target": "file:b63_.agents/skills/vercel-react-best-practices/rules1/js-combine-iterations.md#Combine Multiple Array Iterations",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    },
+    {
+      "id": "b63_.agents/skills/vercel-react-best-practices/rules1/js-early-exit.md--contains--b63_.agents/skills/vercel-react-best-practices/rules1/js-early-exit.md#Early Return from Functions",
+      "source": "file:b63_.agents/skills/vercel-react-best-practices/rules1/js-early-exit.md",
+      "target": "file:b63_.agents/skills/vercel-react-best-practices/rules1/js-early-exit.md#Early Return from Functions",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    },
+    {
+      "id": "b63_.agents/skills/vercel-react-best-practices/rules1/js-flatmap-filter.md--contains--b63_.agents/skills/vercel-react-best-practices/rules1/js-flatmap-filter.md#Use flatMap to Map and Filter in One Pass",
+      "source": "file:b63_.agents/skills/vercel-react-best-practices/rules1/js-flatmap-filter.md",
+      "target": "file:b63_.agents/skills/vercel-react-best-practices/rules1/js-flatmap-filter.md#Use flatMap to Map and Filter in One Pass",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    },
+    {
+      "id": "b63_.agents/skills/vercel-react-best-practices/rules1/js-hoist-regexp.md--contains--b63_.agents/skills/vercel-react-best-practices/rules1/js-hoist-regexp.md#Hoist RegExp Creation",
+      "source": "file:b63_.agents/skills/vercel-react-best-practices/rules1/js-hoist-regexp.md",
+      "target": "file:b63_.agents/skills/vercel-react-best-practices/rules1/js-hoist-regexp.md#Hoist RegExp Creation",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    },
+    {
+      "id": "b63_.agents/skills/vercel-react-best-practices/rules1/js-index-maps.md--contains--b63_.agents/skills/vercel-react-best-practices/rules1/js-index-maps.md#Build Index Maps for Repeated Lookups",
+      "source": "file:b63_.agents/skills/vercel-react-best-practices/rules1/js-index-maps.md",
+      "target": "file:b63_.agents/skills/vercel-react-best-practices/rules1/js-index-maps.md#Build Index Maps for Repeated Lookups",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    },
+    {
+      "id": "b63_.agents/skills/vercel-react-best-practices/rules1/js-length-check-first.md--contains--b63_.agents/skills/vercel-react-best-practices/rules1/js-length-check-first.md#Early Length Check for Array Comparisons",
+      "source": "file:b63_.agents/skills/vercel-react-best-practices/rules1/js-length-check-first.md",
+      "target": "file:b63_.agents/skills/vercel-react-best-practices/rules1/js-length-check-first.md#Early Length Check for Array Comparisons",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    },
+    {
+      "id": "b63_.agents/skills/vercel-react-best-practices/rules1/js-min-max-loop.md--contains--b63_.agents/skills/vercel-react-best-practices/rules1/js-min-max-loop.md#Use Loop for Min/Max Instead of Sort",
+      "source": "file:b63_.agents/skills/vercel-react-best-practices/rules1/js-min-max-loop.md",
+      "target": "file:b63_.agents/skills/vercel-react-best-practices/rules1/js-min-max-loop.md#Use Loop for Min/Max Instead of Sort",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    },
+    {
+      "id": "b63_.agents/skills/vercel-react-best-practices/rules1/js-request-idle-callback.md--contains--b63_.agents/skills/vercel-react-best-practices/rules1/js-request-idle-callback.md#Defer Non-Critical Work with requestIdleCallback",
+      "source": "file:b63_.agents/skills/vercel-react-best-practices/rules1/js-request-idle-callback.md",
+      "target": "file:b63_.agents/skills/vercel-react-best-practices/rules1/js-request-idle-callback.md#Defer Non-Critical Work with requestIdleCallback",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    },
+    {
+      "id": "b63_.agents/skills/vercel-react-best-practices/rules1/js-set-map-lookups.md--contains--b63_.agents/skills/vercel-react-best-practices/rules1/js-set-map-lookups.md#Use Set/Map for O(1) Lookups",
+      "source": "file:b63_.agents/skills/vercel-react-best-practices/rules1/js-set-map-lookups.md",
+      "target": "file:b63_.agents/skills/vercel-react-best-practices/rules1/js-set-map-lookups.md#Use Set/Map for O(1) Lookups",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    },
+    {
+      "id": "b63_.agents/skills/vercel-react-best-practices/rules1/js-tosorted-immutable.md--contains--b63_.agents/skills/vercel-react-best-practices/rules1/js-tosorted-immutable.md#Use toSorted() Instead of sort() for Immutability",
+      "source": "file:b63_.agents/skills/vercel-react-best-practices/rules1/js-tosorted-immutable.md",
+      "target": "file:b63_.agents/skills/vercel-react-best-practices/rules1/js-tosorted-immutable.md#Use toSorted() Instead of sort() for Immutability",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    },
+    {
+      "id": "b63_.agents/skills/vercel-react-best-practices/rules1/rendering-activity.md--contains--b63_.agents/skills/vercel-react-best-practices/rules1/rendering-activity.md#Use Activity Component for Show/Hide",
+      "source": "file:b63_.agents/skills/vercel-react-best-practices/rules1/rendering-activity.md",
+      "target": "file:b63_.agents/skills/vercel-react-best-practices/rules1/rendering-activity.md#Use Activity Component for Show/Hide",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    },
+    {
+      "id": "b63_.agents/skills/vercel-react-best-practices/rules1/rendering-animate-svg-wrapper.md--contains--b63_.agents/skills/vercel-react-best-practices/rules1/rendering-animate-svg-wrapper.md#Animate SVG Wrapper Instead of SVG Element",
+      "source": "file:b63_.agents/skills/vercel-react-best-practices/rules1/rendering-animate-svg-wrapper.md",
+      "target": "file:b63_.agents/skills/vercel-react-best-practices/rules1/rendering-animate-svg-wrapper.md#Animate SVG Wrapper Instead of SVG Element",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    },
+    {
+      "id": "b63_.agents/skills/vercel-react-best-practices/rules1/rendering-conditional-render.md--contains--b63_.agents/skills/vercel-react-best-practices/rules1/rendering-conditional-render.md#Use Explicit Conditional Rendering",
+      "source": "file:b63_.agents/skills/vercel-react-best-practices/rules1/rendering-conditional-render.md",
+      "target": "file:b63_.agents/skills/vercel-react-best-practices/rules1/rendering-conditional-render.md#Use Explicit Conditional Rendering",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    },
+    {
+      "id": "b63_.agents/skills/vercel-react-best-practices/rules1/rendering-content-visibility.md--contains--b63_.agents/skills/vercel-react-best-practices/rules1/rendering-content-visibility.md#CSS content-visibility for Long Lists",
+      "source": "file:b63_.agents/skills/vercel-react-best-practices/rules1/rendering-content-visibility.md",
+      "target": "file:b63_.agents/skills/vercel-react-best-practices/rules1/rendering-content-visibility.md#CSS content-visibility for Long Lists",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    }
+  ]
+}

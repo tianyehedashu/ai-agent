@@ -1,0 +1,60 @@
+{
+  "nodes": [
+    {
+      "id": "file:.claude/agents/backend-test-verify-and-fix.md",
+      "type": "file",
+      "label": "backend-test-verify-and-fix.md",
+      "path": ".claude/agents/backend-test-verify-and-fix.md",
+      "language": "markdown",
+      "summary": "Claude Agent 指令文档，定义后端测试验证与修复 Agent 的任务目标、问题分类策略、修复优先级和最佳实践。涵盖代码变更导致的问题、测试代码本身的问题、依赖环境问题、过时测试等场景的处理流程。",
+      "tags": ["agent", "backend", "testing", "pytest", "quality-assurance"]
+    },
+    {
+      "id": "file:.claude/agents/code-rule-check.md",
+      "type": "file",
+      "label": "code-rule-check.md",
+      "path": ".claude/agents/code-rule-check.md",
+      "language": "markdown",
+      "summary": "Claude Agent 指令文档，提供代码规则检查清单，覆盖 DDD 四层架构、域目录归属、跨域应用端口、命名规范、类型安全、错误处理、DDD 反退化、Gateway 热路径、CQRS 读路径、前端 TypeScript 规范等 16 个检查维度。",
+      "tags": ["agent", "code-review", "ddd", "architecture", "standards"]
+    },
+    {
+      "id": "file:.claude/agents/fronted-code-check.md",
+      "type": "file",
+      "label": "fronted-code-check.md",
+      "path": ".claude/agents/fronted-code-check.md",
+      "language": "markdown",
+      "summary": "Claude Agent 指令文档，定义前端代码检查 Agent 的核心原则、技术栈规范、目录结构约定、状态管理规范、Hooks 使用规范、Tailwind CSS 和 shadcn/ui 使用规范，以及禁止行为清单。",
+      "tags": ["agent", "frontend", "react", "typescript", "eslint", "tailwind"]
+    },
+    {
+      "id": "file:.claude/agents/pylint-fix.md",
+      "type": "file",
+      "label": "pylint-fix.md",
+      "path": ".claude/agents/pylint-fix.md",
+      "language": "markdown",
+      "summary": "Claude Agent 指令文档，定义 Pylint 问题修复 Agent 的执行流程、问题分类与修复策略（简单/中等/架构问题）、修复优先级、禁止行为和最佳实践，包含 Google 风格文档字符串规范。",
+      "tags": ["agent", "backend", "python", "pylint", "linting"]
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:.claude/agents/code-rule-check.md",
+      "target": "file:.claude/agents/pylint-fix.md",
+      "type": "references",
+      "label": "引用"
+    },
+    {
+      "source": "file:.claude/agents/code-rule-check.md",
+      "target": "file:.claude/agents/fronted-code-check.md",
+      "type": "related_to",
+      "label": "相关"
+    },
+    {
+      "source": "file:.claude/agents/pylint-fix.md",
+      "target": "file:.claude/agents/code-rule-check.md",
+      "type": "references",
+      "label": "引用"
+    }
+  ]
+}

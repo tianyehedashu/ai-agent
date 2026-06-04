@@ -1,0 +1,951 @@
+{
+  "nodes": [
+    {
+      "id": "file:b64_.agents/skills/vercel-react-best-practices/rules1/rendering-hoist-jsx.md",
+      "type": "document",
+      "label": "rendering-hoist-jsx.md",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/rendering-hoist-jsx.md",
+      "language": "markdown",
+      "lines": 46,
+      "summary": "Hoist Static JSX Elements",
+      "tags": [
+        "最佳实践",
+        "渲染性能",
+        "docs",
+        "markdown"
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 1
+      },
+      "complexity": "moderate",
+      "name": "b64_.agents/skills/vercel-react-best-practices/rules1/rendering-hoist-jsx.md"
+    },
+    {
+      "id": "file:b64_.agents/skills/vercel-react-best-practices/rules1/rendering-hoist-jsx.md#Hoist Static JSX Elements",
+      "type": "section",
+      "label": "Hoist Static JSX Elements",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/rendering-hoist-jsx.md",
+      "language": "markdown",
+      "lines": 0,
+      "summary": "Hoist Static JSX Elements",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b64_.agents/skills/vercel-react-best-practices/rules1/rendering-hoist-jsx.md",
+      "complexity": "moderate",
+      "name": "b64_.agents/skills/vercel-react-best-practices/rules1/rendering-hoist-jsx.md#Hoist Static JSX Elements"
+    },
+    {
+      "id": "file:b64_.agents/skills/vercel-react-best-practices/rules1/rendering-hydration-no-flicker.md",
+      "type": "document",
+      "label": "rendering-hydration-no-flicker.md",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/rendering-hydration-no-flicker.md",
+      "language": "markdown",
+      "lines": 82,
+      "summary": "Prevent Hydration Mismatch Without Flickering",
+      "tags": [
+        "最佳实践",
+        "渲染性能",
+        "docs",
+        "markdown"
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 1
+      },
+      "complexity": "moderate",
+      "name": "b64_.agents/skills/vercel-react-best-practices/rules1/rendering-hydration-no-flicker.md"
+    },
+    {
+      "id": "file:b64_.agents/skills/vercel-react-best-practices/rules1/rendering-hydration-no-flicker.md#Prevent Hydration Mismatch Without Flickering",
+      "type": "section",
+      "label": "Prevent Hydration Mismatch Without Flickering",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/rendering-hydration-no-flicker.md",
+      "language": "markdown",
+      "lines": 0,
+      "summary": "Prevent Hydration Mismatch Without Flickering",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b64_.agents/skills/vercel-react-best-practices/rules1/rendering-hydration-no-flicker.md",
+      "complexity": "moderate",
+      "name": "b64_.agents/skills/vercel-react-best-practices/rules1/rendering-hydration-no-flicker.md#Prevent Hydration Mismatch Without Flickering"
+    },
+    {
+      "id": "file:b64_.agents/skills/vercel-react-best-practices/rules1/rendering-hydration-suppress-warning.md",
+      "type": "document",
+      "label": "rendering-hydration-suppress-warning.md",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/rendering-hydration-suppress-warning.md",
+      "language": "markdown",
+      "lines": 30,
+      "summary": "Suppress Expected Hydration Mismatches",
+      "tags": [
+        "最佳实践",
+        "渲染性能",
+        "docs",
+        "markdown"
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 1
+      },
+      "complexity": "moderate",
+      "name": "b64_.agents/skills/vercel-react-best-practices/rules1/rendering-hydration-suppress-warning.md"
+    },
+    {
+      "id": "file:b64_.agents/skills/vercel-react-best-practices/rules1/rendering-hydration-suppress-warning.md#Suppress Expected Hydration Mismatches",
+      "type": "section",
+      "label": "Suppress Expected Hydration Mismatches",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/rendering-hydration-suppress-warning.md",
+      "language": "markdown",
+      "lines": 0,
+      "summary": "Suppress Expected Hydration Mismatches",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b64_.agents/skills/vercel-react-best-practices/rules1/rendering-hydration-suppress-warning.md",
+      "complexity": "moderate",
+      "name": "b64_.agents/skills/vercel-react-best-practices/rules1/rendering-hydration-suppress-warning.md#Suppress Expected Hydration Mismatches"
+    },
+    {
+      "id": "file:b64_.agents/skills/vercel-react-best-practices/rules1/rendering-resource-hints.md",
+      "type": "document",
+      "label": "rendering-resource-hints.md",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/rendering-resource-hints.md",
+      "language": "markdown",
+      "lines": 85,
+      "summary": "Use React DOM Resource Hints",
+      "tags": [
+        "最佳实践",
+        "渲染性能",
+        "docs",
+        "markdown"
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 1
+      },
+      "complexity": "moderate",
+      "name": "b64_.agents/skills/vercel-react-best-practices/rules1/rendering-resource-hints.md"
+    },
+    {
+      "id": "file:b64_.agents/skills/vercel-react-best-practices/rules1/rendering-resource-hints.md#Use React DOM Resource Hints",
+      "type": "section",
+      "label": "Use React DOM Resource Hints",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/rendering-resource-hints.md",
+      "language": "markdown",
+      "lines": 0,
+      "summary": "Use React DOM Resource Hints",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b64_.agents/skills/vercel-react-best-practices/rules1/rendering-resource-hints.md",
+      "complexity": "moderate",
+      "name": "b64_.agents/skills/vercel-react-best-practices/rules1/rendering-resource-hints.md#Use React DOM Resource Hints"
+    },
+    {
+      "id": "file:b64_.agents/skills/vercel-react-best-practices/rules1/rendering-script-defer-async.md",
+      "type": "document",
+      "label": "rendering-script-defer-async.md",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/rendering-script-defer-async.md",
+      "language": "markdown",
+      "lines": 68,
+      "summary": "Use defer or async on Script Tags",
+      "tags": [
+        "最佳实践",
+        "异步",
+        "渲染性能",
+        "markdown",
+        "docs"
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 1
+      },
+      "complexity": "moderate",
+      "name": "b64_.agents/skills/vercel-react-best-practices/rules1/rendering-script-defer-async.md"
+    },
+    {
+      "id": "file:b64_.agents/skills/vercel-react-best-practices/rules1/rendering-script-defer-async.md#Use defer or async on Script Tags",
+      "type": "section",
+      "label": "Use defer or async on Script Tags",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/rendering-script-defer-async.md",
+      "language": "markdown",
+      "lines": 0,
+      "summary": "Use defer or async on Script Tags",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b64_.agents/skills/vercel-react-best-practices/rules1/rendering-script-defer-async.md",
+      "complexity": "moderate",
+      "name": "b64_.agents/skills/vercel-react-best-practices/rules1/rendering-script-defer-async.md#Use defer or async on Script Tags"
+    },
+    {
+      "id": "file:b64_.agents/skills/vercel-react-best-practices/rules1/rendering-svg-precision.md",
+      "type": "document",
+      "label": "rendering-svg-precision.md",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/rendering-svg-precision.md",
+      "language": "markdown",
+      "lines": 28,
+      "summary": "Optimize SVG Precision",
+      "tags": [
+        "最佳实践",
+        "渲染性能",
+        "docs",
+        "markdown"
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 1
+      },
+      "complexity": "moderate",
+      "name": "b64_.agents/skills/vercel-react-best-practices/rules1/rendering-svg-precision.md"
+    },
+    {
+      "id": "file:b64_.agents/skills/vercel-react-best-practices/rules1/rendering-svg-precision.md#Optimize SVG Precision",
+      "type": "section",
+      "label": "Optimize SVG Precision",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/rendering-svg-precision.md",
+      "language": "markdown",
+      "lines": 0,
+      "summary": "Optimize SVG Precision",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b64_.agents/skills/vercel-react-best-practices/rules1/rendering-svg-precision.md",
+      "complexity": "moderate",
+      "name": "b64_.agents/skills/vercel-react-best-practices/rules1/rendering-svg-precision.md#Optimize SVG Precision"
+    },
+    {
+      "id": "file:b64_.agents/skills/vercel-react-best-practices/rules1/rendering-usetransition-loading.md",
+      "type": "document",
+      "label": "rendering-usetransition-loading.md",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/rendering-usetransition-loading.md",
+      "language": "markdown",
+      "lines": 75,
+      "summary": "Use useTransition Over Manual Loading States",
+      "tags": [
+        "最佳实践",
+        "渲染性能",
+        "docs",
+        "markdown"
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 1
+      },
+      "complexity": "moderate",
+      "name": "b64_.agents/skills/vercel-react-best-practices/rules1/rendering-usetransition-loading.md"
+    },
+    {
+      "id": "file:b64_.agents/skills/vercel-react-best-practices/rules1/rendering-usetransition-loading.md#Use useTransition Over Manual Loading States",
+      "type": "section",
+      "label": "Use useTransition Over Manual Loading States",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/rendering-usetransition-loading.md",
+      "language": "markdown",
+      "lines": 0,
+      "summary": "Use useTransition Over Manual Loading States",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b64_.agents/skills/vercel-react-best-practices/rules1/rendering-usetransition-loading.md",
+      "complexity": "moderate",
+      "name": "b64_.agents/skills/vercel-react-best-practices/rules1/rendering-usetransition-loading.md#Use useTransition Over Manual Loading States"
+    },
+    {
+      "id": "file:b64_.agents/skills/vercel-react-best-practices/rules1/rerender-defer-reads.md",
+      "type": "document",
+      "label": "rerender-defer-reads.md",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/rerender-defer-reads.md",
+      "language": "markdown",
+      "lines": 39,
+      "summary": "Defer State Reads to Usage Point",
+      "tags": [
+        "重渲染优化",
+        "docs",
+        "markdown",
+        "最佳实践"
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 1
+      },
+      "complexity": "moderate",
+      "name": "b64_.agents/skills/vercel-react-best-practices/rules1/rerender-defer-reads.md"
+    },
+    {
+      "id": "file:b64_.agents/skills/vercel-react-best-practices/rules1/rerender-defer-reads.md#Defer State Reads to Usage Point",
+      "type": "section",
+      "label": "Defer State Reads to Usage Point",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/rerender-defer-reads.md",
+      "language": "markdown",
+      "lines": 0,
+      "summary": "Defer State Reads to Usage Point",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b64_.agents/skills/vercel-react-best-practices/rules1/rerender-defer-reads.md",
+      "complexity": "moderate",
+      "name": "b64_.agents/skills/vercel-react-best-practices/rules1/rerender-defer-reads.md#Defer State Reads to Usage Point"
+    },
+    {
+      "id": "file:b64_.agents/skills/vercel-react-best-practices/rules1/rerender-dependencies.md",
+      "type": "document",
+      "label": "rerender-dependencies.md",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/rerender-dependencies.md",
+      "language": "markdown",
+      "lines": 45,
+      "summary": "Narrow Effect Dependencies",
+      "tags": [
+        "重渲染优化",
+        "docs",
+        "markdown",
+        "最佳实践"
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 1
+      },
+      "complexity": "moderate",
+      "name": "b64_.agents/skills/vercel-react-best-practices/rules1/rerender-dependencies.md"
+    },
+    {
+      "id": "file:b64_.agents/skills/vercel-react-best-practices/rules1/rerender-dependencies.md#Narrow Effect Dependencies",
+      "type": "section",
+      "label": "Narrow Effect Dependencies",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/rerender-dependencies.md",
+      "language": "markdown",
+      "lines": 0,
+      "summary": "Narrow Effect Dependencies",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b64_.agents/skills/vercel-react-best-practices/rules1/rerender-dependencies.md",
+      "complexity": "moderate",
+      "name": "b64_.agents/skills/vercel-react-best-practices/rules1/rerender-dependencies.md#Narrow Effect Dependencies"
+    },
+    {
+      "id": "file:b64_.agents/skills/vercel-react-best-practices/rules1/rerender-derived-state-no-effect.md",
+      "type": "document",
+      "label": "rerender-derived-state-no-effect.md",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/rerender-derived-state-no-effect.md",
+      "language": "markdown",
+      "lines": 40,
+      "summary": "Calculate Derived State During Rendering",
+      "tags": [
+        "最佳实践",
+        "重渲染优化",
+        "markdown",
+        "docs",
+        "状态管理"
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 1
+      },
+      "complexity": "moderate",
+      "name": "b64_.agents/skills/vercel-react-best-practices/rules1/rerender-derived-state-no-effect.md"
+    },
+    {
+      "id": "file:b64_.agents/skills/vercel-react-best-practices/rules1/rerender-derived-state-no-effect.md#Calculate Derived State During Rendering",
+      "type": "section",
+      "label": "Calculate Derived State During Rendering",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/rerender-derived-state-no-effect.md",
+      "language": "markdown",
+      "lines": 0,
+      "summary": "Calculate Derived State During Rendering",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b64_.agents/skills/vercel-react-best-practices/rules1/rerender-derived-state-no-effect.md",
+      "complexity": "moderate",
+      "name": "b64_.agents/skills/vercel-react-best-practices/rules1/rerender-derived-state-no-effect.md#Calculate Derived State During Rendering"
+    },
+    {
+      "id": "file:b64_.agents/skills/vercel-react-best-practices/rules1/rerender-derived-state.md",
+      "type": "document",
+      "label": "rerender-derived-state.md",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/rerender-derived-state.md",
+      "language": "markdown",
+      "lines": 29,
+      "summary": "Subscribe to Derived State",
+      "tags": [
+        "最佳实践",
+        "重渲染优化",
+        "markdown",
+        "docs",
+        "状态管理"
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 1
+      },
+      "complexity": "moderate",
+      "name": "b64_.agents/skills/vercel-react-best-practices/rules1/rerender-derived-state.md"
+    },
+    {
+      "id": "file:b64_.agents/skills/vercel-react-best-practices/rules1/rerender-derived-state.md#Subscribe to Derived State",
+      "type": "section",
+      "label": "Subscribe to Derived State",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/rerender-derived-state.md",
+      "language": "markdown",
+      "lines": 0,
+      "summary": "Subscribe to Derived State",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b64_.agents/skills/vercel-react-best-practices/rules1/rerender-derived-state.md",
+      "complexity": "moderate",
+      "name": "b64_.agents/skills/vercel-react-best-practices/rules1/rerender-derived-state.md#Subscribe to Derived State"
+    },
+    {
+      "id": "file:b64_.agents/skills/vercel-react-best-practices/rules1/rerender-functional-setstate.md",
+      "type": "document",
+      "label": "rerender-functional-setstate.md",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/rerender-functional-setstate.md",
+      "language": "markdown",
+      "lines": 74,
+      "summary": "Use Functional setState Updates",
+      "tags": [
+        "最佳实践",
+        "重渲染优化",
+        "markdown",
+        "docs",
+        "状态管理"
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 1
+      },
+      "complexity": "moderate",
+      "name": "b64_.agents/skills/vercel-react-best-practices/rules1/rerender-functional-setstate.md"
+    },
+    {
+      "id": "file:b64_.agents/skills/vercel-react-best-practices/rules1/rerender-functional-setstate.md#Use Functional setState Updates",
+      "type": "section",
+      "label": "Use Functional setState Updates",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/rerender-functional-setstate.md",
+      "language": "markdown",
+      "lines": 0,
+      "summary": "Use Functional setState Updates",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b64_.agents/skills/vercel-react-best-practices/rules1/rerender-functional-setstate.md",
+      "complexity": "moderate",
+      "name": "b64_.agents/skills/vercel-react-best-practices/rules1/rerender-functional-setstate.md#Use Functional setState Updates"
+    },
+    {
+      "id": "file:b64_.agents/skills/vercel-react-best-practices/rules1/rerender-lazy-state-init.md",
+      "type": "document",
+      "label": "rerender-lazy-state-init.md",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/rerender-lazy-state-init.md",
+      "language": "markdown",
+      "lines": 58,
+      "summary": "Use Lazy State Initialization",
+      "tags": [
+        "最佳实践",
+        "重渲染优化",
+        "markdown",
+        "docs",
+        "状态管理"
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 1
+      },
+      "complexity": "moderate",
+      "name": "b64_.agents/skills/vercel-react-best-practices/rules1/rerender-lazy-state-init.md"
+    },
+    {
+      "id": "file:b64_.agents/skills/vercel-react-best-practices/rules1/rerender-lazy-state-init.md#Use Lazy State Initialization",
+      "type": "section",
+      "label": "Use Lazy State Initialization",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/rerender-lazy-state-init.md",
+      "language": "markdown",
+      "lines": 0,
+      "summary": "Use Lazy State Initialization",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b64_.agents/skills/vercel-react-best-practices/rules1/rerender-lazy-state-init.md",
+      "complexity": "moderate",
+      "name": "b64_.agents/skills/vercel-react-best-practices/rules1/rerender-lazy-state-init.md#Use Lazy State Initialization"
+    },
+    {
+      "id": "file:b64_.agents/skills/vercel-react-best-practices/rules1/rerender-memo-with-default-value.md",
+      "type": "document",
+      "label": "rerender-memo-with-default-value.md",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/rerender-memo-with-default-value.md",
+      "language": "markdown",
+      "lines": 38,
+      "summary": "Extract Default Non-primitive Parameter Value from Memoized Component to Constant",
+      "tags": [
+        "重渲染优化",
+        "docs",
+        "markdown",
+        "最佳实践"
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 1
+      },
+      "complexity": "moderate",
+      "name": "b64_.agents/skills/vercel-react-best-practices/rules1/rerender-memo-with-default-value.md"
+    },
+    {
+      "id": "file:b64_.agents/skills/vercel-react-best-practices/rules1/rerender-memo-with-default-value.md#Extract Default Non-primitive Parameter Value from Memoized Component to Constant",
+      "type": "section",
+      "label": "Extract Default Non-primitive Parameter Value from Memoized Component to Constant",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/rerender-memo-with-default-value.md",
+      "language": "markdown",
+      "lines": 0,
+      "summary": "Extract Default Non-primitive Parameter Value from Memoized Component to Constant",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b64_.agents/skills/vercel-react-best-practices/rules1/rerender-memo-with-default-value.md",
+      "complexity": "moderate",
+      "name": "b64_.agents/skills/vercel-react-best-practices/rules1/rerender-memo-with-default-value.md#Extract Default Non-primitive Parameter Value from Memoized Component to Constant"
+    },
+    {
+      "id": "file:b64_.agents/skills/vercel-react-best-practices/rules1/rerender-memo.md",
+      "type": "document",
+      "label": "rerender-memo.md",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/rerender-memo.md",
+      "language": "markdown",
+      "lines": 44,
+      "summary": "Extract to Memoized Components",
+      "tags": [
+        "重渲染优化",
+        "docs",
+        "markdown",
+        "最佳实践"
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 1
+      },
+      "complexity": "moderate",
+      "name": "b64_.agents/skills/vercel-react-best-practices/rules1/rerender-memo.md"
+    },
+    {
+      "id": "file:b64_.agents/skills/vercel-react-best-practices/rules1/rerender-memo.md#Extract to Memoized Components",
+      "type": "section",
+      "label": "Extract to Memoized Components",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/rerender-memo.md",
+      "language": "markdown",
+      "lines": 0,
+      "summary": "Extract to Memoized Components",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b64_.agents/skills/vercel-react-best-practices/rules1/rerender-memo.md",
+      "complexity": "moderate",
+      "name": "b64_.agents/skills/vercel-react-best-practices/rules1/rerender-memo.md#Extract to Memoized Components"
+    },
+    {
+      "id": "file:b64_.agents/skills/vercel-react-best-practices/rules1/rerender-move-effect-to-event.md",
+      "type": "document",
+      "label": "rerender-move-effect-to-event.md",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/rerender-move-effect-to-event.md",
+      "language": "markdown",
+      "lines": 45,
+      "summary": "Put Interaction Logic in Event Handlers",
+      "tags": [
+        "重渲染优化",
+        "docs",
+        "markdown",
+        "最佳实践"
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 1
+      },
+      "complexity": "moderate",
+      "name": "b64_.agents/skills/vercel-react-best-practices/rules1/rerender-move-effect-to-event.md"
+    },
+    {
+      "id": "file:b64_.agents/skills/vercel-react-best-practices/rules1/rerender-move-effect-to-event.md#Put Interaction Logic in Event Handlers",
+      "type": "section",
+      "label": "Put Interaction Logic in Event Handlers",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/rerender-move-effect-to-event.md",
+      "language": "markdown",
+      "lines": 0,
+      "summary": "Put Interaction Logic in Event Handlers",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b64_.agents/skills/vercel-react-best-practices/rules1/rerender-move-effect-to-event.md",
+      "complexity": "moderate",
+      "name": "b64_.agents/skills/vercel-react-best-practices/rules1/rerender-move-effect-to-event.md#Put Interaction Logic in Event Handlers"
+    },
+    {
+      "id": "file:b64_.agents/skills/vercel-react-best-practices/rules1/rerender-no-inline-components.md",
+      "type": "document",
+      "label": "rerender-no-inline-components.md",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/rerender-no-inline-components.md",
+      "language": "markdown",
+      "lines": 82,
+      "summary": "Don't Define Components Inside Components",
+      "tags": [
+        "重渲染优化",
+        "docs",
+        "markdown",
+        "最佳实践"
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 1
+      },
+      "complexity": "moderate",
+      "name": "b64_.agents/skills/vercel-react-best-practices/rules1/rerender-no-inline-components.md"
+    },
+    {
+      "id": "file:b64_.agents/skills/vercel-react-best-practices/rules1/rerender-no-inline-components.md#Don't Define Components Inside Components",
+      "type": "section",
+      "label": "Don't Define Components Inside Components",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/rerender-no-inline-components.md",
+      "language": "markdown",
+      "lines": 0,
+      "summary": "Don't Define Components Inside Components",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b64_.agents/skills/vercel-react-best-practices/rules1/rerender-no-inline-components.md",
+      "complexity": "moderate",
+      "name": "b64_.agents/skills/vercel-react-best-practices/rules1/rerender-no-inline-components.md#Don't Define Components Inside Components"
+    },
+    {
+      "id": "file:b64_.agents/skills/vercel-react-best-practices/rules1/rerender-simple-expression-in-memo.md",
+      "type": "document",
+      "label": "rerender-simple-expression-in-memo.md",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/rerender-simple-expression-in-memo.md",
+      "language": "markdown",
+      "lines": 35,
+      "summary": "Do not wrap a simple expression with a primitive result type in useMemo",
+      "tags": [
+        "重渲染优化",
+        "docs",
+        "markdown",
+        "最佳实践"
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 1
+      },
+      "complexity": "moderate",
+      "name": "b64_.agents/skills/vercel-react-best-practices/rules1/rerender-simple-expression-in-memo.md"
+    },
+    {
+      "id": "file:b64_.agents/skills/vercel-react-best-practices/rules1/rerender-simple-expression-in-memo.md#Do not wrap a simple expression with a primitive result type in useMemo",
+      "type": "section",
+      "label": "Do not wrap a simple expression with a primitive result type in useMemo",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/rerender-simple-expression-in-memo.md",
+      "language": "markdown",
+      "lines": 0,
+      "summary": "Do not wrap a simple expression with a primitive result type in useMemo",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b64_.agents/skills/vercel-react-best-practices/rules1/rerender-simple-expression-in-memo.md",
+      "complexity": "moderate",
+      "name": "b64_.agents/skills/vercel-react-best-practices/rules1/rerender-simple-expression-in-memo.md#Do not wrap a simple expression with a primitive result type in useMemo"
+    },
+    {
+      "id": "file:b64_.agents/skills/vercel-react-best-practices/rules1/rerender-split-combined-hooks.md",
+      "type": "document",
+      "label": "rerender-split-combined-hooks.md",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/rerender-split-combined-hooks.md",
+      "language": "markdown",
+      "lines": 64,
+      "summary": "Split Combined Hook Computations",
+      "tags": [
+        "重渲染优化",
+        "docs",
+        "markdown",
+        "最佳实践"
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 1
+      },
+      "complexity": "moderate",
+      "name": "b64_.agents/skills/vercel-react-best-practices/rules1/rerender-split-combined-hooks.md"
+    },
+    {
+      "id": "file:b64_.agents/skills/vercel-react-best-practices/rules1/rerender-split-combined-hooks.md#Split Combined Hook Computations",
+      "type": "section",
+      "label": "Split Combined Hook Computations",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/rerender-split-combined-hooks.md",
+      "language": "markdown",
+      "lines": 0,
+      "summary": "Split Combined Hook Computations",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b64_.agents/skills/vercel-react-best-practices/rules1/rerender-split-combined-hooks.md",
+      "complexity": "moderate",
+      "name": "b64_.agents/skills/vercel-react-best-practices/rules1/rerender-split-combined-hooks.md#Split Combined Hook Computations"
+    },
+    {
+      "id": "file:b64_.agents/skills/vercel-react-best-practices/rules1/rerender-transitions.md",
+      "type": "document",
+      "label": "rerender-transitions.md",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/rerender-transitions.md",
+      "language": "markdown",
+      "lines": 40,
+      "summary": "Use Transitions for Non-Urgent Updates",
+      "tags": [
+        "重渲染优化",
+        "docs",
+        "markdown",
+        "最佳实践"
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 1
+      },
+      "complexity": "moderate",
+      "name": "b64_.agents/skills/vercel-react-best-practices/rules1/rerender-transitions.md"
+    },
+    {
+      "id": "file:b64_.agents/skills/vercel-react-best-practices/rules1/rerender-transitions.md#Use Transitions for Non-Urgent Updates",
+      "type": "section",
+      "label": "Use Transitions for Non-Urgent Updates",
+      "path": ".agents/skills/vercel-react-best-practices/rules1/rerender-transitions.md",
+      "language": "markdown",
+      "lines": 0,
+      "summary": "Use Transitions for Non-Urgent Updates",
+      "tags": [
+        "section"
+      ],
+      "parentId": "b64_.agents/skills/vercel-react-best-practices/rules1/rerender-transitions.md",
+      "complexity": "moderate",
+      "name": "b64_.agents/skills/vercel-react-best-practices/rules1/rerender-transitions.md#Use Transitions for Non-Urgent Updates"
+    }
+  ],
+  "edges": [
+    {
+      "id": "b64_.agents/skills/vercel-react-best-practices/rules1/rendering-hoist-jsx.md--contains--b64_.agents/skills/vercel-react-best-practices/rules1/rendering-hoist-jsx.md#Hoist Static JSX Elements",
+      "source": "file:b64_.agents/skills/vercel-react-best-practices/rules1/rendering-hoist-jsx.md",
+      "target": "file:b64_.agents/skills/vercel-react-best-practices/rules1/rendering-hoist-jsx.md#Hoist Static JSX Elements",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    },
+    {
+      "id": "b64_.agents/skills/vercel-react-best-practices/rules1/rendering-hydration-no-flicker.md--contains--b64_.agents/skills/vercel-react-best-practices/rules1/rendering-hydration-no-flicker.md#Prevent Hydration Mismatch Without Flickering",
+      "source": "file:b64_.agents/skills/vercel-react-best-practices/rules1/rendering-hydration-no-flicker.md",
+      "target": "file:b64_.agents/skills/vercel-react-best-practices/rules1/rendering-hydration-no-flicker.md#Prevent Hydration Mismatch Without Flickering",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    },
+    {
+      "id": "b64_.agents/skills/vercel-react-best-practices/rules1/rendering-hydration-suppress-warning.md--contains--b64_.agents/skills/vercel-react-best-practices/rules1/rendering-hydration-suppress-warning.md#Suppress Expected Hydration Mismatches",
+      "source": "file:b64_.agents/skills/vercel-react-best-practices/rules1/rendering-hydration-suppress-warning.md",
+      "target": "file:b64_.agents/skills/vercel-react-best-practices/rules1/rendering-hydration-suppress-warning.md#Suppress Expected Hydration Mismatches",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    },
+    {
+      "id": "b64_.agents/skills/vercel-react-best-practices/rules1/rendering-resource-hints.md--contains--b64_.agents/skills/vercel-react-best-practices/rules1/rendering-resource-hints.md#Use React DOM Resource Hints",
+      "source": "file:b64_.agents/skills/vercel-react-best-practices/rules1/rendering-resource-hints.md",
+      "target": "file:b64_.agents/skills/vercel-react-best-practices/rules1/rendering-resource-hints.md#Use React DOM Resource Hints",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    },
+    {
+      "id": "b64_.agents/skills/vercel-react-best-practices/rules1/rendering-script-defer-async.md--contains--b64_.agents/skills/vercel-react-best-practices/rules1/rendering-script-defer-async.md#Use defer or async on Script Tags",
+      "source": "file:b64_.agents/skills/vercel-react-best-practices/rules1/rendering-script-defer-async.md",
+      "target": "file:b64_.agents/skills/vercel-react-best-practices/rules1/rendering-script-defer-async.md#Use defer or async on Script Tags",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    },
+    {
+      "id": "b64_.agents/skills/vercel-react-best-practices/rules1/rendering-svg-precision.md--contains--b64_.agents/skills/vercel-react-best-practices/rules1/rendering-svg-precision.md#Optimize SVG Precision",
+      "source": "file:b64_.agents/skills/vercel-react-best-practices/rules1/rendering-svg-precision.md",
+      "target": "file:b64_.agents/skills/vercel-react-best-practices/rules1/rendering-svg-precision.md#Optimize SVG Precision",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    },
+    {
+      "id": "b64_.agents/skills/vercel-react-best-practices/rules1/rendering-usetransition-loading.md--contains--b64_.agents/skills/vercel-react-best-practices/rules1/rendering-usetransition-loading.md#Use useTransition Over Manual Loading States",
+      "source": "file:b64_.agents/skills/vercel-react-best-practices/rules1/rendering-usetransition-loading.md",
+      "target": "file:b64_.agents/skills/vercel-react-best-practices/rules1/rendering-usetransition-loading.md#Use useTransition Over Manual Loading States",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    },
+    {
+      "id": "b64_.agents/skills/vercel-react-best-practices/rules1/rerender-defer-reads.md--contains--b64_.agents/skills/vercel-react-best-practices/rules1/rerender-defer-reads.md#Defer State Reads to Usage Point",
+      "source": "file:b64_.agents/skills/vercel-react-best-practices/rules1/rerender-defer-reads.md",
+      "target": "file:b64_.agents/skills/vercel-react-best-practices/rules1/rerender-defer-reads.md#Defer State Reads to Usage Point",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    },
+    {
+      "id": "b64_.agents/skills/vercel-react-best-practices/rules1/rerender-dependencies.md--contains--b64_.agents/skills/vercel-react-best-practices/rules1/rerender-dependencies.md#Narrow Effect Dependencies",
+      "source": "file:b64_.agents/skills/vercel-react-best-practices/rules1/rerender-dependencies.md",
+      "target": "file:b64_.agents/skills/vercel-react-best-practices/rules1/rerender-dependencies.md#Narrow Effect Dependencies",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    },
+    {
+      "id": "b64_.agents/skills/vercel-react-best-practices/rules1/rerender-derived-state-no-effect.md--contains--b64_.agents/skills/vercel-react-best-practices/rules1/rerender-derived-state-no-effect.md#Calculate Derived State During Rendering",
+      "source": "file:b64_.agents/skills/vercel-react-best-practices/rules1/rerender-derived-state-no-effect.md",
+      "target": "file:b64_.agents/skills/vercel-react-best-practices/rules1/rerender-derived-state-no-effect.md#Calculate Derived State During Rendering",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    },
+    {
+      "id": "b64_.agents/skills/vercel-react-best-practices/rules1/rerender-derived-state.md--contains--b64_.agents/skills/vercel-react-best-practices/rules1/rerender-derived-state.md#Subscribe to Derived State",
+      "source": "file:b64_.agents/skills/vercel-react-best-practices/rules1/rerender-derived-state.md",
+      "target": "file:b64_.agents/skills/vercel-react-best-practices/rules1/rerender-derived-state.md#Subscribe to Derived State",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    },
+    {
+      "id": "b64_.agents/skills/vercel-react-best-practices/rules1/rerender-functional-setstate.md--contains--b64_.agents/skills/vercel-react-best-practices/rules1/rerender-functional-setstate.md#Use Functional setState Updates",
+      "source": "file:b64_.agents/skills/vercel-react-best-practices/rules1/rerender-functional-setstate.md",
+      "target": "file:b64_.agents/skills/vercel-react-best-practices/rules1/rerender-functional-setstate.md#Use Functional setState Updates",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    },
+    {
+      "id": "b64_.agents/skills/vercel-react-best-practices/rules1/rerender-lazy-state-init.md--contains--b64_.agents/skills/vercel-react-best-practices/rules1/rerender-lazy-state-init.md#Use Lazy State Initialization",
+      "source": "file:b64_.agents/skills/vercel-react-best-practices/rules1/rerender-lazy-state-init.md",
+      "target": "file:b64_.agents/skills/vercel-react-best-practices/rules1/rerender-lazy-state-init.md#Use Lazy State Initialization",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    },
+    {
+      "id": "b64_.agents/skills/vercel-react-best-practices/rules1/rerender-memo-with-default-value.md--contains--b64_.agents/skills/vercel-react-best-practices/rules1/rerender-memo-with-default-value.md#Extract Default Non-primitive Parameter Value from Memoized Component to Constant",
+      "source": "file:b64_.agents/skills/vercel-react-best-practices/rules1/rerender-memo-with-default-value.md",
+      "target": "file:b64_.agents/skills/vercel-react-best-practices/rules1/rerender-memo-with-default-value.md#Extract Default Non-primitive Parameter Value from Memoized Component to Constant",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    },
+    {
+      "id": "b64_.agents/skills/vercel-react-best-practices/rules1/rerender-memo.md--contains--b64_.agents/skills/vercel-react-best-practices/rules1/rerender-memo.md#Extract to Memoized Components",
+      "source": "file:b64_.agents/skills/vercel-react-best-practices/rules1/rerender-memo.md",
+      "target": "file:b64_.agents/skills/vercel-react-best-practices/rules1/rerender-memo.md#Extract to Memoized Components",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    },
+    {
+      "id": "b64_.agents/skills/vercel-react-best-practices/rules1/rerender-move-effect-to-event.md--contains--b64_.agents/skills/vercel-react-best-practices/rules1/rerender-move-effect-to-event.md#Put Interaction Logic in Event Handlers",
+      "source": "file:b64_.agents/skills/vercel-react-best-practices/rules1/rerender-move-effect-to-event.md",
+      "target": "file:b64_.agents/skills/vercel-react-best-practices/rules1/rerender-move-effect-to-event.md#Put Interaction Logic in Event Handlers",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    },
+    {
+      "id": "b64_.agents/skills/vercel-react-best-practices/rules1/rerender-no-inline-components.md--contains--b64_.agents/skills/vercel-react-best-practices/rules1/rerender-no-inline-components.md#Don't Define Components Inside Components",
+      "source": "file:b64_.agents/skills/vercel-react-best-practices/rules1/rerender-no-inline-components.md",
+      "target": "file:b64_.agents/skills/vercel-react-best-practices/rules1/rerender-no-inline-components.md#Don't Define Components Inside Components",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    },
+    {
+      "id": "b64_.agents/skills/vercel-react-best-practices/rules1/rerender-simple-expression-in-memo.md--contains--b64_.agents/skills/vercel-react-best-practices/rules1/rerender-simple-expression-in-memo.md#Do not wrap a simple expression with a primitive result type in useMemo",
+      "source": "file:b64_.agents/skills/vercel-react-best-practices/rules1/rerender-simple-expression-in-memo.md",
+      "target": "file:b64_.agents/skills/vercel-react-best-practices/rules1/rerender-simple-expression-in-memo.md#Do not wrap a simple expression with a primitive result type in useMemo",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    },
+    {
+      "id": "b64_.agents/skills/vercel-react-best-practices/rules1/rerender-split-combined-hooks.md--contains--b64_.agents/skills/vercel-react-best-practices/rules1/rerender-split-combined-hooks.md#Split Combined Hook Computations",
+      "source": "file:b64_.agents/skills/vercel-react-best-practices/rules1/rerender-split-combined-hooks.md",
+      "target": "file:b64_.agents/skills/vercel-react-best-practices/rules1/rerender-split-combined-hooks.md#Split Combined Hook Computations",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    },
+    {
+      "id": "b64_.agents/skills/vercel-react-best-practices/rules1/rerender-transitions.md--contains--b64_.agents/skills/vercel-react-best-practices/rules1/rerender-transitions.md#Use Transitions for Non-Urgent Updates",
+      "source": "file:b64_.agents/skills/vercel-react-best-practices/rules1/rerender-transitions.md",
+      "target": "file:b64_.agents/skills/vercel-react-best-practices/rules1/rerender-transitions.md#Use Transitions for Non-Urgent Updates",
+      "type": "contains",
+      "label": "包含",
+      "direction": "forward"
+    }
+  ]
+}
