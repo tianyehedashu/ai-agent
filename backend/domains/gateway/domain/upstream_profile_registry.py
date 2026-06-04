@@ -129,7 +129,7 @@ _PROFILES: tuple[UpstreamProfile, ...] = (
         provider="moonshot",
         label="Kimi Code",
         api_bases={UpstreamProtocol.OPENAI_COMPAT: "https://api.kimi.com/coding/v1"},
-        coding_agent_ua="cursor/1.0",
+        coding_agent_ua="claude-code/1.0",
     ),
     UpstreamProfile(
         id="custom.default",
