@@ -97,3 +97,83 @@ def test_max_tokens_clamped_to_tag_limit() -> None:
         ),
     )
     assert out["max_tokens"] == 8192
+
+
+def test_coding_agent_ua_injected_for_coding_plan_profile() -> None:
+    out = UpstreamAdapter().adapt(
+        {"max_tokens": 100},
+        client_model="kimi-k2-0711",
+        resolved=ResolvedModelName(
+            record=_FakeRecord(provider="moonshot"),
+            route=None,
+            via_route=None,
+        ),
+        credential_profile_id="moonshot.coding_plan",
+    )
+    assert out["extra_headers"]["User-Agent"] == "cursor/1.0"
+
+
+def test_coding_agent_ua_not_injected_for_default_profile() -> None:
+    out = UpstreamAdapter().adapt(
+        {"max_tokens": 100},
+        client_model="moonshot-v1-8k",
+        resolved=ResolvedModelName(
+            record=_FakeRecord(provider="moonshot"),
+            route=None,
+            via_route=None,
+        ),
+        credential_profile_id="moonshot.default",
+    )
+    assert "extra_headers" not in out or "User-Agent" not in (out.get("extra_headers") or {})
+
+
+def test_flatten_text_only_content_array_for_non_vision_provider() -> None:
+    record = _FakeRecord(provider="deepseek", real_model="deepseek-chat")
+    resolved = ResolvedModelName(record=record, route=None, via_route=None)
+    kwargs = {
+        "messages": [
+            {"role": "user", "content": [{"type": "text", "text": "hello"}]},
+            {"role": "assistant", "content": [{"type": "text", "text": "world"}]},
+        ],
+        "max_tokens": 100,
+    }
+    out = UpstreamAdapter().adapt(kwargs, client_model="deepseek-chat", resolved=resolved)
+    assert out["messages"][0]["content"] == "hello"
+    assert out["messages"][1]["content"] == "world"
+
+
+def test_preserve_mixed_content_array_for_non_vision_provider() -> None:
+    record = _FakeRecord(provider="deepseek", real_model="deepseek-chat")
+    resolved = ResolvedModelName(record=record, route=None, via_route=None)
+    kwargs = {
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "hello"},
+                    {"type": "image_url", "image_url": {"url": "http://example.com/img.png"}},
+                ],
+            },
+        ],
+        "max_tokens": 100,
+    }
+    out = UpstreamAdapter().adapt(kwargs, client_model="deepseek-chat", resolved=resolved)
+    assert isinstance(out["messages"][0]["content"], list)
+    assert out["messages"][0]["content"][0]["type"] == "text"
+
+
+def test_skip_flatten_for_vision_provider() -> None:
+    record = _FakeRecord(
+        provider="openai",
+        real_model="gpt-4o",
+        tags={"context_window": 8192, "supports_vision": True},
+    )
+    resolved = ResolvedModelName(record=record, route=None, via_route=None)
+    kwargs = {
+        "messages": [
+            {"role": "user", "content": [{"type": "text", "text": "hello"}]},
+        ],
+        "max_tokens": 100,
+    }
+    out = UpstreamAdapter().adapt(kwargs, client_model="gpt-4o", resolved=resolved)
+    assert isinstance(out["messages"][0]["content"], list)

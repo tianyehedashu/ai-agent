@@ -12,9 +12,11 @@ from domains.gateway.domain.policies.volcengine_message_sanitize import (
 )
 from domains.gateway.domain.upstream_policy import (
     clamp_max_tokens,
+    flatten_text_only_content_arrays,
     max_output_tokens_limit,
     preprocess_messages_for_reasoner,
 )
+from domains.gateway.domain.upstream_profile_registry import get_upstream_profile
 
 if TYPE_CHECKING:
     from domains.gateway.application.model_or_route_resolution import ResolvedModelName
@@ -29,6 +31,7 @@ class UpstreamAdapter:
         *,
         client_model: str,
         resolved: ResolvedModelName | None,
+        credential_profile_id: str | None = None,
     ) -> dict[str, Any]:
         if resolved is None:
             return dict(kwargs)
@@ -49,11 +52,37 @@ class UpstreamAdapter:
                 record.real_model,
                 messages,
             )
+        if not snap.supports_vision:
+            messages = adapted.get("messages")
+            if isinstance(messages, list):
+                adapted["messages"] = flatten_text_only_content_arrays(messages)
         if is_volcengine_provider(record.provider):
             volcengine_messages = adapted.get("messages")
             if isinstance(volcengine_messages, list):
                 adapted["messages"] = sanitize_messages_for_volcengine(volcengine_messages)
+        adapted = self._inject_coding_agent_ua(
+            adapted,
+            provider=record.provider,
+            credential_profile_id=credential_profile_id,
+        )
         return adapted
+
+    @staticmethod
+    def _inject_coding_agent_ua(
+        kwargs: dict[str, Any],
+        *,
+        provider: str,
+        credential_profile_id: str | None,
+    ) -> dict[str, Any]:
+        """若 profile 声明 ``coding_agent_ua``，注入到 ``extra_headers["user-agent"]``。"""
+        profile = get_upstream_profile(credential_profile_id, provider=provider)
+        ua = profile.coding_agent_ua
+        if not ua:
+            return kwargs
+        headers = dict(kwargs.get("extra_headers") or {})
+        headers["User-Agent"] = ua
+        kwargs["extra_headers"] = headers
+        return kwargs
 
 
 __all__ = ["UpstreamAdapter"]
