@@ -72,28 +72,13 @@ def calc_upstream_cost(kwargs: dict[str, Any], response_obj: Any) -> tuple[Decim
 
 
 def extract_usage_tokens(response_obj: Any) -> tuple[int, int, int]:
-    if response_obj is None:
-        return 0, 0, 0
-    usage = getattr(response_obj, "usage", None) or {}
+    """从 response_obj.usage 提取 (input_tokens, output_tokens, cached_tokens)。
 
-    def _usage_get(key: str, default: Any = None) -> Any:
-        if isinstance(usage, dict):
-            return usage.get(key, default)
-        return getattr(usage, key, default)
+    .. deprecated:: 内部委托 :func:`extract_normalized_usage`，保留签名向后兼容。
+    """
+    from domains.gateway.domain.normalized_usage import extract_normalized_usage
 
-    input_tokens = int(_usage_get("prompt_tokens", 0) or 0)
-    output_tokens = int(_usage_get("completion_tokens", 0) or 0)
-    cached_tokens = 0
-    cache_details = _usage_get("prompt_tokens_details", None)
-    if isinstance(cache_details, dict):
-        cached_tokens = int(cache_details.get("cached_tokens", 0) or 0)
-    elif cache_details is not None:
-        cached_tokens = int(getattr(cache_details, "cached_tokens", 0) or 0)
-    # Anthropic 格式 fallback
-    if cached_tokens == 0:
-        cache_read = _usage_get("cache_read_input_tokens", 0)
-        cached_tokens = int(cache_read or 0)
-    return input_tokens, output_tokens, cached_tokens
+    return extract_normalized_usage(response_obj).to_db_tuple()
 
 
 _calc_cost = calc_upstream_cost

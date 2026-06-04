@@ -54,34 +54,13 @@ def _read_hidden_response_cost(response_obj: Any) -> Decimal | None:
 
 
 def _extract_usage_from_response(response_obj: Any, *, requests: int = 1) -> TokenUsage:
-    if response_obj is None:
-        return TokenUsage(requests=requests)
-    usage = getattr(response_obj, "usage", None)
-    if usage is None and isinstance(response_obj, dict):
-        usage = response_obj.get("usage")
-    if usage is None:
-        return TokenUsage(requests=requests)
-    if isinstance(usage, dict):
-        return TokenUsage(
-            input_tokens=int(usage.get("prompt_tokens") or usage.get("input_tokens") or 0),
-            output_tokens=int(usage.get("completion_tokens") or usage.get("output_tokens") or 0),
-            cache_read_tokens=int(
-                usage.get("cache_read_input_tokens") or usage.get("cached_tokens") or 0
-            ),
-            cache_creation_tokens=int(usage.get("cache_creation_input_tokens") or 0),
-            requests=requests,
-        )
-    return TokenUsage(
-        input_tokens=int(
-            getattr(usage, "prompt_tokens", 0) or getattr(usage, "input_tokens", 0) or 0
-        ),
-        output_tokens=int(
-            getattr(usage, "completion_tokens", 0) or getattr(usage, "output_tokens", 0) or 0
-        ),
-        cache_read_tokens=int(getattr(usage, "cache_read_input_tokens", 0) or 0),
-        cache_creation_tokens=int(getattr(usage, "cache_creation_input_tokens", 0) or 0),
-        requests=requests,
-    )
+    """从 response_obj.usage 提取 TokenUsage。
+
+    .. deprecated:: 内部委托 :func:`extract_normalized_usage`，保留签名向后兼容。
+    """
+    from domains.gateway.domain.normalized_usage import extract_normalized_usage
+
+    return extract_normalized_usage(response_obj, requests=requests).to_token_usage()
 
 
 def _completion_cost_upstream(

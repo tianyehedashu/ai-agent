@@ -185,3 +185,91 @@ async def test_persist_event_no_slo_cache_remains_false() -> None:
 
     assert captured_insert.get("cache_hit") is False
     assert captured_insert.get("cached_tokens") == 0
+
+
+@pytest.mark.asyncio
+async def test_persist_event_slo_cache_creation_fallback() -> None:
+    """当 SLO 包含 cache_creation_input_tokens 且 response usage 提取失败时，应补齐 input_tokens。"""
+
+    captured_insert: dict[str, Any] = {}
+
+    class FakeRepo:
+        def __init__(self, _session: Any) -> None:
+            pass
+
+        async def insert(self, **kwargs: Any) -> None:
+            captured_insert.update(kwargs)
+
+    # response_obj.usage 无 prompt_tokens 也无 cache 信息，模拟提取失败
+    response_obj = SimpleNamespace(usage={})
+
+    kwargs: dict[str, Any] = {
+        "model": "some-anthropic-model",
+        "metadata": {
+            "gateway_team_id": "00000000-0000-0000-0000-000000000001",
+            "gateway_user_id": "00000000-0000-0000-0000-000000000002",
+            "gateway_capability": "chat",
+        },
+        "standard_logging_object": {
+            "cache_hit": True,
+            "cache_read_input_tokens": 4000,
+            "cache_creation_input_tokens": 500,
+            "response_cost": 0.002,
+        },
+    }
+
+    with (
+        patch(
+            "domains.gateway.infrastructure.repositories.request_log_repository.RequestLogRepository",
+            FakeRepo,
+        ),
+        patch(
+            "domains.gateway.infrastructure.callbacks.custom_logger.get_session_context",
+        ) as mock_ctx,
+        patch(
+            "domains.gateway.infrastructure.callbacks.custom_logger._calc_cost",
+            return_value=(Decimal("0.002"), "litellm_slo"),
+        ),
+        patch(
+            "domains.gateway.infrastructure.callbacks.custom_logger._credential_snapshots_for_persist",
+            return_value=(None, None),
+        ),
+        patch(
+            "domains.gateway.infrastructure.callbacks.custom_logger._deployment_from_model_info_kwargs",
+            return_value=(None, None),
+        ),
+        patch(
+            "domains.gateway.infrastructure.callbacks.custom_logger.gateway_provider_for_persist",
+            return_value="anthropic",
+        ),
+        patch(
+            "domains.gateway.infrastructure.callbacks.custom_logger._resolve_persist_user_id",
+            return_value=None,
+        ),
+        patch(
+            "domains.gateway.infrastructure.callbacks.custom_logger.should_persist_request_log_row",
+            return_value=True,
+        ),
+        patch(
+            "domains.gateway.infrastructure.callbacks.custom_logger.get_redis_client",
+            return_value=None,
+        ),
+    ):
+        session_mock = AsyncMock()
+        mock_ctx.return_value.__aenter__ = AsyncMock(return_value=session_mock)
+        mock_ctx.return_value.__aexit__ = AsyncMock(return_value=None)
+
+        await _persist_event(
+            kwargs=kwargs,
+            response_obj=response_obj,
+            start_time=datetime(2026, 6, 2, 10, 0, tzinfo=UTC),
+            end_time=datetime(2026, 6, 2, 10, 0, 3, tzinfo=UTC),
+            status="success",
+            error_code=None,
+            error_message=None,
+        )
+
+    assert captured_insert.get("cache_hit") is True
+    assert captured_insert.get("cached_tokens") == 4000  # cache_read only
+    # input_tokens 从 SLO 补齐：cache_read(4000) + cache_creation(500)
+    assert captured_insert.get("input_tokens") == 4500

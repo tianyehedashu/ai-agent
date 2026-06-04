@@ -9,7 +9,8 @@ from domains.gateway.application.pricing.upstream_cost_resolver import (
     SOURCE_LITELLM_HIDDEN,
     SOURCE_LITELLM_SLO,
 )
-from domains.gateway.infrastructure.callbacks.custom_logger import _calc_cost, _extract_usage
+from domains.gateway.infrastructure.callbacks.cost_calculation import _extract_usage
+from domains.gateway.infrastructure.callbacks.custom_logger import _calc_cost
 
 
 def test_calc_cost_prefers_litellm_hidden_response_cost() -> None:

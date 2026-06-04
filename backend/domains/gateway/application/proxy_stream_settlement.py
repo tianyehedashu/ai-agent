@@ -5,9 +5,9 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
-from domains.gateway.application.anthropic_native_adapt import anthropic_usage_total_tokens
 from domains.gateway.application.pricing.pricing_budget_cost import proxy_budget_cost_usd
 from domains.gateway.application.pricing.upstream_cost_resolver import resolve_upstream_cost_usd
+from domains.gateway.domain.normalized_usage import normalized_usage_from_raw
 
 if TYPE_CHECKING:
     from domains.gateway.application.budget_service import BudgetService
@@ -17,9 +17,7 @@ if TYPE_CHECKING:
 
 def stream_usage_token_total(usage: dict[str, Any]) -> int:
     """从 OpenAI 或 Anthropic 形 usage 字典统计 token 总量。"""
-    if "total_tokens" in usage:
-        return int(usage.get("total_tokens", 0) or 0)
-    return anthropic_usage_total_tokens(usage)
+    return normalized_usage_from_raw(usage).total_tokens
 
 
 def resolve_stream_budget_cost_usd(

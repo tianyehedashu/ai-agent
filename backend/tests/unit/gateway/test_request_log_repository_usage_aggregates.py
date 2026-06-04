@@ -57,6 +57,8 @@ async def test_aggregate_by_route_names_workspace_fills_defaults_and_rows() -> N
         requests=3,
         input_tokens=10,
         output_tokens=20,
+        cached_tokens=0,
+        cache_creation_tokens=0,
         cost_usd=Decimal("0.05"),
     )
     result = MagicMock()
@@ -84,6 +86,8 @@ async def test_aggregate_by_deployment_ids_user_axis_maps_by_id() -> None:
         requests=1,
         input_tokens=2,
         output_tokens=3,
+        cached_tokens=0,
+        cache_creation_tokens=0,
         cost_usd=Decimal("0.01"),
     )
     result = MagicMock()
@@ -105,6 +109,8 @@ async def test_aggregate_by_credential_global_skips_null_credential_id_rows() ->
         requests=99,
         input_tokens=0,
         output_tokens=0,
+        cached_tokens=0,
+        cache_creation_tokens=0,
         cost_usd=Decimal("0"),
         success=0,
         failure=0,
@@ -114,6 +120,8 @@ async def test_aggregate_by_credential_global_skips_null_credential_id_rows() ->
         requests=2,
         input_tokens=5,
         output_tokens=6,
+        cached_tokens=0,
+        cache_creation_tokens=0,
         cost_usd=Decimal("0.02"),
         success=1,
         failure=1,
@@ -142,6 +150,7 @@ async def test_aggregate_usage_statistics_by_axis_maps_items_and_totals() -> Non
         input_tokens=10,
         output_tokens=20,
         cached_tokens=4,
+        cache_creation_tokens=0,
         cost_usd=Decimal("0.03"),
         avg_latency_ms=123.4,
         avg_ttfb_ms=42.0,
@@ -154,6 +163,7 @@ async def test_aggregate_usage_statistics_by_axis_maps_items_and_totals() -> Non
         input_tokens=10,
         output_tokens=20,
         cached_tokens=4,
+        cache_creation_tokens=0,
         cost_usd=Decimal("0.03"),
         avg_latency_ms=123.4,
         avg_ttfb_ms=42.0,

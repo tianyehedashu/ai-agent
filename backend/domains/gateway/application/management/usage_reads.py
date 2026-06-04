@@ -69,6 +69,7 @@ class UsageStatisticsMetric:
     input_tokens: int
     output_tokens: int
     cached_tokens: int
+    cache_creation_tokens: int
     cost_usd: Decimal
     avg_latency_ms: float
     avg_ttfb_ms: float
@@ -222,6 +223,8 @@ class EntitlementUsageReadModel:
     requests: int
     input_tokens: int
     output_tokens: int
+    cached_tokens: int
+    cache_creation_tokens: int
     cost_usd: Decimal
     charged_usd: Decimal
     period_start: datetime
@@ -236,6 +239,8 @@ class ProviderPlanCostReadModel:
     requests: int
     input_tokens: int
     output_tokens: int
+    cached_tokens: int
+    cache_creation_tokens: int
     cost_usd: Decimal
     period_start: datetime
     period_end: datetime

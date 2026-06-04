@@ -133,6 +133,8 @@ async def test_aggregate_summary_by_axis_passes_filter_clauses() -> None:
         total=5,
         input_tokens=10,
         output_tokens=20,
+        cached_tokens=0,
+        cache_creation_tokens=0,
         cost_usd=Decimal("0.05"),
         success=4,
         failure=1,

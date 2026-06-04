@@ -54,6 +54,7 @@ async def test_rollup_window_batches_upsert_in_single_execute() -> None:
         input_tokens=10,
         output_tokens=20,
         cached_tokens=0,
+        cache_creation_tokens=0,
         cost_usd=Decimal("0.001"),
         total_latency_ms=300,
         cache_hit_count=0,

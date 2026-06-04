@@ -24,8 +24,7 @@ def test_extract_usage_tokens_openai_format() -> None:
 
 
 def test_extract_usage_tokens_anthropic_format() -> None:
-    # extract_usage_tokens 主要识别 OpenAI 统一后的 prompt_tokens / completion_tokens，
-    # 但本次修复确保 cache_read_input_tokens（Anthropic 缓存格式）能被正确提取为 cached_tokens。
+    # Anthropic 归一化：input_tokens 应包含 cache_read + cache_creation，与 OpenAI prompt_tokens 对齐
     response = SimpleNamespace(
         usage={
             "input_tokens": 100,
@@ -33,7 +32,9 @@ def test_extract_usage_tokens_anthropic_format() -> None:
             "cache_read_input_tokens": 2000,
         }
     )
-    _inp, _out, cached = extract_usage_tokens(response)
+    inp, out, cached = extract_usage_tokens(response)
+    assert inp == 2100  # 100 + 2000 (cache_read)
+    assert out == 50
     assert cached == 2000
 
 
@@ -44,8 +45,28 @@ def test_extract_usage_tokens_anthropic_object_usage() -> None:
         cache_read_input_tokens=1000,
     )
     response = SimpleNamespace(usage=usage)
-    _inp, _out, cached = extract_usage_tokens(response)
+    inp, out, cached = extract_usage_tokens(response)
+    assert inp == 1080  # 80 + 1000 (cache_read)
+    assert out == 40
     assert cached == 1000
+
+
+def test_extract_usage_tokens_anthropic_with_cache_creation() -> None:
+    """Anthropic cache_creation_input_tokens 应计入 input_tokens 归一化。"""
+    response = SimpleNamespace(
+        usage={
+            "input_tokens": 20,
+            "output_tokens": 10,
+            "cache_read_input_tokens": 500,
+            "cache_creation_input_tokens": 100,
+        }
+    )
+    inp, out, cached = extract_usage_tokens(response)
+    # input_tokens 归一化：20 + 500 + 100 = 620
+    assert inp == 620
+    assert out == 10
+    # cached_tokens 仅 cache_read（cache_creation 已在 input_tokens 中）
+    assert cached == 500
 
 
 def test_extract_usage_tokens_openai_priority_over_anthropic() -> None:

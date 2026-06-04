@@ -51,6 +51,7 @@ def settle_request_log_amounts(
     input_tokens: int,
     output_tokens: int,
     cached_tokens: int,
+    cache_creation_tokens: int = 0,
 ) -> tuple[Decimal, Decimal, dict[str, Any]]:
     """返回 (cost_usd 上游, revenue_usd 下游, pricing_snapshot 扩展字段)。"""
     package = metadata.get("gateway_billing_package")
@@ -68,6 +69,7 @@ def settle_request_log_amounts(
     usage = TokenUsage(
         input_tokens=input_tokens,
         output_tokens=output_tokens,
+        cache_creation_tokens=cache_creation_tokens,
         cache_read_tokens=cached_tokens,
     )
     cost_usd = litellm_cost_usd

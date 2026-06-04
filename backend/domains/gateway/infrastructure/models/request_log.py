@@ -119,6 +119,9 @@ class GatewayRequestLog(Base):
     cached_tokens: Mapped[int] = mapped_column(
         Integer, nullable=False, server_default="0", default=0
     )
+    cache_creation_tokens: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="0", default=0
+    )
     cost_usd: Mapped[Decimal] = mapped_column(
         Numeric(12, 6), nullable=False, server_default="0", default=Decimal("0")
     )

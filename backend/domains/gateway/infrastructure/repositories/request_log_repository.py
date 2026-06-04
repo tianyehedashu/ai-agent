@@ -68,6 +68,7 @@ class RequestLogUsageAggregateRow:
     input_tokens: int = 0
     output_tokens: int = 0
     cached_tokens: int = 0
+    cache_creation_tokens: int = 0
     cost_usd: Decimal = Decimal("0")
     avg_latency_ms: float = 0.0
     avg_ttfb_ms: float = 0.0
@@ -84,6 +85,7 @@ class RequestLogUsageTotals:
     input_tokens: int
     output_tokens: int
     cached_tokens: int
+    cache_creation_tokens: int
     cost_usd: Decimal
     avg_latency_ms: float
     avg_ttfb_ms: float
@@ -118,6 +120,7 @@ class RequestLogRepository:
         input_tokens: int,
         output_tokens: int,
         cached_tokens: int,
+        cache_creation_tokens: int = 0,
         cost_usd: Decimal,
         revenue_usd: Decimal | None = None,
         pricing_snapshot: dict[str, Any] | None = None,
@@ -159,6 +162,7 @@ class RequestLogRepository:
             input_tokens=input_tokens,
             output_tokens=output_tokens,
             cached_tokens=cached_tokens,
+            cache_creation_tokens=cache_creation_tokens,
             cost_usd=cost_usd,
             revenue_usd=revenue_usd if revenue_usd is not None else cost_usd,
             pricing_snapshot=pricing_snapshot,
@@ -305,6 +309,8 @@ class RequestLogRepository:
             func.count(GatewayRequestLog.id).label("total"),
             func.sum(GatewayRequestLog.input_tokens).label("input_tokens"),
             func.sum(GatewayRequestLog.output_tokens).label("output_tokens"),
+            func.sum(GatewayRequestLog.cached_tokens).label("cached_tokens"),
+            func.sum(GatewayRequestLog.cache_creation_tokens).label("cache_creation_tokens"),
             func.sum(GatewayRequestLog.cost_usd).label("cost_usd"),
             func.sum(case((GatewayRequestLog.status == "success", 1), else_=0)).label("success"),
             func.sum(case((GatewayRequestLog.status != "success", 1), else_=0)).label("failure"),
@@ -316,6 +322,8 @@ class RequestLogRepository:
             "total": int(row.total or 0),
             "input_tokens": int(row.input_tokens or 0),
             "output_tokens": int(row.output_tokens or 0),
+            "cached_tokens": int(row.cached_tokens or 0),
+            "cache_creation_tokens": int(row.cache_creation_tokens or 0),
             "cost_usd": Decimal(row.cost_usd or 0),
             "success": int(row.success or 0),
             "failure": int(row.failure or 0),
@@ -461,6 +469,8 @@ class RequestLogRepository:
                 func.count(GatewayRequestLog.id).label("requests"),
                 func.sum(GatewayRequestLog.input_tokens).label("input_tokens"),
                 func.sum(GatewayRequestLog.output_tokens).label("output_tokens"),
+                func.sum(GatewayRequestLog.cached_tokens).label("cached_tokens"),
+                func.sum(GatewayRequestLog.cache_creation_tokens).label("cache_creation_tokens"),
                 func.sum(GatewayRequestLog.cost_usd).label("cost_usd"),
             )
             .where(_sql_and(*clauses))
@@ -472,6 +482,8 @@ class RequestLogRepository:
                 "requests": 0,
                 "input_tokens": 0,
                 "output_tokens": 0,
+                "cached_tokens": 0,
+                "cache_creation_tokens": 0,
                 "cost_usd": Decimal("0"),
             }
             for n in uniq
@@ -484,6 +496,8 @@ class RequestLogRepository:
                 "requests": int(row.requests or 0),
                 "input_tokens": int(row.input_tokens or 0),
                 "output_tokens": int(row.output_tokens or 0),
+                "cached_tokens": int(row.cached_tokens or 0),
+                "cache_creation_tokens": int(row.cache_creation_tokens or 0),
                 "cost_usd": Decimal(row.cost_usd or 0),
             }
         return out
@@ -511,6 +525,8 @@ class RequestLogRepository:
                 func.count(GatewayRequestLog.id).label("requests"),
                 func.sum(GatewayRequestLog.input_tokens).label("input_tokens"),
                 func.sum(GatewayRequestLog.output_tokens).label("output_tokens"),
+                func.sum(GatewayRequestLog.cached_tokens).label("cached_tokens"),
+                func.sum(GatewayRequestLog.cache_creation_tokens).label("cache_creation_tokens"),
                 func.sum(GatewayRequestLog.cost_usd).label("cost_usd"),
             )
             .where(_sql_and(*clauses))
@@ -522,6 +538,8 @@ class RequestLogRepository:
                 "requests": 0,
                 "input_tokens": 0,
                 "output_tokens": 0,
+                "cached_tokens": 0,
+                "cache_creation_tokens": 0,
                 "cost_usd": Decimal("0"),
             }
             for mid in uniq
@@ -534,6 +552,8 @@ class RequestLogRepository:
                 "requests": int(row.requests or 0),
                 "input_tokens": int(row.input_tokens or 0),
                 "output_tokens": int(row.output_tokens or 0),
+                "cached_tokens": int(row.cached_tokens or 0),
+                "cache_creation_tokens": int(row.cache_creation_tokens or 0),
                 "cost_usd": Decimal(row.cost_usd or 0),
             }
         return out
@@ -558,6 +578,8 @@ class RequestLogRepository:
                 func.count(GatewayRequestLog.id).label("requests"),
                 func.sum(GatewayRequestLog.input_tokens).label("input_tokens"),
                 func.sum(GatewayRequestLog.output_tokens).label("output_tokens"),
+                func.sum(GatewayRequestLog.cached_tokens).label("cached_tokens"),
+                func.sum(GatewayRequestLog.cache_creation_tokens).label("cache_creation_tokens"),
                 func.sum(GatewayRequestLog.cost_usd).label("cost_usd"),
                 func.sum(case((GatewayRequestLog.status == "success", 1), else_=0)).label(
                     "success"
@@ -579,6 +601,8 @@ class RequestLogRepository:
                 "requests": int(row.requests or 0),
                 "input_tokens": int(row.input_tokens or 0),
                 "output_tokens": int(row.output_tokens or 0),
+                "cached_tokens": int(row.cached_tokens or 0),
+                "cache_creation_tokens": int(row.cache_creation_tokens or 0),
                 "cost_usd": Decimal(row.cost_usd or 0),
                 "success": int(row.success or 0),
                 "failure": int(row.failure or 0),
@@ -782,6 +806,7 @@ class RequestLogRepository:
                 func.sum(GatewayRequestLog.input_tokens).label("input_tokens"),
                 func.sum(GatewayRequestLog.output_tokens).label("output_tokens"),
                 func.sum(GatewayRequestLog.cached_tokens).label("cached_tokens"),
+                func.sum(GatewayRequestLog.cache_creation_tokens).label("cache_creation_tokens"),
                 func.sum(GatewayRequestLog.cost_usd).label("cost_usd"),
                 func.avg(GatewayRequestLog.latency_ms).label("avg_latency_ms"),
                 func.avg(GatewayRequestLog.ttfb_ms).label("avg_ttfb_ms"),
@@ -821,6 +846,7 @@ class RequestLogRepository:
                     input_tokens=int(row.input_tokens or 0),
                     output_tokens=int(row.output_tokens or 0),
                     cached_tokens=int(row.cached_tokens or 0),
+                    cache_creation_tokens=int(row.cache_creation_tokens or 0),
                     cost_usd=Decimal(row.cost_usd or 0),
                     avg_latency_ms=float(row.avg_latency_ms or 0),
                     avg_ttfb_ms=float(row.avg_ttfb_ms or 0),
@@ -835,6 +861,7 @@ class RequestLogRepository:
             func.sum(GatewayRequestLog.input_tokens).label("input_tokens"),
             func.sum(GatewayRequestLog.output_tokens).label("output_tokens"),
             func.sum(GatewayRequestLog.cached_tokens).label("cached_tokens"),
+            func.sum(GatewayRequestLog.cache_creation_tokens).label("cache_creation_tokens"),
             func.sum(GatewayRequestLog.cost_usd).label("cost_usd"),
             func.avg(GatewayRequestLog.latency_ms).label("avg_latency_ms"),
             func.avg(GatewayRequestLog.ttfb_ms).label("avg_ttfb_ms"),
@@ -848,6 +875,7 @@ class RequestLogRepository:
             input_tokens=int(total_row.input_tokens or 0),
             output_tokens=int(total_row.output_tokens or 0),
             cached_tokens=int(total_row.cached_tokens or 0),
+            cache_creation_tokens=int(total_row.cache_creation_tokens or 0),
             cost_usd=Decimal(total_row.cost_usd or 0),
             avg_latency_ms=float(total_row.avg_latency_ms or 0),
             avg_ttfb_ms=float(total_row.avg_ttfb_ms or 0),

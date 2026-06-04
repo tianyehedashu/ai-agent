@@ -16,6 +16,8 @@ def merge_gateway_usage_slices(a: dict[str, Any], b: dict[str, Any]) -> dict[str
         "requests": int(a.get("requests", 0)) + int(b.get("requests", 0)),
         "input_tokens": int(a.get("input_tokens", 0)) + int(b.get("input_tokens", 0)),
         "output_tokens": int(a.get("output_tokens", 0)) + int(b.get("output_tokens", 0)),
+        "cached_tokens": int(a.get("cached_tokens", 0)) + int(b.get("cached_tokens", 0)),
+        "cache_creation_tokens": int(a.get("cache_creation_tokens", 0)) + int(b.get("cache_creation_tokens", 0)),
         "cost_usd": da + db,
     }
 

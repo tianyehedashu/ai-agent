@@ -34,6 +34,7 @@ _UPSERT_COLUMNS = (
     "input_tokens",
     "output_tokens",
     "cached_tokens",
+    "cache_creation_tokens",
     "cost_usd",
     "total_latency_ms",
     "p95_latency_ms",
@@ -70,6 +71,7 @@ class GatewayMetricsRollupRepository:
                 func.sum(GatewayRequestLog.input_tokens).label("input_tokens"),
                 func.sum(GatewayRequestLog.output_tokens).label("output_tokens"),
                 func.sum(GatewayRequestLog.cached_tokens).label("cached_tokens"),
+                func.sum(GatewayRequestLog.cache_creation_tokens).label("cache_creation_tokens"),
                 func.sum(GatewayRequestLog.cost_usd).label("cost_usd"),
                 func.sum(GatewayRequestLog.latency_ms).label("total_latency_ms"),
                 func.sum(case((GatewayRequestLog.cache_hit.is_(True), 1), else_=0)).label(
@@ -116,6 +118,7 @@ class GatewayMetricsRollupRepository:
                 "input_tokens": int(row.input_tokens or 0),
                 "output_tokens": int(row.output_tokens or 0),
                 "cached_tokens": int(row.cached_tokens or 0),
+                "cache_creation_tokens": int(row.cache_creation_tokens or 0),
                 "cost_usd": Decimal(row.cost_usd or 0),
                 "total_latency_ms": int(row.total_latency_ms or 0),
                 "p95_latency_ms": 0,

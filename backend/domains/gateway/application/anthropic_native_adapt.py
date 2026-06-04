@@ -61,22 +61,11 @@ def estimate_anthropic_request_tokens(body: Mapping[str, Any]) -> int:
 def anthropic_usage_total_tokens(usage: Any) -> int:
     """从 Anthropic ``usage`` 对象或 dict 得到结算用 token 总数。
 
-    Anthropic 的 ``input_tokens`` **仅**为非缓存部分；实际输入 token 总数需加上
-    ``cache_read_input_tokens`` + ``cache_creation_input_tokens``。
+    .. deprecated:: 内部委托 :func:`normalized_usage_from_raw`，保留签名向后兼容。
     """
-    if usage is None:
-        return 0
-    if isinstance(usage, Mapping):
-        inp = int(usage.get("input_tokens") or 0)
-        out = int(usage.get("output_tokens") or 0)
-        cache_read = int(usage.get("cache_read_input_tokens") or 0)
-        cache_create = int(usage.get("cache_creation_input_tokens") or 0)
-        return inp + cache_read + cache_create + out
-    inp = int(getattr(usage, "input_tokens", 0) or 0)
-    out = int(getattr(usage, "output_tokens", 0) or 0)
-    cache_read = int(getattr(usage, "cache_read_input_tokens", 0) or 0)
-    cache_create = int(getattr(usage, "cache_creation_input_tokens", 0) or 0)
-    return inp + cache_read + cache_create + out
+    from domains.gateway.domain.normalized_usage import normalized_usage_from_raw
+
+    return normalized_usage_from_raw(usage).total_tokens
 
 
 def anthropic_response_to_dict(response: Any) -> dict[str, Any]:

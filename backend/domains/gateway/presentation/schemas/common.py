@@ -571,6 +571,8 @@ class GatewayModelRouteUsageSlice(BaseModel):
     requests: int = 0
     input_tokens: int = 0
     output_tokens: int = 0
+    cached_tokens: int = 0
+    cache_creation_tokens: int = 0
     cost_usd: Decimal = Decimal("0")
 
 
@@ -1043,6 +1045,7 @@ class RequestLogResponse(BaseModel):
     input_tokens: int = 0
     output_tokens: int = 0
     cached_tokens: int = 0
+    cache_creation_tokens: int = 0
     cost_usd: Decimal = Decimal("0")
     revenue_usd: Decimal = Decimal("0")
     latency_ms: int = 0
@@ -1089,6 +1092,8 @@ class DashboardSummaryResponse(BaseModel):
     total_requests: int
     total_input_tokens: int
     total_output_tokens: int
+    total_cached_tokens: int
+    total_cache_creation_tokens: int
     total_cost_usd: Decimal
     success_count: int
     failure_count: int
@@ -1102,6 +1107,10 @@ class TimeSeriesPointResponse(BaseModel):
     bucket: datetime
     requests: int
     tokens: int
+    input_tokens: int = 0
+    output_tokens: int = 0
+    cached_tokens: int = 0
+    cache_creation_tokens: int = 0
     cost_usd: Decimal
     errors: int
 
@@ -1113,6 +1122,7 @@ class UsageStatisticsMetricResponse(BaseModel):
     input_tokens: int
     output_tokens: int
     cached_tokens: int
+    cache_creation_tokens: int
     total_tokens: int
     cost_usd: Decimal
     avg_latency_ms: float
