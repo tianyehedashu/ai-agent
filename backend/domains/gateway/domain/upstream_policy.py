@@ -58,6 +58,29 @@ def preprocess_messages_for_reasoner(
     return processed
 
 
+def flatten_text_only_content_arrays(
+    messages: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """将仅含 text 类型的 content array 降级为字符串。
+
+    用于不支持 OpenAI content parts 数组的上游（如 Deepseek）。
+    若包含非 text 部分（如 image_url），保留原样，由上游返回明确错误。
+    """
+    for msg in messages:
+        content = msg.get("content")
+        if not isinstance(content, list):
+            continue
+        texts: list[str] = []
+        for part in content:
+            if isinstance(part, dict) and part.get("type") == "text":
+                texts.append(part.get("text", ""))
+            else:
+                break
+        else:
+            msg["content"] = "".join(texts)
+    return messages
+
+
 def max_output_tokens_limit(tags: dict[str, Any], provider: str) -> int:
     raw = tags.get("context_window")
     if isinstance(raw, int) and raw > 0:
@@ -112,6 +135,7 @@ __all__ = [
     "UpstreamCapabilityFlags",
     "adapt_kwargs_by_capability",
     "clamp_max_tokens",
+    "flatten_text_only_content_arrays",
     "is_deepseek_reasoner",
     "is_deepseek_thinking_model",
     "max_output_tokens_limit",

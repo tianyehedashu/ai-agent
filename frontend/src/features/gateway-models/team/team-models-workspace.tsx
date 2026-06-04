@@ -5,6 +5,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 
 import { gatewayApi, fetchAllGatewayModelPages } from '@/api/gateway'
 import type { GatewayModel } from '@/api/gateway/models'
+import { routesApi } from '@/api/gateway/routes'
 import { ConfirmAlertDialog } from '@/components/confirm-alert-dialog'
 import { PaginationControls } from '@/components/pagination-controls'
 import { Button } from '@/components/ui/button'
@@ -316,6 +317,22 @@ export function TeamModelsWorkspace({
     enabled: isRegisterView && listMode === 'team',
   })
 
+  const { data: routes } = useQuery({
+    queryKey: ['gateway', 'routes', teamId],
+    queryFn: () => routesApi.listRoutes(teamId),
+    enabled: !isRegisterView && listMode === 'team',
+  })
+
+  const routeMap = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const route of routes ?? []) {
+      for (const pm of route.primary_models) {
+        map.set(pm, route.virtual_model)
+      }
+    }
+    return map
+  }, [routes])
+
   const filterCredentialSummary = credentialFilter
     ? credentialSummariesById.get(credentialFilter)
     : undefined
@@ -536,10 +553,22 @@ export function TeamModelsWorkspace({
     return `将删除当前筛选下的全部 ${String(filteredDeleteCount)} 个模型，此操作不可撤销。`
   }, [filteredDeleteCount, filteredModels])
 
-  const listItems = useMemo(
-    () => filteredModels.map((m) => fromGatewayModel(m, listMode === 'system' ? 'system' : 'team')),
-    [filteredModels, listMode]
-  )
+  const listItems = useMemo(() => {
+    const sorted = [...filteredModels].sort((a, b) => {
+      const aVm = routeMap.get(a.name)
+      const bVm = routeMap.get(b.name)
+      if (aVm && bVm) {
+        if (aVm === bVm) return a.name.localeCompare(b.name)
+        return aVm.localeCompare(bVm)
+      }
+      if (aVm) return -1
+      if (bVm) return 1
+      return a.name.localeCompare(b.name)
+    })
+    return sorted.map((m) =>
+      fromGatewayModel(m, listMode === 'system' ? 'system' : 'team', routeMap.get(m.name))
+    )
+  }, [filteredModels, listMode, routeMap])
 
   const selectableModels = useMemo(
     () => filteredModels.filter(checkModelBatchSelectable),

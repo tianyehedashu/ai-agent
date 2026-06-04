@@ -32,10 +32,17 @@ def kwargs_from_prepared(
     resolved = prepared.resolved
     tags = resolved.record.tags if resolved is not None else None
     tag_dict = tags if isinstance(tags, dict) else None
+    meta = prepared.kwargs.get("metadata")
+    credential_profile_id = (
+        meta.get("gateway_credential_profile_id")
+        if isinstance(meta, dict) and isinstance(meta.get("gateway_credential_profile_id"), str)
+        else None
+    )
     kwargs = upstream_adapter.adapt(
         prepared.kwargs,
         client_model=prepared.client_model,
         resolved=resolved,
+        credential_profile_id=credential_profile_id,
     )
     return prompt_cache.inbound(
         kwargs,

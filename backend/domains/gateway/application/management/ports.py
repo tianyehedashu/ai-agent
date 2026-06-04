@@ -24,6 +24,7 @@ class UpstreamModelListPort(Protocol):
         list_url: str,
         api_key: str,
         timeout_seconds: float = 15.0,
+        user_agent: str | None = None,
     ) -> RawUpstreamListResult:
         """GET ``list_url``，使用 Bearer API Key。"""
 

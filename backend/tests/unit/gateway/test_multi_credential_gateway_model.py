@@ -134,3 +134,192 @@ async def test_multi_credential_conflict_with_existing_route(db_session, test_us
             is_platform_admin=False,
             **team_owner_actor_kw(test_user),
         )
+
+
+# ---------------------------------------------------------------------------
+# append_credential_to_existing_model_name
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_append_credential_creates_route_when_none_exists(db_session, test_user) -> None:
+    """已有单模型、无 Route：重命名旧模型并新建 Route。"""
+    team = await TeamService(db_session).ensure_personal_team(test_user.id)
+    encryption_key = derive_encryption_key(settings.secret_key.get_secret_value())
+    cred_repo = ProviderCredentialRepository(db_session)
+    old_cred = await cred_repo.create_for_tenant(
+        tenant_id=team.id,
+        provider="openai",
+        name=f"old-{uuid.uuid4().hex[:6]}",
+        api_key_encrypted=encrypt_value("sk-fake", encryption_key),
+        api_base=None,
+    )
+    new_cred = await cred_repo.create_for_tenant(
+        tenant_id=team.id,
+        provider="openai",
+        name=f"new-{uuid.uuid4().hex[:6]}",
+        api_key_encrypted=encrypt_value("sk-fake", encryption_key),
+        api_base=None,
+    )
+    writes = GatewayManagementWriteService(db_session)
+    virtual = f"append-{uuid.uuid4().hex[:6]}"
+    await writes.create_gateway_model(
+        tenant_id=team.id,
+        name=virtual,
+        capability="chat",
+        real_model="gpt-4o-mini",
+        credential_id=old_cred.id,
+        provider="openai",
+        weight=1,
+        rpm_limit=None,
+        tpm_limit=None,
+        tags=None,
+        actor_user_id=test_user.id,
+        team_role="owner",
+        is_platform_admin=False,
+        reload_router=False,
+    )
+    await db_session.flush()
+
+    new_model = await writes.append_credential_to_existing_model_name(
+        tenant_id=team.id,
+        name=virtual,
+        capability="chat",
+        real_model="gpt-4o-mini",
+        credential_id=new_cred.id,
+        provider="openai",
+        weight=1,
+        rpm_limit=None,
+        tpm_limit=None,
+        tags=None,
+        upstream_call_shape=None,
+        actor_user_id=test_user.id,
+        team_role="owner",
+        is_platform_admin=False,
+    )
+    await db_session.flush()
+
+    assert new_model.name.startswith(virtual + "--")
+    route_repo = GatewayRouteRepository(db_session)
+    route = await route_repo.get_by_virtual_model(team.id, virtual)
+    assert route is not None
+    assert new_model.name in route.primary_models
+    model_repo = GatewayModelRepository(db_session)
+    old_renamed = await model_repo.get_by_name(team.id, route.primary_models[0])
+    assert old_renamed is not None
+    assert old_renamed.name != virtual
+
+
+@pytest.mark.asyncio
+async def test_append_credential_adds_to_existing_route(db_session, test_user) -> None:
+    """已有 Route：直接追加新凭据别名到 primary_models。"""
+    team = await TeamService(db_session).ensure_personal_team(test_user.id)
+    encryption_key = derive_encryption_key(settings.secret_key.get_secret_value())
+    cred_repo = ProviderCredentialRepository(db_session)
+    creds = []
+    for i in range(3):
+        creds.append(
+            await cred_repo.create_for_tenant(
+                tenant_id=team.id,
+                provider="openai",
+                name=f"route-append-{i}-{uuid.uuid4().hex[:6]}",
+                api_key_encrypted=encrypt_value("sk-fake", encryption_key),
+                api_base=None,
+            )
+        )
+    writes = GatewayManagementWriteService(db_session)
+    virtual = f"route-append-{uuid.uuid4().hex[:6]}"
+    await writes.create_multi_credential_gateway_model(
+        tenant_id=team.id,
+        name=virtual,
+        capability="chat",
+        real_model="gpt-4o-mini",
+        provider="openai",
+        credential_ids=[creds[0].id, creds[1].id],
+        is_platform_admin=False,
+        **team_owner_actor_kw(test_user),
+    )
+    await db_session.flush()
+
+    new_model = await writes.append_credential_to_existing_model_name(
+        tenant_id=team.id,
+        name=virtual,
+        capability="chat",
+        real_model="gpt-4o-mini",
+        credential_id=creds[2].id,
+        provider="openai",
+        weight=1,
+        rpm_limit=None,
+        tpm_limit=None,
+        tags=None,
+        upstream_call_shape=None,
+        actor_user_id=test_user.id,
+        team_role="owner",
+        is_platform_admin=False,
+    )
+    await db_session.flush()
+
+    route_repo = GatewayRouteRepository(db_session)
+    route = await route_repo.get_by_virtual_model(team.id, virtual)
+    assert route is not None
+    assert len(route.primary_models) == 3
+    assert new_model.name in route.primary_models
+
+
+@pytest.mark.asyncio
+async def test_append_credential_rejects_mismatched_real_model(db_session, test_user) -> None:
+    """real_model 不一致时拒绝追加。"""
+    team = await TeamService(db_session).ensure_personal_team(test_user.id)
+    encryption_key = derive_encryption_key(settings.secret_key.get_secret_value())
+    cred_repo = ProviderCredentialRepository(db_session)
+    old_cred = await cred_repo.create_for_tenant(
+        tenant_id=team.id,
+        provider="openai",
+        name=f"mismatch-{uuid.uuid4().hex[:6]}",
+        api_key_encrypted=encrypt_value("sk-fake", encryption_key),
+        api_base=None,
+    )
+    new_cred = await cred_repo.create_for_tenant(
+        tenant_id=team.id,
+        provider="openai",
+        name=f"mismatch-new-{uuid.uuid4().hex[:6]}",
+        api_key_encrypted=encrypt_value("sk-fake", encryption_key),
+        api_base=None,
+    )
+    writes = GatewayManagementWriteService(db_session)
+    virtual = f"mismatch-{uuid.uuid4().hex[:6]}"
+    await writes.create_gateway_model(
+        tenant_id=team.id,
+        name=virtual,
+        capability="chat",
+        real_model="gpt-4o-mini",
+        credential_id=old_cred.id,
+        provider="openai",
+        weight=1,
+        rpm_limit=None,
+        tpm_limit=None,
+        tags=None,
+        actor_user_id=test_user.id,
+        team_role="owner",
+        is_platform_admin=False,
+        reload_router=False,
+    )
+    await db_session.flush()
+
+    with pytest.raises(ValidationError):
+        await writes.append_credential_to_existing_model_name(
+            tenant_id=team.id,
+            name=virtual,
+            capability="chat",
+            real_model="gpt-4o",
+            credential_id=new_cred.id,
+            provider="openai",
+            weight=1,
+            rpm_limit=None,
+            tpm_limit=None,
+            tags=None,
+            upstream_call_shape=None,
+            actor_user_id=test_user.id,
+            team_role="owner",
+            is_platform_admin=False,
+        )

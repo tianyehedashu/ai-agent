@@ -554,6 +554,111 @@ class ModelWritesMixin:
             reload_router=reload_router,
         )
 
+    async def append_credential_to_existing_model_name(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        name: str,
+        capability: str,
+        real_model: str,
+        credential_id: uuid.UUID,
+        provider: str,
+        weight: int,
+        rpm_limit: int | None,
+        tpm_limit: int | None,
+        tags: dict[str, Any] | None,
+        upstream_call_shape: str | None,
+        actor_user_id: uuid.UUID | None,
+        team_role: str,
+        is_platform_admin: bool,
+        enabled: bool = True,
+    ) -> Any:
+        """注册别名已存在时，自动将其转化为（或追加到）多凭据路由。
+
+        返回新创建的 GatewayModel（--hash 别名）。
+        """
+        cleaned_name = (name or "").strip()
+        if not cleaned_name:
+            raise ValidationError("注册别名不能为空")
+
+        existing = await self._models.get_by_name(tenant_id, cleaned_name)
+        route = await self._routes.get_by_virtual_model(tenant_id, cleaned_name)
+
+        if existing is not None:
+            if str(existing.credential_id) == str(credential_id):
+                raise ValidationError(f"注册别名已存在: {cleaned_name}")
+            if existing.real_model != real_model:
+                raise ValidationError(
+                    f"现有模型 {cleaned_name} 的上游模型 ID 为 {existing.real_model}，"
+                    f"与新请求的 {real_model} 不一致；"
+                    f"多凭据路由要求同一 (provider, real_model)"
+                )
+        elif route is None:
+            raise ValidationError(f"模型 {cleaned_name} 不存在")
+
+        # 生成新模型的 hash 别名
+        short = uuid.UUID(str(credential_id)).hex[:8]
+        new_alias = f"{cleaned_name}--{short}"
+        suffix = 0
+        base_alias = new_alias
+        while await self._models.name_exists_for_tenant(tenant_id, new_alias):
+            suffix += 1
+            new_alias = f"{base_alias}-{suffix}"
+
+        # 创建新模型
+        new_model = await self.create_gateway_model(
+            tenant_id=tenant_id,
+            name=new_alias,
+            capability=capability,
+            real_model=real_model,
+            credential_id=credential_id,
+            provider=provider,
+            weight=weight,
+            rpm_limit=rpm_limit,
+            tpm_limit=tpm_limit,
+            tags=tags,
+            upstream_call_shape=upstream_call_shape,
+            actor_user_id=actor_user_id,
+            team_role=team_role,
+            is_platform_admin=is_platform_admin,
+            enabled=enabled,
+            reload_router=False,
+        )
+
+        if route is not None:
+            # 追加到已有 route
+            primary = list(route.primary_models or ())
+            if new_alias not in primary:
+                primary.append(new_alias)
+                await self._routes.update(route.id, primary_models=primary)
+        else:
+            # 没有 route：将现有模型重命名并创建 route
+            existing_short = uuid.UUID(str(existing.credential_id)).hex[:8]
+            existing_alias = f"{cleaned_name}--{existing_short}"
+            suffix = 0
+            base_existing_alias = existing_alias
+            while await self._models.name_exists_for_tenant(tenant_id, existing_alias):
+                suffix += 1
+                existing_alias = f"{base_existing_alias}-{suffix}"
+
+            await rename_gateway_model_name_references(
+                self._session,
+                tenant_id=tenant_id,
+                old_name=existing.name,
+                new_name=existing_alias,
+            )
+            await self._models.update(existing.id, name=existing_alias)
+
+            await self._routes.create(
+                tenant_id=tenant_id,
+                virtual_model=cleaned_name,
+                primary_models=[existing_alias, new_alias],
+                strategy="simple-shuffle",
+            )
+
+        await self.reload_litellm_router(tenant_id=tenant_id)
+        return new_model
+
     async def create_multi_credential_gateway_model(
         self,
         *,

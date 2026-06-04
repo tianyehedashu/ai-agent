@@ -140,4 +140,28 @@ describe('fromGatewayModel', () => {
     expect(item.registryKind).toBe('system')
     expect(item.entitlementStatus).toBe('active')
   })
+
+  it('sets routeVirtualModel when provided', () => {
+    const item = fromGatewayModel(
+      gatewayModel({
+        id: 'gm-route',
+        name: 'deepseek-chat--a1b2c3d4',
+      }),
+      'team',
+      'deepseek-chat'
+    )
+
+    expect(item.routeVirtualModel).toBe('deepseek-chat')
+  })
+
+  it('leaves routeVirtualModel undefined when not provided', () => {
+    const item = fromGatewayModel(
+      gatewayModel({
+        id: 'gm-standalone',
+        name: 'standalone-model',
+      })
+    )
+
+    expect(item.routeVirtualModel).toBeUndefined()
+  })
 })

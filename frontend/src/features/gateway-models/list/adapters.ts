@@ -36,7 +36,8 @@ export function fromPersonalModel(model: PersonalGatewayModel): GatewayModelList
 /** GatewayModel → 统一列表 ViewModel */
 export function fromGatewayModel(
   model: GatewayModel,
-  scope: Exclude<GatewayModelListScope, 'personal'> = 'team'
+  scope: Exclude<GatewayModelListScope, 'personal'> = 'team',
+  routeVirtualModel?: string | null
 ): GatewayModelListItem {
   return {
     id: model.id,
@@ -56,6 +57,7 @@ export function fromGatewayModel(
     entitlementResetAt: model.entitlement_reset_at,
     teamId: model.tenant_id ?? model.team_id,
     registryKind: model.registry_kind,
+    routeVirtualModel,
     source: model,
   }
 }

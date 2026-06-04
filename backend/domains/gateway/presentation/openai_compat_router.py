@@ -280,27 +280,39 @@ async def list_models(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> dict[str, object]:
     reads = GatewayManagementReadService(db)
-    models = await reads.list_gateway_models(
+    all_models = await reads.list_gateway_models(
         principal.team_id,
         registry_scope="callable",
         only_enabled=True,
         user_id=principal.user_id,
     )
+    routes = await reads.list_gateway_routes(principal.team_id, only_enabled=True)
+
+    allowed: set[str] | None = None
     if principal.vkey and principal.vkey.allowed_models:
         allowed = set(principal.vkey.allowed_models)
-        models = [m for m in models if m.name in allowed]
     if principal.api_key_grant and principal.api_key_grant.allowed_models:
-        allowed = set(principal.api_key_grant.allowed_models)
-        models = [m for m in models if m.name in allowed]
+        grant_allowed = set(principal.api_key_grant.allowed_models)
+        allowed = grant_allowed if allowed is None else allowed & grant_allowed
+
+    if allowed is not None:
+        visible_models = [m for m in all_models if m.name in allowed]
+        visible_routes = [r for r in routes if r.virtual_model in allowed]
+    else:
+        visible_models = all_models
+        visible_routes = routes
+
     entitlement_scope, entitlement_scope_id = resolve_entitlement_scope(
         vkey_id=principal.vkey.vkey_id if principal.vkey else None,
         apikey_grant_id=principal.api_key_grant.grant_id if principal.api_key_grant else None,
     )
     data = await build_proxy_models_list(
         db,
-        models,
+        visible_models,
+        routes=visible_routes,
         entitlement_scope=entitlement_scope,
         entitlement_scope_id=entitlement_scope_id,
+        route_lookup_models=all_models,
     )
     return {"object": "list", "data": data}
 

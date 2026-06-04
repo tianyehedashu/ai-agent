@@ -27,6 +27,7 @@ from domains.gateway.domain.policies.credential_scope import (
 from domains.gateway.domain.upstream_catalog_policy import (
     resolve_openai_compatible_models_list_url,
 )
+from domains.gateway.domain.upstream_profile_registry import get_upstream_profile
 from domains.gateway.domain.upstream_registration_match import (
     format_already_registered_reason,
     match_registered_names,
@@ -237,7 +238,12 @@ class CredentialUpstreamCatalogService:
                 message="无法解密凭据中的 API Key，请检查服务端密钥配置或重新保存凭据。",
                 http_status=None,
             )
-        raw = await self._port.fetch_models(list_url=url, api_key=api_key)
+        profile = get_upstream_profile(row.profile_id, provider=row.provider)
+        raw = await self._port.fetch_models(
+            list_url=url,
+            api_key=api_key,
+            user_agent=profile.coding_agent_ua,
+        )
         base = self._map_raw_to_probe_result(credential_id=credential_id, raw=raw)
         if base.support not in ("full", "partial") or not base.items:
             return base

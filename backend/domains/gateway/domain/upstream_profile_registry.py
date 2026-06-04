@@ -78,6 +78,7 @@ _PROFILES: tuple[UpstreamProfile, ...] = (
         provider="zhipuai",
         label="智谱 Coding Plan",
         api_bases={UpstreamProtocol.OPENAI_COMPAT: "https://open.bigmodel.cn/api/coding/paas/v4"},
+        coding_agent_ua="cursor/1.0",
     ),
     UpstreamProfile(
         id="zhipuai.default",
@@ -102,6 +103,7 @@ _PROFILES: tuple[UpstreamProfile, ...] = (
         },
         normalize_rules=(_VOLCENGINE_OPENAI_NORMALIZE,),
         default_call_shape=UpstreamCallShape.OPENAI_COMPAT,
+        coding_agent_ua="cursor/1.0",
     ),
     UpstreamProfile(
         id="volcengine.default",
@@ -127,6 +129,7 @@ _PROFILES: tuple[UpstreamProfile, ...] = (
         provider="moonshot",
         label="Kimi Code",
         api_bases={UpstreamProtocol.OPENAI_COMPAT: "https://api.kimi.com/coding/v1"},
+        coding_agent_ua="cursor/1.0",
     ),
     UpstreamProfile(
         id="custom.default",

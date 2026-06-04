@@ -19,11 +19,14 @@ class OpenAICompatibleModelListAdapter(UpstreamModelListPort):
         list_url: str,
         api_key: str,
         timeout_seconds: float = 15.0,
+        user_agent: str | None = None,
     ) -> RawUpstreamListResult:
-        headers = {
+        headers: dict[str, str] = {
             "Authorization": f"Bearer {api_key}",
             "Accept": "application/json",
         }
+        if user_agent:
+            headers["User-Agent"] = user_agent
         try:
             async with httpx.AsyncClient(timeout=timeout_seconds) as client:
                 resp = await client.get(list_url, headers=headers)

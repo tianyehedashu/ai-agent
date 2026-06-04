@@ -130,10 +130,21 @@ export const GatewayModelListRow = memo(function GatewayModelListRow({
     <ModelCapabilityBadges model={item.source} compact />
   ) : null
 
+  const isRouteAlias = !!item.routeVirtualModel
+
   const titleLine = (
     <div className="flex min-w-0 items-center gap-2">
+      {isRouteAlias ? (
+        <span className="shrink-0 rounded bg-muted px-1 py-0.5 text-[10px] text-muted-foreground">
+          别名
+        </span>
+      ) : null}
       <p
-        className={cn('min-w-0 flex-1 truncate text-sm font-medium', isPersonal ? '' : 'font-mono')}
+        className={cn(
+          'min-w-0 flex-1 truncate',
+          isPersonal ? 'text-sm font-medium' : 'font-mono text-sm font-medium',
+          isRouteAlias && 'text-muted-foreground'
+        )}
       >
         {item.title}
       </p>

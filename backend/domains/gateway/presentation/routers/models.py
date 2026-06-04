@@ -301,24 +301,45 @@ async def create_model(
         team_role=team.team_role,
         is_platform_admin=team.is_platform_admin,
     )
-    model = await writes.create_managed_gateway_model(
-        credential_scope=cred.scope,
-        tenant_id=team.team_id,
-        name=body.name,
-        capability=body.capability,
-        real_model=body.real_model,
-        credential_id=body.credential_id,
-        provider=body.provider,
-        weight=body.weight,
-        rpm_limit=body.rpm_limit,
-        tpm_limit=body.tpm_limit,
-        tags=body.tags,
-        upstream_call_shape=body.upstream_call_shape,
-        actor_user_id=team.user_id,
-        team_role=team.team_role,
-        is_platform_admin=team.is_platform_admin,
-        enabled=body.enabled,
-    )
+    # 若注册别名已存在且凭据不同，自动转化为多凭据路由（追加到已有 Route 或新建 Route）
+    existing = await reads._models.get_by_name(team.team_id, body.name)
+    if existing is not None and str(existing.credential_id) != str(body.credential_id):
+        model = await writes.append_credential_to_existing_model_name(
+            tenant_id=team.team_id,
+            name=body.name,
+            capability=body.capability,
+            real_model=body.real_model,
+            credential_id=body.credential_id,
+            provider=body.provider,
+            weight=body.weight,
+            rpm_limit=body.rpm_limit,
+            tpm_limit=body.tpm_limit,
+            tags=body.tags,
+            upstream_call_shape=body.upstream_call_shape,
+            actor_user_id=team.user_id,
+            team_role=team.team_role,
+            is_platform_admin=team.is_platform_admin,
+            enabled=body.enabled,
+        )
+    else:
+        model = await writes.create_managed_gateway_model(
+            credential_scope=cred.scope,
+            tenant_id=team.team_id,
+            name=body.name,
+            capability=body.capability,
+            real_model=body.real_model,
+            credential_id=body.credential_id,
+            provider=body.provider,
+            weight=body.weight,
+            rpm_limit=body.rpm_limit,
+            tpm_limit=body.tpm_limit,
+            tags=body.tags,
+            upstream_call_shape=body.upstream_call_shape,
+            actor_user_id=team.user_id,
+            team_role=team.team_role,
+            is_platform_admin=team.is_platform_admin,
+            enabled=body.enabled,
+        )
     team_credentials_by_id = await reads.map_team_credentials_display_by_id(
         {model.credential_id},
     )

@@ -81,6 +81,8 @@ export interface GatewayModelListItem {
   entitlementResetAt?: string | null
   teamId?: string | null
   registryKind?: 'team' | 'system'
+  /** 若该模型是多凭据路由的别名，对应 Route 的 virtual_model */
+  routeVirtualModel?: string | null
   source: PersonalGatewayModel | GatewayModel
 }
 

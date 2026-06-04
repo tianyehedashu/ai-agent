@@ -180,6 +180,7 @@ class ProbeWritesMixin:
             actor_user_id=probe_actor_id,
             target=target,
             credential_name=credential.name,
+            credential_profile_id=getattr(credential, "profile_id", None),
         )
 
         try:

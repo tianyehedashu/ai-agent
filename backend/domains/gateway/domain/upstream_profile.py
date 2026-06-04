@@ -88,6 +88,7 @@ class UpstreamProfile:
     probe_protocol: UpstreamProtocol = UpstreamProtocol.OPENAI_COMPAT
     probe_supported: bool = True
     probe_unsupported_reason: str | None = None
+    coding_agent_ua: str | None = None
 
     def normalize_api_base(self, api_base: str | None, *, protocol: UpstreamProtocol) -> str | None:
         """用户覆盖或 profile 默认 base，经 normalize_rules 规范化。"""
