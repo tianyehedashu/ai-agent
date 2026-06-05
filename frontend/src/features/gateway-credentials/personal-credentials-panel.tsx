@@ -15,6 +15,7 @@ import {
   type GatewayCredentialUpdateBody,
   type ProviderCredential,
 } from '@/api/gateway'
+import type { GatewayTeam } from '@/api/gateway/teams'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -35,7 +36,7 @@ import { GatewayRefreshButton } from '@/features/gateway-shared/gateway-refresh-
 import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { useToast } from '@/hooks/use-toast'
 import { lazyWithReload } from '@/lib/lazy-with-reload'
-import { Key, Loader2, Pencil, Plus, Trash2 } from '@/lib/lucide-icons'
+import { Key, Loader2, Pencil, Plus, Trash2, Upload } from '@/lib/lucide-icons'
 import { useCurrentUser } from '@/stores/user'
 
 import { USER_GATEWAY_CREDENTIAL_PROVIDER_IDS, credentialProviderLabel } from './constants'
@@ -51,16 +52,23 @@ const AddModelsDialog = lazyWithReload(() =>
   import('./add-models-dialog').then((m) => ({ default: m.AddModelsDialog }))
 )
 
+const ImportToTeamDialog = lazyWithReload(() =>
+  import('./import-to-team-dialog').then((m) => ({ default: m.ImportToTeamDialog }))
+)
+
 export interface PersonalCredentialsPanelProps {
   /**
    * 上层接管「添加凭据」入口：可选预填 provider。
    * 若未注入，则 panel 不展示「添加账号」按钮。
    */
   onAddCredential?: (provider?: string) => void
+  /** 可写入的协作团队列表，用于导入到团队对话框的目标团队选择。 */
+  writableTeams?: GatewayTeam[]
 }
 
 export function PersonalCredentialsPanel({
   onAddCredential,
+  writableTeams = [],
 }: PersonalCredentialsPanelProps = {}): React.ReactElement {
   useProviderProfilesCatalog()
   const queryClient = useQueryClient()
@@ -74,6 +82,10 @@ export function PersonalCredentialsPanel({
     null
   )
   const [showFullMaskedInList, setShowFullMaskedInList] = useState(false)
+  const [importDialogState, setImportDialogState] = useState<{
+    open: boolean
+    preselectedIds: string[]
+  }>({ open: false, preselectedIds: [] })
 
   const {
     data: credentials = [],
@@ -206,17 +218,34 @@ export function PersonalCredentialsPanel({
                 </div>
                 <div className="flex items-center gap-1">
                   {rows.length > 0 ? (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      disabled={testIsPending}
-                      onClick={() => {
-                        const active = rows.find((row) => row.is_active) ?? rows[0]
-                        testMutate(active.id)
-                      }}
-                    >
-                      {testIsPending ? '验证中…' : '验证'}
-                    </Button>
+                    <>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        disabled={testIsPending}
+                        onClick={() => {
+                          const active = rows.find((row) => row.is_active) ?? rows[0]
+                          testMutate(active.id)
+                        }}
+                      >
+                        {testIsPending ? '验证中…' : '验证'}
+                      </Button>
+                      {writableTeams.length > 0 ? (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setImportDialogState({
+                              open: true,
+                              preselectedIds: rows.map((r) => r.id),
+                            })
+                          }}
+                        >
+                          <Upload className="mr-1 h-3.5 w-3.5" />
+                          导入到团队
+                        </Button>
+                      ) : null}
+                    </>
                   ) : null}
                   {onAddCredential ? (
                     <Button
@@ -325,6 +354,7 @@ export function PersonalCredentialsPanel({
       currentUser?.id,
       personalBudgets,
       myModels,
+      writableTeams.length,
     ]
   )
 
@@ -365,6 +395,18 @@ export function PersonalCredentialsPanel({
             ariaLabel="刷新个人凭据"
             onRefresh={handleRefresh}
           />
+          {writableTeams.length > 0 && credentials.length > 0 ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setImportDialogState({ open: true, preselectedIds: [] })
+              }}
+            >
+              <Upload className="mr-1.5 h-4 w-4" />
+              批量导入到团队
+            </Button>
+          ) : null}
           {onAddCredential ? (
             <Button
               size="sm"
@@ -438,6 +480,25 @@ export function PersonalCredentialsPanel({
           />
         </Suspense>
       ) : null}
+
+      <Suspense
+        fallback={
+          <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            加载导入…
+          </div>
+        }
+      >
+        <ImportToTeamDialog
+          open={importDialogState.open}
+          onOpenChange={(next) => {
+            setImportDialogState((prev) => ({ ...prev, open: next }))
+          }}
+          preselectedCredentialIds={importDialogState.preselectedIds}
+          credentials={credentials}
+          writableTeams={writableTeams}
+        />
+      </Suspense>
     </div>
   )
 }

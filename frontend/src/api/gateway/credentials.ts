@@ -198,6 +198,31 @@ export interface TeamGatewayModelBatchImportResponse {
   failed: BatchImportFailureItem[]
 }
 
+// ---------- 凭据 + 模型批量导入到团队 ----------
+
+export interface ImportedModelSummary {
+  source_model_id?: string | null
+  name: string
+  real_model: string
+}
+
+export interface ModelImportFailureItem {
+  model_name: string
+  reason: string
+}
+
+export interface ImportedCredentialItem {
+  source_credential_id: string
+  new_credential: ProviderCredential
+  models_created: ImportedModelSummary[]
+  models_failed: ModelImportFailureItem[]
+}
+
+export interface ImportCredentialsWithModelsResponse {
+  succeeded: ImportedCredentialItem[]
+  failed: BatchImportFailureItem[]
+}
+
 /** GET /managed-team-credentials 分页响应 */
 export interface ManagedTeamCredentialListResponse extends PaginatedList<ProviderCredential> {
   queried_team_count: number
@@ -347,6 +372,26 @@ export const credentialsApi = {
   /** 将当前用户的全部 user-scope 凭据复制到团队；返回新建条数 */
   importFromUserConfig: (teamId: string) =>
     apiClient.post<{ created: number }>(teamGatewayPath(teamId, '/credentials/import')),
+
+  /** 将选中的个人凭据及其关联模型批量导入到团队 */
+  importCredentialsWithModels: async (teamId: string, body: { credential_ids: string[] }) => {
+    const data = await apiClient.post<{
+      succeeded: Array<{
+        source_credential_id: string
+        new_credential: ProviderCredentialWire
+        models_created: ImportedModelSummary[]
+        models_failed: ModelImportFailureItem[]
+      }>
+      failed: BatchImportFailureItem[]
+    }>(teamGatewayPath(teamId, '/credentials/import-with-models'), body)
+    return {
+      ...data,
+      succeeded: data.succeeded.map((s) => ({
+        ...s,
+        new_credential: normalizeCredential(s.new_credential),
+      })),
+    } as ImportCredentialsWithModelsResponse
+  },
 } as const
 
 /** 拉取当前 actor 可见的全部团队 scope 凭据（筛选下拉等需全量时使用） */

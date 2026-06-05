@@ -341,12 +341,28 @@ class ProviderCredentialRepository:
         await self._session.flush()
         return True
 
+    async def find_tenant_by_provider_and_name(
+        self, tenant_id: uuid.UUID, provider: str, name: str
+    ) -> ProviderCredential | None:
+        stmt = (
+            select(ProviderCredential)
+            .where(
+                ProviderCredential.tenant_id == tenant_id,
+                ProviderCredential.provider == provider,
+                ProviderCredential.name == name,
+            )
+            .limit(1)
+        )
+        result = await self._session.execute(stmt)
+        return result.scalar_one_or_none()
+
     async def copy_to_team(
         self,
         credential_id: uuid.UUID,
         tenant_id: uuid.UUID,
         *,
         created_by_user_id: uuid.UUID | None = None,
+        name_override: str | None = None,
     ) -> ProviderCredential | None:
         source = await self.get(credential_id)
         if source is None:
@@ -356,7 +372,7 @@ class ProviderCredentialRepository:
             scope=None,
             scope_id=None,
             provider=source.provider,
-            name=source.name,
+            name=name_override or source.name,
             api_key_encrypted=source.api_key_encrypted,
             api_base=source.api_base,
             api_bases=source.api_bases,

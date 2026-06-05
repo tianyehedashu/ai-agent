@@ -259,7 +259,10 @@ export default function GatewayCredentialsPage(): React.JSX.Element {
 
         {activeTab === 'personal' ? (
           <TabsContent value="personal" className="mt-4 focus-visible:outline-none">
-            <PersonalCredentialsPanel onAddCredential={handleOpenCreate} />
+            <PersonalCredentialsPanel
+              onAddCredential={handleOpenCreate}
+              writableTeams={writableTeams}
+            />
           </TabsContent>
         ) : activeTab === 'system' ? (
           isPlatformAdmin ? (

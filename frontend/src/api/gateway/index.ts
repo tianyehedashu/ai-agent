@@ -73,6 +73,10 @@ export type {
   TeamGatewayModelBatchImportResponse,
   ManagedTeamCredentialListResponse,
   ListManagedTeamCredentialsParams,
+  ImportedModelSummary,
+  ModelImportFailureItem,
+  ImportedCredentialItem,
+  ImportCredentialsWithModelsResponse,
 } from './credentials'
 
 export type {

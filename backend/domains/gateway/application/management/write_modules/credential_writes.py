@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import Any
+from dataclasses import dataclass, field
 import uuid
 
 from bootstrap.config import settings
@@ -29,6 +30,52 @@ from libs.exceptions import ValidationError
 from utils.logging import get_logger
 
 logger = get_logger(__name__)
+
+
+@dataclass
+class ImportedModelSummary:
+    """Summary of a single model created during import."""
+
+    source_model_id: str | None
+    name: str
+    real_model: str
+
+
+@dataclass
+class ModelImportFailure:
+    """Failure record for a single model that could not be imported."""
+
+    model_name: str
+    reason: str
+
+
+@dataclass
+class CredentialImportFailure:
+    """Failure record for a single credential that could not be imported."""
+
+    credential_id: str
+    reason: str
+
+
+@dataclass
+class ImportedCredentialItem:
+    """Single credential successfully imported with its associated models."""
+
+    source_credential_id: uuid.UUID
+    new_credential_id: uuid.UUID
+    new_credential_name: str
+    new_credential_read: CredentialReadModel
+    provider: str
+    models_created: list[ImportedModelSummary]
+    models_failed: list[ModelImportFailure]
+
+
+@dataclass
+class ImportCredentialsWithModelsResult:
+    """Aggregate result of batch credential+model import."""
+
+    succeeded: list[ImportedCredentialItem] = field(default_factory=list)
+    failed: list[CredentialImportFailure] = field(default_factory=list)
 
 
 def _credential_update_api_fields(
@@ -400,6 +447,164 @@ class CredentialWritesMixin:
             raise CredentialNotFoundError(str(user_credential_id))
         await self.reload_litellm_router()
         return ensure_credential_read_model(new_cred)
+
+    async def import_credentials_with_models_to_team(
+        self,
+        *,
+        credential_ids: list[uuid.UUID],
+        tenant_id: uuid.UUID,
+        actor_user_id: uuid.UUID,
+        is_platform_admin: bool,
+    ) -> ImportCredentialsWithModelsResult:
+        """Copy user-scope credentials and their associated personal models to a target team.
+
+        Each credential is processed independently — a single failure does not block others.
+        Returns structured results with succeeded items (including newly created model details)
+        and failed items.
+        """
+        personal_team_id = await self._ensure_personal_tenant_id(actor_user_id)
+
+        succeeded: list[ImportedCredentialItem] = []
+        failed: list[CredentialImportFailure] = []
+        any_created = False
+
+        for cred_id in credential_ids:
+            try:
+                item = await self._import_one_credential_with_models(
+                    cred_id=cred_id,
+                    tenant_id=tenant_id,
+                    actor_user_id=actor_user_id,
+                    is_platform_admin=is_platform_admin,
+                    personal_team_id=personal_team_id,
+                )
+                succeeded.append(item)
+                any_created = True
+            except Exception as exc:
+                reason = str(exc) or type(exc).__name__
+                failed.append(CredentialImportFailure(credential_id=str(cred_id), reason=reason))
+                logger.warning(
+                    "import_credentials_with_models: cred=%s failed: %s",
+                    cred_id,
+                    reason,
+                )
+
+        if any_created:
+            await self.reload_litellm_router()
+
+        return ImportCredentialsWithModelsResult(succeeded=succeeded, failed=failed)
+
+    async def _import_one_credential_with_models(
+        self,
+        *,
+        cred_id: uuid.UUID,
+        tenant_id: uuid.UUID,
+        actor_user_id: uuid.UUID,
+        is_platform_admin: bool,
+        personal_team_id: uuid.UUID,
+    ) -> ImportedCredentialItem:
+        src = await self._creds.get(cred_id)
+        if src is None:
+            raise CredentialNotFoundError(str(cred_id))
+
+        from domains.gateway.domain.policies.credential_scope import (
+            assert_user_credential_importable,
+        )
+
+        assert_user_credential_importable(
+            src,
+            actor_user_id=actor_user_id,
+            is_platform_admin=is_platform_admin,
+            tenant_id=tenant_id,
+        )
+
+        # Handle credential name conflict in target team
+        target_name = src.name
+        existing = await self._creds.find_tenant_by_provider_and_name(
+            tenant_id, src.provider, target_name
+        )
+        if existing is not None:
+            suffix = uuid.uuid4().hex[:4]
+            target_name = f"{src.name}-imported-{suffix}"
+
+        new_cred = await self._creds.copy_to_team(
+            cred_id, tenant_id, created_by_user_id=actor_user_id, name_override=target_name
+        )
+        if new_cred is None:
+            raise CredentialNotFoundError(str(cred_id))
+
+        # Copy associated personal models via shared self._models repo
+        personal_models = await self._models.list_tenant_owned(
+            personal_team_id, credential_id=cred_id, only_enabled=False
+        )
+
+        models_created: list[ImportedModelSummary] = []
+        models_failed: list[ModelImportFailure] = []
+
+        for pm in personal_models:
+            try:
+                from domains.gateway.application.management.write_modules.model_writes import (
+                    generate_unique_model_name,
+                )
+
+                unique_name = await generate_unique_model_name(
+                    lambda n, _tid=tenant_id: self._models.name_exists_for_tenant(_tid, n),
+                    pm.name,
+                )
+                await self._models.create(
+                    tenant_id=tenant_id,
+                    name=unique_name,
+                    capability=pm.capability,
+                    real_model=pm.real_model,
+                    credential_id=new_cred.id,
+                    provider=pm.provider,
+                    weight=pm.weight or 1,
+                    rpm_limit=pm.rpm_limit,
+                    tpm_limit=pm.tpm_limit,
+                    tags=pm.tags,
+                    upstream_call_shape=pm.upstream_call_shape,
+                    enabled=pm.enabled,
+                )
+                models_created.append(
+                    ImportedModelSummary(
+                        source_model_id=str(pm.id),
+                        name=unique_name,
+                        real_model=pm.real_model,
+                    )
+                )
+            except Exception as exc:
+                models_failed.append(
+                    ModelImportFailure(
+                        model_name=pm.name, reason=str(exc) or type(exc).__name__
+                    )
+                )
+                logger.warning(
+                    "import_credentials_with_models: model=%s failed: %s",
+                    pm.name,
+                    str(exc),
+                )
+
+        return ImportedCredentialItem(
+            source_credential_id=cred_id,
+            new_credential_id=new_cred.id,
+            new_credential_name=new_cred.name,
+            new_credential_read=ensure_credential_read_model(new_cred),
+            provider=new_cred.provider,
+            models_created=models_created,
+            models_failed=models_failed,
+        )
+
+    @staticmethod
+    async def _unique_model_name_for_tenant(
+        model_repo: Any, tenant_id: uuid.UUID, base: str
+    ) -> str:
+        """Deprecated: use :func:`generate_unique_model_name` from model_writes."""
+        from domains.gateway.application.management.write_modules.model_writes import (
+            generate_unique_model_name,
+        )
+
+        return await generate_unique_model_name(
+            lambda n: model_repo.name_exists_for_tenant(tenant_id, n), base
+        )
 
     async def import_all_user_credentials_to_team(
         self, *, actor_user_id: uuid.UUID, tenant_id: uuid.UUID

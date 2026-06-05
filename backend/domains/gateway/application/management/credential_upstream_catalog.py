@@ -524,36 +524,30 @@ class CredentialUpstreamCatalogService:
         return created, failed
 
     async def _unique_team_model_name(self, team_id: uuid.UUID, base: str) -> str:
+        from domains.gateway.application.management.write_modules.model_writes import (
+            generate_unique_model_name,
+        )
         from domains.gateway.infrastructure.repositories.model_repository import (
             GatewayModelRepository,
         )
 
         repo = GatewayModelRepository(self._session)
-        name = base[:200]
-        if not await repo.name_exists_for_tenant(team_id, name):
-            return name
-        for i in range(2, 10_000):
-            suffix = f"-{i}"
-            candidate = (base[: 200 - len(suffix)] + suffix).strip("-") or f"model-{i}"
-            if not await repo.name_exists_for_tenant(team_id, candidate):
-                return candidate
-        raise ValidationError("无法生成唯一注册别名")
+        return await generate_unique_model_name(
+            lambda n: repo.name_exists_for_tenant(team_id, n), base
+        )
 
     async def _unique_system_model_name(self, base: str) -> str:
+        from domains.gateway.application.management.write_modules.model_writes import (
+            generate_unique_model_name,
+        )
         from domains.gateway.infrastructure.repositories.model_repository import (
             GatewayModelRepository,
         )
 
         repo = GatewayModelRepository(self._session)
-        name = base[:200]
-        if not await repo.name_exists_in_scope(None, name):
-            return name
-        for i in range(2, 10_000):
-            suffix = f"-{i}"
-            candidate = (base[: 200 - len(suffix)] + suffix).strip("-") or f"model-{i}"
-            if not await repo.name_exists_in_scope(None, candidate):
-                return candidate
-        raise ValidationError("无法生成唯一系统模型注册别名")
+        return await generate_unique_model_name(
+            lambda n: repo.name_exists_in_scope(None, n), base
+        )
 
 
 def _slugify_alias(model_id: str) -> str:

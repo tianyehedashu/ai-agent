@@ -53,6 +53,25 @@ _BATCH_MODEL_OP_MAX = 200
 _ALLOWED_UPSTREAM_CALL_SHAPES = frozenset({"openai_compat", "anthropic_native"})
 
 
+async def generate_unique_model_name(
+    exists_fn: Any, base: str, *, max_len: int = 200
+) -> str:
+    """Generate a unique model name by appending numeric suffixes.
+
+    Shared across ``CredentialWritesMixin``, ``CredentialUpstreamCatalogService``
+    for both tenant-scoped and system-scoped model name deduplication.
+    """
+    name = base[:max_len]
+    if not await exists_fn(name):
+        return name
+    for i in range(2, 10_000):
+        suffix = f"-{i}"
+        candidate = (base[: max_len - len(suffix)] + suffix).strip("-") or f"model-{i}"
+        if not await exists_fn(candidate):
+            return candidate
+    raise ValidationError("无法生成唯一注册别名")
+
+
 def _parse_gateway_capability(raw: str) -> str:
     key = raw.strip().lower()
     try:

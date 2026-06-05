@@ -29,6 +29,13 @@ from domains.gateway.presentation.schemas.credential_upstream_catalog import (
     TeamGatewayModelBatchImportRequest,
     TeamGatewayModelBatchImportResponse,
 )
+from domains.gateway.presentation.schemas.credential_import import (
+    ImportedCredentialItemResponse,
+    ImportedModelSummary,
+    ImportCredentialsWithModelsRequest,
+    ImportCredentialsWithModelsResponse,
+    ModelImportFailureItem,
+)
 from libs.crypto import encrypt_value
 from libs.exceptions import AuthenticationError, ValidationError
 
@@ -290,6 +297,61 @@ async def import_all_user_credentials(
         tenant_id=team.team_id,
     )
     return {"created": created}
+
+
+@router.post(
+    "/credentials/import-with-models",
+    response_model=ImportCredentialsWithModelsResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def import_credentials_with_models(
+    body: ImportCredentialsWithModelsRequest,
+    team: CurrentTeam,
+    writes: MgmtWrites,
+) -> ImportCredentialsWithModelsResponse:
+    """Copy selected user-scope credentials and their associated personal models to the current team."""
+    if team.user_id is None:
+        raise AuthenticationError("User context required")
+    result = await writes.import_credentials_with_models_to_team(
+        credential_ids=body.credential_ids,
+        tenant_id=team.team_id,
+        actor_user_id=team.user_id,
+        is_platform_admin=team.is_platform_admin,
+    )
+    enc_key = encryption_key()
+    # Build response: CredentialReadModel is already resolved by the service
+    succeeded: list[ImportedCredentialItemResponse] = []
+    for item in result.succeeded:
+        cred_resp = build_credential_response(
+            item.new_credential_read, encryption_key=enc_key
+        )
+        succeeded.append(
+            ImportedCredentialItemResponse(
+                source_credential_id=item.source_credential_id,
+                new_credential=cred_resp,
+                models_created=[
+                    ImportedModelSummary(
+                        source_model_id=m.source_model_id,
+                        name=m.name,
+                        real_model=m.real_model,
+                    )
+                    for m in item.models_created
+                ],
+                models_failed=[
+                    ModelImportFailureItem(
+                        model_name=m.model_name, reason=m.reason
+                    )
+                    for m in item.models_failed
+                ],
+            )
+        )
+    return ImportCredentialsWithModelsResponse(
+        succeeded=succeeded,
+        failed=[
+            BatchImportFailureItem(upstream_model_id=f.credential_id, reason=f.reason)
+            for f in result.failed
+        ],
+    )
 
 
 __all__ = ["router"]
