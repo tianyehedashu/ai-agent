@@ -26,6 +26,7 @@ describe('statsApi usageStats query', () => {
             input_tokens: 0,
             output_tokens: 0,
             cached_tokens: 0,
+            cache_creation_tokens: 0,
             total_tokens: 0,
             cost_usd: 0,
             avg_latency_ms: 0,

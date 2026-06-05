@@ -150,7 +150,10 @@ const StatsRow = memo(function StatsRow({
           <TooltipContent side="top">
             <div className="space-y-0.5 text-xs">
               <div>{item.cache_hit_count.toLocaleString()} 次命中</div>
-              <div>{item.cached_tokens.toLocaleString()} cached tokens</div>
+              <div>{item.cached_tokens.toLocaleString()} cached tokens (读)</div>
+              {item.cache_creation_tokens > 0 && (
+                <div>{item.cache_creation_tokens.toLocaleString()} cache creation (写)</div>
+              )}
             </div>
           </TooltipContent>
         </Tooltip>

@@ -454,6 +454,22 @@ export default function GatewayLogsPage(): React.JSX.Element {
             value={(summary.total_input_tokens + summary.total_output_tokens).toLocaleString()}
             caption={`${summary.total_input_tokens.toLocaleString()} in / ${summary.total_output_tokens.toLocaleString()} out`}
           />
+          {(summary.total_cached_tokens > 0 || summary.total_cache_creation_tokens > 0) && (
+            <MetricTile
+              icon={<Database className="h-4 w-4" />}
+              label="缓存"
+              value={
+                summary.total_cached_tokens > 0
+                  ? `${summary.total_cached_tokens.toLocaleString()} 读`
+                  : ''
+              }
+              caption={
+                summary.total_cache_creation_tokens > 0
+                  ? `${summary.total_cache_creation_tokens.toLocaleString()} 写`
+                  : undefined
+              }
+            />
+          )}
           <MetricTile
             icon={<Receipt className="h-4 w-4" />}
             label="成本"
@@ -937,7 +953,16 @@ function LogMetricGrid({ log }: Readonly<{ log: GatewayLogItem }>): React.JSX.El
         icon={<Server className="h-4 w-4" />}
         label="缓存"
         value={log.cache_hit ? '命中' : '未命中'}
-        caption={log.cached_tokens > 0 ? `${log.cached_tokens.toLocaleString()} cached` : undefined}
+        caption={
+          log.cached_tokens > 0 || log.cache_creation_tokens > 0
+            ? [
+                log.cached_tokens > 0 && `${log.cached_tokens.toLocaleString()} 读`,
+                log.cache_creation_tokens > 0 && `${log.cache_creation_tokens.toLocaleString()} 写`,
+              ]
+                .filter(Boolean)
+                .join(' / ')
+            : undefined
+        }
       />
     </div>
   )

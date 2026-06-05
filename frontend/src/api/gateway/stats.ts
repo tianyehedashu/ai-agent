@@ -30,6 +30,7 @@ export interface GatewayUsageStatsMetric {
   input_tokens: number
   output_tokens: number
   cached_tokens: number
+  cache_creation_tokens: number
   total_tokens: number
   cost_usd: number | string
   avg_latency_ms: number

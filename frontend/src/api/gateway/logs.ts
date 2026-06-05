@@ -38,6 +38,7 @@ export interface GatewayLogItem {
   input_tokens: number
   output_tokens: number
   cached_tokens: number
+  cache_creation_tokens: number
   cost_usd: number | string
   revenue_usd?: number | string
   latency_ms: number
@@ -65,6 +66,8 @@ export interface DashboardSummary {
   total_requests: number
   total_input_tokens: number
   total_output_tokens: number
+  total_cached_tokens: number
+  total_cache_creation_tokens: number
   /** 后端 Decimal 序列化常为 JSON 字符串 */
   total_cost_usd: number | string
   success_count: number

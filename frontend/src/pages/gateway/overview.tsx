@@ -140,6 +140,12 @@ export default function GatewayOverviewPage(): React.JSX.Element {
         <CardContent className="text-sm text-muted-foreground">
           成功 {data?.success_count ?? '—'} / 失败 {data?.failure_count ?? '—'} · 输入 Token{' '}
           {data?.total_input_tokens ?? '—'} · 输出 Token {data?.total_output_tokens ?? '—'}
+          {(data?.total_cached_tokens ?? 0) > 0 && (
+            <> · 缓存读取 {(data?.total_cached_tokens ?? 0).toLocaleString()}</>
+          )}
+          {(data?.total_cache_creation_tokens ?? 0) > 0 && (
+            <> · 缓存创建 {(data?.total_cache_creation_tokens ?? 0).toLocaleString()}</>
+          )}
         </CardContent>
       </Card>
     </div>
