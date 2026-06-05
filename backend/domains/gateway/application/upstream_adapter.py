@@ -51,6 +51,7 @@ class UpstreamAdapter:
                 client_model,
                 record.real_model,
                 messages,
+                supports_reasoning=snap.supports_reasoning,
             )
         if not snap.supports_vision:
             messages = adapted.get("messages")

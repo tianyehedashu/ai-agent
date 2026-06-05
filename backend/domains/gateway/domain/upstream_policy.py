@@ -55,8 +55,15 @@ def preprocess_messages_for_reasoner(
     client_model: str,
     real_model: str,
     messages: list[dict[str, Any]],
+    *,
+    supports_reasoning: bool = False,
 ) -> list[dict[str, Any]]:
-    if not is_deepseek_thinking_model(client_model, real_model):
+    """为 thinking 模型回填缺失的 ``reasoning_content``。
+
+    当 ``supports_reasoning=True``（来自 ``ModelCapabilitySnapshot``）时，对所有
+    thinking 模型生效（Moonshot/Kimi、DeepSeek 等）；否则回退到 DeepSeek 遗留检测。
+    """
+    if not supports_reasoning and not is_deepseek_thinking_model(client_model, real_model):
         return messages
     processed: list[dict[str, Any]] = []
     for msg in messages:

@@ -76,3 +76,87 @@ def test_deepseek_reasoner_content_array_extracts_text() -> None:
     out = preprocess_messages_for_reasoner("deepseek-reasoner", "deepseek-reasoner", messages)
     assert out[0].get("reasoning_content") == "thoughts"
     assert isinstance(out[0].get("reasoning_content"), str)
+
+
+def test_generic_reasoning_model_message_padding() -> None:
+    """supports_reasoning=True 时对任意 thinking 模型（如 Moonshot/Kimi）回填 reasoning_content。"""
+    messages = [
+        {
+            "role": "assistant",
+            "tool_calls": [{"id": "1", "type": "function", "function": {"name": "read_file"}}],
+        }
+    ]
+    out = preprocess_messages_for_reasoner(
+        "kimi-for-coding-chat",
+        "kimi-for-coding",
+        messages,
+        supports_reasoning=True,
+    )
+    assert out[0].get("reasoning_content") == ""
+
+
+def test_generic_reasoning_model_content_array_extracts_text() -> None:
+    """supports_reasoning=True + content-parts 数组时提取纯文本。"""
+    messages = [
+        {
+            "role": "assistant",
+            "content": [{"type": "text", "text": "analysis"}],
+            "tool_calls": [{"id": "1", "type": "function", "function": {"name": "x"}}],
+        }
+    ]
+    out = preprocess_messages_for_reasoner(
+        "some-model",
+        "some-real-model",
+        messages,
+        supports_reasoning=True,
+    )
+    assert out[0].get("reasoning_content") == "analysis"
+    assert isinstance(out[0].get("reasoning_content"), str)
+
+
+def test_non_reasoning_model_skips_padding() -> None:
+    """非 thinking 模型且 supports_reasoning=False 时不应添加 reasoning_content。"""
+    messages = [
+        {
+            "role": "assistant",
+            "tool_calls": [{"id": "1", "type": "function", "function": {"name": "x"}}],
+        }
+    ]
+    out = preprocess_messages_for_reasoner(
+        "gpt-4o",
+        "gpt-4o",
+        messages,
+        supports_reasoning=False,
+    )
+    assert "reasoning_content" not in out[0]
+
+
+def test_existing_reasoning_content_preserved() -> None:
+    """已有 reasoning_content 的消息不应被覆盖。"""
+    messages = [
+        {
+            "role": "assistant",
+            "content": "response",
+            "reasoning_content": "original thought",
+            "tool_calls": [{"id": "1", "type": "function", "function": {"name": "x"}}],
+        }
+    ]
+    out = preprocess_messages_for_reasoner(
+        "kimi-for-coding-chat",
+        "kimi-for-coding",
+        messages,
+        supports_reasoning=True,
+    )
+    assert out[0].get("reasoning_content") == "original thought"
+
+
+def test_deepseek_backward_compat_without_supports_reasoning() -> None:
+    """向后兼容：DeepSeek 模型不传 supports_reasoning 时仍正常工作。"""
+    messages = [
+        {
+            "role": "assistant",
+            "tool_calls": [{"id": "1", "type": "function", "function": {"name": "x"}}],
+        }
+    ]
+    out = preprocess_messages_for_reasoner("deepseek-reasoner", "deepseek-reasoner", messages)
+    assert out[0].get("reasoning_content") == ""
