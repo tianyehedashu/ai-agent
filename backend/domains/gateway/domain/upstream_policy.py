@@ -38,6 +38,19 @@ def is_deepseek_thinking_model(client_model: str, real_model: str) -> bool:
     return is_deepseek_v4_model_id(combined)
 
 
+def _text_from_content(content: Any) -> str:
+    """从 ``content``（str 或 content-parts list）提取纯文本。"""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        texts: list[str] = []
+        for part in content:
+            if isinstance(part, dict) and part.get("type") == "text":
+                texts.append(str(part.get("text", "")))
+        return "".join(texts)
+    return ""
+
+
 def preprocess_messages_for_reasoner(
     client_model: str,
     real_model: str,
@@ -53,7 +66,7 @@ def preprocess_messages_for_reasoner(
             and msg_copy.get("tool_calls")
             and "reasoning_content" not in msg_copy
         ):
-            msg_copy["reasoning_content"] = msg_copy.get("content", "") or ""
+            msg_copy["reasoning_content"] = _text_from_content(msg_copy.get("content")) or ""
         processed.append(msg_copy)
     return processed
 
@@ -133,6 +146,7 @@ def adapt_kwargs_by_capability(
 
 __all__ = [
     "UpstreamCapabilityFlags",
+    "_text_from_content",
     "adapt_kwargs_by_capability",
     "clamp_max_tokens",
     "flatten_text_only_content_arrays",

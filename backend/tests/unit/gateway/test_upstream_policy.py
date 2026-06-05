@@ -62,3 +62,17 @@ def test_deepseek_v4_message_padding() -> None:
 
 def test_is_deepseek_thinking_model_v4() -> None:
     assert is_deepseek_thinking_model("deepseek-v4-pro-260425", "deepseek-v4-pro")
+
+
+def test_deepseek_reasoner_content_array_extracts_text() -> None:
+    """content 为 content-parts 数组时，reasoning_content 应提取为字符串而非保留 list。"""
+    messages = [
+        {
+            "role": "assistant",
+            "content": [{"type": "text", "text": "thoughts"}],
+            "tool_calls": [{"id": "1", "type": "function", "function": {"name": "x"}}],
+        }
+    ]
+    out = preprocess_messages_for_reasoner("deepseek-reasoner", "deepseek-reasoner", messages)
+    assert out[0].get("reasoning_content") == "thoughts"
+    assert isinstance(out[0].get("reasoning_content"), str)
