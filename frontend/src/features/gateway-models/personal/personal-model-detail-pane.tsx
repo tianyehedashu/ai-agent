@@ -1,4 +1,4 @@
-﻿import { useCallback, useState } from 'react'
+import { useCallback, useState } from 'react'
 
 import { useQuery } from '@tanstack/react-query'
 import { Link, useNavigate } from 'react-router-dom'
@@ -22,7 +22,7 @@ import { usePersonalModelMutations } from '@/features/gateway-models/hooks/use-p
 import { personalModelEditHref, personalModelsIndexHref } from '@/features/gateway-models/paths'
 import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { Loader2, Pencil, Trash2, Zap } from '@/lib/lucide-icons'
-import { useUserStore } from '@/stores/user'
+import { useCurrentUser } from '@/stores/user'
 import { MODEL_PROVIDERS, MODEL_TYPE_LABELS } from '@/types/user-model'
 
 interface PersonalModelDetailPaneProps {
@@ -34,7 +34,7 @@ export function PersonalModelDetailPane({
 }: PersonalModelDetailPaneProps): React.JSX.Element {
   const teamId = useGatewayTeamId()
   const navigate = useNavigate()
-  const { currentUser } = useUserStore()
+  const currentUser = useCurrentUser()
   const [deleteOpen, setDeleteOpen] = useState(false)
 
   const { data: model, isLoading } = useQuery({

@@ -1,4 +1,4 @@
-﻿/**
+/**
  * AI Gateway · 团队管理
  */
 
@@ -55,7 +55,7 @@ import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { useToast } from '@/hooks/use-toast'
 import { cn } from '@/lib/utils'
 import { useGatewayTeamStore } from '@/stores/gateway-team'
-import { useUserStore } from '@/stores/user'
+import { useCurrentUser } from '@/stores/user'
 import { formatTeamMemberDisplay, teamRoleLabel, TeamRole } from '@/types/permissions'
 
 import type { QueryClient } from '@tanstack/react-query'
@@ -100,7 +100,7 @@ export default function GatewayTeamsPage(): React.JSX.Element {
   const queryClient = useQueryClient()
   const { toast } = useToast()
   const { canWrite, isPlatformAdmin, teamRole } = useGatewayPermission()
-  const viewerUserId = useUserStore((s) => s.currentUser?.id ?? null)
+  const viewerUserId = useCurrentUser()?.id ?? null
 
   const {
     data: teams,

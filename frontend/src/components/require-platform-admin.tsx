@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { useUserStore } from '@/stores/user'
+import { useCurrentUser } from '@/stores/user'
 
 interface RequirePlatformAdminProps {
   children: ReactNode
@@ -11,7 +11,7 @@ interface RequirePlatformAdminProps {
 export function RequirePlatformAdmin({
   children,
 }: Readonly<RequirePlatformAdminProps>): React.JSX.Element {
-  const { currentUser } = useUserStore()
+  const currentUser = useCurrentUser()
   const isAdmin = currentUser?.role === 'admin'
 
   if (!isAdmin) {

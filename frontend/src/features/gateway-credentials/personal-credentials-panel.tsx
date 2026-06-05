@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 个人凭据（/my-credentials）列表与编辑，用于 AI Gateway 凭据页「个人」Tab。
  *
  * 新增动作由外层 [`pages/gateway/credentials.tsx`](../../pages/gateway/credentials.tsx)
@@ -36,7 +36,7 @@ import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { useToast } from '@/hooks/use-toast'
 import { lazyWithReload } from '@/lib/lazy-with-reload'
 import { Key, Loader2, Pencil, Plus, Trash2 } from '@/lib/lucide-icons'
-import { useUserStore } from '@/stores/user'
+import { useCurrentUser } from '@/stores/user'
 
 import { USER_GATEWAY_CREDENTIAL_PROVIDER_IDS, credentialProviderLabel } from './constants'
 import { CredentialDeleteConfirmDialog } from './credential-delete-confirm-dialog'
@@ -65,7 +65,7 @@ export function PersonalCredentialsPanel({
   useProviderProfilesCatalog()
   const queryClient = useQueryClient()
   const { toast } = useToast()
-  const { currentUser } = useUserStore()
+  const currentUser = useCurrentUser()
   const hasAuthSession = currentUser !== null
   const teamId = useGatewayTeamId()
   const [editCred, setEditCred] = useState<ProviderCredential | null>(null)

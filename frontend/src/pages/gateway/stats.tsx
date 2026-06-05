@@ -70,7 +70,7 @@ import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { ChevronRight, LineChart, X } from '@/lib/lucide-icons'
 import { coalesceMoney, formatMoney } from '@/lib/money'
 import { DEFAULT_PAGE_SIZE, buildFilterKey, usePaginationPageForFilters } from '@/lib/pagination'
-import { useUserStore } from '@/stores/user'
+import { useCurrentUser } from '@/stores/user'
 const PAGE_SIZE = DEFAULT_PAGE_SIZE
 
 /** 统计页筛选触发器：略宽于旧版 9rem，下拉面板独立加宽（见 GatewayFilterCombobox） */
@@ -231,7 +231,7 @@ function buildUsageStatsQueryKey(
 export default function GatewayStatsPage(): React.JSX.Element {
   const teamId = useGatewayTeamId()
   const { isAdmin, isPlatformAdmin } = useGatewayPermission()
-  const viewerUserId = useUserStore((s) => s.currentUser?.id ?? null)
+  const viewerUserId = useCurrentUser()?.id ?? null
   const aggregationOptions = useMemo(
     () => gatewayUsageAggregationOptions(isPlatformAdmin),
     [isPlatformAdmin]

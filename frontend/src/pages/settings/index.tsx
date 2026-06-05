@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 
+import { useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 
 import { userApi, type UpdateUserParams } from '@/api/user'
@@ -19,7 +20,7 @@ import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useToast } from '@/hooks/use-toast'
-import { useUserStore } from '@/stores/user'
+import { CURRENT_USER_QUERY_KEY, useCurrentUser } from '@/stores/user'
 
 import { ApiKeyTab } from './components/api-key-tab'
 import { MCPTab } from './components/mcp-tab'
@@ -36,7 +37,8 @@ export default function SettingsPage(): React.JSX.Element {
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const { theme, setTheme } = useTheme()
-  const { currentUser, setCurrentUser } = useUserStore()
+  const currentUser = useCurrentUser()
+  const queryClient = useQueryClient()
   const { toast } = useToast()
   const { isPlatformAdmin } = useGatewayPermission()
 
@@ -138,7 +140,7 @@ export default function SettingsPage(): React.JSX.Element {
       }
 
       const updatedUser = await userApi.updateUser(params)
-      setCurrentUser({
+      queryClient.setQueryData(CURRENT_USER_QUERY_KEY, {
         ...currentUser,
         name: updatedUser.name,
         vendor_creator_id: updatedUser.vendor_creator_id,

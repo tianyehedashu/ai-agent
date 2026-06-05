@@ -26,7 +26,7 @@ import {
 } from '@/features/gateway-teams/use-gateway-teams'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
-import { useUserStore } from '@/stores/user'
+import { useCurrentUser } from '@/stores/user'
 
 export interface TeamCredentialsWorkspaceProps {
   mutations: GatewayCredentialMutations
@@ -40,7 +40,7 @@ export function TeamCredentialsWorkspace({
   const routeTeamId = useGatewayTeamId()
   const memberCollaborationTeams = useGatewayMemberCollaborationTeams()
   const writableCollaborationTeams = useGatewayWritableCollaborationTeams()
-  const viewerUserId = useUserStore((s) => s.currentUser?.id ?? null)
+  const viewerUserId = useCurrentUser()?.id ?? null
   const { isPlatformAdmin } = useGatewayPermission()
   const [teamSearch, setTeamSearch] = useState('')
   const deferredTeamSearch = useDeferredValue(teamSearch)

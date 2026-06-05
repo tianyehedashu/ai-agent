@@ -20,7 +20,7 @@ import { gatewayWorkspaceLabel } from '@/features/gateway-teams/gateway-team-dis
 import { useToast } from '@/hooks/use-toast'
 import { Copy } from '@/lib/lucide-icons'
 import { copyToClipboard } from '@/lib/utils'
-import { useUserStore } from '@/stores/user'
+import { useCurrentUser } from '@/stores/user'
 
 export interface CreateKeyValues {
   name: string
@@ -58,7 +58,7 @@ export function CreateKeyDialog({
   plaintext,
   createdKeyId,
 }: Readonly<CreateKeyDialogProps>): React.JSX.Element {
-  const viewerUserId = useUserStore((s) => s.currentUser?.id ?? null)
+  const viewerUserId = useCurrentUser()?.id ?? null
   const [targetTeamId, setTargetTeamId] = useState('')
   const [values, setValues] = useState<CreateKeyValues>({
     name: '',

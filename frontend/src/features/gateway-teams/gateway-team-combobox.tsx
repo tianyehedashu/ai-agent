@@ -21,7 +21,7 @@ import { GATEWAY_FILTER_ALL } from '@/features/gateway-usage/gateway-filter-comb
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { ChevronsUpDown } from '@/lib/lucide-icons'
 import { cn } from '@/lib/utils'
-import { useUserStore } from '@/stores/user'
+import { useCurrentUser } from '@/stores/user'
 
 function teamOptionSubtitle(team: GatewayTeam, viewerUserId: string | null): string | undefined {
   if (team.kind === 'shared') {
@@ -76,7 +76,7 @@ export function GatewayTeamCombobox({
   searchThreshold = 8,
 }: Readonly<GatewayTeamComboboxProps>): React.JSX.Element {
   const { isPlatformAdmin } = useGatewayPermission()
-  const viewerUserId = useUserStore((s) => s.currentUser?.id ?? null)
+  const viewerUserId = useCurrentUser()?.id ?? null
   const [search, setSearch] = useState('')
 
   const resolveLabel = useMemo(() => {

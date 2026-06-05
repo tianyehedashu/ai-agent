@@ -24,7 +24,7 @@ import { credentialDetailHref } from '@/features/gateway-models/paths'
 import { useGatewayMemberTeamNameMap } from '@/features/gateway-teams/use-gateway-teams'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useGatewayWorkspaceTeamId } from '@/hooks/use-gateway-team-id'
-import { useUserStore } from '@/stores/user'
+import { useCurrentUser } from '@/stores/user'
 
 import type {
   PlaygroundCredentialGroups,
@@ -54,7 +54,7 @@ export function PlaygroundCredentialField({
   const teamNameById = useGatewayMemberTeamNameMap()
   const detailTeamId = selectedSummary?.context_team_id ?? workspaceTeamId
   const { canWrite, isPlatformAdmin } = useGatewayPermission()
-  const viewerUserId = useUserStore((s) => s.currentUser?.id ?? null)
+  const viewerUserId = useCurrentUser()?.id ?? null
   const showDetailLink = canLinkToCredentialDetail(
     selectedSummary,
     viewerUserId,

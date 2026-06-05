@@ -6,9 +6,11 @@
  * 设计要点：
  * 1. 使用 TanStack Query 与项目其他数据获取保持一致
  * 2. 阻塞渲染直到身份校验完成
- * 3. 同步用户信息到 Zustand store 供全局访问
- * 4. 监听 token 过期事件，自动 toast 提示并重定向到登录页
- * 5. 未认证用户：local 模式重定向到 /login；sso 模式整页跳转到 giikin 单点登录入口
+ * 3. 监听 token 过期事件，自动 toast 提示并重定向到登录页
+ * 4. 未认证用户：local 模式重定向到 /login；sso 模式整页跳转到 giikin 单点登录入口
+ *
+ * 注意：currentUser 的唯一数据源是 TanStack Query 缓存（queryKey: ['auth','currentUser']），
+ * 子组件通过 useCurrentUser() 读取，无需 Zustand store 中转。
  */
 
 import { type ReactNode, useEffect, useRef, useState } from 'react'
@@ -16,7 +18,7 @@ import { type ReactNode, useEffect, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Navigate, useLocation } from 'react-router-dom'
 
-import { ApiError } from '@/api/client'
+import { ApiError } from '@/api/errors'
 import { userApi } from '@/api/user'
 import {
   clearSsoAttempt,
@@ -31,7 +33,7 @@ import {
 import { useToast } from '@/hooks/use-toast'
 import { AlertCircle, Loader2 } from '@/lib/lucide-icons'
 import { getAuthToken } from '@/stores/auth'
-import { useUserStore } from '@/stores/user'
+import { CURRENT_USER_QUERY_KEY } from '@/stores/user'
 
 const PUBLIC_PATHS = ['/login', '/register', '/sso-callback']
 
@@ -40,8 +42,6 @@ interface AuthProviderProps {
 }
 
 export function AuthProvider({ children }: Readonly<AuthProviderProps>): React.JSX.Element {
-  const setCurrentUser = useUserStore((state) => state.setCurrentUser)
-  const storeHasUser = useUserStore((state) => state.currentUser !== null)
   const queryClient = useQueryClient()
   const { toast } = useToast()
   const location = useLocation()
@@ -68,7 +68,7 @@ export function AuthProvider({ children }: Readonly<AuthProviderProps>): React.J
     error,
     refetch,
   } = useQuery({
-    queryKey: ['auth', 'currentUser'],
+    queryKey: CURRENT_USER_QUERY_KEY,
     queryFn: () => userApi.getCurrentUser(),
     retry: false,
     staleTime: 1000 * 60 * 5,
@@ -87,7 +87,7 @@ export function AuthProvider({ children }: Readonly<AuthProviderProps>): React.J
         title: '登录已过期',
         description: '请重新登录以恢复数据访问',
       })
-      queryClient.setQueryData(['auth', 'currentUser'], null)
+      queryClient.setQueryData(CURRENT_USER_QUERY_KEY, null)
       void queryClient.invalidateQueries()
       void refetch()
     }
@@ -97,29 +97,12 @@ export function AuthProvider({ children }: Readonly<AuthProviderProps>): React.J
     }
   }, [toast, queryClient, refetch])
 
-  // 同步用户信息到 Zustand store
+  // SSO 登录成功后清除重试计数
   useEffect(() => {
-    if (isFetched) {
-      setCurrentUser(sessionUser)
-      if (sessionUser) {
-        clearSsoAttempt()
-      }
+    if (isFetched && sessionUser) {
+      clearSsoAttempt()
     }
-  }, [sessionUser, isFetched, setCurrentUser])
-
-  /**
-   * store 是否已与 query 同步。
-   *
-   * useEffect 是异步的，AuthProvider 在 isLoading→false 后立即渲染子组件，
-   * 但此时 useEffect 还没执行，Zustand store 中 currentUser 仍为 null，
-   * 导致子组件（如 PersonalModelsWorkspace）误判为未登录。
-   *
-   * 通过比较 store 布尔值与 query 值判断同步是否完成：
-   * - store 非初始值(null) → 已同步过
-   * - query 尚未 fetch → 不阻塞
-   * - sessionUser 为 null → store null 也一致，已同步
-   */
-  const isStoreSynced = !isFetched || storeHasUser || sessionUser === null
+  }, [sessionUser, isFetched])
 
   // SSO 回调后 guard_token 写入存在短延迟，冷却期内先重试 auth/me 再报错
   // hybrid + 有本地 JWT 时跳过此 effect：JWT 过期应走 /login 而非 SSO 自愈
@@ -145,7 +128,7 @@ export function AuthProvider({ children }: Readonly<AuthProviderProps>): React.J
     setSsoPostLoginRetrying(true)
     void (async () => {
       for (let attempt = 0; attempt < 8; attempt += 1) {
-        await queryClient.invalidateQueries({ queryKey: ['auth', 'currentUser'] })
+        await queryClient.invalidateQueries({ queryKey: CURRENT_USER_QUERY_KEY })
         const result = await refetch()
         if (result.data) {
           clearSsoAttempt()
@@ -213,7 +196,7 @@ export function AuthProvider({ children }: Readonly<AuthProviderProps>): React.J
     })
   }, [shouldStartSso, location.pathname, toast])
 
-  if ((isLoading && !deferAuthMe) || (!isStoreSynced && !deferAuthMe)) {
+  if (isLoading && !deferAuthMe) {
     return (
       <div className="flex h-screen items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-3">

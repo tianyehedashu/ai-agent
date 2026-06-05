@@ -1,20 +1,50 @@
 /**
- * User Store
+ * User Store & useCurrentUser Hook
  *
- * 管理用户信息的 Zustand Store
+ * 架构：TanStack Query 是 currentUser 的唯一数据源，Zustand store 仅保留命令式操作。
  *
  * 职责分离：
- * - authStore: 管理认证状态（token）
- * - userStore: 管理用户信息（currentUser、登录/注册/登出操作）
- *
- * 登出时会同时清除 authStore 中的 token
+ * - useCurrentUser(): 读取当前用户（派生自 TanStack Query 缓存，无 effect 同步）
+ * - useUserStore: login / register / logout 等命令式操作
+ * - authStore: 管理 token 持久化
  */
 
+import { useQuery } from '@tanstack/react-query'
 import { create } from 'zustand'
 
+import { ApiError } from '@/api/errors'
 import { userApi, type CurrentUser, type LoginParams, type RegisterParams } from '@/api/user'
 import { clearSsoAttempt, isHybridMode, isSsoMode, resolveSsoLogoutUrl } from '@/config/auth'
-import { clearAuth, setAuthToken } from '@/stores/auth'
+import { clearAuth } from '@/stores/auth'
+
+// ---------------------------------------------------------------------------
+// useCurrentUser — TanStack Query 单一数据源
+// ---------------------------------------------------------------------------
+
+/** auth/me 查询的 queryKey，全局共享 */
+export const CURRENT_USER_QUERY_KEY = ['auth', 'currentUser'] as const
+
+/**
+ * 读取当前登录用户。
+ *
+ * - 数据源：TanStack Query 缓存（与 AuthProvider 共享同一 queryKey）
+ * - 401 视为会话无效，返回 null
+ * - 未 fetch 或 loading 时返回 null
+ */
+export function useCurrentUser(): CurrentUser | null {
+  const { data, error } = useQuery({
+    queryKey: CURRENT_USER_QUERY_KEY,
+    queryFn: () => userApi.getCurrentUser(),
+    staleTime: 1000 * 60 * 5,
+  })
+
+  const isSessionInvalid = error instanceof ApiError && error.status === 401
+  return isSessionInvalid ? null : (data ?? null)
+}
+
+// ---------------------------------------------------------------------------
+// User Store — 仅保留命令式操作
+// ---------------------------------------------------------------------------
 
 function appRootPath(): string {
   const root = (import.meta.env.VITE_APP_ROOT as string | undefined) ?? '/ai-agent'
@@ -25,69 +55,24 @@ function appRootPath(): string {
 }
 
 interface UserState {
-  // Current user
-  currentUser: CurrentUser | null
-  isLoading: boolean
-  error: string | null
-
   // Actions
-  setCurrentUser: (user: CurrentUser | null) => void
-  login: (params: LoginParams) => Promise<void>
-  register: (params: RegisterParams) => Promise<void>
+  login: (params: LoginParams) => Promise<CurrentUser>
+  register: (params: RegisterParams) => Promise<CurrentUser>
   logout: () => Promise<void>
-  clearError: () => void
 }
 
-export const useUserStore = create<UserState>((set) => ({
-  // Initial state
-  currentUser: null,
-  isLoading: false,
-  error: null,
-
-  // Set current user (由 AuthProvider 通过 TanStack Query 同步)
-  setCurrentUser: (user) => {
-    set({ currentUser: user, error: null })
-  },
-
+export const useUserStore = create<UserState>(() => ({
   // Login
-  // 登录成功后，token 由 userApi.login 内部设置到 authStore
   login: async (params) => {
-    set({ isLoading: true, error: null })
-    try {
-      const response = await userApi.login(params)
-      // 如果返回的是包含 token 的响应，设置到 authStore
-      if ('access_token' in response && typeof response.access_token === 'string') {
-        setAuthToken(response.access_token)
-      }
-      // 获取用户信息
-      const user = await userApi.getCurrentUser()
-      set({ currentUser: user, isLoading: false, error: null })
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : '登录失败'
-      set({
-        currentUser: null,
-        isLoading: false,
-        error: errorMessage,
-      })
-      throw error // Re-throw to allow component to handle specific errors/redirects
-    }
+    // userApi.login 内部已通过 apiClient.setToken 设置 token
+    const user = await userApi.login(params)
+    return user
   },
 
   // Register
   register: async (params) => {
-    set({ isLoading: true, error: null })
-    try {
-      const user = await userApi.register(params)
-      set({ currentUser: user, isLoading: false, error: null })
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : '注册失败'
-      set({
-        currentUser: null,
-        isLoading: false,
-        error: errorMessage,
-      })
-      throw error
-    }
+    const user = await userApi.register(params)
+    return user
   },
 
   // Logout
@@ -96,7 +81,6 @@ export const useUserStore = create<UserState>((set) => ({
   logout: async () => {
     try {
       if (isSsoMode) {
-        // sso / hybrid 模式都需清 SSO Cookie
         const response = await fetch(resolveSsoLogoutUrl(), {
           method: 'POST',
           credentials: 'include',
@@ -106,16 +90,13 @@ export const useUserStore = create<UserState>((set) => ({
         }
       }
       if (!isSsoMode || isHybridMode) {
-        // local / hybrid 模式也清本地 JWT 会话
         await userApi.logout()
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : '退出登录失败'
       console.warn('[logout]', errorMessage, error)
-      set({ error: errorMessage })
     } finally {
       clearSsoAttempt()
-      set({ currentUser: null, error: null })
       clearAuth()
       if (isSsoMode) {
         window.location.href = `${appRootPath()}/login`
@@ -123,10 +104,5 @@ export const useUserStore = create<UserState>((set) => ({
         window.location.reload()
       }
     }
-  },
-
-  // Clear error
-  clearError: () => {
-    set({ error: null })
   },
 }))

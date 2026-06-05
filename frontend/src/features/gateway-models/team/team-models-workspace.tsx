@@ -1,4 +1,4 @@
-﻿import { Suspense, useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react'
+import { Suspense, useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react'
 
 import { useQuery, keepPreviousData } from '@tanstack/react-query'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
@@ -76,7 +76,7 @@ import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { lazyWithReload } from '@/lib/lazy-with-reload'
 import { Loader2, Plus, Trash2 } from '@/lib/lucide-icons'
 import { buildFilterKey, usePaginationPageForFilters } from '@/lib/pagination'
-import { useUserStore } from '@/stores/user'
+import { useCurrentUser } from '@/stores/user'
 import { MODEL_PROVIDERS } from '@/types/user-model'
 
 import { preloadRegisterModelForm } from './register-model-preload'
@@ -110,7 +110,7 @@ export function TeamModelsWorkspace({
   listMode,
 }: TeamModelsWorkspaceProps): React.JSX.Element {
   const teamId = useGatewayTeamId()
-  const viewerUserId = useUserStore((s) => s.currentUser?.id ?? null)
+  const viewerUserId = useCurrentUser()?.id ?? null
   const { canWrite, canContribute, isPlatformAdmin } = useGatewayPermission()
   const {
     byId: credentialSummariesById,

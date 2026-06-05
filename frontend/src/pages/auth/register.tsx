@@ -1,6 +1,7 @@
 import { useState } from 'react'
 
 import { zodResolver } from '@hookform/resolvers/zod'
+import { useQueryClient } from '@tanstack/react-query'
 import { Loader2, Lock, Mail, Terminal, User } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { useNavigate } from 'react-router-dom'
@@ -25,7 +26,7 @@ import {
 } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
 import { useToast } from '@/hooks/use-toast'
-import { useUserStore } from '@/stores/user'
+import { useUserStore, CURRENT_USER_QUERY_KEY } from '@/stores/user'
 
 const formSchema = z
   .object({
@@ -43,6 +44,7 @@ export default function RegisterPage(): React.JSX.Element {
   const navigate = useNavigate()
   const { register } = useUserStore()
   const { toast } = useToast()
+  const queryClient = useQueryClient()
   const [isLoading, setIsLoading] = useState(false)
 
   const form = useForm<z.infer<typeof formSchema>>({
@@ -58,11 +60,13 @@ export default function RegisterPage(): React.JSX.Element {
   async function onSubmit(values: z.infer<typeof formSchema>): Promise<void> {
     setIsLoading(true)
     try {
-      await register({
+      const user = await register({
         name: values.name,
         email: values.email,
         password: values.password,
       })
+      queryClient.setQueryData(CURRENT_USER_QUERY_KEY, user)
+      await queryClient.invalidateQueries()
       toast({
         title: '注册成功',
         description: '账号已创建并自动登录',

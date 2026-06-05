@@ -43,7 +43,7 @@ import { registerSidebarNavigate } from '@/lib/ui-overlay/overlay-nav-bridge'
 import { cn } from '@/lib/utils'
 import { useChatStore } from '@/stores/chat'
 import { useSidebarStore } from '@/stores/sidebar'
-import { useUserStore } from '@/stores/user'
+import { useCurrentUser } from '@/stores/user'
 import type { Session } from '@/types'
 import { isVideoSession } from '@/types'
 
@@ -100,7 +100,7 @@ export default function Sidebar(): React.JSX.Element {
   const { sessionId } = useParams<{ sessionId?: string }>()
   const { isCollapsed, toggle } = useSidebarStore()
   const [isHistoryOpen, setIsHistoryOpen] = useState(false)
-  const { currentUser } = useUserStore()
+  const currentUser = useCurrentUser()
   const isAuthenticated = currentUser !== null
   const isAdmin = currentUser?.role === 'admin'
   const visibleNavigation = useMemo(

@@ -11,7 +11,7 @@ import { useParams } from 'react-router-dom'
 
 import { useGatewayWorkspaceTeamId } from '@/hooks/use-gateway-team-id'
 import { useGatewayTeamStore } from '@/stores/gateway-team'
-import { useUserStore } from '@/stores/user'
+import { useCurrentUser } from '@/stores/user'
 import { TeamRole, type TeamRoleValue } from '@/types/permissions'
 
 export const PlatformRole = {
@@ -49,7 +49,7 @@ export interface GatewayPermissionFlags {
 }
 
 export function useGatewayPermission(): GatewayPermissionFlags {
-  const { currentUser } = useUserStore()
+  const currentUser = useCurrentUser()
   const teams = useGatewayTeamStore((s) => s.teams)
   const { teamId: routeTeamId } = useParams<{ teamId?: string }>()
   const workspaceTeamId = useGatewayWorkspaceTeamId()

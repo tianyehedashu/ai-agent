@@ -25,7 +25,7 @@ import {
   useGatewayTeamNameMap,
 } from '@/features/api-key-gateway/use-gateway-teams'
 import { copyToClipboard } from '@/lib/utils'
-import { useUserStore } from '@/stores/user'
+import { useCurrentUser } from '@/stores/user'
 
 import { ApiKeyCard } from './api-key-card'
 
@@ -62,7 +62,7 @@ const apiKeyListSkeleton = (
 
 export function ApiKeyTab(): React.ReactElement {
   const queryClient = useQueryClient()
-  const isAuthenticated = useUserStore((state) => state.currentUser !== null)
+  const isAuthenticated = useCurrentUser() !== null
   const teamNameById = useGatewayTeamNameMap(isAuthenticated)
 
   const [createDialogOpen, setCreateDialogOpen] = useState(false)

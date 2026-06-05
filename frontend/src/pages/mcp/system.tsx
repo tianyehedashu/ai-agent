@@ -41,7 +41,7 @@ import {
 import { Textarea } from '@/components/ui/textarea'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { copyToClipboard } from '@/lib/utils'
-import { useUserStore } from '@/stores/user'
+import { useCurrentUser } from '@/stores/user'
 import type {
   ClientDirectMCPServer,
   CursorMCPServerConfig,
@@ -80,7 +80,7 @@ function ServerConfigCard({
   onManageDynamicTools,
   onManagePrompts,
 }: ServerConfigCardProps): React.JSX.Element {
-  const isAdmin = useUserStore((s) => s.currentUser?.role === 'admin')
+  const isAdmin = useCurrentUser()?.role === 'admin'
   const snippet = { [cursorName]: config }
   const snippetJson = JSON.stringify(snippet, null, 2)
   const tools = server.tools ?? []
@@ -930,7 +930,7 @@ function DynamicPromptsSheet({
   onOpenChange,
 }: DynamicPromptsSheetProps): React.JSX.Element {
   const queryClient = useQueryClient()
-  const currentUser = useUserStore((s) => s.currentUser)
+  const currentUser = useCurrentUser()
   const isAdmin = currentUser?.role === 'admin'
   const [addDialogOpen, setAddDialogOpen] = useState(false)
   const [editingPrompt, setEditingPrompt] = useState<DynamicPromptItem | null>(null)
@@ -1085,7 +1085,7 @@ function DynamicToolsSheet({
   onOpenChange,
 }: DynamicToolsSheetProps): React.JSX.Element {
   const queryClient = useQueryClient()
-  const currentUser = useUserStore((s) => s.currentUser)
+  const currentUser = useCurrentUser()
   const isAdmin = currentUser?.role === 'admin'
   const [addDialogOpen, setAddDialogOpen] = useState(false)
   const [editingTool, setEditingTool] = useState<DynamicToolItem | null>(null)

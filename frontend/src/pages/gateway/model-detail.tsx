@@ -1,4 +1,4 @@
-﻿/**
+/**
  * AI Gateway · 模型详情（个人 / 团队深链）
  */
 
@@ -31,7 +31,7 @@ import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { lazyWithReload } from '@/lib/lazy-with-reload'
 import { ChevronLeft, ChevronRight, Loader2 } from '@/lib/lucide-icons'
-import { useUserStore } from '@/stores/user'
+import { useCurrentUser } from '@/stores/user'
 
 const TeamModelDetailPane = lazyWithReload(() =>
   import('@/features/gateway-models/team/team-model-detail-pane').then((m) => ({
@@ -64,7 +64,7 @@ export default function GatewayModelDetailPage(): React.JSX.Element {
   const id = modelId ?? ''
   const [searchParams] = useSearchParams()
   const { canWrite, isPlatformAdmin } = useGatewayPermission()
-  const viewerUserId = useUserStore((s) => s.currentUser?.id ?? null)
+  const viewerUserId = useCurrentUser()?.id ?? null
   const scopeTab = parseModelsScopeTab(searchParams.get('tab'))
   const pageView = parseModelsPageView(searchParams.get('view'))
   const credentialId = searchParams.get('credentialId') ?? ''

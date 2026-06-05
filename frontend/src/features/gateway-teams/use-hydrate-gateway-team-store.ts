@@ -7,7 +7,7 @@ import { useEffect } from 'react'
 import type { GatewayTeam as ApiGatewayTeam } from '@/api/gateway/teams'
 import { useGatewayMemberTeams } from '@/features/gateway-teams/use-gateway-teams'
 import { useGatewayTeamStore, type GatewayTeam } from '@/stores/gateway-team'
-import { useUserStore } from '@/stores/user'
+import { useCurrentUser } from '@/stores/user'
 
 function toStoreTeam(team: ApiGatewayTeam): GatewayTeam {
   return {
@@ -21,7 +21,8 @@ function toStoreTeam(team: ApiGatewayTeam): GatewayTeam {
 
 /** 挂载于 Layout：未登录跳过；已登录用户注水 teams 缓存 */
 export function useHydrateGatewayTeamStore(): void {
-  const isAuthenticated = useUserStore((s) => s.currentUser !== null)
+  const currentUser = useCurrentUser()
+  const isAuthenticated = currentUser !== null
   const setTeams = useGatewayTeamStore((s) => s.setTeams)
   const { data: teams } = useGatewayMemberTeams(isAuthenticated)
 

@@ -1,4 +1,4 @@
-﻿/**
+/**
  * AI Gateway · 凭据详情（编辑、轮换密钥、启用/禁用、关联模型）
  *
  * 设计要点：
@@ -66,7 +66,7 @@ import { useGatewayTeamId, useGatewayTeamRecord } from '@/hooks/use-gateway-team
 import { useToast } from '@/hooks/use-toast'
 import { lazyWithReload } from '@/lib/lazy-with-reload'
 import { ChevronRight, Loader2, Trash2 } from '@/lib/lucide-icons'
-import { useUserStore } from '@/stores/user'
+import { useCurrentUser } from '@/stores/user'
 
 const AddModelsDialog = lazyWithReload(() =>
   import('@/features/gateway-credentials/add-models-dialog').then((m) => ({
@@ -90,7 +90,7 @@ export default function GatewayCredentialDetailPage(): React.JSX.Element {
   const queryClient = useQueryClient()
   const { toast } = useToast()
   const { canWrite, isPlatformAdmin, isAdmin } = useGatewayPermission()
-  const currentUser = useUserStore((s) => s.currentUser)
+  const currentUser = useCurrentUser()
   const viewerUserId = currentUser?.id ?? null
 
   const {

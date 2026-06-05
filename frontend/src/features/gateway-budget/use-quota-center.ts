@@ -15,7 +15,7 @@ import { GATEWAY_MODELS_STALE_MS } from '@/features/gateway-models/utils'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { useToast } from '@/hooks/use-toast'
-import { useUserStore } from '@/stores/user'
+import { useCurrentUser } from '@/stores/user'
 import { formatTeamMemberDisplay } from '@/types/permissions'
 
 import { parseOptionalInt, parseOptionalUsd } from './budget-form-utils'
@@ -260,7 +260,7 @@ function useQuotaCenterImpl(): QuotaCenterState {
   const teamId = useGatewayTeamId()
   const { toast } = useToast()
   const { isAdmin, isPlatformViewer } = useGatewayPermission()
-  const { currentUser } = useUserStore()
+  const currentUser = useCurrentUser()
   const selfUserId = currentUser?.id ?? null
   const mode: QuotaCenterMode = isAdmin ? 'admin' : 'member'
   const queryClient = useQueryClient()

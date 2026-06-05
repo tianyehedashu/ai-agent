@@ -27,7 +27,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { initiateSsoLogin, isSsoMode, showLocalLogin } from '@/config/auth'
 import { useToast } from '@/hooks/use-toast'
-import { useUserStore } from '@/stores/user'
+import { useUserStore, CURRENT_USER_QUERY_KEY } from '@/stores/user'
 
 const formSchema = z.object({
   email: z.string().email({ message: '请输入有效的邮箱地址' }),
@@ -70,7 +70,8 @@ export default function LoginPage(): React.JSX.Element {
   async function onSubmit(values: z.infer<typeof formSchema>): Promise<void> {
     setIsLoading(true)
     try {
-      await login(values)
+      const user = await login(values)
+      queryClient.setQueryData(CURRENT_USER_QUERY_KEY, user)
       await queryClient.invalidateQueries()
       toast({
         title: '登录成功',

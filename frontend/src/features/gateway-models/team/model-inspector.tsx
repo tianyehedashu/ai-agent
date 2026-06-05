@@ -1,4 +1,4 @@
-﻿import { memo, useEffect, useMemo, useState } from 'react'
+import { memo, useEffect, useMemo, useState } from 'react'
 
 import { Link, useSearchParams } from 'react-router-dom'
 
@@ -56,7 +56,7 @@ import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { Copy, ExternalLink, Info, Loader2, RefreshCw, Trash2, Zap } from '@/lib/lucide-icons'
 import { cn, copyToClipboard } from '@/lib/utils'
-import { useUserStore } from '@/stores/user'
+import { useCurrentUser } from '@/stores/user'
 
 import { ModelCapabilityBadges } from './model-capability-badges'
 import {
@@ -106,7 +106,7 @@ const ModelInspectorPanel = memo(function ModelInspectorPanel({
   const teamId = useGatewayTeamId()
   const [searchParams] = useSearchParams()
   const { canWrite, isAdmin, isPlatformAdmin } = useGatewayPermission()
-  const currentUser = useUserStore((s) => s.currentUser)
+  const currentUser = useCurrentUser()
   const viewerUserId = currentUser?.id ?? null
   const scopeTab = parseModelsScopeTab(searchParams.get('tab'))
   const permissionContext = useMemo(() => ({ preferSystem: scopeTab === 'system' }), [scopeTab])

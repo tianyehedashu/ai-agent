@@ -15,7 +15,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
-import { useUserStore } from '@/stores/user'
+import { useCurrentUser, useUserStore } from '@/stores/user'
 
 const pageTitles: Partial<Record<string, string>> = {
   '/': '对话',
@@ -33,7 +33,8 @@ export default function Header(): React.JSX.Element {
   const { sessionId } = useParams<{ sessionId?: string }>()
   const { theme, setTheme } = useTheme()
   // 用户信息已由 AuthProvider 在应用启动时获取
-  const { currentUser, logout } = useUserStore()
+  const currentUser = useCurrentUser()
+  const { logout } = useUserStore()
   const { isPlatformAdmin, isPlatformViewer } = useGatewayPermission()
 
   // 如果有 sessionId，获取会话信息以显示标题

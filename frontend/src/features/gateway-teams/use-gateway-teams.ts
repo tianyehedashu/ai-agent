@@ -17,7 +17,7 @@ import {
   filterGatewayWritableTeams,
 } from '@/features/gateway-teams/gateway-team-write-policy'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
-import { useUserStore } from '@/stores/user'
+import { useCurrentUser } from '@/stores/user'
 
 import type { UseQueryResult } from '@tanstack/react-query'
 
@@ -48,7 +48,7 @@ export function useGatewayMemberTeams(enabled = true): UseQueryResult<GatewayTea
 
 export function useGatewayTeamNameMap(enabled = true): Map<string, string> {
   const { data: teams = [] } = useGatewayTeams(enabled)
-  const viewerUserId = useUserStore((s) => s.currentUser?.id ?? null)
+  const viewerUserId = useCurrentUser()?.id ?? null
 
   return useMemo(() => {
     const map = new Map<string, string>()
@@ -62,7 +62,7 @@ export function useGatewayTeamNameMap(enabled = true): Map<string, string> {
 /** Playground / 团队管理页等同源（membership_only） */
 export function useGatewayMemberTeamNameMap(enabled = true): Map<string, string> {
   const { data: teams = [] } = useGatewayMemberTeams(enabled)
-  const viewerUserId = useUserStore((s) => s.currentUser?.id ?? null)
+  const viewerUserId = useCurrentUser()?.id ?? null
 
   return useMemo(() => {
     const map = new Map<string, string>()
@@ -76,7 +76,7 @@ export function useGatewayMemberTeamNameMap(enabled = true): Map<string, string>
 /** 虚拟 Key 等工作区列：本人 personal 显示「个人」 */
 export function useGatewayMemberWorkspaceNameMap(enabled = true): Map<string, string> {
   const { data: teams = [] } = useGatewayMemberTeams(enabled)
-  const viewerUserId = useUserStore((s) => s.currentUser?.id ?? null)
+  const viewerUserId = useCurrentUser()?.id ?? null
 
   return useMemo(() => {
     const map = new Map<string, string>()

@@ -29,7 +29,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
-import { useUserStore } from '@/stores/user'
+import { useCurrentUser } from '@/stores/user'
 
 const QUERY_KEY = ['admin', 'storage']
 
@@ -58,7 +58,7 @@ function configToForm(config: StorageConfigAdmin): UpdateStorageConfigPayload {
 }
 
 export default function AdminStoragePage(): React.JSX.Element {
-  const { currentUser } = useUserStore()
+  const currentUser = useCurrentUser()
   const isAdmin = currentUser?.role === 'admin'
   const queryClient = useQueryClient()
 

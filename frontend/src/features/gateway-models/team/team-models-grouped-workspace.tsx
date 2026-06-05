@@ -66,7 +66,7 @@ import {
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { Plus, Search } from '@/lib/lucide-icons'
 import { buildFilterKey } from '@/lib/pagination'
-import { useUserStore } from '@/stores/user'
+import { useCurrentUser } from '@/stores/user'
 import { MODEL_PROVIDERS } from '@/types/user-model'
 
 import { preloadTeamModelDetailPane } from './team-model-detail-preload'
@@ -75,7 +75,7 @@ export function TeamModelsGroupedWorkspace(): React.JSX.Element {
   const memberCollaborationTeams = useGatewayMemberCollaborationTeams()
   const writableCollaborationTeams = useGatewayWritableCollaborationTeams()
   const teamNameById = useGatewayMemberTeamNameMap()
-  const viewerUserId = useUserStore((s) => s.currentUser?.id ?? null)
+  const viewerUserId = useCurrentUser()?.id ?? null
   const { canWrite, canContribute, isPlatformAdmin } = useGatewayPermission()
   const [searchParams, setSearchParams] = useSearchParams()
   const credentialFilter = searchParams.get('credentialId') ?? ''

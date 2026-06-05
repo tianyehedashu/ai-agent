@@ -1,4 +1,4 @@
-﻿import { Suspense, useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react'
+import { Suspense, useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react'
 
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
@@ -48,7 +48,7 @@ import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { useToast } from '@/hooks/use-toast'
 import { Loader2, Plus, Trash2 } from '@/lib/lucide-icons'
 import { buildFilterKey, usePaginationPageForFilters } from '@/lib/pagination'
-import { useUserStore } from '@/stores/user'
+import { useCurrentUser } from '@/stores/user'
 import { MODEL_PROVIDERS } from '@/types/user-model'
 
 import { PersonalModelForm, type PersonalModelFormValues } from './personal-model-form'
@@ -75,7 +75,7 @@ export function PersonalModelsWorkspace({
   pageView: pageViewProp,
 }: PersonalModelsWorkspaceProps): React.JSX.Element {
   const teamId = useGatewayTeamId()
-  const hasAuthSession = useUserStore((s) => s.currentUser !== null)
+  const hasAuthSession = useCurrentUser() !== null
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const pageView = pageViewProp ?? parseModelsPageView(searchParams.get('view'))
