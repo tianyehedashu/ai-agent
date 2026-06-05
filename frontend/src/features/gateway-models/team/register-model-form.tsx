@@ -26,6 +26,7 @@ import {
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { CapabilityField } from '@/features/gateway-models/capability-field'
 import { MANUAL_PRESET, NO_CREDENTIAL } from '@/features/gateway-models/constants'
+import { UpstreamCallShapeSelect } from '@/features/gateway-models/model-capability-editor'
 import { buildPresetTags, parsePositiveInt } from '@/features/gateway-models/utils'
 import { ChevronDown, Info } from '@/lib/lucide-icons'
 import { cn } from '@/lib/utils'
@@ -368,31 +369,17 @@ export function RegisterModelForm({
                       }}
                     />
                   </div>
-                  <div className="sm:col-span-2">
-                    <Label>出站调用形</Label>
-                    <Select
-                      value={values.upstreamCallShape || '__default__'}
-                      onValueChange={(v) => {
-                        setValues({
-                          ...values,
-                          upstreamCallShape: v === '__default__' ? '' : v,
-                        })
-                      }}
-                    >
-                      <SelectTrigger className="mt-1">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="__default__">跟随凭据方案（默认）</SelectItem>
-                        <SelectItem value="openai_compat">OpenAI-compat</SelectItem>
-                        <SelectItem value="anthropic_native">Anthropic-native（实验）</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <p className="mt-1 text-[11px] text-muted-foreground">
-                      Anthropic-native 需服务端开启实验开关；当前经 Gateway 代理仍以 OpenAI-compat
-                      出站。
-                    </p>
-                  </div>
+                  <UpstreamCallShapeSelect
+                    value={values.upstreamCallShape}
+                    onValueChange={(v) => {
+                      setValues({ ...values, upstreamCallShape: v })
+                    }}
+                    className="sm:col-span-2"
+                  />
+                  <p className="text-[11px] text-muted-foreground sm:col-span-2">
+                    Anthropic-native 需服务端开启实验开关；当前经 Gateway 代理仍以 OpenAI-compat
+                    出站。
+                  </p>
                 </div>
               </CollapsibleContent>
             </Collapsible>

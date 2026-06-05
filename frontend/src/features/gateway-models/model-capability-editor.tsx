@@ -22,11 +22,42 @@ import { CAPABILITIES, type GatewayCapability } from './constants'
 
 const PRODUCT_TYPES: ModelType[] = ['text', 'image', 'image_gen', 'video']
 
-const MODEL_TYPE_TO_CAPABILITY: Record<ModelType, string> = {
-  text: 'chat',
-  image: 'chat',
-  image_gen: 'image',
-  video: 'video_generation',
+export interface UpstreamCallShapeSelectProps {
+  value: string
+  onValueChange: (value: string) => void
+  disabled?: boolean
+  id?: string
+  className?: string
+}
+
+export function UpstreamCallShapeSelect({
+  value,
+  onValueChange,
+  disabled = false,
+  id = 'upstream-call-shape',
+  className,
+}: UpstreamCallShapeSelectProps): React.JSX.Element {
+  return (
+    <div className={cn('grid gap-1.5', className)}>
+      <Label htmlFor={id}>出站调用形</Label>
+      <Select
+        value={value || '__default__'}
+        onValueChange={(v) => {
+          onValueChange(v === '__default__' ? '' : v)
+        }}
+        disabled={disabled}
+      >
+        <SelectTrigger id={id}>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="__default__">跟随凭据方案（默认）</SelectItem>
+          <SelectItem value="openai_compat">OpenAI-compat</SelectItem>
+          <SelectItem value="anthropic_native">Anthropic-native（实验）</SelectItem>
+        </SelectContent>
+      </Select>
+    </div>
+  )
 }
 
 export interface ModelCapabilityEditorValues {
@@ -41,8 +72,8 @@ export interface ModelCapabilityEditorProps {
   values: ModelCapabilityEditorValues
   onChange: (values: ModelCapabilityEditorValues) => void
   disabled?: boolean
-  /** 个人模型单行编辑：仅允许选一个 model_type */
-  singleModelType?: boolean
+  /** 隐藏出站调用形选择（个人模型 API 不支持此字段） */
+  hideUpstreamCallShape?: boolean
   className?: string
 }
 
@@ -65,7 +96,7 @@ export function ModelCapabilityEditor({
   values,
   onChange,
   disabled = false,
-  singleModelType = false,
+  hideUpstreamCallShape = false,
   className,
 }: ModelCapabilityEditorProps): React.JSX.Element {
   const allowed = allowedProductTypes(values.capability)
@@ -75,20 +106,12 @@ export function ModelCapabilityEditor({
     onChange({
       ...values,
       capability,
-      modelTypes: singleModelType ? [nextTypes[0] ?? 'text'] : nextTypes,
+      modelTypes: nextTypes,
     })
   }
 
   function toggleType(t: ModelType): void {
     if (disabled || !allowed.includes(t)) return
-    if (singleModelType) {
-      onChange({
-        ...values,
-        capability: MODEL_TYPE_TO_CAPABILITY[t],
-        modelTypes: [t],
-      })
-      return
-    }
     const current = values.modelTypes
     let next: ModelType[]
     if (current.includes(t)) {
@@ -157,29 +180,14 @@ export function ModelCapabilityEditor({
         </Alert>
       ) : null}
 
-      {!singleModelType ? (
-        <div className="grid gap-1.5">
-          <Label htmlFor="upstream-call-shape">出站调用形</Label>
-          <Select
-            value={values.upstreamCallShape || '__default__'}
-            onValueChange={(v) => {
-              onChange({
-                ...values,
-                upstreamCallShape: v === '__default__' ? '' : v,
-              })
-            }}
-            disabled={disabled}
-          >
-            <SelectTrigger id="upstream-call-shape">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="__default__">跟随凭据方案（默认）</SelectItem>
-              <SelectItem value="openai_compat">OpenAI-compat</SelectItem>
-              <SelectItem value="anthropic_native">Anthropic-native（实验）</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
+      {!hideUpstreamCallShape ? (
+        <UpstreamCallShapeSelect
+          value={values.upstreamCallShape}
+          onValueChange={(v) => {
+            onChange({ ...values, upstreamCallShape: v })
+          }}
+          disabled={disabled}
+        />
       ) : null}
     </div>
   )
@@ -207,38 +215,13 @@ export function capabilityEditorValuesFromModel(model: {
   }
 }
 
-/** 个人模型单行编辑：从 API model_types 推导当前行主 type（vision 行常为 text+image）。 */
-export function primaryPersonalModelType(model: {
-  capability: string
-  model_types?: string[]
-  selector_capabilities?: Record<string, unknown>
-}): ModelType {
-  const types = (model.model_types ?? ['text']).filter(
-    (t): t is ModelType => t === 'text' || t === 'image' || t === 'image_gen' || t === 'video'
-  )
-  const nonText = types.filter((t) => t !== 'text')
-  if (nonText.length === 1) return nonText[0]
-  const sc = model.selector_capabilities
-  if (sc?.supports_video_gen === true) return 'video'
-  if (sc?.supports_image_gen === true) return 'image_gen'
-  if (sc?.supports_vision === true) return 'image'
-  if (model.capability === 'image') return 'image_gen'
-  if (model.capability === 'video_generation') return 'video'
-  return 'text'
-}
-
 export function capabilityEditorValuesFromPersonalModel(model: {
   capability: string
   model_types?: string[]
   upstream_call_shape?: string | null
   selector_capabilities?: Record<string, unknown>
 }): ModelCapabilityEditorValues {
-  const primary = primaryPersonalModelType(model)
-  return {
-    capability: MODEL_TYPE_TO_CAPABILITY[primary],
-    modelTypes: [primary],
-    upstreamCallShape: model.upstream_call_shape ?? '',
-  }
+  return capabilityEditorValuesFromModel(model)
 }
 
 export function modelCapabilityPatchFromEditor(

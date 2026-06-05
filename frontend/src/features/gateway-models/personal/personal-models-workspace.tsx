@@ -48,7 +48,7 @@ import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { useToast } from '@/hooks/use-toast'
 import { Loader2, Plus, Trash2 } from '@/lib/lucide-icons'
 import { buildFilterKey, usePaginationPageForFilters } from '@/lib/pagination'
-import { useAuthStore } from '@/stores/auth'
+import { useUserStore } from '@/stores/user'
 import { MODEL_PROVIDERS } from '@/types/user-model'
 
 import { PersonalModelForm, type PersonalModelFormValues } from './personal-model-form'
@@ -75,8 +75,7 @@ export function PersonalModelsWorkspace({
   pageView: pageViewProp,
 }: PersonalModelsWorkspaceProps): React.JSX.Element {
   const teamId = useGatewayTeamId()
-  const token = useAuthStore((s) => s.token)
-  const hasAuthSession = Boolean(token)
+  const hasAuthSession = useUserStore((s) => s.currentUser !== null)
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const pageView = pageViewProp ?? parseModelsPageView(searchParams.get('view'))

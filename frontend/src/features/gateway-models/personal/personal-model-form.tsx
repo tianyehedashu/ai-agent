@@ -4,7 +4,6 @@ import { Link } from 'react-router-dom'
 
 import type { CredentialProbeResult, PersonalGatewayModel } from '@/api/gateway'
 import { Button } from '@/components/ui/button'
-import { Checkbox } from '@/components/ui/checkbox'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -28,7 +27,6 @@ import {
 import { ChevronDown, Info, Loader2, RefreshCw } from '@/lib/lucide-icons'
 import { cn } from '@/lib/utils'
 import type { ModelType } from '@/types/user-model'
-import { MODEL_TYPE_LABELS } from '@/types/user-model'
 
 import { personalModelFormValuesFromModel } from './personal-model-form-values'
 
@@ -192,31 +190,25 @@ export function PersonalModelForm({
     })
   }, [])
 
-  function toggleType(t: ModelType): void {
-    if (mode === 'edit') return
-    const current = form.model_types
-    const next = current.includes(t) ? current.filter((x) => x !== t) : [...current, t]
-    if (next.length === 0) return
-    setForm({ ...form, model_types: next })
-  }
-
   function handleSubmit(): void {
     if (mode === 'edit') {
       onSubmit({
         ...form,
         model_types:
-          capabilityValues.modelTypes.length > 0
-            ? [capabilityValues.modelTypes[0] ?? 'text']
-            : form.model_types.slice(0, 1),
+          capabilityValues.modelTypes.length > 0 ? capabilityValues.modelTypes : form.model_types,
       })
       return
     }
-    onSubmit(form)
+    onSubmit({
+      ...form,
+      model_types:
+        capabilityValues.modelTypes.length > 0 ? capabilityValues.modelTypes : form.model_types,
+    })
   }
 
   const title = mode === 'create' ? '添加个人模型' : '编辑模型'
   const descCreate = '选择个人凭据后，可从上游一键导入多个模型；也可在下方手动注册单条。'
-  const descEdit = '修改模型配置（多能力拆分为多行时仅编辑当前行）'
+  const descEdit = '修改模型配置与能力'
 
   if (mode === 'edit') {
     return (
@@ -293,7 +285,7 @@ export function PersonalModelForm({
             <ModelCapabilityEditor
               values={capabilityValues}
               onChange={setCapabilityValues}
-              singleModelType
+              hideUpstreamCallShape
             />
 
             {onResyncCapabilities ? (
@@ -514,22 +506,11 @@ export function PersonalModelForm({
                 </div>
               </div>
 
-              <div className="grid gap-1.5">
-                <Label>模型类型</Label>
-                <div className="flex flex-wrap gap-4">
-                  {(['text', 'image', 'image_gen', 'video'] as ModelType[]).map((t) => (
-                    <label key={t} className="flex cursor-pointer items-center gap-1.5 text-sm">
-                      <Checkbox
-                        checked={form.model_types.includes(t)}
-                        onCheckedChange={() => {
-                          toggleType(t)
-                        }}
-                      />
-                      {MODEL_TYPE_LABELS[t]}
-                    </label>
-                  ))}
-                </div>
-              </div>
+              <ModelCapabilityEditor
+                values={capabilityValues}
+                onChange={setCapabilityValues}
+                hideUpstreamCallShape
+              />
 
               <div className="flex justify-end gap-2">
                 <Button variant="outline" type="button" onClick={onCancel}>

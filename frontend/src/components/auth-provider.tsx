@@ -14,7 +14,6 @@
 import { type ReactNode, useEffect, useRef, useState } from 'react'
 
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertCircle, Loader2 } from 'lucide-react'
 import { Navigate, useLocation } from 'react-router-dom'
 
 import { ApiError } from '@/api/client'
@@ -30,6 +29,7 @@ import {
   SSO_MAX_ATTEMPTS,
 } from '@/config/auth'
 import { useToast } from '@/hooks/use-toast'
+import { AlertCircle, Loader2 } from '@/lib/lucide-icons'
 import { getAuthToken } from '@/stores/auth'
 import { useUserStore } from '@/stores/user'
 
@@ -41,6 +41,7 @@ interface AuthProviderProps {
 
 export function AuthProvider({ children }: Readonly<AuthProviderProps>): React.JSX.Element {
   const setCurrentUser = useUserStore((state) => state.setCurrentUser)
+  const storeHasUser = useUserStore((state) => state.currentUser !== null)
   const queryClient = useQueryClient()
   const { toast } = useToast()
   const location = useLocation()
@@ -105,6 +106,20 @@ export function AuthProvider({ children }: Readonly<AuthProviderProps>): React.J
       }
     }
   }, [sessionUser, isFetched, setCurrentUser])
+
+  /**
+   * store 是否已与 query 同步。
+   *
+   * useEffect 是异步的，AuthProvider 在 isLoading→false 后立即渲染子组件，
+   * 但此时 useEffect 还没执行，Zustand store 中 currentUser 仍为 null，
+   * 导致子组件（如 PersonalModelsWorkspace）误判为未登录。
+   *
+   * 通过比较 store 布尔值与 query 值判断同步是否完成：
+   * - store 非初始值(null) → 已同步过
+   * - query 尚未 fetch → 不阻塞
+   * - sessionUser 为 null → store null 也一致，已同步
+   */
+  const isStoreSynced = !isFetched || storeHasUser || sessionUser === null
 
   // SSO 回调后 guard_token 写入存在短延迟，冷却期内先重试 auth/me 再报错
   // hybrid + 有本地 JWT 时跳过此 effect：JWT 过期应走 /login 而非 SSO 自愈
@@ -198,7 +213,7 @@ export function AuthProvider({ children }: Readonly<AuthProviderProps>): React.J
     })
   }, [shouldStartSso, location.pathname, toast])
 
-  if (isLoading && !deferAuthMe) {
+  if ((isLoading && !deferAuthMe) || (!isStoreSynced && !deferAuthMe)) {
     return (
       <div className="flex h-screen items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-3">

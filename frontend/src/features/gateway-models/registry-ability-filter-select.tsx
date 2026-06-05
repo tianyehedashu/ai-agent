@@ -5,9 +5,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { MODEL_TYPE_LABELS, type ModelType } from '@/types/user-model'
 
-import { CAPABILITY_LABELS, FILTER_ALL, type GatewayCapability } from './constants'
+import { CAPABILITY_LABELS, FILTER_ALL, modelTypeLabel, type GatewayCapability } from './constants'
 
 /** 与 backend ``REGISTRY_ABILITY_FILTER_VALUES`` 一致（顺序仅影响下拉展示） */
 const REGISTRY_ABILITY_FILTER_VALUES = [
@@ -24,18 +23,13 @@ const REGISTRY_ABILITY_FILTER_VALUES = [
   'rerank',
 ] as const
 
-const MODEL_TYPE_KEYS = new Set<ModelType>(['text', 'image', 'image_gen', 'video'])
-
 function registryAbilityFilterLabel(
   value: (typeof REGISTRY_ABILITY_FILTER_VALUES)[number]
 ): string {
-  if (MODEL_TYPE_KEYS.has(value as ModelType)) {
-    return MODEL_TYPE_LABELS[value as ModelType]
-  }
   if (value in CAPABILITY_LABELS) {
     return CAPABILITY_LABELS[value as GatewayCapability]
   }
-  return value
+  return modelTypeLabel(value)
 }
 
 /** 注册表列表 ``?type=`` 筛选项（与后端白名单对齐） */

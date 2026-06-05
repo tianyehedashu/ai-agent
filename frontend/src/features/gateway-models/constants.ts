@@ -1,5 +1,7 @@
 /** 与 backend GATEWAY_MODEL_TEST_SUPPORTED_CAPABILITIES 一致 */
 import { GATEWAY_MODEL_TEST_SUPPORTED_CAPABILITIES } from '@/api/gateway/_base'
+import { MODEL_TYPE_LABELS } from '@/types/user-model'
+import type { ModelType } from '@/types/user-model'
 
 /**
  * 网关页面 Scope Tab（`?tab=`）。
@@ -51,8 +53,20 @@ export function capabilityLabel(capability: string): string {
   return capability
 }
 
-/** @deprecated 使用 `@/types/user-model` 的 `MODEL_TYPE_LABELS` */
-export { MODEL_TYPE_LABELS } from '@/types/user-model'
+export { MODEL_TYPE_LABELS, ModelType }
+
+/** 已知产品特性类型集合，用于区分已知/未知 type */
+export const MODEL_TYPE_KEYS: ReadonlySet<ModelType> = new Set<ModelType>([
+  'text',
+  'image',
+  'image_gen',
+  'video',
+])
+
+/** 产品特性标签：已知 type 用中文标签，未知原样返回 */
+export function modelTypeLabel(t: string): string {
+  return MODEL_TYPE_KEYS.has(t as ModelType) ? MODEL_TYPE_LABELS[t as ModelType] : t
+}
 
 export const TESTABLE_CAPABILITIES: ReadonlySet<string> = new Set(
   GATEWAY_MODEL_TEST_SUPPORTED_CAPABILITIES

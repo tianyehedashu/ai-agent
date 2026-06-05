@@ -8,8 +8,8 @@ import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn, formatRelativeTime } from '@/lib/utils'
-import { MODEL_TYPE_LABELS, type ModelType } from '@/types/user-model'
 
+import { modelTypeLabel } from '../constants'
 import { ModelCapabilityBadges } from '../team/model-capability-badges'
 import { SystemModelAdminMeta } from '../team/system-model-admin-meta'
 import { classifyFailureReason, formatUsageLine } from '../utils'
@@ -18,12 +18,6 @@ import type { GatewayModelListRowProps } from './types'
 
 const CONFIG_MANAGED_BATCH_HINT =
   '配置同步托管的系统模型不可删除；请通过 gateway-catalog 或配置管理'
-
-const MODEL_TYPE_KEYS = new Set<ModelType>(['text', 'image', 'image_gen', 'video'])
-
-function modelTypeLabel(t: string): string {
-  return MODEL_TYPE_KEYS.has(t as ModelType) ? MODEL_TYPE_LABELS[t as ModelType] : t
-}
 
 function isGatewayModelSource(
   source: GatewayModelListRowProps['item']['source']
