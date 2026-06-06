@@ -256,6 +256,7 @@ def migrate_user_models_to_personal_gateway_sync(session: Session) -> dict[str, 
                 last_test_status=um.get("last_test_status"),
                 last_tested_at=um.get("last_tested_at"),
                 last_test_reason=um.get("last_test_reason"),
+                created_by_user_id=user_id,
             )
             session.add(row)
             migrated_models += 1

@@ -563,6 +563,7 @@ class CredentialWritesMixin:
                     tags=pm.tags,
                     upstream_call_shape=pm.upstream_call_shape,
                     enabled=pm.enabled,
+                    created_by_user_id=actor_user_id,
                 )
                 models_created.append(
                     ImportedModelSummary(

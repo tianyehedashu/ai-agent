@@ -57,7 +57,13 @@ function actorOwnsTeamModel(model: GatewayModel, viewerUserId: string | null | u
   )
 }
 
-/** 团队模型：凭据 owner 或 legacy admin+；系统模型：平台管理员 */
+function actorCreatedModel(model: GatewayModel, viewerUserId: string | null | undefined): boolean {
+  const creatorId = model.created_by_user_id
+  if (creatorId === null || creatorId === undefined || creatorId === '') return false
+  return viewerUserId !== null && viewerUserId !== undefined && viewerUserId === creatorId
+}
+
+/** 团队模型：凭据 owner、模型创建者或 legacy admin+；系统模型：平台管理员 */
 export function canManageGatewayModel(
   model: GatewayModel,
   viewerUserId: string | null | undefined,
@@ -69,6 +75,7 @@ export function canManageGatewayModel(
     return isPlatformAdmin
   }
   if (actorOwnsTeamModel(model, viewerUserId)) return true
+  if (actorCreatedModel(model, viewerUserId)) return true
   if (isLegacyTeamModel(model) && canWrite) return true
   return false
 }
@@ -96,6 +103,7 @@ export function canDeleteGatewayModel(
     return isPlatformAdmin && !isConfigManagedSystemModel(model, context)
   }
   if (actorOwnsTeamModel(model, viewerUserId)) return true
+  if (actorCreatedModel(model, viewerUserId)) return true
   if (isLegacyTeamModel(model) && canWrite) return true
   if (canWrite && !isLegacyTeamModel(model)) return true
   return false

@@ -19,6 +19,15 @@ class TeamModelCredentialView(Protocol):
     created_by_user_id: UUID | None
 
 
+def actor_created_model(
+    *,
+    model_created_by_user_id: UUID | None,
+    actor_user_id: UUID,
+) -> bool:
+    """当前用户是否为该模型的创建者。"""
+    return model_created_by_user_id is not None and model_created_by_user_id == actor_user_id
+
+
 def can_create_model_on_team_credential(
     credential: TeamModelCredentialView,
     *,
@@ -151,6 +160,7 @@ def assert_can_delete_team_model_on_credential(
 
 __all__ = [
     "TeamModelCredentialView",
+    "actor_created_model",
     "assert_can_create_model_on_team_credential",
     "assert_can_delete_team_model_on_credential",
     "assert_can_update_team_model_on_credential",

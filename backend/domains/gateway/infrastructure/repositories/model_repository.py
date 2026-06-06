@@ -279,6 +279,7 @@ class GatewayModelRepository:
         tags: dict[str, Any] | None = None,
         upstream_call_shape: str | None = None,
         enabled: bool = True,
+        created_by_user_id: uuid.UUID | None = None,
     ) -> GatewayModel:
         model = GatewayModel(
             tenant_id=tenant_id,
@@ -293,6 +294,7 @@ class GatewayModelRepository:
             tags=tags,
             upstream_call_shape=upstream_call_shape,
             enabled=enabled,
+            created_by_user_id=created_by_user_id,
         )
         self._session.add(model)
         await self._session.flush()

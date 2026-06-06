@@ -470,6 +470,10 @@ class GatewayModelResponse(BaseModel):
         default=None,
         description="绑定 team 凭据创建者；前端模型权限判断",
     )
+    created_by_user_id: uuid.UUID | None = Field(
+        default=None,
+        description="模型创建者；前端判断用户是否可编辑自己添加的模型",
+    )
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)

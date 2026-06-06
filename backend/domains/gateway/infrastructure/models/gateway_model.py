@@ -72,6 +72,12 @@ class GatewayModel(BaseModel, TenantScopedMixin):
             "video_durations（整数秒列表）"
         ),
     )
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        nullable=True,
+        index=True,
+        comment="创建该模型的用户 ID（refs users.id，无 DB FK）",
+    )
     upstream_call_shape: Mapped[str | None] = mapped_column(
         String(32),
         nullable=True,

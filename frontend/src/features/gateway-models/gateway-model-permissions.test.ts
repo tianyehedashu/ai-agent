@@ -89,6 +89,21 @@ describe('canManageGatewayModel', () => {
     ).toBe(false)
   })
 
+  it('allows model creator to manage their own team models', () => {
+    expect(
+      canManageGatewayModel(
+        model({
+          registry_kind: 'team',
+          credential_created_by_user_id: ownerId,
+          created_by_user_id: viewerId,
+        }),
+        viewerId,
+        false,
+        false
+      )
+    ).toBe(true)
+  })
+
   it('allows platform admin to manage system models', () => {
     expect(canManageGatewayModel(model({ registry_kind: 'system' }), viewerId, false, true)).toBe(
       true
@@ -134,6 +149,21 @@ describe('canDeleteGatewayModel', () => {
         false
       )
     ).toBe(false)
+  })
+
+  it('allows model creator to delete their own team models', () => {
+    expect(
+      canDeleteGatewayModel(
+        model({
+          registry_kind: 'team',
+          credential_created_by_user_id: ownerId,
+          created_by_user_id: viewerId,
+        }),
+        viewerId,
+        false,
+        false
+      )
+    ).toBe(true)
   })
 
   it('allows platform admin to delete non-managed system models', () => {

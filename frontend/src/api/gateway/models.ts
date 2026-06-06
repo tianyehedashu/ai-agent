@@ -32,6 +32,8 @@ export interface GatewayModel {
   credential_name?: string | null
   /** 绑定 team 凭据创建者 */
   credential_created_by_user_id?: string | null
+  /** 模型创建者（用户自己添加的模型可以编辑） */
+  created_by_user_id?: string | null
   weight: number
   rpm_limit: number | null
   tpm_limit: number | null

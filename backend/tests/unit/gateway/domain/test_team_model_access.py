@@ -5,6 +5,7 @@ from uuid import uuid4
 import pytest
 
 from domains.gateway.domain.policies.team_model_access import (
+    actor_created_model,
     assert_can_create_model_on_team_credential,
     assert_can_delete_team_model_on_credential,
     assert_can_update_team_model_on_credential,
@@ -89,3 +90,11 @@ def test_legacy_admin_can_create_and_delete() -> None:
         team_role=TeamRole.ADMIN.value,
         is_platform_admin=False,
     )
+
+
+def test_actor_created_model() -> None:
+    user = uuid4()
+    other = uuid4()
+    assert actor_created_model(model_created_by_user_id=user, actor_user_id=user) is True
+    assert actor_created_model(model_created_by_user_id=user, actor_user_id=other) is False
+    assert actor_created_model(model_created_by_user_id=None, actor_user_id=user) is False
