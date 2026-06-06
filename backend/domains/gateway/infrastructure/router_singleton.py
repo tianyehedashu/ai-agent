@@ -134,8 +134,11 @@ def _build_litellm_params(
 
     ``upstream_call_shape`` 决定出站协议面：``anthropic_native`` 时
     ``model`` 强制走 ``anthropic/`` 前缀（让 LiteLLM 使用 Anthropic Messages 通道）
-    并解析 profile 的 Anthropic-native 根 ``api_base``；
-    否则保持 ``provider`` 原生前缀 + OpenAI-compat 根。
+    并解析 profile 的 Anthropic-native 根 ``api_base``。
+    OpenAI-compat 出站直接用 ``real_model`` 不加 ``provider/`` 前缀——LiteLLM
+    的 ``anthropic_messages()`` 在 Anthropic→OpenAI 格式翻译时无法正确剥离前缀，
+    导致上游收到含前缀的非法模型名；路由靠 ``api_base`` + ``api_key`` +
+    ``custom_llm_provider`` 组合就已足够。
     """
     profile_id = getattr(credential, "profile_id", None)
     call_shape = resolve_effective_upstream_call_shape(
@@ -146,10 +149,11 @@ def _build_litellm_params(
     if call_shape == UpstreamCallShape.ANTHROPIC_NATIVE:
         model_id = build_litellm_model_id("anthropic", real_model)
         protocol = UpstreamProtocol.ANTHROPIC_NATIVE
+        params: dict[str, Any] = {"model": model_id}
     else:
-        model_id = build_litellm_model_id(provider, real_model)
+        model_id = real_model
         protocol = UpstreamProtocol.OPENAI_COMPAT
-    params: dict[str, Any] = {"model": model_id}
+        params = {"model": model_id, "custom_llm_provider": provider}
     encryption_key = _get_encryption_key()
     try:
         decrypted_api_key = decrypt_value(credential.api_key_encrypted, encryption_key)

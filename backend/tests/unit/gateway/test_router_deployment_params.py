@@ -55,7 +55,8 @@ async def test_resolve_deployment_uses_system_credential_when_no_tenant_cred(
     )
 
     assert dep is not None
-    assert dep.get("model") == "dashscope/text-embedding-v3"
+    assert dep.get("model") == "text-embedding-v3"
+    assert dep.get("custom_llm_provider") == "dashscope"
     assert dep.get("api_key") == "sk-sys-embed"
 
 

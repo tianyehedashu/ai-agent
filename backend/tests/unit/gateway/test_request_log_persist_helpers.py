@@ -29,7 +29,7 @@ def test_falls_back_to_model_info_gateway_provider() -> None:
 
 def test_infers_from_litellm_params_model() -> None:
     provider = gateway_provider_for_persist(
-        {"litellm_params": {"model": "volcengine/doubao-pro-32k"}},
+        {"litellm_params": {"model": "doubao-pro-32k"}},
         {},
     )
     assert provider == "volcengine"

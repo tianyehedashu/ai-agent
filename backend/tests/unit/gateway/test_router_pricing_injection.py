@@ -5,7 +5,7 @@ from __future__ import annotations
 from unittest.mock import MagicMock
 import uuid
 
-from domains.gateway.domain.litellm_model_id import build_litellm_model_id
+from domains.gateway.domain.router_model_name import encode_router_model_name
 from domains.gateway.infrastructure.router_singleton import (
     _build_deployment,
     _build_litellm_params,
@@ -16,7 +16,7 @@ from domains.gateway.infrastructure.router_singleton import (
 
 def _stub_build_litellm_params(**kwargs):
     """绕过解密；保留 pricing 注入逻辑。"""
-    params = {"model": build_litellm_model_id(kwargs["provider"], kwargs["real_model"])}
+    params = {"model": kwargs["real_model"], "custom_llm_provider": kwargs["provider"]}
     pricing = kwargs.get("pricing")
     if pricing:
         for k, v in pricing.items():

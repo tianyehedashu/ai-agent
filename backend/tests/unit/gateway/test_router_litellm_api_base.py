@@ -32,7 +32,8 @@ def test_build_litellm_params_volcengine_coding_normalizes_api_base(monkeypatch)
         tags=None,
     )
     assert params["api_base"] == "https://ark.cn-beijing.volces.com/api/coding/v3"
-    assert params["model"] == "volcengine/deepseek-v4-flash"
+    assert params["model"] == "deepseek-v4-flash"
+    assert params["custom_llm_provider"] == "volcengine"
 
 
 def test_build_litellm_params_anthropic_native_uses_anthropic_root_and_prefix(
@@ -66,3 +67,4 @@ def test_build_litellm_params_anthropic_native_uses_anthropic_root_and_prefix(
     assert params["model"] == "anthropic/claude-sonnet-4-20250514"
     assert params["api_base"] == "https://ark.cn-beijing.volces.com/api/coding"
     assert params["api_key"] == "sk-test"
+    assert "custom_llm_provider" not in params

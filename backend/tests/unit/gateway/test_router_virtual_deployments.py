@@ -5,7 +5,6 @@ from __future__ import annotations
 from unittest.mock import MagicMock
 import uuid
 
-from domains.gateway.domain.litellm_model_id import build_litellm_model_id
 from domains.gateway.domain.router_model_name import encode_router_model_name
 from domains.gateway.infrastructure.router_singleton import (
     _models_to_deployments,
@@ -14,7 +13,7 @@ from domains.gateway.infrastructure.router_singleton import (
 
 
 def _stub_build_litellm_params(**kwargs):
-    return {"model": build_litellm_model_id(kwargs["provider"], kwargs["real_model"])}
+    return {"model": kwargs["real_model"], "custom_llm_provider": kwargs["provider"]}
 
 
 def _mk_model(
@@ -141,14 +140,14 @@ def test_virtual_route_cross_provider_deployments(monkeypatch) -> None:
     cred_dpsk, cred_vol = uuid.uuid4(), uuid.uuid4()
     m_dpsk = _mk_model(
         name="deepseek-dpsk",
-        real_model="deepseek/deepseek-chat",
+        real_model="deepseek-chat",
         provider="deepseek",
         cred_id=cred_dpsk,
         tenant_id=team,
     )
     m_vol = _mk_model(
         name="deepseek-volc",
-        real_model="volcengine/ep-deepseek-v3",
+        real_model="ep-deepseek-v3",
         provider="volcengine",
         cred_id=cred_vol,
         tenant_id=team,
@@ -170,7 +169,7 @@ def test_virtual_route_cross_provider_deployments(monkeypatch) -> None:
     )
     assert len(virtuals) == 2
     litellm_models = {d["litellm_params"]["model"] for d in virtuals}
-    assert litellm_models == {"deepseek/deepseek-chat", "volcengine/ep-deepseek-v3"}
+    assert litellm_models == {"deepseek-chat", "ep-deepseek-v3"}
 
 
 def test_virtual_route_skips_missing_primary(monkeypatch) -> None:
