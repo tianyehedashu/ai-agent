@@ -2,7 +2,7 @@ schema_version: 1
 module_path: ""
 title: AI Agent 全栈平台工程化体系
 scope:
-    - .agents\commands\code-check.md
+    - .agents\skills\code-check\SKILL.md
     - .agents\skills\database-schema\SKILL.md
     - .agents\skills\database-schema\basemodel.md
     - .agents\skills\database-schema\design.md
@@ -128,18 +128,18 @@ scope:
     - .qoder\repowiki\knowledge\zh\AI Agent 全栈平台工程化体系\架构设计.md
     - .qoder\repowiki\knowledge\zh\AI Agent 全栈平台工程化体系\概述.md
     - .qoder\repowiki\knowledge\zh\AI Agent 全栈平台工程化体系\编码规范.md
-    - .qoder\repowiki\knowledge\zh\AI Agent 前端应用与网关控制台\_module.yaml
-    - .qoder\repowiki\knowledge\zh\AI Agent 前端应用与网关控制台\技术栈.md
-    - .qoder\repowiki\knowledge\zh\AI Agent 前端应用与网关控制台\架构设计.md
-    - .qoder\repowiki\knowledge\zh\AI Agent 前端应用与网关控制台\概述.md
-    - .qoder\repowiki\knowledge\zh\AI Agent 前端应用与网关控制台\特殊配置与命令.md
-    - .qoder\repowiki\knowledge\zh\AI Agent 前端应用与网关控制台\编码规范.md
-    - .qoder\repowiki\knowledge\zh\AI Agent 后端服务与网关\_module.yaml
-    - .qoder\repowiki\knowledge\zh\AI Agent 后端服务与网关\技术栈.md
-    - .qoder\repowiki\knowledge\zh\AI Agent 后端服务与网关\架构设计.md
-    - .qoder\repowiki\knowledge\zh\AI Agent 后端服务与网关\概述.md
-    - .qoder\repowiki\knowledge\zh\AI Agent 后端服务与网关\特殊配置与命令.md
-    - .qoder\repowiki\knowledge\zh\AI Agent 后端服务与网关\编码规范.md
+    - .qoder\repowiki\knowledge\zh\AI Agent 后端服务\_module.yaml
+    - .qoder\repowiki\knowledge\zh\AI Agent 后端服务\技术栈.md
+    - .qoder\repowiki\knowledge\zh\AI Agent 后端服务\架构设计.md
+    - .qoder\repowiki\knowledge\zh\AI Agent 后端服务\概述.md
+    - .qoder\repowiki\knowledge\zh\AI Agent 后端服务\特殊配置与命令.md
+    - .qoder\repowiki\knowledge\zh\AI Agent 后端服务\编码规范.md
+    - .qoder\repowiki\knowledge\zh\AI 网关与智能体前端应用\_module.yaml
+    - .qoder\repowiki\knowledge\zh\AI 网关与智能体前端应用\技术栈.md
+    - .qoder\repowiki\knowledge\zh\AI 网关与智能体前端应用\架构设计.md
+    - .qoder\repowiki\knowledge\zh\AI 网关与智能体前端应用\概述.md
+    - .qoder\repowiki\knowledge\zh\AI 网关与智能体前端应用\特殊配置与命令.md
+    - .qoder\repowiki\knowledge\zh\AI 网关与智能体前端应用\编码规范.md
     - .qoder\repowiki\knowledge\zh\_index.yaml
     - .qoder\repowiki\knowledge\zh\多环境部署与网关接入\_module.yaml
     - .qoder\repowiki\knowledge\zh\多环境部署与网关接入\技术栈.md
@@ -427,10 +427,15 @@ scope:
     - backend\.pytest-basetemp-6ae095c4\test_inlines_relative_listing_0\images\abc.png
     - backend\.pytest-basetemp-6ae095c4\test_resolve_catalog_seed_mode0\seed.json
     - backend\.pytest-basetemp-6b46e79c\test_load_benchmark0\test_benchmark.yaml
+    - backend\.pytest-basetemp-775afa94\test_inlines_relative_listing_0\images\abc.png
+    - backend\.pytest-basetemp-775afa94\test_resolve_catalog_seed_mode0\seed.json
     - backend\.pytest-basetemp-7c06b69f\test_path_traversal_blocked0\d1d982db660d463daa19905045f7a6a7.png
     - backend\.pytest-basetemp-7c06b69f\test_returns_path_when_file_ex0\images\abc.png
     - backend\.pytest-basetemp-7c06b69f\test_save_bytes_returns_serve_0\eb2eceeb2e9c46509c23f4220f696197.png
     - backend\.pytest-basetemp-7cffe68f\test_inlines_relative_listing_0\images\abc.png
+    - backend\.pytest-basetemp-7daf5c0a\test_inlines_relative_listing_0\images\abc.png
+    - backend\.pytest-basetemp-7daf5c0a\test_resolve_catalog_seed_mode0\seed.json
+    - backend\.pytest-basetemp-7dd6f829\test_inlines_relative_listing_0\images\abc.png
     - backend\.pytest-basetemp-8b787c2c\test_list_templates0\config\environments\template1.toml
     - backend\.pytest-basetemp-8b787c2c\test_list_templates0\config\execution.toml
     - backend\.pytest-basetemp-8b787c2c\test_load_agent_config0\agents\test-agent\agent.toml
@@ -776,6 +781,7 @@ scope:
     - backend\.ruff_cache\0.14.11\9974328633531301218
     - backend\.ruff_cache\0.15.14\10753958907684099425
     - backend\.ruff_cache\0.15.14\16842851540706809657
+    - backend\.ruff_cache\0.15.14\17103132081246441550
     - backend\.ruff_cache\0.15.14\18191466862438923542
     - backend\.ruff_cache\CACHEDIR.TAG
     - backend\.scannerwork\.sonar_lock
@@ -9996,12 +10002,6 @@ scope:
     - backend\data\storage\images\83446e65ef2f43a1970f31728b73b1a7.png
     - backend\data\storage\images\864bfbae6d4a454095d23b6168ede287.png
     - backend\data\storage\images\882bf617344a447e9eadddb57dc3388c.png
-    - backend\data\storage\images\8894a5856ec7478bbb92d60713dba758.png
-    - backend\data\storage\images\8a15cf5eb617454ebee10a9e09a9720d.png
-    - backend\data\storage\images\8aea3eb3d04f4f7f929dedfb214ca64b.png
-    - backend\data\storage\images\8ec608b2a0e84457a334a0ff7292c359.png
-    - backend\data\storage\images\918ca5767818497f9745c049ae980ff6.png
-    - backend\data\storage\images\97af8af351c843ea945288bbb58be706.png
 source_files: []
 depends_on: []
 related_to: []

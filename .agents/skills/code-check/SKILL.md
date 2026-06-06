@@ -1,3 +1,10 @@
+---
+name: code-check
+description: Reviews code changes for compliance with project standards including DDD layering, anti-degeneration, Gateway hot path constraints, and deduplication. Outputs actionable suggestions anchored to canonical rule sources. Use when reviewing pull requests, examining git diffs, auditing staged changes, or when the user asks for a code review against project conventions.
+---
+
+# 代码审查
+
 对当前改动做 **规范 + DDD 分层 + 重复/遗留** 审核，输出可执行建议。
 
 > 规则真源：
@@ -8,14 +15,14 @@
 > - `backend/docs/AI_GATEWAY_DOMAIN_ARCHITECTURE.md`（Gateway 边界 / `ProxyUseCase` 拆分）
 > - `backend/docs/ARCHITECTURE.md`、仓库根 `AGENTS.md`
 >
-> 可勾选 checklist：`.cursor/agents/code-rule-check.md`
+> 可勾选 checklist：`.claude/agents/code-rule-check.md`
 >
-> 本命令只规定**流程、专项问法与输出格式**，不再重复罗列所有规则。
+> 本 skill 只规定**流程、专项问法与输出格式**，不再重复罗列所有规则。
 
 ## 审查流程（按顺序）
 
 1. **改动盘点**：列出本次新增/修改的文件，标出归属域与层（presentation / application / domain / infrastructure / bootstrap / libs）。
-2. **应用 checklist**：对每个改动文件勾选 `.cursor/agents/code-rule-check.md` §1–§16，记录违反项。
+2. **应用 checklist**：对每个改动文件勾选 `.claude/agents/code-rule-check.md` §1–§16，记录违反项。
 3. **专项问法**（按改动类型分流，至少回答触发的那一类）：
 
    - **Gateway `/v1/*` 代理改动** → 回答 §A
