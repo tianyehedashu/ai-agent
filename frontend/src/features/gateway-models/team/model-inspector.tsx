@@ -164,6 +164,7 @@ const ModelInspectorPanel = memo(function ModelInspectorPanel({
     model.capability,
     model.model_types,
     model.upstream_call_shape,
+    model.tags,
   ])
 
   const referencingRoutes = useMemo(

@@ -60,10 +60,71 @@ export function UpstreamCallShapeSelect({
   )
 }
 
+const THINKING_PARAM_OPTIONS: { value: string; label: string }[] = [
+  { value: '__auto__', label: '自动（跟随推断）' },
+  { value: 'none', label: '无（显式禁用）' },
+  { value: 'dashscope_enable_thinking', label: 'Qwen3 思考' },
+  { value: 'builtin_reasoning', label: '内置推理' },
+  { value: 'anthropic_extended', label: 'Extended Thinking' },
+  { value: 'deepseek_v4_thinking', label: 'V4 思考' },
+]
+
+const VALID_THINKING_PARAMS: readonly string[] = [
+  'dashscope_enable_thinking',
+  'builtin_reasoning',
+  'anthropic_extended',
+  'deepseek_v4_thinking',
+]
+
+export interface ThinkingParamSelectProps {
+  value: string
+  onValueChange: (value: string) => void
+  disabled?: boolean
+  id?: string
+  className?: string
+}
+
+export function ThinkingParamSelect({
+  value,
+  onValueChange,
+  disabled = false,
+  id = 'thinking-param',
+  className,
+}: ThinkingParamSelectProps): React.JSX.Element {
+  return (
+    <div className={cn('grid gap-1.5', className)}>
+      <Label htmlFor={id}>思考模式</Label>
+      <Select
+        value={value || '__auto__'}
+        onValueChange={(v) => {
+          onValueChange(v === '__auto__' ? '' : v)
+        }}
+        disabled={disabled}
+      >
+        <SelectTrigger id={id}>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {THINKING_PARAM_OPTIONS.map((opt) => (
+            <SelectItem key={opt.value} value={opt.value}>
+              {opt.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <p className="text-xs text-muted-foreground">
+        选择“自动”时由后端按模型名推断；手动指定后优先使用所选值。
+      </p>
+    </div>
+  )
+}
+
 export interface ModelCapabilityEditorValues {
   capability: string
   modelTypes: ModelType[]
   upstreamCallShape: string
+  /** 思考模式：'' 表示自动（跟随后端推断），否则为 ThinkingParam 值 */
+  thinkingParam: string
   /** 读侧推导但当前 capability 下不可编辑的历史特性（如 chat 行的 image_gen） */
   legacyModelTypes?: ModelType[]
 }
@@ -74,6 +135,8 @@ export interface ModelCapabilityEditorProps {
   disabled?: boolean
   /** 隐藏出站调用形选择（个人模型 API 不支持此字段） */
   hideUpstreamCallShape?: boolean
+  /** 隐藏思考模式选择（个人模型编辑 API 不支持 tags） */
+  hideThinkingParam?: boolean
   className?: string
 }
 
@@ -97,6 +160,7 @@ export function ModelCapabilityEditor({
   onChange,
   disabled = false,
   hideUpstreamCallShape = false,
+  hideThinkingParam = false,
   className,
 }: ModelCapabilityEditorProps): React.JSX.Element {
   const allowed = allowedProductTypes(values.capability)
@@ -189,14 +253,38 @@ export function ModelCapabilityEditor({
           disabled={disabled}
         />
       ) : null}
+
+      {!hideThinkingParam ? (
+        <ThinkingParamSelect
+          value={values.thinkingParam}
+          onValueChange={(v) => {
+            onChange({ ...values, thinkingParam: v })
+          }}
+          disabled={disabled}
+        />
+      ) : null}
     </div>
   )
+}
+
+/** 从 tags 解析 thinking_param 回显值；'' 表示 auto（跟随推断）。 */
+function resolveThinkingParamFromTags(tags?: Record<string, unknown> | null): string {
+  if (!tags) return ''
+  if (tags.thinking_param_locked === true && tags.thinking_param === 'none') {
+    return 'none'
+  }
+  const tp = tags.thinking_param
+  if (typeof tp === 'string' && tp !== 'none' && VALID_THINKING_PARAMS.includes(tp)) {
+    return tp
+  }
+  return ''
 }
 
 export function capabilityEditorValuesFromModel(model: {
   capability: string
   model_types?: string[]
   upstream_call_shape?: string | null
+  tags?: Record<string, unknown> | null
 }): ModelCapabilityEditorValues {
   const cap = CAPABILITIES.includes(model.capability as GatewayCapability)
     ? model.capability
@@ -211,6 +299,7 @@ export function capabilityEditorValuesFromModel(model: {
     capability: cap,
     modelTypes: editableTypes.length > 0 ? editableTypes : ['text'],
     upstreamCallShape: model.upstream_call_shape ?? '',
+    thinkingParam: resolveThinkingParamFromTags(model.tags),
     legacyModelTypes: legacyTypes.length > 0 ? legacyTypes : undefined,
   }
 }
@@ -220,8 +309,20 @@ export function capabilityEditorValuesFromPersonalModel(model: {
   model_types?: string[]
   upstream_call_shape?: string | null
   selector_capabilities?: Record<string, unknown>
+  tags?: Record<string, unknown> | null
 }): ModelCapabilityEditorValues {
-  return capabilityEditorValuesFromModel(model)
+  const base = capabilityEditorValuesFromModel(model)
+  // 个人模型可能无 tags 暴露，从 selector_capabilities 回显
+  if (base.thinkingParam) return base
+  const scThinking = model.selector_capabilities?.thinking_param
+  if (
+    typeof scThinking === 'string' &&
+    scThinking !== 'none' &&
+    VALID_THINKING_PARAMS.includes(scThinking)
+  ) {
+    return { ...base, thinkingParam: scThinking }
+  }
+  return base
 }
 
 export function modelCapabilityPatchFromEditor(
@@ -231,11 +332,13 @@ export function modelCapabilityPatchFromEditor(
   capability?: string
   model_types?: ModelType[]
   upstream_call_shape?: string | null
+  tags?: Record<string, unknown> | null
 } {
   const patch: {
     capability?: string
     model_types?: ModelType[]
     upstream_call_shape?: string | null
+    tags?: Record<string, unknown> | null
   } = {}
   if (values.capability !== baseline.capability) {
     patch.capability = values.capability
@@ -248,6 +351,17 @@ export function modelCapabilityPatchFromEditor(
   }
   if (values.upstreamCallShape !== baseline.upstreamCallShape) {
     patch.upstream_call_shape = values.upstreamCallShape.trim() || null
+  }
+  if (values.thinkingParam !== baseline.thinkingParam) {
+    if (values.thinkingParam === '') {
+      // auto：清除显式设置
+      patch.tags = { thinking_param: null, thinking_param_locked: null }
+    } else if (values.thinkingParam === 'none') {
+      // 显式禁用：锁定阻止推断覆盖
+      patch.tags = { thinking_param: 'none', thinking_param_locked: true }
+    } else {
+      patch.tags = { thinking_param: values.thinkingParam, thinking_param_locked: null }
+    }
   }
   return patch
 }

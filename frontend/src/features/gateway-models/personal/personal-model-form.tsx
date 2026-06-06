@@ -37,6 +37,8 @@ export interface PersonalModelFormValues {
   credential_id: string
   model_types: ModelType[]
   resync_capabilities?: boolean
+  /** 思考模式（创建时可通过 tags 传递；编辑时 API 不支持 tags） */
+  thinkingParam?: string
 }
 
 const EMPTY_FORM: PersonalModelFormValues = {
@@ -203,6 +205,7 @@ export function PersonalModelForm({
       ...form,
       model_types:
         capabilityValues.modelTypes.length > 0 ? capabilityValues.modelTypes : form.model_types,
+      thinkingParam: capabilityValues.thinkingParam,
     })
   }
 
@@ -286,6 +289,7 @@ export function PersonalModelForm({
               values={capabilityValues}
               onChange={setCapabilityValues}
               hideUpstreamCallShape
+              hideThinkingParam
             />
 
             {onResyncCapabilities ? (

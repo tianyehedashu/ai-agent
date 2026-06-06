@@ -342,7 +342,10 @@ export function PlaygroundCard({
 
   const thinkingSwitchInteractive = playgroundMode === 'chat' && thinkingFlavorMatch
 
-  const showThinkingSection = playgroundMode === 'chat' && thinkingParam !== 'builtin_reasoning'
+  const isBuiltinReasoning = playgroundMode === 'chat' && thinkingParam === 'builtin_reasoning'
+
+  const showThinkingSection =
+    playgroundMode === 'chat' && (thinkingFlavorMatch || isBuiltinReasoning)
 
   const thinkingModelHint = useMemo(
     () =>
@@ -657,7 +660,7 @@ export function PlaygroundCard({
             </div>
           ) : null}
 
-          {builtinThinkingHint ? (
+          {builtinThinkingHint && !showThinkingSection ? (
             <p className="rounded-md border border-purple-500/20 bg-purple-500/5 px-3 py-2 text-xs text-muted-foreground">
               {builtinThinkingHint}
             </p>
@@ -709,9 +712,9 @@ export function PlaygroundCard({
                 <div className="flex items-center gap-2">
                   <Switch
                     id={thinkingId}
-                    checked={thinkingSwitchInteractive ? thinkingEnabled : false}
+                    checked={thinkingSwitchInteractive ? thinkingEnabled : isBuiltinReasoning}
                     onCheckedChange={handleThinkingCheckedChange}
-                    disabled={isRunning || !thinkingSwitchInteractive}
+                    disabled={isBuiltinReasoning || isRunning || !thinkingSwitchInteractive}
                   />
                   <Label
                     htmlFor={thinkingId}
@@ -719,15 +722,22 @@ export function PlaygroundCard({
                       'text-sm',
                       thinkingSwitchInteractive
                         ? 'cursor-pointer'
-                        : 'cursor-not-allowed text-muted-foreground'
+                        : isBuiltinReasoning
+                          ? 'cursor-default text-muted-foreground'
+                          : 'cursor-not-allowed text-muted-foreground'
                     )}
                   >
                     思考模式
                   </Label>
                 </div>
-                {!thinkingSwitchInteractive && thinkingModelHint ? (
+                {!thinkingSwitchInteractive && !isBuiltinReasoning && thinkingModelHint ? (
                   <p className="text-xs leading-relaxed text-muted-foreground">
                     {thinkingModelHint}
+                  </p>
+                ) : null}
+                {isBuiltinReasoning && builtinThinkingHint ? (
+                  <p className="text-xs leading-relaxed text-muted-foreground">
+                    {builtinThinkingHint}
                   </p>
                 ) : null}
               </div>

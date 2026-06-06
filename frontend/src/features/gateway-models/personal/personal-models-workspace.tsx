@@ -355,12 +355,23 @@ export function PersonalModelsWorkspace({
   const handleCreateSubmit = useCallback(
     (values: PersonalModelFormValues): void => {
       if (!values.display_name || !values.model_id || !values.credential_id) return
+      let tags: Record<string, unknown> | undefined
+      if (values.thinkingParam) {
+        tags = {}
+        if (values.thinkingParam === 'none') {
+          tags.thinking_param = 'none'
+          tags.thinking_param_locked = true
+        } else {
+          tags.thinking_param = values.thinkingParam
+        }
+      }
       createMutation.mutate({
         display_name: values.display_name,
         provider: values.provider,
         model_id: values.model_id,
         credential_id: values.credential_id,
         model_types: values.model_types,
+        tags,
       })
     },
     [createMutation]

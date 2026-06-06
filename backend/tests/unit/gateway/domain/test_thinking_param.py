@@ -9,6 +9,7 @@ from domains.gateway.domain.thinking_param import (
     enrich_gateway_model_tags,
     infer_thinking_param,
     is_deepseek_v4_model_id,
+    is_moonshot_model,
     resolve_thinking_param_from_tags,
 )
 
@@ -159,3 +160,42 @@ def test_enrich_gateway_model_tags_respects_explicit() -> None:
         real_model="qwen3-32b",
     )
     assert out["thinking_param"] == THINKING_PARAM_BUILTIN
+
+
+# ---------- Moonshot/Kimi ----------
+
+
+def test_is_moonshot_model_by_name() -> None:
+    assert is_moonshot_model("kimi-for-coding-chat")
+    assert is_moonshot_model("kimi-for-coding")
+    assert is_moonshot_model("moonshot-v1-128k")
+    assert not is_moonshot_model("gpt-4o")
+    assert not is_moonshot_model("")
+
+
+def test_infer_moonshot_by_provider() -> None:
+    """provider=moonshot 时自动推断为 builtin reasoning。"""
+    assert (
+        infer_thinking_param(provider="moonshot", real_model="kimi-for-coding")
+        == THINKING_PARAM_BUILTIN
+    )
+
+
+def test_infer_kimi_by_model_name() -> None:
+    """即使 provider 为 openai，模型名含 kimi 也能识别。"""
+    assert (
+        infer_thinking_param(provider="openai", real_model="kimi-for-coding-chat")
+        == THINKING_PARAM_BUILTIN
+    )
+
+
+def test_enrich_moonshot_tags_auto_detect() -> None:
+    """Moonshot 模型注册时自动推断 supports_reasoning=True。"""
+    out = enrich_gateway_model_tags(
+        {},
+        provider="moonshot",
+        real_model="kimi-for-coding",
+    )
+    assert out["thinking_param"] == THINKING_PARAM_BUILTIN
+    assert out["supports_reasoning"] is True
+    assert out["temperature_policy"] == "fixed_1"

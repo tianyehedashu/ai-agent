@@ -38,6 +38,17 @@ def is_deepseek_v4_model_id(model_id: str) -> bool:
     return "deepseek-v4-pro" in model_part or "deepseek-v4-flash" in model_part
 
 
+def is_moonshot_model(model_id: str) -> bool:
+    """Moonshot/Kimi 模型：上游默认启用 thinking，tool call 多轮须回传 reasoning_content。
+
+    通过模型 ID 语义检测（不含 provider 字段），用于出站消息预处理的 fallback 路径。
+    """
+    lower = (model_id or "").strip().lower()
+    if not lower:
+        return False
+    return "moonshot" in lower or "kimi" in lower
+
+
 def _model_id_lower(provider: str, real_model: str) -> str:
     rm = (real_model or "").strip().lower()
     if "/" in rm:
@@ -88,6 +99,10 @@ def infer_thinking_param(
 
     if prov == "anthropic" and supports_reasoning:
         return THINKING_PARAM_ANTHROPIC
+
+    # Moonshot/Kimi：上游默认启用 thinking，不依赖显式参数
+    if prov == "moonshot" or is_moonshot_model(model_part):
+        return THINKING_PARAM_BUILTIN
 
     if supports_reasoning:
         return THINKING_PARAM_BUILTIN
@@ -163,5 +178,6 @@ __all__ = [
     "enrich_gateway_model_tags",
     "infer_thinking_param",
     "is_deepseek_v4_model_id",
+    "is_moonshot_model",
     "resolve_thinking_param_from_tags",
 ]

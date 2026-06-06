@@ -26,7 +26,10 @@ import {
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { CapabilityField } from '@/features/gateway-models/capability-field'
 import { MANUAL_PRESET, NO_CREDENTIAL } from '@/features/gateway-models/constants'
-import { UpstreamCallShapeSelect } from '@/features/gateway-models/model-capability-editor'
+import {
+  UpstreamCallShapeSelect,
+  ThinkingParamSelect,
+} from '@/features/gateway-models/model-capability-editor'
 import { buildPresetTags, parsePositiveInt } from '@/features/gateway-models/utils'
 import { ChevronDown, Info } from '@/lib/lucide-icons'
 import { cn } from '@/lib/utils'
@@ -42,6 +45,7 @@ interface ModelFormValues {
   rpmLimit: string
   tpmLimit: string
   upstreamCallShape: string
+  thinkingParam: string
 }
 
 const emptyForm: ModelFormValues = {
@@ -55,6 +59,7 @@ const emptyForm: ModelFormValues = {
   rpmLimit: '',
   tpmLimit: '',
   upstreamCallShape: '',
+  thinkingParam: '',
 }
 
 export interface RegisterModelFormProps {
@@ -147,6 +152,17 @@ export function RegisterModelForm({
 
   function submit(): void {
     if (!canSubmit) return
+    const presetTags = selectedPreset ? buildPresetTags(selectedPreset) : {}
+    // 手动选择的 thinkingParam 覆盖预设
+    if (values.thinkingParam) {
+      if (values.thinkingParam === 'none') {
+        presetTags.thinking_param = 'none'
+        presetTags.thinking_param_locked = true
+      } else {
+        presetTags.thinking_param = values.thinkingParam
+        delete presetTags.thinking_param_locked
+      }
+    }
     onSubmit({
       name: values.name.trim(),
       capability: values.capability,
@@ -156,7 +172,7 @@ export function RegisterModelForm({
       weight: parsePositiveInt(values.weight) ?? 1,
       rpm_limit: parsePositiveInt(values.rpmLimit),
       tpm_limit: parsePositiveInt(values.tpmLimit),
-      tags: selectedPreset ? buildPresetTags(selectedPreset) : null,
+      tags: Object.keys(presetTags).length > 0 ? presetTags : null,
       upstream_call_shape: values.upstreamCallShape.trim() || null,
     })
   }
@@ -380,6 +396,13 @@ export function RegisterModelForm({
                     Anthropic-native 需服务端开启实验开关；当前经 Gateway 代理仍以 OpenAI-compat
                     出站。
                   </p>
+                  <ThinkingParamSelect
+                    value={values.thinkingParam}
+                    onValueChange={(v) => {
+                      setValues({ ...values, thinkingParam: v })
+                    }}
+                    className="sm:col-span-2"
+                  />
                 </div>
               </CollapsibleContent>
             </Collapsible>

@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from domains.gateway.domain.thinking_param import is_deepseek_v4_model_id
+from domains.gateway.domain.thinking_param import is_deepseek_v4_model_id, is_moonshot_model
 
 _PROVIDER_MAX_OUTPUT: dict[str, int] = {
     "deepseek": 65536,
@@ -38,6 +38,17 @@ def is_deepseek_thinking_model(client_model: str, real_model: str) -> bool:
     return is_deepseek_v4_model_id(combined)
 
 
+def _needs_reasoning_content(client_model: str, real_model: str) -> bool:
+    """模型名语义检测：是否需要为 assistant tool call 消息回填 reasoning_content。
+
+    统一封装 DeepSeek / Moonshot/Kimi 等 thinking 模型的 fallback 检测，
+    供 ``preprocess_messages_for_reasoner`` 在 ``supports_reasoning`` 未设置时使用。
+    """
+    return is_deepseek_thinking_model(client_model, real_model) or (
+        is_moonshot_model(real_model) or is_moonshot_model(client_model)
+    )
+
+
 def _text_from_content(content: Any) -> str:
     """从 ``content``（str 或 content-parts list）提取纯文本。"""
     if isinstance(content, str):
@@ -61,9 +72,10 @@ def preprocess_messages_for_reasoner(
     """为 thinking 模型回填缺失的 ``reasoning_content``。
 
     当 ``supports_reasoning=True``（来自 ``ModelCapabilitySnapshot``）时，对所有
-    thinking 模型生效（Moonshot/Kimi、DeepSeek 等）；否则回退到 DeepSeek 遗留检测。
+    thinking 模型生效（Moonshot/Kimi、DeepSeek 等）；否则回退到模型名语义检测
+    （``_needs_reasoning_content``）。
     """
-    if not supports_reasoning and not is_deepseek_thinking_model(client_model, real_model):
+    if not supports_reasoning and not _needs_reasoning_content(client_model, real_model):
         return messages
     processed: list[dict[str, Any]] = []
     for msg in messages:
