@@ -14,7 +14,6 @@ from domains.gateway.infrastructure.litellm_capability_hint_adapter import (
 )
 from domains.gateway.infrastructure.repositories.model_repository import GatewayModelRepository
 from domains.tenancy.application.team_service import TeamService
-from libs.exceptions import ValidationError
 
 
 async def _seed_personal_model(
@@ -43,11 +42,16 @@ async def _seed_personal_model(
 
 
 @pytest.mark.asyncio
-async def test_update_personal_model_rejects_multiple_model_types(
+async def test_update_personal_model_accepts_multiple_model_types(
     db_session, test_user, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """个人模型编辑应与团队模型一致，支持多 model_type。"""
     tenant_id, model_id, user_uuid = await _seed_personal_model(db_session, test_user)
     writes = GatewayManagementWriteService(db_session)
+
+    def _vision_hints(_self, *, provider: str, real_model: str) -> LitellmModelInfoHints:
+        _ = provider, real_model
+        return LitellmModelInfoHints(supports_vision=True)
 
     monkeypatch.setattr(
         writes,
@@ -60,13 +64,16 @@ async def test_update_personal_model_rejects_multiple_model_types(
         AsyncMock(return_value=tenant_id),
     )
     monkeypatch.setattr(writes, "reload_litellm_router", AsyncMock(return_value=None))
+    monkeypatch.setattr(LitellmCapabilityHintAdapter, "get_model_hints", _vision_hints)
 
-    with pytest.raises(ValidationError, match="单一 model_type"):
-        await writes.update_personal_model(
-            user_uuid,
-            model_id,
-            fields={"model_types": ["text", "image"]},
-        )
+    updated = await writes.update_personal_model(
+        user_uuid,
+        model_id,
+        fields={"model_types": ["text", "image"]},
+    )
+    assert updated.tags is not None
+    assert updated.tags.get("supports_vision") is True
+    assert updated.capability == "chat"
 
 
 @pytest.mark.asyncio

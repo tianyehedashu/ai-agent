@@ -313,12 +313,15 @@ class ModelWritesMixin:
         if incoming.get("is_active") is not None:
             update_fields["enabled"] = incoming["is_active"]
         if model_types_raw is not None:
-            if len(model_types_raw) != 1:
-                raise ValidationError("个人模型编辑仅支持单一 model_type")
-            mtype = str(model_types_raw[0]).strip().lower()
-            if mtype not in PERSONAL_MODEL_TYPES:
-                raise ValidationError(f"无效的 model_type: {mtype}")
-            update_fields["capability"] = capability_for_model_type(mtype)
+            if not model_types_raw:
+                raise ValidationError("model_types 不能为空")
+            normalized_types = [str(t).strip().lower() for t in model_types_raw]
+            invalid = set(normalized_types) - PERSONAL_MODEL_TYPES
+            if invalid:
+                raise ValidationError(f"无效的模型类型: {sorted(invalid)}")
+            primary_cap = capability_for_model_type(normalized_types[0])
+            update_fields["capability"] = primary_cap
+            validate_model_types_for_capability(normalized_types, primary_cap)
         if incoming.get("display_name") is not None:
             merged_tags = dict(existing.tags or {})
             merged_tags["display_name"] = incoming["display_name"]
@@ -339,8 +342,9 @@ class ModelWritesMixin:
                 update_fields.get("capability") or existing.capability
             ).strip()
             if model_types_raw is not None:
+                normalized_types = [str(t).strip().lower() for t in model_types_raw]
                 merged_tags = tags_from_model_types(
-                    [str(model_types_raw[0]).strip().lower()],
+                    normalized_types,
                     existing_tags=merged_tags,
                     capability=effective_capability,
                 )
