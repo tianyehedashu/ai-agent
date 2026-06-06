@@ -177,12 +177,22 @@ class ModelWritesMixin:
         team_role: str,
         is_platform_admin: bool,
         mutation: str,
+        model_created_by_user_id: uuid.UUID | None = None,
     ) -> None:
         from domains.gateway.domain.policies.team_model_access import (
             assert_can_create_model_on_team_credential,
             assert_can_delete_team_model_on_credential,
             assert_can_update_team_model_on_credential,
+            actor_created_model,
         )
+
+        # 模型创建者对自己创建的模型拥有 update/delete 权限（无需检查凭据归属）
+        if mutation in ("update", "delete") and actor_user_id is not None:
+            if actor_created_model(
+                model_created_by_user_id=model_created_by_user_id,
+                actor_user_id=actor_user_id,
+            ):
+                return
 
         cred_row = await self._creds.get(credential_id)
         if cred_row is None:
@@ -274,6 +284,7 @@ class ModelWritesMixin:
                 tpm_limit=None,
                 tags=mtags,
                 enabled=enabled,
+                created_by_user_id=user_id,
             )
             created.append(row)
         if reload_router:
@@ -471,6 +482,7 @@ class ModelWritesMixin:
             tags=prepared.enriched_tags,
             upstream_call_shape=upstream_call_shape,
             enabled=enabled,
+            created_by_user_id=actor_user_id,
         )
         if reload_router:
             await self.reload_litellm_router(tenant_id=tenant_id)
@@ -603,6 +615,9 @@ class ModelWritesMixin:
         cleaned_name = (name or "").strip()
         if not cleaned_name:
             raise ValidationError("注册别名不能为空")
+
+        # 归一化 real_model，确保与 DB 中已存储的格式一致（如 openai/gpt-4o-mini）
+        real_model = build_litellm_model_id(provider, real_model)
 
         existing = await self._models.get_by_name(tenant_id, cleaned_name)
         route = await self._routes.get_by_virtual_model(tenant_id, cleaned_name)
@@ -939,6 +954,7 @@ class ModelWritesMixin:
                 team_role=team_role,
                 is_platform_admin=is_platform_admin,
                 mutation="update",
+                model_created_by_user_id=existing.created_by_user_id,
             )
             tags = existing.tags or {}
             block_rename = (
@@ -1010,6 +1026,7 @@ class ModelWritesMixin:
                 team_role=team_role,
                 is_platform_admin=is_platform_admin,
                 mutation="delete",
+                model_created_by_user_id=existing.created_by_user_id,
             )
             model_name = existing.name
             await repo.delete(model_id)

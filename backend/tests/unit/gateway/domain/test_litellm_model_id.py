@@ -8,7 +8,7 @@ from domains.gateway.domain.litellm_model_id import build_litellm_model_id
 @pytest.mark.parametrize(
     ("provider", "model_id", "expected"),
     [
-        ("openai", "gpt-4o", "gpt-4o"),
+        ("openai", "gpt-4o", "openai/gpt-4o"),
         ("anthropic", "claude-3-5-sonnet-20241022", "anthropic/claude-3-5-sonnet-20241022"),
         ("deepseek", "deepseek-chat", "deepseek/deepseek-chat"),
         ("zhipuai", "glm-4", "zai/glm-4"),

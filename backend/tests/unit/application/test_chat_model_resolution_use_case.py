@@ -55,7 +55,7 @@ class TestChatModelValidation:
 @pytest.mark.unit
 class TestBuildLitellmModel:
     def test_openai_bare_id(self):
-        assert build_litellm_model_id("openai", "gpt-4o") == "gpt-4o"
+        assert build_litellm_model_id("openai", "gpt-4o") == "openai/gpt-4o"
 
     def test_prefixes_bare_id(self):
         assert build_litellm_model_id("deepseek", "deepseek-chat") == "deepseek/deepseek-chat"

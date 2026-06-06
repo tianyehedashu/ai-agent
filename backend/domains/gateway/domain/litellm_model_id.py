@@ -7,7 +7,7 @@ LiteLLM 模型标识拼装（Gateway 出站规则，纯函数无 I/O）。
 from __future__ import annotations
 
 _PROVIDER_PREFIXES: frozenset[str] = frozenset(
-    {"anthropic", "dashscope", "deepseek", "volcengine", "moonshot"}
+    {"openai", "anthropic", "dashscope", "deepseek", "volcengine", "moonshot"}
 )
 
 

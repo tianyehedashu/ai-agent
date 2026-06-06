@@ -31,7 +31,7 @@ def test_models_to_deployments_includes_credential_model_info() -> None:
     out = _models_to_deployments([m], {cred_id: cred})
     assert len(out) == 1
     assert out[0]["model_name"] == encode_router_model_name(team_id, "my-virtual")
-    assert out[0]["litellm_params"]["model"] == "gpt-4o-mini"
+    assert out[0]["litellm_params"]["model"] == "openai/gpt-4o-mini"
     info = out[0]["model_info"]
     assert info["gateway_credential_id"] == str(cred_id)
     assert info["gateway_credential_name"] == "work"
