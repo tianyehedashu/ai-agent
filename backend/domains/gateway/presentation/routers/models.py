@@ -56,7 +56,7 @@ from domains.gateway.presentation.schemas.common import (
 from domains.identity.presentation.deps import AdminUser
 from libs.api.pagination import PageParams, page_query_params
 from libs.db.database import get_db
-from libs.exceptions import NotFoundError, PermissionDeniedError
+from libs.exceptions import ConflictError, NotFoundError, PermissionDeniedError
 
 from ._common import (
     MgmtReads,
@@ -303,7 +303,12 @@ async def create_model(
     )
     # 若注册别名已存在且凭据不同，自动转化为多凭据路由（追加到已有 Route 或新建 Route）
     existing = await reads._models.get_by_name(team.team_id, body.name)
-    if existing is not None and str(existing.credential_id) != str(body.credential_id):
+    if existing is not None:
+        if str(existing.credential_id) == str(body.credential_id):
+            raise ConflictError(
+                message=f"模型名称 '{body.name}' 在该团队中已存在且绑定了相同凭据，请勿重复添加",
+                resource="gateway model",
+            )
         model = await writes.append_credential_to_existing_model_name(
             tenant_id=team.team_id,
             name=body.name,
