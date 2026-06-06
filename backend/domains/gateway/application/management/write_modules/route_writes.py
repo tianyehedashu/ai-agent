@@ -55,6 +55,16 @@ class RouteWritesMixin:
         strategy: str,
         retry_policy: dict[str, Any],
     ) -> Any:
+        cleaned_virtual = (virtual_model or "").strip()
+        if not cleaned_virtual:
+            raise ValidationError("虚拟模型名不能为空")
+        existing = await self._routes.get_by_virtual_model_for_tenant(
+            tenant_id, cleaned_virtual
+        )
+        if existing is not None:
+            raise ValidationError(
+                f"虚拟模型名 '{cleaned_virtual}' 在当前工作区已存在路由"
+            )
         await self._validate_route_model_names(
             tenant_id,
             primary_models=primary_models,
@@ -64,7 +74,7 @@ class RouteWritesMixin:
         )
         row = await self._routes.create(
             tenant_id=tenant_id,
-            virtual_model=virtual_model,
+            virtual_model=cleaned_virtual,
             primary_models=primary_models,
             fallbacks_general=fallbacks_general,
             fallbacks_content_policy=fallbacks_content_policy,

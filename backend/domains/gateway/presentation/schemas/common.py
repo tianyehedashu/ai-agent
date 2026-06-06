@@ -800,7 +800,7 @@ class GatewayModelPresetResponse(BaseModel):
 
 
 class RouteCreate(BaseModel):
-    virtual_model: str
+    virtual_model: str = Field(..., min_length=1, max_length=200)
     primary_models: list[str]
     fallbacks_general: list[str] = Field(default_factory=list)
     fallbacks_content_policy: list[str] = Field(default_factory=list)

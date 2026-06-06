@@ -24,5 +24,4 @@ def build_litellm_model_id(provider: str, model_id: str) -> str:
         return f"{provider_key}/{model_id}"
     return model_id
 
-
 __all__ = ["build_litellm_model_id"]

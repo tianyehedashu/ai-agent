@@ -27,6 +27,9 @@ from domains.gateway.domain.policies.credential_scope import (
 from domains.gateway.domain.upstream_catalog_policy import (
     resolve_openai_compatible_models_list_url,
 )
+from domains.gateway.domain.upstream_model_name_normalize import (
+    normalize_upstream_model_id,
+)
 from domains.gateway.domain.upstream_profile_registry import get_upstream_profile
 from domains.gateway.domain.upstream_registration_match import (
     format_already_registered_reason,
@@ -387,12 +390,13 @@ class CredentialUpstreamCatalogService:
             mid: str, payload: tuple[str, tuple[str, ...]]
         ) -> dict[str, Any] | None:
             _mid, types = payload
-            display = f"{display_name_prefix} {mid}".strip() if display_name_prefix else mid
+            normalized_mid = normalize_upstream_model_id(mid)
+            display = f"{display_name_prefix} {normalized_mid}".strip() if display_name_prefix else normalized_mid
             rows = await self._writes.create_personal_models(
                 user_id,
                 display_name=display,
                 provider=provider,
-                model_id=mid,
+                model_id=normalized_mid,
                 credential_id=credential_id,
                 model_types=list(types),
                 tags=tags,
@@ -400,7 +404,7 @@ class CredentialUpstreamCatalogService:
                 reload_router=False,
             )
             registered_rows.extend((r.name, r.real_model) for r in rows)
-            return {"upstream_model_id": mid, "gateway_model_ids": [r.id for r in rows]}
+            return {"upstream_model_id": normalized_mid, "gateway_model_ids": [r.id for r in rows]}
 
         created, failed, reload_once = await _run_batch_import_loop(
             work_items,
@@ -438,13 +442,14 @@ class CredentialUpstreamCatalogService:
 
         async def import_one(mid: str, payload: tuple[str, str | None]) -> dict[str, Any] | None:
             _upstream_id, name_override = payload
-            base_name = (name_override or "").strip() or _slugify_alias(mid)
+            normalized_mid = normalize_upstream_model_id(mid)
+            base_name = (name_override or "").strip() or _slugify_alias(normalized_mid)
             unique_name = await self._unique_team_model_name(tenant_id, base_name)
             m = await self._writes.create_gateway_model(
                 tenant_id=tenant_id,
                 name=unique_name,
                 capability=capability,
-                real_model=mid,
+                real_model=normalized_mid,
                 credential_id=credential_id,
                 provider=provider,
                 weight=weight,
@@ -458,7 +463,7 @@ class CredentialUpstreamCatalogService:
                 reload_router=False,
             )
             registered_rows.append((m.name, m.real_model))
-            return {"upstream_model_id": mid, "gateway_model_id": m.id}
+            return {"upstream_model_id": normalized_mid, "gateway_model_id": m.id}
 
         created, failed, reload_once = await _run_batch_import_loop(
             work_items,
@@ -492,12 +497,13 @@ class CredentialUpstreamCatalogService:
 
         async def import_one(mid: str, payload: tuple[str, str | None]) -> dict[str, Any] | None:
             _upstream_id, name_override = payload
-            base_name = (name_override or "").strip() or _slugify_alias(mid)
+            normalized_mid = normalize_upstream_model_id(mid)
+            base_name = (name_override or "").strip() or _slugify_alias(normalized_mid)
             unique_name = await self._unique_system_model_name(base_name)
             m = await self._writes.create_system_gateway_model(
                 name=unique_name,
                 capability=capability,
-                real_model=mid,
+                real_model=normalized_mid,
                 credential_id=credential_id,
                 provider=provider,
                 weight=weight,
@@ -509,7 +515,7 @@ class CredentialUpstreamCatalogService:
                 reload_router=False,
             )
             registered_rows.append((m.name, m.real_model))
-            return {"upstream_model_id": mid, "gateway_model_id": m.id}
+            return {"upstream_model_id": normalized_mid, "gateway_model_id": m.id}
 
         created, failed, reload_once = await _run_batch_import_loop(
             work_items,

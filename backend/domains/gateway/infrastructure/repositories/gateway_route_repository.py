@@ -119,6 +119,21 @@ class GatewayRouteRepository:
         result = await self._session.execute(stmt)
         return result.scalar_one_or_none()
 
+    async def get_by_virtual_model_for_tenant(
+        self, tenant_id: uuid.UUID, virtual_model: str
+    ) -> GatewayRoute | None:
+        """检查指定租户是否存在同名虚拟路由（含已禁用），用于创建前重复检查。"""
+        stmt = (
+            select(GatewayRoute)
+            .where(
+                GatewayRoute.virtual_model == virtual_model,
+                GatewayRoute.tenant_id == tenant_id,
+            )
+            .limit(1)
+        )
+        result = await self._session.execute(stmt)
+        return result.scalar_one_or_none()
+
     async def resolve_by_virtual_model(
         self, team_id: uuid.UUID | None, virtual_model: str
     ) -> GatewayRoute | SystemGatewayRoute | None:

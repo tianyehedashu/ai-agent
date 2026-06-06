@@ -26,7 +26,6 @@ from domains.gateway.domain.errors import (
     ManagementEntityNotFoundError,
 )
 from domains.gateway.domain.litellm_capability_mapping import strip_litellm_capability_tags
-from domains.gateway.domain.litellm_model_id import build_litellm_model_id
 from domains.gateway.domain.model_types_tags import (
     tags_from_model_types,
     validate_model_types_for_capability,
@@ -125,15 +124,14 @@ def _prepare_gateway_model_write_fields(
     prefix_msg = litellm_prefix_violation_message(provider, raw_rm)
     if prefix_msg:
         raise ValidationError(prefix_msg)
-    normalized_rm = build_litellm_model_id(provider, raw_rm)
     enriched_tags = build_gateway_model_tags(
         tags,
         provider=provider,
-        real_model=normalized_rm,
+        real_model=raw_rm,
         skip_hints=is_config_managed_system_gateway_model(tags=tags),
     )
     return _PreparedGatewayModelWrite(
-        normalized_real_model=normalized_rm,
+        normalized_real_model=raw_rm,
         enriched_tags=enriched_tags,
     )
 
@@ -258,7 +256,7 @@ class ModelWritesMixin:
                 f"凭据提供商为 {cred_row.provider}，与所选 provider {provider} 不一致"
             )
         tenant_id = await self._ensure_personal_tenant_id(user_id)
-        real_model = build_litellm_model_id(provider, model_id)
+        real_model = str(model_id).strip()
         created: list[Any] = []
         for idx, mtype in enumerate(model_types):
             cap = capability_for_model_type(mtype)
@@ -318,9 +316,7 @@ class ModelWritesMixin:
                 )
             update_fields["credential_id"] = incoming["credential_id"]
         if incoming.get("model_id") is not None:
-            update_fields["real_model"] = build_litellm_model_id(
-                existing.provider, str(incoming["model_id"])
-            )
+            update_fields["real_model"] = str(incoming["model_id"]).strip()
         if incoming.get("is_active") is not None:
             update_fields["enabled"] = incoming["is_active"]
         if model_types_raw is not None:
@@ -616,8 +612,8 @@ class ModelWritesMixin:
         if not cleaned_name:
             raise ValidationError("注册别名不能为空")
 
-        # 归一化 real_model，确保与 DB 中已存储的格式一致（如 openai/gpt-4o-mini）
-        real_model = build_litellm_model_id(provider, real_model)
+        # real_model 存储上游模型 ID，不加 LiteLLM provider 前缀
+        real_model = str(real_model).strip()
 
         existing = await self._models.get_by_name(tenant_id, cleaned_name)
         route = await self._routes.get_by_virtual_model(tenant_id, cleaned_name)
@@ -844,7 +840,7 @@ class ModelWritesMixin:
             prefix_msg = litellm_prefix_violation_message(existing.provider, raw_rm)
             if prefix_msg:
                 raise ValidationError(prefix_msg)
-            update_fields["real_model"] = build_litellm_model_id(existing.provider, raw_rm)
+            update_fields["real_model"] = raw_rm
         if "upstream_call_shape" in update_fields:
             shape_raw = update_fields["upstream_call_shape"]
             if shape_raw is None or (isinstance(shape_raw, str) and not shape_raw.strip()):

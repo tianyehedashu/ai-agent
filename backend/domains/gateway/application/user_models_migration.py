@@ -13,7 +13,6 @@ from domains.gateway.application.personal_models import (
     personal_model_alias,
     tags_for_model_type,
 )
-from domains.gateway.domain.litellm_model_id import build_litellm_model_id
 from domains.gateway.infrastructure.repositories.credential_repository import (
     ProviderCredentialRepository,
 )
@@ -104,7 +103,7 @@ async def migrate_user_models_to_personal_gateway(session: AsyncSession) -> dict
             if isinstance(config, dict):
                 tags.update({k: v for k, v in config.items() if v is not None})
 
-            real_model = build_litellm_model_id(um["provider"], um["model_id"])
+            real_model = str(um["model_id"]).strip()
             row = await models.create(
                 tenant_id=team_id,
                 name=alias,
@@ -240,7 +239,7 @@ def migrate_user_models_to_personal_gateway_sync(session: Session) -> dict[str, 
             if isinstance(config, dict):
                 tags.update({k: v for k, v in config.items() if v is not None})
 
-            real_model = build_litellm_model_id(um["provider"], um["model_id"])
+            real_model = str(um["model_id"]).strip()
             row = GatewayModel(
                 tenant_id=team_id,
                 name=alias,

@@ -23,7 +23,6 @@ from domains.gateway.domain.credential_sync_policy import (
     credential_force_env_sync,
     resolve_bootstrap_api_base,
 )
-from domains.gateway.domain.litellm_model_id import build_litellm_model_id
 from domains.gateway.domain.model_capability import tags_to_capability_snapshot
 from domains.gateway.domain.policies.catalog_provider_availability import (
     build_catalog_provider_retirement_plan,
@@ -319,7 +318,7 @@ async def _sync_catalog_models(
             skipped += 1
             continue
         raw_model = model.litellm_model or model.id
-        real_model = build_litellm_model_id(model.provider, raw_model)
+        real_model = raw_model  # 存储上游模型 ID，不加 LiteLLM provider 前缀
         capability = infer_catalog_capability(model)
         tags = build_tags_from_seed_model(model)
         existing = await models_repo.get_system_by_name(model.id)

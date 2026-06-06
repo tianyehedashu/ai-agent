@@ -2,6 +2,7 @@
 
 import type { GatewayModel, GatewayRouteCreateBody } from '@/api/gateway'
 import { Button } from '@/components/ui/button'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import type { RoutingStrategy } from '@/features/gateway-models/constants'
@@ -13,7 +14,8 @@ import { RoutingStrategySelect } from '@/features/gateway-models/routes/routing-
 import { excludeModelsFromList } from '@/features/gateway-models/utils'
 import { GATEWAY_DISPLAY_CURRENCY } from '@/features/gateway-pricing/display-currency'
 import { useGatewayModelPrices } from '@/features/gateway-pricing/use-gateway-model-prices'
-import { Loader2, Route } from '@/lib/lucide-icons'
+import { ChevronDown, Loader2, Route } from '@/lib/lucide-icons'
+import { cn } from '@/lib/utils'
 
 const DEFAULT_STRATEGY: RoutingStrategy = 'simple-shuffle'
 
@@ -36,11 +38,16 @@ export function CreateRoutePanel({
   const [virtualModel, setVirtualModel] = useState('')
   const [primaryModels, setPrimaryModels] = useState<string[]>([])
   const [fallbacksGeneral, setFallbacksGeneral] = useState<string[]>([])
+  const [fallbacksContentPolicy, setFallbacksContentPolicy] = useState<string[]>([])
+  const [fallbacksContextWindow, setFallbacksContextWindow] = useState<string[]>([])
   const [strategy, setStrategy] = useState<RoutingStrategy>(DEFAULT_STRATEGY)
+  const [advancedOpen, setAdvancedOpen] = useState(false)
 
   const setPrimaryModelsAndPruneFallbacks = useCallback((next: string[]): void => {
     setPrimaryModels(next)
     setFallbacksGeneral((prev) => excludeModelsFromList(prev, next))
+    setFallbacksContentPolicy((prev) => excludeModelsFromList(prev, next))
+    setFallbacksContextWindow((prev) => excludeModelsFromList(prev, next))
   }, [])
 
   const canSubmit =
@@ -52,6 +59,8 @@ export function CreateRoutePanel({
       virtual_model: virtualModel.trim(),
       primary_models: primaryModels,
       fallbacks_general: excludeModelsFromList(fallbacksGeneral, primaryModels),
+      fallbacks_content_policy: excludeModelsFromList(fallbacksContentPolicy, primaryModels),
+      fallbacks_context_window: excludeModelsFromList(fallbacksContextWindow, primaryModels),
       strategy,
     })
   }
@@ -121,6 +130,44 @@ export function CreateRoutePanel({
               priceByName={priceByName}
               currency={GATEWAY_DISPLAY_CURRENCY}
             />
+
+            <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
+              <CollapsibleTrigger asChild>
+                <Button type="button" variant="ghost" size="sm" className="h-8 px-2 text-xs">
+                  <ChevronDown
+                    className={cn(
+                      'mr-1 h-4 w-4 transition-transform',
+                      advancedOpen && 'rotate-180'
+                    )}
+                  />
+                  更多 Fallback 分组
+                </Button>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="mt-2 space-y-3">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <RouteFallbackModelPicker
+                    models={pickerModels}
+                    selected={fallbacksContentPolicy}
+                    onSelectedChange={setFallbacksContentPolicy}
+                    disabled={isSubmitting}
+                    label="内容策略"
+                    excludeNames={primaryModels}
+                    priceByName={priceByName}
+                    currency={GATEWAY_DISPLAY_CURRENCY}
+                  />
+                  <RouteFallbackModelPicker
+                    models={pickerModels}
+                    selected={fallbacksContextWindow}
+                    onSelectedChange={setFallbacksContextWindow}
+                    disabled={isSubmitting}
+                    label="上下文窗口"
+                    excludeNames={primaryModels}
+                    priceByName={priceByName}
+                    currency={GATEWAY_DISPLAY_CURRENCY}
+                  />
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
           </>
         )}
 
