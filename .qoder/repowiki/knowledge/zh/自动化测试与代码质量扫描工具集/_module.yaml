@@ -1,0 +1,8 @@
+schema_version: 1
+module_path: scripts
+title: 自动化测试与代码质量扫描工具集
+scope:
+    - scripts/
+source_files: []
+depends_on: []
+related_to: []

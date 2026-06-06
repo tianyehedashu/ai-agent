@@ -431,12 +431,21 @@ export function PlaygroundCard({
     userEditedKeyRef.current = false
   }, [])
 
-  const outputEndpoint = useMemo(() => `${baseUrl}${endpointPath}`, [baseUrl, endpointPath])
+  /** Anthropic 兼容面使用独立的 base URL（/api/v1/anthropic/v1），其余走 OpenAI 兼容面。 */
+  const effectiveBaseUrl = useMemo(
+    () =>
+      apiFlavor === 'anthropic' ? baseUrl.replace(/\/openai\/v1\/?$/, '/anthropic/v1') : baseUrl,
+    [baseUrl, apiFlavor]
+  )
+  const outputEndpoint = useMemo(
+    () => `${effectiveBaseUrl}${endpointPath}`,
+    [effectiveBaseUrl, endpointPath]
+  )
   const outputPriceRow = useMemo(() => priceByName.get(trimmedModel), [priceByName, trimmedModel])
 
   const handleSend = (): void => {
     const params = {
-      baseUrl,
+      baseUrl: effectiveBaseUrl,
       apiKey: trimmedKey,
       model: trimmedModel,
       prompt: trimmedPrompt,
@@ -483,7 +492,7 @@ export function PlaygroundCard({
             <div className="flex min-w-0 flex-wrap items-center gap-2">
               <CardTitle className="text-base">在线试调</CardTitle>
               <span className="truncate font-mono text-xs text-muted-foreground" translate="no">
-                {baseUrl}
+                {effectiveBaseUrl}
                 {endpointPath}
               </span>
             </div>

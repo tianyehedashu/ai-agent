@@ -27,6 +27,7 @@ export function buildCapabilityModules(
   model: string
 ): CapabilityGuideModule[] {
   const authOpenai = `Authorization: Bearer ${key}`
+  const anthropicV1 = `${baseUrl.replace(/\/openai\/v1\/?$/, '/anthropic')}/v1`
   const visionPrompt = PLAYGROUND_EXAMPLE_PROMPTS.vision
   const visionImageUrl = PLAYGROUND_EXAMPLE_IMAGE_URL
 
@@ -92,7 +93,7 @@ export function buildCapabilityModules(
 )`,
       },
       anthropic: {
-        curl: `curl "${baseUrl}/messages" \\
+        curl: `curl "${anthropicV1}/messages" \\
   -H "Content-Type: application/json" \\
   -H "x-api-key: ${key}" \\
   -H "anthropic-version: 2023-06-01" \\
@@ -183,7 +184,7 @@ export function buildCapabilityModules(
 )`,
       },
       anthropic: {
-        curl: `curl "${baseUrl}/messages" \\
+        curl: `curl "${anthropicV1}/messages" \\
   -H "Content-Type: application/json" \\
   -H "x-api-key: ${key}" \\
   -H "anthropic-version: 2023-06-01" \\
@@ -271,7 +272,7 @@ await fetch("${baseUrl}/chat/completions", {
 )`,
       },
       anthropic: {
-        curl: `curl "${baseUrl}/messages" \\
+        curl: `curl "${anthropicV1}/messages" \\
   -H "Content-Type: application/json" \\
   -H "x-api-key: ${key}" \\
   -H "anthropic-version: 2023-06-01" \\
@@ -371,7 +372,7 @@ for chunk in stream:
 # )`,
       },
       anthropic: {
-        curl: `curl "${baseUrl}/messages" \\
+        curl: `curl "${anthropicV1}/messages" \\
   -H "Content-Type: application/json" \\
   -H "x-api-key: ${key}" \\
   -H "anthropic-version: 2023-06-01" \\
@@ -422,7 +423,7 @@ for chunk in stream:
     print(chunk.choices[0].delta.content or "", end="", flush=True)`,
       },
       anthropic: {
-        curl: `curl -N "${baseUrl}/messages" \\
+        curl: `curl -N "${anthropicV1}/messages" \\
   -H "Content-Type: application/json" \\
   -H "x-api-key: ${key}" \\
   -H "anthropic-version: 2023-06-01" \\
@@ -480,7 +481,7 @@ for await (const event of stream) {
 )`,
       },
       anthropic: {
-        curl: `curl "${baseUrl}/messages" \\
+        curl: `curl "${anthropicV1}/messages" \\
   -H "Content-Type: application/json" \\
   -H "x-api-key: ${key}" \\
   -H "anthropic-version: 2023-06-01" \\
@@ -543,7 +544,7 @@ except Exception as e:
       anthropic: {
         curl: `# 429 示例（限流）
 # {"type":"error","error":{"type":"rate_limit_error","message":"..."}}
-curl -i "${baseUrl}/messages" \\
+curl -i "${anthropicV1}/messages" \\
   -H "Content-Type: application/json" \\
   -H "x-api-key: ${key}" \\
   -H "anthropic-version: 2023-06-01" \\

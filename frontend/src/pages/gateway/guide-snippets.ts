@@ -110,6 +110,7 @@ export ANTHROPIC_SMALL_FAST_MODEL="claude-haiku-4-5"`,
 export function buildGuideSnippets(baseUrl: string, key: string, model: string): GuideSnippets {
   const authHeader = `Authorization: Bearer ${key}`
   const anthropicBase = baseUrl.replace(/\/openai\/v1\/?$/, '/anthropic')
+  const anthropicV1 = `${anthropicBase}/v1`
   return {
     baseUrl,
     anthropicBaseUrl: anthropicBase,
@@ -224,9 +225,9 @@ data: {"id":"chatcmpl-...","object":"chat.completion.chunk","model":"${model}","
 data: [DONE]`,
     },
     anthropic: {
-      endpoint: `POST ${baseUrl}/messages`,
+      endpoint: `POST ${anthropicV1}/messages`,
       authHeader: `x-api-key: ${key}`,
-      curl: `curl "${baseUrl}/messages" \\
+      curl: `curl "${anthropicV1}/messages" \\
   -H "Content-Type: application/json" \\
   -H "x-api-key: ${key}" \\
   -H "anthropic-version: 2023-06-01" \\
@@ -235,7 +236,7 @@ data: [DONE]`,
     "max_tokens": 1024,
     "messages": [{"role": "user", "content": "请用三句话介绍 AI Gateway 的作用。"}]
   }'`,
-      curlStream: `curl -N "${baseUrl}/messages" \\
+      curlStream: `curl -N "${anthropicV1}/messages" \\
   -H "Content-Type: application/json" \\
   -H "x-api-key: ${key}" \\
   -H "anthropic-version: 2023-06-01" \\
