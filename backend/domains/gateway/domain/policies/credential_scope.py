@@ -2,10 +2,16 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
-from domains.gateway.domain.errors import SystemCredentialAdminRequiredError
-from domains.gateway.domain.errors import TeamPermissionDeniedError
+if TYPE_CHECKING:
+    import uuid
+
+from domains.gateway.domain.errors import (
+    CredentialNotFoundError,
+    SystemCredentialAdminRequiredError,
+    TeamPermissionDeniedError,
+)
 
 GatewayModelRegistryTarget = Literal["team", "system"]
 
@@ -34,9 +40,9 @@ def team_model_credential_scope_allowed(scope: str | None) -> bool:
 def assert_user_credential_importable(
     credential: object,
     *,
-    actor_user_id: "uuid.UUID",
+    actor_user_id: uuid.UUID,
     is_platform_admin: bool,
-    tenant_id: "uuid.UUID",
+    tenant_id: uuid.UUID,
 ) -> None:
     """Assert the actor may import a user-scope credential to a team.
 
@@ -46,8 +52,6 @@ def assert_user_credential_importable(
     scope = getattr(credential, "scope", None)
     scope_id = getattr(credential, "scope_id", None)
     if scope != "user":
-        from domains.gateway.domain.errors import CredentialNotFoundError
-
         raise CredentialNotFoundError(str(getattr(credential, "id", "")))
     if scope_id == actor_user_id or is_platform_admin:
         return

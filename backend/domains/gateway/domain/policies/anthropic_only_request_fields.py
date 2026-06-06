@@ -34,6 +34,9 @@ _ANTHROPIC_ONLY_REQUEST_FIELD_ORDER: tuple[str, ...] = (
     "context_management",
     "anthropic_version",
     "anthropic_beta",
+    "output_config",
+    "container",
+    "mcp_servers",
 )
 ANTHROPIC_ONLY_REQUEST_FIELDS: frozenset[str] = frozenset(_ANTHROPIC_ONLY_REQUEST_FIELD_ORDER)
 

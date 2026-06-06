@@ -20,7 +20,10 @@ from domains.gateway.domain.litellm_credential_extra_keys import (
     credential_extra_keys_for_litellm,
     litellm_api_key_param_name,
 )
-from domains.gateway.domain.litellm_model_id import build_litellm_model_id
+from domains.gateway.domain.litellm_model_id import (
+    build_litellm_model_id,
+    resolve_litellm_custom_llm_provider,
+)
 from domains.gateway.domain.router_model_name import (
     deployment_scope_team_id,
     encode_router_model_name,
@@ -153,7 +156,7 @@ def _build_litellm_params(
     else:
         model_id = real_model
         protocol = UpstreamProtocol.OPENAI_COMPAT
-        params = {"model": model_id, "custom_llm_provider": provider}
+        params = {"model": model_id}
     encryption_key = _get_encryption_key()
     try:
         decrypted_api_key = decrypt_value(credential.api_key_encrypted, encryption_key)
@@ -176,6 +179,14 @@ def _build_litellm_params(
     )
     if endpoint:
         params["api_base"] = endpoint
+    # OpenAI-compat 出站：custom_llm_provider 必须在 endpoint 解析之后确定，
+    # 因为 ``provider=openai`` + 自定义 ``api_base``（非 OpenAI 官方端点）
+    # 必须使用 ``custom_openai``——否则 ``anthropic_messages()`` 会走
+    # Responses API（``/responses``），而自定义端点只支持 ``/chat/completions``。
+    if call_shape != UpstreamCallShape.ANTHROPIC_NATIVE:
+        params["custom_llm_provider"] = resolve_litellm_custom_llm_provider(
+            provider, api_base=endpoint
+        )
     extra = credential.extra or {}
     for key in credential_extra_keys_for_litellm(provider):
         value = extra.get(key)

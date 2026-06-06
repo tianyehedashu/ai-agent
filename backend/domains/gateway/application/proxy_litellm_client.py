@@ -131,6 +131,20 @@ class ProxyLiteLLMClient:
         )
         return await perform_dashscope_embedding(request)
 
+    @staticmethod
+    def _merge_deployment_params_into_kwargs(
+        kwargs: dict[str, Any],
+        dep: dict[str, Any],
+    ) -> None:
+        """将 deployment litellm 参数就地 merge 到 kwargs（Router fallback / direct 共用）。"""
+        dep_filtered = filter_litellm_params_for_direct_anthropic(dep)
+        litellm_model = dep_filtered.pop("model", None)
+        if litellm_model:
+            kwargs["model"] = litellm_model
+        for key, val in dep_filtered.items():
+            if key not in kwargs or kwargs.get(key) in (None, ""):
+                kwargs[key] = val
+
     async def merge_direct_deployment_litellm_params(
         self,
         kwargs: dict[str, Any],
@@ -144,13 +158,7 @@ class ProxyLiteLLMClient:
         if dep is None:
             return kwargs
         merged = dict(kwargs)
-        dep_filtered = filter_litellm_params_for_direct_anthropic(dep)
-        litellm_model = dep_filtered.pop("model", None)
-        if litellm_model:
-            merged["model"] = litellm_model
-        for key, val in dep_filtered.items():
-            if key not in merged or merged.get(key) in (None, ""):
-                merged[key] = val
+        self._merge_deployment_params_into_kwargs(merged, dep)
         return merged
 
     async def direct_anthropic_messages(self, kwargs: dict[str, Any]) -> Any:
@@ -351,6 +359,7 @@ class ProxyLiteLLMClient:
         direct_call: Callable[[], Awaitable[Any]],
         kwargs: dict[str, Any],
     ) -> Any:
+        from domains.gateway.domain.router_model_name import decode_router_model_name
         from domains.gateway.infrastructure.router_singleton import (
             ensure_gateway_callbacks,
         )
@@ -361,6 +370,20 @@ class ProxyLiteLLMClient:
         router = await ensure_router_deployment(self._session, encoded)
         router_fn = getattr(router, router_method, None)
         if not callable(router_fn):
+            # Router 不支持此方法（如 aanthropic_messages），需要从 deployment
+            # 提取凭据并 merge 到 kwargs，再走 direct 调用。
+            # 否则 kwargs 中的 model 仍是 Router 编码名（gw/t/.../），
+            # 且缺少 api_key / api_base / custom_llm_provider 等出站参数。
+            decoded = decode_router_model_name(encoded)
+            if decoded is not None:
+                team_id, client_model = decoded
+                dep = await resolve_deployment_litellm_params(
+                    self._session,
+                    team_id,
+                    client_model,
+                )
+                if dep is not None:
+                    self._merge_deployment_params_into_kwargs(kwargs, dep)
             return await direct_call()
         result = router_fn(**kwargs)
         if isinstance(result, Awaitable):

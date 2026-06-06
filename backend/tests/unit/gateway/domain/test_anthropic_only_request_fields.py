@@ -91,6 +91,19 @@ def test_strip_for_volcengine_removes_known_fields_in_place() -> None:
     assert kwargs["messages"] == [{"role": "user", "content": "hi"}]
 
 
+def test_strip_output_config_for_openai_compat_upstream() -> None:
+    """Claude Code 发送的 output_config 在 OpenAI-compat 上游必须剥离。"""
+    kwargs = {
+        "model": "glm-5-1",
+        "messages": [{"role": "user", "content": "hi"}],
+        "max_tokens": 1024,
+        "output_config": {"format": {"type": "json", "schema": {}}},
+    }
+    dropped = strip_anthropic_only_fields(kwargs, upstream_provider="openai")
+    assert dropped == ["output_config"]
+    assert "output_config" not in kwargs
+
+
 def test_strip_preserves_thinking_for_non_anthropic_upstream() -> None:
     """``thinking`` 字段不在本策略清单，由模型粒度 ``thinking_param`` 体系处理。
 
@@ -138,9 +151,15 @@ def test_strip_when_no_fields_present_returns_empty() -> None:
 
 def test_anthropic_only_field_list_is_immutable() -> None:
     assert isinstance(ANTHROPIC_ONLY_REQUEST_FIELDS, frozenset)
-    assert "context_management" in ANTHROPIC_ONLY_REQUEST_FIELDS
-    assert "anthropic_version" in ANTHROPIC_ONLY_REQUEST_FIELDS
-    assert "anthropic_beta" in ANTHROPIC_ONLY_REQUEST_FIELDS
+    for field in (
+        "context_management",
+        "anthropic_version",
+        "anthropic_beta",
+        "output_config",
+        "container",
+        "mcp_servers",
+    ):
+        assert field in ANTHROPIC_ONLY_REQUEST_FIELDS
     assert "thinking" not in ANTHROPIC_ONLY_REQUEST_FIELDS
 
 
