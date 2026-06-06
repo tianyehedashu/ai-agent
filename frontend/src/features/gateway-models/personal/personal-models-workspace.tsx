@@ -449,14 +449,18 @@ export function PersonalModelsWorkspace({
 
   const handleConfirmDeleteFiltered = useCallback((): void => {
     void (async () => {
-      const all = await fetchAllPersonalGatewayModels({
-        ...personalListQueryBase,
-        ...(healthFilter !== 'all' ? { connectivity: healthFilter } : {}),
-      })
-      if (all.length === 0) return
-      runBatchDelete(all.map((m) => m.id))
+      try {
+        const all = await fetchAllPersonalGatewayModels({
+          ...personalListQueryBase,
+          ...(healthFilter !== 'all' ? { connectivity: healthFilter } : {}),
+        })
+        if (all.length === 0) return
+        runBatchDelete(all.map((m) => m.id))
+      } catch (e) {
+        toast({ title: '删除失败', description: String(e), variant: 'destructive' })
+      }
     })()
-  }, [personalListQueryBase, healthFilter, runBatchDelete])
+  }, [personalListQueryBase, healthFilter, runBatchDelete, toast])
 
   const handleRowDelete = useCallback((id: string): void => {
     setPendingRowDeleteId(id)

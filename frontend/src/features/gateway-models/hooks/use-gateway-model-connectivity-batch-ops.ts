@@ -377,24 +377,32 @@ export function useGatewayModelConnectivityBatchOps(
 
   const handleTestAll = useCallback((): void => {
     void (async () => {
-      const all = await fetchAllFiltered()
-      populateTeamByModelId(all)
-      const testable = filterTestableForBatch(all)
-      if (testable.length === 0) return
-      startBatchTest(testable)
+      try {
+        const all = await fetchAllFiltered()
+        populateTeamByModelId(all)
+        const testable = filterTestableForBatch(all)
+        if (testable.length === 0) return
+        startBatchTest(testable)
+      } catch (e) {
+        toast({ title: '批量测试失败', description: String(e), variant: 'destructive' })
+      }
     })()
-  }, [fetchAllFiltered, filterTestableForBatch, populateTeamByModelId, startBatchTest])
+  }, [fetchAllFiltered, filterTestableForBatch, populateTeamByModelId, startBatchTest, toast])
 
   const handleTestUntested = useCallback((): void => {
     void (async () => {
-      const all = await fetchAllFiltered()
-      populateTeamByModelId(all)
-      const untested = filterUntestedConnectivityModels(all)
-      const testable = filterTestableForBatch(untested)
-      if (testable.length === 0) return
-      startBatchTest(testable)
+      try {
+        const all = await fetchAllFiltered()
+        populateTeamByModelId(all)
+        const untested = filterUntestedConnectivityModels(all)
+        const testable = filterTestableForBatch(untested)
+        if (testable.length === 0) return
+        startBatchTest(testable)
+      } catch (e) {
+        toast({ title: '批量测试失败', description: String(e), variant: 'destructive' })
+      }
     })()
-  }, [fetchAllFiltered, filterTestableForBatch, populateTeamByModelId, startBatchTest])
+  }, [fetchAllFiltered, filterTestableForBatch, populateTeamByModelId, startBatchTest, toast])
 
   const handleTestSelected = useCallback(
     (items: readonly BatchOpsRegistryItem[]): void => {
@@ -408,13 +416,17 @@ export function useGatewayModelConnectivityBatchOps(
 
   const handleResyncAll = useCallback((): void => {
     void (async () => {
-      const all = await fetchAllFiltered()
-      const resyncable = filterResyncableForBatch(all)
-      if (resyncable.length === 0) return
-      populateTeamByModelId(resyncable)
-      runBatchResync(resyncable.map((m) => m.id))
+      try {
+        const all = await fetchAllFiltered()
+        const resyncable = filterResyncableForBatch(all)
+        if (resyncable.length === 0) return
+        populateTeamByModelId(resyncable)
+        runBatchResync(resyncable.map((m) => m.id))
+      } catch (e) {
+        toast({ title: '批量同步失败', description: String(e), variant: 'destructive' })
+      }
     })()
-  }, [fetchAllFiltered, populateTeamByModelId, runBatchResync, filterResyncableForBatch])
+  }, [fetchAllFiltered, populateTeamByModelId, runBatchResync, filterResyncableForBatch, toast])
 
   const handleResyncSelected = useCallback(
     (items: readonly BatchOpsRegistryItem[]): void => {
@@ -445,31 +457,35 @@ export function useGatewayModelConnectivityBatchOps(
 
   const handleConfirmDeleteFailed = useCallback((): void => {
     void (async () => {
-      const listQueryBase = listQueryBaseRef.current
-      const all = isPersonalScope
-        ? await fetchAllPersonalGatewayModels({
-            ...(listQueryBase as PersonalModelListQuery),
-            connectivity: 'failed',
-          })
-        : scope === 'single-team' && singleTeamId
-          ? await fetchAllGatewayModelPages(singleTeamId, {
-              ...(listQueryBase as GatewayModelListQuery),
+      try {
+        const listQueryBase = listQueryBaseRef.current
+        const all = isPersonalScope
+          ? await fetchAllPersonalGatewayModels({
+              ...(listQueryBase as PersonalModelListQuery),
               connectivity: 'failed',
             })
-          : await fetchAllManagedTeamModelPages({
-              ...(listQueryBase as ListManagedTeamModelsParams),
-              connectivity: 'failed',
-            })
-      const canDelete = canDeleteModelRef.current as (model: BatchOpsRegistryItem) => boolean
-      const deletable = filterDeletableFailedModels(
-        all as readonly BatchOpsRegistryItem[],
-        canDelete
-      )
-      if (deletable.length === 0) return
-      populateTeamByModelId(deletable)
-      runBatchDelete(deletable.map((m) => m.id))
+          : scope === 'single-team' && singleTeamId
+            ? await fetchAllGatewayModelPages(singleTeamId, {
+                ...(listQueryBase as GatewayModelListQuery),
+                connectivity: 'failed',
+              })
+            : await fetchAllManagedTeamModelPages({
+                ...(listQueryBase as ListManagedTeamModelsParams),
+                connectivity: 'failed',
+              })
+        const canDelete = canDeleteModelRef.current as (model: BatchOpsRegistryItem) => boolean
+        const deletable = filterDeletableFailedModels(
+          all as readonly BatchOpsRegistryItem[],
+          canDelete
+        )
+        if (deletable.length === 0) return
+        populateTeamByModelId(deletable)
+        runBatchDelete(deletable.map((m) => m.id))
+      } catch (e) {
+        toast({ title: '删除失败模型失败', description: String(e), variant: 'destructive' })
+      }
     })()
-  }, [scope, singleTeamId, populateTeamByModelId, runBatchDelete, isPersonalScope])
+  }, [scope, singleTeamId, populateTeamByModelId, runBatchDelete, isPersonalScope, toast])
 
   const testableItems = useMemo(
     () => filterTestableConnectivityModels(registryItems as readonly BatchOpsRegistryItem[]),

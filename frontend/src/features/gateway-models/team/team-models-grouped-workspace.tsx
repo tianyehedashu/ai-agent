@@ -64,6 +64,7 @@ import {
   useGatewayWritableCollaborationTeams,
 } from '@/features/gateway-teams/use-gateway-teams'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
+import { useToast } from '@/hooks/use-toast'
 import { Plus, Search } from '@/lib/lucide-icons'
 import { buildFilterKey } from '@/lib/pagination'
 import { useCurrentUser } from '@/stores/user'
@@ -72,6 +73,7 @@ import { MODEL_PROVIDERS } from '@/types/user-model'
 import { preloadTeamModelDetailPane } from './team-model-detail-preload'
 
 export function TeamModelsGroupedWorkspace(): React.JSX.Element {
+  const { toast } = useToast()
   const memberCollaborationTeams = useGatewayMemberCollaborationTeams()
   const writableCollaborationTeams = useGatewayWritableCollaborationTeams()
   const teamNameById = useGatewayMemberTeamNameMap()
@@ -448,14 +450,18 @@ export function TeamModelsGroupedWorkspace(): React.JSX.Element {
 
   const handleConfirmDeleteFiltered = useCallback((): void => {
     void (async () => {
-      const all = await fetchAllManagedTeamModelPages({
-        ...listQueryBase,
-        ...(healthFilter !== 'all' ? { connectivity: healthFilter } : {}),
-      })
-      if (all.length === 0) return
-      runBatchDelete(all.map((m) => m.id))
+      try {
+        const all = await fetchAllManagedTeamModelPages({
+          ...listQueryBase,
+          ...(healthFilter !== 'all' ? { connectivity: healthFilter } : {}),
+        })
+        if (all.length === 0) return
+        runBatchDelete(all.map((m) => m.id))
+      } catch (e) {
+        toast({ title: '删除失败', description: String(e), variant: 'destructive' })
+      }
     })()
-  }, [listQueryBase, healthFilter, runBatchDelete])
+  }, [listQueryBase, healthFilter, runBatchDelete, toast])
 
   const handleToggleEnabled = useCallback(
     (item: ReturnType<typeof fromGatewayModel>, teamId: string, enabled: boolean) => {

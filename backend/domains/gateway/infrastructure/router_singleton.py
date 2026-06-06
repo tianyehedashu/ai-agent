@@ -473,12 +473,12 @@ async def _build_router_kwargs(
     system_credentials_repo = SystemProviderCredentialRepository(db)
     cred_ids = {m.credential_id for m in models}
     credentials: dict[Any, ProviderCredential] = {}
-    for cid in cred_ids:
-        cred = await credentials_repo.get(cid)
-        if cred is None:
-            cred = await system_credentials_repo.get(cid)  # type: ignore[assignment]
-        if cred is not None and cred.is_active:
-            credentials[cid] = cred  # type: ignore[assignment]
+    if cred_ids:
+        cred_list = await credentials_repo.list_by_ids(list(cred_ids))
+        sys_cred_list = await system_credentials_repo.list_by_ids(cred_ids)
+        for cred in [*cred_list, *sys_cred_list]:
+            if cred.is_active:
+                credentials[cred.id] = cred  # type: ignore[assignment]
 
     routes = [
         *await route_repo.list_all_active(),

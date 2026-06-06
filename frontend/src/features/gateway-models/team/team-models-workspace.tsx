@@ -73,6 +73,7 @@ import { combineFetching } from '@/features/gateway-shared/combine-fetching'
 import { useGatewayMemberTeamNameMap } from '@/features/gateway-teams/use-gateway-teams'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
+import { useToast } from '@/hooks/use-toast'
 import { lazyWithReload } from '@/lib/lazy-with-reload'
 import { Loader2, Plus, Trash2 } from '@/lib/lucide-icons'
 import { buildFilterKey, usePaginationPageForFilters } from '@/lib/pagination'
@@ -123,6 +124,7 @@ export function TeamModelsWorkspace({
       listMode === 'system' ? 'system' : 'team-collaboration',
       true
     )
+  const { toast } = useToast()
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const credentialFilter = searchParams.get('credentialId') ?? ''
@@ -581,14 +583,18 @@ export function TeamModelsWorkspace({
 
   const handleConfirmDeleteFiltered = useCallback((): void => {
     void (async () => {
-      const all = await fetchAllGatewayModelPages(teamId, {
-        ...teamListQueryBase,
-        ...(healthFilter !== 'all' ? { connectivity: healthFilter } : {}),
-      })
-      if (all.length === 0) return
-      runBatchDelete(all.map((m) => m.id))
+      try {
+        const all = await fetchAllGatewayModelPages(teamId, {
+          ...teamListQueryBase,
+          ...(healthFilter !== 'all' ? { connectivity: healthFilter } : {}),
+        })
+        if (all.length === 0) return
+        runBatchDelete(all.map((m) => m.id))
+      } catch (e) {
+        toast({ title: '删除失败', description: String(e), variant: 'destructive' })
+      }
     })()
-  }, [teamId, teamListQueryBase, healthFilter, runBatchDelete])
+  }, [teamId, teamListQueryBase, healthFilter, runBatchDelete, toast])
 
   const handleToggleEnabled = useCallback(
     (item: ReturnType<typeof fromGatewayModel>, enabled: boolean) => {

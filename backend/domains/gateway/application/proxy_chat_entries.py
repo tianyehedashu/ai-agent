@@ -90,7 +90,7 @@ async def estimate_anthropic_input_tokens(body: dict[str, Any], model: str) -> i
         if isinstance(counted, int) and counted > 0:
             return counted
     except Exception:
-        pass
+        logger.warning("token_counter failed for model=%s, falling back to estimate", model, exc_info=True)
     return estimate_anthropic_request_tokens(body)
 
 

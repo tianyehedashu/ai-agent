@@ -276,7 +276,7 @@ class ChromaVectorIndex(VectorIndexAdapter):
             coll = client.get_or_create_collection(name=collection)
             coll.delete(ids=point_ids)
         except Exception:
-            pass
+            logger.warning("Failed to delete vectors from collection=%s ids=%s", collection, point_ids[:5], exc_info=True)
 
 
 class EphemeralChromaVectorIndex(ChromaVectorIndex):
