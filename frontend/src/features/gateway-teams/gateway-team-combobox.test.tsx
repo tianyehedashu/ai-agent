@@ -3,12 +3,24 @@
  */
 
 import { render, screen } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import type { GatewayTeam } from '@/api/gateway/teams'
 import { GATEWAY_FILTER_ALL } from '@/features/gateway-usage/gateway-filter-combobox'
 
 import { GatewayTeamCombobox } from './gateway-team-combobox'
+
+vi.mock('@/stores/user', () => ({
+  useCurrentUser: () => ({ id: 'viewer-1', role: 'user' }),
+}))
+
+vi.mock('@/hooks/use-gateway-team-id', () => ({
+  useGatewayWorkspaceTeamId: () => 'team-a',
+}))
+
+vi.mock('@/stores/gateway-team', () => ({
+  useGatewayTeamStore: () => [],
+}))
 
 const TEAM_A: GatewayTeam = {
   id: 'team-a',
