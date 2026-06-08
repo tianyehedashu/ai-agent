@@ -1,4 +1,4 @@
-﻿import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 
 import { Link } from 'react-router-dom'
 
@@ -28,7 +28,6 @@ import { RoutingStrategySelect } from '@/features/gateway-models/routes/routing-
 import { excludeModelsFromList, stringArraysEqual } from '@/features/gateway-models/utils'
 import { GATEWAY_DISPLAY_CURRENCY } from '@/features/gateway-pricing/display-currency'
 import { useGatewayModelPrices } from '@/features/gateway-pricing/use-gateway-model-prices'
-import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { ChevronDown, Loader2 } from '@/lib/lucide-icons'
 import { cn } from '@/lib/utils'
 
@@ -64,8 +63,9 @@ function RouteTopologyForm({
   onSave,
   onDelete,
 }: RouteTopologyFormProps): React.JSX.Element {
-  const { canWrite } = useGatewayPermission()
-  const editable = canWrite && !readOnly
+  // readOnly 已由父组件基于路由所属团队角色判断（canManageTeamRoutes），
+  // 无需再用 canWrite（基于当前工作区团队）做冗余检查——跨团队视图下二者可能不一致。
+  const editable = !readOnly
   const { byName: priceByName } = useGatewayModelPrices(GATEWAY_DISPLAY_CURRENCY)
 
   const modelsByName = useMemo(() => new Map(models.map((m) => [m.name, m])), [models])
@@ -164,11 +164,11 @@ function RouteTopologyForm({
             />
             <span className="text-sm text-muted-foreground">{enabled ? '已启用' : '已禁用'}</span>
           </div>
-        ) : readOnly ? (
+        ) : (
           <p className="mt-2 text-xs text-muted-foreground">
             系统级路由，仅可查看；团队可创建同名路由覆盖。
           </p>
-        ) : null}
+        )}
       </div>
 
       <div className="flex-1 space-y-4 overflow-y-auto p-4">
