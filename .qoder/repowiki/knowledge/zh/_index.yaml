@@ -2,11 +2,11 @@
 schema_version: 1
 locale: zh-CN
 branch: main
-exported_at: "2026-06-06T10:15:52Z"
+exported_at: "2026-06-06T11:44:12Z"
 modules:
     "":
-        dir_name: AI Agent 全栈平台工程化体系
-        title: AI Agent 全栈平台工程化体系
+        dir_name: AI Agent 全栈工程化与质量治理体系
+        title: AI Agent 全栈工程化与质量治理体系
         scope:
             - .agents\skills\code-check\SKILL.md
             - .agents\skills\database-schema\SKILL.md
@@ -130,22 +130,22 @@ modules:
             - .github\workflows\sonarcloud.yml
             - .github\workflows\typecheck.yml
             - .gitignore
-            - .qoder\repowiki\knowledge\zh\AI Agent 全栈平台工程化体系\_module.yaml
-            - .qoder\repowiki\knowledge\zh\AI Agent 全栈平台工程化体系\架构设计.md
-            - .qoder\repowiki\knowledge\zh\AI Agent 全栈平台工程化体系\概述.md
-            - .qoder\repowiki\knowledge\zh\AI Agent 全栈平台工程化体系\编码规范.md
+            - .qoder\repowiki\knowledge\zh\AI Agent 全栈工程化与质量治理体系\_module.yaml
+            - .qoder\repowiki\knowledge\zh\AI Agent 全栈工程化与质量治理体系\架构设计.md
+            - .qoder\repowiki\knowledge\zh\AI Agent 全栈工程化与质量治理体系\概述.md
+            - .qoder\repowiki\knowledge\zh\AI Agent 全栈工程化与质量治理体系\编码规范.md
+            - .qoder\repowiki\knowledge\zh\AI Agent 前端应用与 AI Gateway 控制台\_module.yaml
+            - .qoder\repowiki\knowledge\zh\AI Agent 前端应用与 AI Gateway 控制台\技术栈.md
+            - .qoder\repowiki\knowledge\zh\AI Agent 前端应用与 AI Gateway 控制台\架构设计.md
+            - .qoder\repowiki\knowledge\zh\AI Agent 前端应用与 AI Gateway 控制台\概述.md
+            - .qoder\repowiki\knowledge\zh\AI Agent 前端应用与 AI Gateway 控制台\特殊配置与命令.md
+            - .qoder\repowiki\knowledge\zh\AI Agent 前端应用与 AI Gateway 控制台\编码规范.md
             - .qoder\repowiki\knowledge\zh\AI Agent 后端服务\_module.yaml
             - .qoder\repowiki\knowledge\zh\AI Agent 后端服务\技术栈.md
             - .qoder\repowiki\knowledge\zh\AI Agent 后端服务\架构设计.md
             - .qoder\repowiki\knowledge\zh\AI Agent 后端服务\概述.md
             - .qoder\repowiki\knowledge\zh\AI Agent 后端服务\特殊配置与命令.md
             - .qoder\repowiki\knowledge\zh\AI Agent 后端服务\编码规范.md
-            - .qoder\repowiki\knowledge\zh\AI 网关与智能体前端应用\_module.yaml
-            - .qoder\repowiki\knowledge\zh\AI 网关与智能体前端应用\技术栈.md
-            - .qoder\repowiki\knowledge\zh\AI 网关与智能体前端应用\架构设计.md
-            - .qoder\repowiki\knowledge\zh\AI 网关与智能体前端应用\概述.md
-            - .qoder\repowiki\knowledge\zh\AI 网关与智能体前端应用\特殊配置与命令.md
-            - .qoder\repowiki\knowledge\zh\AI 网关与智能体前端应用\编码规范.md
             - .qoder\repowiki\knowledge\zh\_index.yaml
             - .qoder\repowiki\knowledge\zh\多环境部署与网关接入\_module.yaml
             - .qoder\repowiki\knowledge\zh\多环境部署与网关接入\技术栈.md
@@ -334,6 +334,8 @@ modules:
             - backend\.env.test
             - backend\.pre-commit-config.yaml
             - backend\.pylintrc
+            - backend\.pytest-basetemp-00efb8a7\test_inlines_relative_listing_0\images\abc.png
+            - backend\.pytest-basetemp-00efb8a7\test_resolve_catalog_seed_mode0\seed.json
             - backend\.pytest-basetemp-012dbc20\test_inlines_relative_listing_0\images\abc.png
             - backend\.pytest-basetemp-012dbc20\test_resolve_catalog_seed_mode0\seed.json
             - backend\.pytest-basetemp-08b8c69f\test_path_traversal_blocked0\eb0d3012909b4c318503f1a1d450ce97.png
@@ -426,6 +428,8 @@ modules:
             - backend\.pytest-basetemp-4a90db91\test_resolve_catalog_seed_mode0\seed.json
             - backend\.pytest-basetemp-4a90db91\test_returns_path_when_file_ex0\images\abc.png
             - backend\.pytest-basetemp-4ac53d62\test_load_benchmark_json0\gaia_test.json
+            - backend\.pytest-basetemp-4bead686\test_inlines_relative_listing_0\images\abc.png
+            - backend\.pytest-basetemp-4bead686\test_resolve_catalog_seed_mode0\seed.json
             - backend\.pytest-basetemp-4ff6ddb4\test_inlines_relative_listing_0\images\abc.png
             - backend\.pytest-basetemp-4ff6ddb4\test_resolve_catalog_seed_mode0\seed.json
             - backend\.pytest-basetemp-6a5f0d67\test_inlines_relative_listing_0\images\abc.png
@@ -474,6 +478,8 @@ modules:
             - backend\.pytest-basetemp-8f9eabfe\test_save_bytes_returns_serve_0\f139cb98a1014c118cbea8a3e46080f2.png
             - backend\.pytest-basetemp-8f9eabfe\test_save_config0\config\new_config.toml
             - backend\.pytest-basetemp-8f9eabfe\test_validate_invalid_config0\config\execution.toml
+            - backend\.pytest-basetemp-930f2cb5\test_inlines_relative_listing_0\images\abc.png
+            - backend\.pytest-basetemp-930f2cb5\test_resolve_catalog_seed_mode0\seed.json
             - backend\.pytest-basetemp-9a74253d\test_inlines_relative_listing_0\images\abc.png
             - backend\.pytest-basetemp-9c708a68\test_clear_cache0\config\execution.toml
             - backend\.pytest-basetemp-9c708a68\test_clear_cache1\config\execution.toml
@@ -515,8 +521,11 @@ modules:
             - backend\.pytest-basetemp-9de9fbed\test_remove_sandbox_no_cleanup0\sandbox-workspace\test_file.txt
             - backend\.pytest-basetemp-9de9fbed\test_service_can_load_for_any_0\config\execution.toml
             - backend\.pytest-basetemp-9ed5d7c9\test_inlines_relative_listing_0\images\abc.png
+            - backend\.pytest-basetemp-ca04e82f\test_resolve_catalog_seed_mode0\seed.json
             - backend\.pytest-basetemp-d5c8e523\test_inlines_relative_listing_0\images\abc.png
             - backend\.pytest-basetemp-d5c8e523\test_resolve_catalog_seed_mode0\seed.json
+            - backend\.pytest-basetemp-dd32b0ad\test_inlines_relative_listing_0\images\abc.png
+            - backend\.pytest-basetemp-dd32b0ad\test_resolve_catalog_seed_mode0\seed.json
             - backend\.review_diff.txt
             - backend\.ruff_cache\.gitignore
             - backend\.ruff_cache\0.14.11\10006887384680293972
@@ -9999,22 +10008,13 @@ modules:
             - backend\data\storage\images\60449e0689d443b8932bf3d6ee36e9d3.png
             - backend\data\storage\images\6bab360abd1846569b8d8c4b5c1c8cf8.png
             - backend\data\storage\images\6d96728cbbc249039bacaa4864212a61.png
-            - backend\data\storage\images\7404a9e043f54b80ae87aea09a6fa7b2.jpg
-            - backend\data\storage\images\7912f698977e47399cf4dfc16e89ff93.jpg
-            - backend\data\storage\images\7a6b9d308ce2456ca1c7350893a934a7.png
-            - backend\data\storage\images\7d53ebad9d524126a3f5cba3164555fe.png
-            - backend\data\storage\images\7e5de263fbb04ca9bda4416f8708d817.png
-            - backend\data\storage\images\7ebf0d2fa195489893eecf90c3d31faf.png
-            - backend\data\storage\images\83446e65ef2f43a1970f31728b73b1a7.png
-            - backend\data\storage\images\864bfbae6d4a454095d23b6168ede287.png
-            - backend\data\storage\images\882bf617344a447e9eadddb57dc3388c.png
         source_files: []
         children: []
         depends_on: []
         related_to: []
     backend:
-        dir_name: AI Agent 后端服务与多租户网关
-        title: AI Agent 后端服务与多租户网关
+        dir_name: AI Agent 后端服务
+        title: AI Agent 后端服务
         scope:
             - backend/
         source_files: []
@@ -10023,6 +10023,7 @@ modules:
         related_to:
             - path: frontend
             - path: deploy
+            - path: scripts
     deploy:
         dir_name: 多环境部署与网关接入
         title: 多环境部署与网关接入
@@ -10033,6 +10034,7 @@ modules:
         depends_on: []
         related_to:
             - path: backend
+            - path: frontend
     docs:
         dir_name: 项目级工程规范与架构文档中心
         title: 项目级工程规范与架构文档中心
@@ -10043,8 +10045,8 @@ modules:
         depends_on: []
         related_to: []
     frontend:
-        dir_name: AI Agent 前端应用与网关控制台
-        title: AI Agent 前端应用与网关控制台
+        dir_name: AI Agent 前端应用与 AI Gateway 控制台
+        title: AI Agent 前端应用与 AI Gateway 控制台
         scope:
             - frontend/
         source_files: []
@@ -10052,6 +10054,8 @@ modules:
         depends_on: []
         related_to:
             - path: backend
+            - path: deploy
+            - path: scripts
     scripts:
         dir_name: 自动化测试与代码质量扫描工具集
         title: 自动化测试与代码质量扫描工具集
@@ -10060,4 +10064,6 @@ modules:
         source_files: []
         children: []
         depends_on: []
-        related_to: []
+        related_to:
+            - path: backend
+            - path: frontend

@@ -6,7 +6,12 @@ import uuid
 
 import pytest
 
-from domains.gateway.application.model_or_route_resolution import resolve_model_or_route
+from bootstrap.config import settings
+from domains.gateway.application.model_or_route_resolution import (
+    GatewayModelResolveSnapshot,
+    resolve_model_or_route,
+)
+from domains.gateway.application.resolve_model_cache import clear_resolve_model_cache_for_tests
 from domains.gateway.infrastructure.repositories.model_repository import (
     GatewayModelRepository,
     GatewayRouteRepository,
@@ -39,6 +44,44 @@ async def test_resolve_returns_gateway_model_when_name_matches(db_session, test_
     assert resolved.route is None
     assert resolved.via_route is None
     assert resolved.record.id == model.id
+
+
+@pytest.mark.asyncio
+async def test_resolve_cache_returns_snapshot_after_session_expunge(
+    db_session, test_user, monkeypatch
+) -> None:
+    """缓存命中不应返回 SQLAlchemy ORM 实例，避免 Session 关闭后属性刷新失败。"""
+    monkeypatch.setattr(settings, "gateway_resolve_model_cache_enabled", True)
+    clear_resolve_model_cache_for_tests()
+    try:
+        team = await TeamService(db_session).ensure_personal_team(test_user.id)
+        cred = await _seed_cred(db_session, team.id, f"resolve-cache-{uuid.uuid4().hex[:6]}")
+        name = f"vm-cache-{uuid.uuid4().hex[:6]}"
+        model = await GatewayModelRepository(db_session).create(
+            tenant_id=team.id,
+            name=name,
+            capability="chat",
+            real_model="gpt-4o-mini",
+            credential_id=cred.id,
+            provider="openai",
+        )
+        await db_session.flush()
+        model_id = model.id
+
+        first = await resolve_model_or_route(db_session, team.id, name)
+        assert first is not None
+        assert first.record.id == model_id
+
+        db_session.sync_session.expunge_all()
+
+        second = await resolve_model_or_route(db_session, team.id, name)
+        assert second is not None
+        assert isinstance(second.record, GatewayModelResolveSnapshot)
+        assert second.record.id == model_id
+        assert second.record.provider == "openai"
+        assert second.record.real_model == "gpt-4o-mini"
+    finally:
+        clear_resolve_model_cache_for_tests()
 
 
 @pytest.mark.asyncio

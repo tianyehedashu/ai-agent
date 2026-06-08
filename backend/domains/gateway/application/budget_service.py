@@ -32,6 +32,42 @@ PERIOD_DAILY = "daily"
 PERIOD_MONTHLY = "monthly"
 PERIOD_TOTAL = "total"
 
+_RESERVE_LUA_SCRIPT = """
+local key = KEYS[1]
+local incr_requests = tonumber(ARGV[1])
+local incr_tokens = tonumber(ARGV[2])
+local limit_requests = tonumber(ARGV[3])
+local limit_tokens = tonumber(ARGV[4])
+local expire_seconds = tonumber(ARGV[5])
+
+local requests_val = 0
+if incr_requests > 0 then
+    requests_val = redis.call('HINCRBY', key, 'requests', 1)
+    if expire_seconds > 0 then
+        redis.call('EXPIRE', key, expire_seconds)
+    end
+    if limit_requests > 0 and requests_val > limit_requests then
+        redis.call('HINCRBY', key, 'requests', -1)
+        return {-1, requests_val}
+    end
+end
+
+if incr_tokens > 0 then
+    local tokens_val = redis.call('HINCRBY', key, 'tokens', incr_tokens)
+    if expire_seconds > 0 then
+        redis.call('EXPIRE', key, expire_seconds)
+    end
+    if limit_tokens > 0 and tokens_val > limit_tokens then
+        if incr_requests > 0 then
+            redis.call('HINCRBY', key, 'requests', -1)
+        end
+        redis.call('HINCRBY', key, 'tokens', -incr_tokens)
+        return {0, tokens_val}
+    end
+end
+return {1, 0}
+"""
+
 
 def _model_segment_hash(model_name: str) -> str:
     return hashlib.sha256(model_name.encode("utf-8")).hexdigest()[:16]
@@ -375,7 +411,7 @@ class BudgetService:
         credential_id: uuid.UUID | str | None = None,
         tenant_id: uuid.UUID | str | None = None,
     ) -> tuple[int, int]:
-        """预扣请求名额与/或 token 估算（防止并发穿透）。
+        """预扣请求名额与/或 token 估算（Lua 原子化，防止并发穿透）。
 
         返回 ``(reserved_requests, reserved_tokens)``。
         """
@@ -397,45 +433,39 @@ class BudgetService:
             tenant_segment=tenant_seg,
         )
 
-        reserved_requests = 0
-        reserved_tokens = 0
+        expire = 90000 if period == PERIOD_DAILY else (86400 * 35 if period == PERIOD_MONTHLY else 0)
+        do_incr_requests = 1 if reserve_requests else 0
 
-        if reserve_requests:
-            assert limit_requests is not None
-            new_value = await client.hincrby(key, "requests", 1)
-            reserved_requests = 1
-            if period == PERIOD_DAILY:
-                await client.expire(key, 90000)
-            elif period == PERIOD_MONTHLY:
-                await client.expire(key, 86400 * 35)
-            if new_value > limit_requests:
-                await client.hincrby(key, "requests", -1)
-                raise BudgetExceededError(
-                    scope=target_kind,
-                    period=period,
-                    limit=float(limit_requests),
-                    used=float(new_value - 1),
-                )
+        result = await client.eval(
+            _RESERVE_LUA_SCRIPT,
+            1,
+            key,
+            do_incr_requests,
+            int(estimate_tokens if reserve_tokens else 0),
+            int(limit_requests or 0),
+            int(limit_tokens or 0),
+            int(expire),
+        )
+        assert isinstance(result, (list, tuple)) and len(result) >= 1
+        status = int(result[0])
 
-        if reserve_tokens:
-            assert limit_tokens is not None
-            new_tokens = await client.hincrby(key, "tokens", estimate_tokens)
-            reserved_tokens = estimate_tokens
-            if period == PERIOD_DAILY:
-                await client.expire(key, 90000)
-            elif period == PERIOD_MONTHLY:
-                await client.expire(key, 86400 * 35)
-            if new_tokens > limit_tokens:
-                if reserved_requests:
-                    await client.hincrby(key, "requests", -1)
-                await client.hincrby(key, "tokens", -estimate_tokens)
-                raise BudgetExceededError(
-                    scope=target_kind,
-                    period=period,
-                    limit=float(limit_tokens),
-                    used=float(new_tokens - estimate_tokens),
-                )
-
+        if status == -1:
+            raise BudgetExceededError(
+                scope=target_kind,
+                period=period,
+                limit=float(limit_requests or 0),
+                used=float(result[1]) - 1,
+            )
+        if status == 0:
+            raise BudgetExceededError(
+                scope=target_kind,
+                period=period,
+                limit=float(limit_tokens or 0),
+                used=float(result[1]) - estimate_tokens,
+            )
+        # status == 1: success
+        reserved_requests = 1 if reserve_requests else 0
+        reserved_tokens = estimate_tokens if reserve_tokens else 0
         return (reserved_requests, reserved_tokens)
 
     async def release(

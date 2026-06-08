@@ -5,7 +5,8 @@ description: Reviews code changes for compliance with project standards includin
 
 # 代码审查
 
-对当前改动做 **规范 + DDD 分层 + 重复/遗留** 审核，输出可执行建议。
+对当前改动做 **规范 + DDD 分层 + 重复/遗留+面向对象** 审核，输出可执行建议；
+功能正确是前提；
 
 > 规则真源：
 >

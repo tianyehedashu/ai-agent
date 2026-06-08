@@ -13,6 +13,7 @@ from domains.gateway.application.proxy_chat_pipeline import (
     apply_timing_to_metadata,
     prepare_chat_proxy_request,
 )
+from domains.gateway.application.proxy_litellm_client import apply_upstream_timeout
 from domains.gateway.application.proxy_response_adapter import (
     adapt_anthropic_response,
     adapt_anthropic_stream,
@@ -149,6 +150,7 @@ class ProxyChatMixin:
             encoded = str(prepared.kwargs.get("model") or "")
             ensure_litellm_router_team_metadata(prepared.kwargs, ctx.team_id)
             router = await ensure_router_deployment(self.session, encoded)
+            apply_upstream_timeout(prepared.kwargs)
             return await router.acompletion(**prepared.kwargs)
 
         upstream_started = time.perf_counter()

@@ -50,6 +50,17 @@ if TYPE_CHECKING:
     from domains.gateway.application.proxy_context import ProxyContext
 
 
+def apply_upstream_timeout(kwargs: dict[str, Any]) -> dict[str, Any]:
+    """向 LiteLLM kwargs 注入上游超时配置。"""
+    timeout = settings.gateway_upstream_timeout_seconds
+    stream_timeout = settings.gateway_upstream_stream_timeout_seconds
+    if timeout > 0 and "timeout" not in kwargs:
+        kwargs["timeout"] = timeout
+    if stream_timeout > 0 and "stream_timeout" not in kwargs:
+        kwargs["stream_timeout"] = stream_timeout
+    return kwargs
+
+
 class ProxyLiteLLMClient:
     """封装代理用例对 LiteLLM Router 与直连 API 的技术调用。"""
 
@@ -91,6 +102,7 @@ class ProxyLiteLLMClient:
         )
 
         ensure_gateway_callbacks()
+        apply_upstream_timeout(kwargs)
         return await acompletion(**kwargs)
 
     async def direct_embedding(self, kwargs: dict[str, Any]) -> Any:
@@ -101,6 +113,7 @@ class ProxyLiteLLMClient:
         )
 
         ensure_gateway_callbacks()
+        apply_upstream_timeout(kwargs)
         return await aembedding(**kwargs)
 
     async def dashscope_direct_embedding(
@@ -169,6 +182,7 @@ class ProxyLiteLLMClient:
         )
 
         ensure_gateway_callbacks()
+        apply_upstream_timeout(kwargs)
         return await litellm_anthropic_messages(**kwargs)
 
     async def router_anthropic_messages(self, kwargs: dict[str, Any]) -> Any:
@@ -186,6 +200,7 @@ class ProxyLiteLLMClient:
         )
 
         ensure_gateway_callbacks()
+        apply_upstream_timeout(kwargs)
         return await aspeech(**kwargs)
 
     async def router_speech(self, kwargs: dict[str, Any]) -> Any:
@@ -203,6 +218,7 @@ class ProxyLiteLLMClient:
         )
 
         ensure_gateway_callbacks()
+        apply_upstream_timeout(kwargs)
         return await arerank(**kwargs)
 
     async def router_rerank(self, kwargs: dict[str, Any]) -> Any:
@@ -220,6 +236,7 @@ class ProxyLiteLLMClient:
         )
 
         ensure_gateway_callbacks()
+        apply_upstream_timeout(kwargs)
         return await amoderation(**kwargs)
 
     async def router_moderation(self, kwargs: dict[str, Any]) -> Any:
@@ -237,6 +254,7 @@ class ProxyLiteLLMClient:
         )
 
         ensure_gateway_callbacks()
+        apply_upstream_timeout(kwargs)
         return await aimage_generation(**kwargs)
 
     async def router_image_generation(self, kwargs: dict[str, Any]) -> Any:
@@ -254,6 +272,7 @@ class ProxyLiteLLMClient:
         )
 
         ensure_gateway_callbacks()
+        apply_upstream_timeout(kwargs)
         return await atranscription(**kwargs)
 
     async def router_transcription(self, kwargs: dict[str, Any]) -> Any:
@@ -343,6 +362,7 @@ class ProxyLiteLLMClient:
         )
 
         ensure_gateway_callbacks()
+        apply_upstream_timeout(kwargs)
         return await avideo_generation(**kwargs)
 
     async def router_video_generation(self, kwargs: dict[str, Any]) -> Any:
@@ -365,6 +385,7 @@ class ProxyLiteLLMClient:
         )
 
         ensure_gateway_callbacks()
+        apply_upstream_timeout(kwargs)
         encoded = str(kwargs.get("model") or "")
         ensure_litellm_router_team_metadata(kwargs)
         router = await ensure_router_deployment(self._session, encoded)
@@ -391,4 +412,4 @@ class ProxyLiteLLMClient:
         return result
 
 
-__all__ = ["ProxyLiteLLMClient"]
+__all__ = ["ProxyLiteLLMClient", "apply_upstream_timeout"]

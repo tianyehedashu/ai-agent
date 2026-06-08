@@ -1,6 +1,6 @@
 schema_version: 1
 module_path: backend
-title: AI Agent 后端服务与多租户网关
+title: AI Agent 后端服务
 scope:
     - backend/
 source_files: []
@@ -8,3 +8,4 @@ depends_on: []
 related_to:
     - path: frontend
     - path: deploy
+    - path: scripts

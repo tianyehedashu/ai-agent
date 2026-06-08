@@ -7,6 +7,7 @@ Anthropic Messages API 兼容入口（挂载于 ``{ROOT}/api/v1/anthropic``，ro
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncIterator
 from typing import Annotated, Any, cast
 
@@ -101,8 +102,12 @@ async def create_message(
         stream = cast("AsyncIterator[bytes]", result)
 
         async def _sse() -> AsyncIterator[bytes]:
-            async for part in stream:
-                yield part
+            try:
+                async for part in stream:
+                    yield part
+            except asyncio.CancelledError:
+                logger.debug("Anthropic SSE client disconnected; aborting upstream stream")
+                raise
 
         return StreamingResponse(
             _sse(),

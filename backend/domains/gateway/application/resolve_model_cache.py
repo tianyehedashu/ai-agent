@@ -1,21 +1,18 @@
-"""``resolve_model_or_route`` 进程内 LRU + TTL 缓存（存 resolved 数据指针，免 hydrate 回表）。
+"""``resolve_model_or_route`` 进程内 LRU + TTL 缓存。
 
-v2: 缓存改为直接缓存 ``ResolvedModelName``（带 ORM 对象引用），
-命中时无需 DB 回表。ORM 对象在 TTL 内可能 stale，但模型注册、路由
-的修改频率极低（通过管理面），60s TTL 内的不一致可接受。
+正缓存保存 ``ResolvedModelName`` 的纯值快照，避免把 SQLAlchemy ORM 实例带出原 Session；
+负缓存保存无解析结果标记。
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import time
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING
 from uuid import UUID
 
 if TYPE_CHECKING:
     from domains.gateway.application.model_or_route_resolution import ResolvedModelName
 
-# 直接用 ResolvedModelName 作为正值缓存，无需额外的 PositiveResolveCacheEntry
 _NEGATIVE_ENTRY = object()  # 负缓存标记（无 resolve）
 _CACHE: dict[tuple[UUID, UUID | None, str], tuple[object, float]] = {}
 _TTL_SEC = 60.0
@@ -34,7 +31,7 @@ def peek_resolve_cache_entry(
     *,
     user_id: UUID | None,
 ) -> object:
-    """命中返回 ``ResolvedModelName``（正）/ ``None``（负）；未命中返回 ``CACHE_MISS``。"""
+    """命中返回缓存安全 ``ResolvedModelName``（正）/ ``None``（负）；未命中返回 ``CACHE_MISS``。"""
     cleaned = name.strip()
     if not cleaned:
         return None
@@ -56,7 +53,7 @@ def put_resolve_cache_entry(
     name: str,
     *,
     user_id: UUID | None,
-    resolved: object,
+    resolved: ResolvedModelName | None,
 ) -> None:
     cleaned = name.strip()
     if not cleaned:
@@ -64,7 +61,14 @@ def put_resolve_cache_entry(
     if len(_CACHE) >= _MAX_ENTRIES:
         _evict_oldest()
     key = _cache_key(team_id, cleaned, user_id=user_id)
-    payload = _NEGATIVE_ENTRY if resolved is None else resolved
+    if resolved is None:
+        payload = _NEGATIVE_ENTRY
+    else:
+        from domains.gateway.application.model_or_route_resolution import (
+            cache_safe_resolved_model_name,
+        )
+
+        payload = cache_safe_resolved_model_name(resolved)
     _CACHE[key] = (payload, time.monotonic())
 
 

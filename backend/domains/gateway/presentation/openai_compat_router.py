@@ -15,6 +15,7 @@ OpenAI 兼容入口（挂载于 ``{ROOT}/api/v1/openai``，router 前缀 ``/v1``
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncIterator
 from typing import Annotated, Any, cast
 
@@ -87,9 +88,15 @@ async def chat_completions(
         stream = cast("AsyncIterator[dict[str, Any]]", result)
 
         async def _sse() -> AsyncIterator[bytes]:
-            async for chunk in stream:
-                yield b"data: " + orjson.dumps(chunk) + b"\n\n"
-            yield b"data: [DONE]\n\n"
+            try:
+                async for chunk in stream:
+                    yield b"data: " + orjson.dumps(chunk) + b"\n\n"
+                yield b"data: [DONE]\n\n"
+            except asyncio.CancelledError:
+                logger.debug("SSE client disconnected; aborting upstream stream")
+                # 客户端断开时结束生成器，LiteLLM 会通过 stream_timeout 感知
+                # 并关闭底层 HTTP 连接，避免上游连接泄漏。
+                raise
 
         return StreamingResponse(
             _sse(),

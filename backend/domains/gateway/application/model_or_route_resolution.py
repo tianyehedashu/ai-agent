@@ -11,7 +11,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from datetime import datetime
+from typing import TYPE_CHECKING, Any
+import uuid
 
 from domains.gateway.application.gateway_model_listing import resolve_by_name_visible
 from domains.gateway.infrastructure.repositories.gateway_route_repository import (
@@ -19,8 +21,6 @@ from domains.gateway.infrastructure.repositories.gateway_route_repository import
 )
 
 if TYPE_CHECKING:
-    import uuid
-
     from sqlalchemy.ext.asyncio import AsyncSession
 
     from domains.gateway.infrastructure.models.gateway_model import GatewayModel
@@ -29,6 +29,56 @@ if TYPE_CHECKING:
         SystemGatewayModel,
         SystemGatewayRoute,
     )
+
+
+@dataclass(frozen=True, slots=True)
+class GatewayModelResolveSnapshot:
+    """``GatewayModel``/``SystemGatewayModel`` 的缓存安全只读快照。
+
+    解析结果会跨请求短 TTL 缓存，不能保存 SQLAlchemy ORM 实例，否则命中后可能访问
+    detached/expired 属性。快照保留代理热路径需要的列名，让下游仍可按 ``record.xxx``
+    读取。
+    """
+
+    id: uuid.UUID
+    tenant_id: uuid.UUID | None
+    name: str
+    capability: str
+    real_model: str
+    credential_id: uuid.UUID
+    provider: str
+    weight: int
+    rpm_limit: int | None
+    tpm_limit: int | None
+    enabled: bool
+    tags: dict[str, Any] | None
+    upstream_call_shape: str | None
+    created_by_user_id: uuid.UUID | None = None
+    visibility: str | None = None
+    last_test_status: str | None = None
+    last_tested_at: datetime | None = None
+    last_test_reason: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class GatewayRouteResolveSnapshot:
+    """``GatewayRoute``/``SystemGatewayRoute`` 的缓存安全只读快照。"""
+
+    id: uuid.UUID
+    tenant_id: uuid.UUID | None
+    virtual_model: str
+    primary_models: list[str]
+    fallbacks_general: list[str]
+    fallbacks_content_policy: list[str]
+    fallbacks_context_window: list[str]
+    strategy: str
+    retry_policy: dict[str, Any] | None
+    enabled: bool
+
+
+if TYPE_CHECKING:
+    ResolvedGatewayModel = GatewayModel | SystemGatewayModel | GatewayModelResolveSnapshot
+    ResolvedGatewayRoute = GatewayRoute | SystemGatewayRoute | GatewayRouteResolveSnapshot
 
 
 @dataclass(frozen=True)
@@ -41,9 +91,90 @@ class ResolvedModelName:
         via_route: 与 ``route`` 同步；为前端/日志快照预留。
     """
 
-    record: GatewayModel | SystemGatewayModel
-    route: GatewayRoute | SystemGatewayRoute | None
+    record: ResolvedGatewayModel
+    route: ResolvedGatewayRoute | None
     via_route: str | None
+
+
+def _uuid_or_none(value: object) -> uuid.UUID | None:
+    return value if isinstance(value, uuid.UUID) else None
+
+
+def _list_copy(value: object) -> list[str]:
+    if isinstance(value, list | tuple):
+        return [str(item) for item in value]
+    return []
+
+
+def _json_copy(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {str(key): _json_copy(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_json_copy(item) for item in value]
+    return value
+
+
+def _dict_copy(value: object) -> dict[str, Any] | None:
+    if isinstance(value, dict):
+        copied = _json_copy(value)
+        if isinstance(copied, dict):
+            return copied
+    return None
+
+
+def _model_snapshot(row: ResolvedGatewayModel) -> GatewayModelResolveSnapshot:
+    if isinstance(row, GatewayModelResolveSnapshot):
+        return row
+    return GatewayModelResolveSnapshot(
+        id=row.id,
+        tenant_id=_uuid_or_none(getattr(row, "tenant_id", None)),
+        name=row.name,
+        capability=row.capability,
+        real_model=row.real_model,
+        credential_id=row.credential_id,
+        provider=row.provider,
+        weight=row.weight,
+        rpm_limit=row.rpm_limit,
+        tpm_limit=row.tpm_limit,
+        enabled=row.enabled,
+        tags=_dict_copy(row.tags),
+        upstream_call_shape=row.upstream_call_shape,
+        created_by_user_id=_uuid_or_none(getattr(row, "created_by_user_id", None)),
+        visibility=getattr(row, "visibility", None),
+        last_test_status=getattr(row, "last_test_status", None),
+        last_tested_at=getattr(row, "last_tested_at", None),
+        last_test_reason=getattr(row, "last_test_reason", None),
+    )
+
+
+def _route_snapshot(row: ResolvedGatewayRoute) -> GatewayRouteResolveSnapshot:
+    if isinstance(row, GatewayRouteResolveSnapshot):
+        return row
+    return GatewayRouteResolveSnapshot(
+        id=row.id,
+        tenant_id=_uuid_or_none(getattr(row, "tenant_id", None)),
+        virtual_model=row.virtual_model,
+        primary_models=_list_copy(row.primary_models),
+        fallbacks_general=_list_copy(row.fallbacks_general),
+        fallbacks_content_policy=_list_copy(row.fallbacks_content_policy),
+        fallbacks_context_window=_list_copy(row.fallbacks_context_window),
+        strategy=row.strategy,
+        retry_policy=_dict_copy(row.retry_policy),
+        enabled=row.enabled,
+    )
+
+
+def cache_safe_resolved_model_name(
+    resolved: ResolvedModelName | None,
+) -> ResolvedModelName | None:
+    """将解析结果转换为可跨 Session 缓存的纯值对象。"""
+    if resolved is None:
+        return None
+    return ResolvedModelName(
+        record=_model_snapshot(resolved.record),
+        route=_route_snapshot(resolved.route) if resolved.route is not None else None,
+        via_route=resolved.via_route,
+    )
 
 
 async def _resolve_personal_team_model(
@@ -135,4 +266,10 @@ async def resolve_model_or_route(
     return resolved
 
 
-__all__ = ["ResolvedModelName", "resolve_model_or_route"]
+__all__ = [
+    "GatewayModelResolveSnapshot",
+    "GatewayRouteResolveSnapshot",
+    "ResolvedModelName",
+    "cache_safe_resolved_model_name",
+    "resolve_model_or_route",
+]
