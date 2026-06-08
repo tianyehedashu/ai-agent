@@ -9,12 +9,13 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 import { useCopyToClipboard, useCopyToClipboardKeyed } from './use-copy-to-clipboard'
 
-describe('useCopyToClipboard', () => {
-  const writeText = vi.fn()
+vi.mock('@/lib/utils', () => ({
+  copyToClipboard: vi.fn().mockResolvedValue(undefined),
+}))
 
+describe('useCopyToClipboard', () => {
   beforeEach(() => {
     vi.useFakeTimers()
-    Object.assign(navigator, { clipboard: { writeText } })
   })
 
   afterEach(() => {
@@ -28,12 +29,12 @@ describe('useCopyToClipboard', () => {
   })
 
   it('copy 后 copied 为 true，约 1.5s 后恢复 false', async () => {
-    writeText.mockResolvedValue(undefined)
     const { result } = renderHook(() => useCopyToClipboard())
     await act(async () => {
       await result.current[0]('hello')
     })
-    expect(writeText).toHaveBeenCalledWith('hello')
+    const { copyToClipboard } = await import('@/lib/utils')
+    expect(copyToClipboard).toHaveBeenCalledWith('hello')
     expect(result.current[1]).toBe(true)
     act(() => {
       vi.advanceTimersByTime(1500)
@@ -43,11 +44,8 @@ describe('useCopyToClipboard', () => {
 })
 
 describe('useCopyToClipboardKeyed', () => {
-  const writeText = vi.fn()
-
   beforeEach(() => {
     vi.useFakeTimers()
-    Object.assign(navigator, { clipboard: { writeText } })
   })
 
   afterEach(() => {
@@ -61,12 +59,12 @@ describe('useCopyToClipboardKeyed', () => {
   })
 
   it('copy(text, key) 后 copiedKey 为 key', async () => {
-    writeText.mockResolvedValue(undefined)
     const { result } = renderHook(() => useCopyToClipboardKeyed())
     await act(async () => {
       await result.current[0]('text', 3)
     })
-    expect(writeText).toHaveBeenCalledWith('text')
+    const { copyToClipboard } = await import('@/lib/utils')
+    expect(copyToClipboard).toHaveBeenCalledWith('text')
     expect(result.current[1]).toBe(3)
   })
 })
