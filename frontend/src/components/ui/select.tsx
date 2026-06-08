@@ -1,8 +1,8 @@
 import * as React from 'react'
 
 import * as SelectPrimitive from '@radix-ui/react-select'
-import { Check, ChevronDown, ChevronUp } from 'lucide-react'
 
+import { Check, ChevronDown, ChevronUp } from '@/lib/lucide-icons'
 import { useOverlayPortalReady } from '@/lib/ui-overlay/overlay-portal-ready'
 import { deferReleaseUiOverlayLock } from '@/lib/ui-overlay/release-overlay-lock'
 import { cn } from '@/lib/utils'

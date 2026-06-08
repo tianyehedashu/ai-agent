@@ -1,8 +1,8 @@
 import * as React from 'react'
 
 import * as DropdownMenuPrimitive from '@radix-ui/react-dropdown-menu'
-import { Check, ChevronRight, Circle } from 'lucide-react'
 
+import { Check, ChevronRight, Circle } from '@/lib/lucide-icons'
 import { useOverlayPortalReady } from '@/lib/ui-overlay/overlay-portal-ready'
 import { deferReleaseUiOverlayLock } from '@/lib/ui-overlay/release-overlay-lock'
 import { cn } from '@/lib/utils'
