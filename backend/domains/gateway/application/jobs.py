@@ -20,7 +20,7 @@ from domains.gateway.infrastructure.repositories.metrics_rollup_repository impor
     GatewayMetricsRollupRepository,
 )
 from libs.background_tasks import register_app_background_task
-from libs.db.database import get_session_context
+from libs.db.database import get_background_session_context
 from utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -39,7 +39,7 @@ async def gateway_rollup_loop() -> None:
             now = datetime.now(UTC)
             until = now.replace(minute=0, second=0, microsecond=0)
             since = until - timedelta(hours=2)
-            async with get_session_context() as session:
+            async with get_background_session_context() as session:
                 repo = GatewayMetricsRollupRepository(session)
                 count = await repo.rollup_window(since, until)
                 logger.debug("gateway_rollup_job: upserted %d rows", count)
@@ -58,7 +58,7 @@ async def gateway_partition_loop() -> None:
     interval = settings.gateway_partition_interval_seconds
     while True:
         try:
-            async with get_session_context() as session:
+            async with get_background_session_context() as session:
                 sql_jobs = GatewaySqlJobsRepository(session)
                 now = datetime.now(UTC)
                 for delta in (0, 1, 2):
@@ -76,7 +76,7 @@ async def gateway_request_log_retention_loop() -> None:
         try:
             retention = settings.gateway_request_log_retention_days
             if retention is not None and retention > 0:
-                async with get_session_context() as session:
+                async with get_background_session_context() as session:
                     sql_jobs = GatewaySqlJobsRepository(session)
                     dropped = await sql_jobs.drop_expired_request_log_partitions(retention)
                     if dropped:
@@ -99,7 +99,7 @@ async def gateway_plan_lifecycle_loop() -> None:
     interval = settings.gateway_rollup_interval_seconds
     while True:
         try:
-            async with get_session_context() as session:
+            async with get_background_session_context() as session:
                 sql_jobs = GatewaySqlJobsRepository(session)
                 e_off, e_on = await sql_jobs.process_plan_lifecycle_for_table(
                     table="entitlement_plans",

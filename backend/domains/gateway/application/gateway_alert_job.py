@@ -16,7 +16,7 @@ from domains.gateway.domain.policies.alert_evaluation import (
     evaluate_alert_rule,
 )
 from domains.gateway.infrastructure.repositories.alert_repository import GatewayAlertRepository
-from libs.db.database import get_session_context
+from libs.db.database import get_background_session_context
 from utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -35,7 +35,7 @@ async def run_gateway_alert_cycle() -> None:
     now = datetime.now(UTC)
     pending_triggers: list[tuple[AlertRuleSnapshot, AlertEvaluationResult]] = []
 
-    async with get_session_context() as read_session:
+    async with get_background_session_context() as read_session:
         repo = GatewayAlertRepository(read_session)
         rules = await repo.list_all_enabled_rules()
         for snapshot in rules:
@@ -58,7 +58,7 @@ async def run_gateway_alert_cycle() -> None:
         return
 
     webhook_queue: list[tuple[str, dict[str, Any]]] = []
-    async with get_session_context() as write_session:
+    async with get_background_session_context() as write_session:
         write_repo = GatewayAlertRepository(write_session)
         for snapshot, result in pending_triggers:
             try:

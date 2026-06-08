@@ -33,6 +33,10 @@ class Base(DeclarativeBase):
 _engine: AsyncEngine | None = None
 _session_factory: async_sessionmaker[AsyncSession] | None = None
 
+# 后台任务专用引擎/会话工厂（小池子，与热路径物理隔离）
+_background_engine: AsyncEngine | None = None
+_background_session_factory: async_sessionmaker[AsyncSession] | None = None
+
 
 # 触发 pool 回收的 asyncpg 异常文本片段（这些场景说明连接已脏，无法再复用）。
 # 当 pool_pre_ping 或正常查询遇到这些错误时，应判为 disconnect 让 pool 重建连接，
@@ -200,7 +204,7 @@ def _register_slow_query_logging(engine: AsyncEngine) -> None:
 
 async def init_db() -> None:
     """初始化数据库连接"""
-    global _engine, _session_factory
+    global _engine, _session_factory, _background_engine, _background_session_factory
 
     _engine = create_async_engine(
         settings.database_url,
@@ -222,10 +226,34 @@ async def init_db() -> None:
         autoflush=False,
     )
 
+    # 后台任务专用小连接池：不与 /v1/* 热路径争抢
+    _background_engine = create_async_engine(
+        settings.database_url,
+        echo=False,
+        pool_size=settings.database_background_pool_size,
+        max_overflow=settings.database_background_max_overflow,
+        pool_pre_ping=True,
+        pool_recycle=300,
+    )
+    _register_dirty_connection_recycle(_background_engine)
+    # 后台池不记录慢 SQL（避免日志洪水）
+    _background_session_factory = async_sessionmaker(
+        bind=_background_engine,
+        class_=AsyncSession,
+        expire_on_commit=False,
+        autocommit=False,
+        autoflush=False,
+    )
+
 
 async def close_db() -> None:
     """关闭数据库连接"""
-    global _engine, _session_factory
+    global _engine, _session_factory, _background_engine, _background_session_factory
+
+    if _background_engine:
+        await _background_engine.dispose()
+        _background_engine = None
+        _background_session_factory = None
 
     if _engine:
         await _engine.dispose()
@@ -245,6 +273,13 @@ def get_session_factory() -> async_sessionmaker[AsyncSession]:
     if _session_factory is None:
         raise RuntimeError("Database not initialized. Call init_db() first.")
     return _session_factory
+
+
+def get_background_session_factory() -> async_sessionmaker[AsyncSession]:
+    """获取后台任务专用会话工厂（独立小连接池）。"""
+    if _background_session_factory is None:
+        raise RuntimeError("Database not initialized. Call init_db() first.")
+    return _background_session_factory
 
 
 async def get_session() -> AsyncGenerator[AsyncSession, None]:
@@ -285,6 +320,23 @@ async def get_session_context() -> AsyncGenerator[AsyncSession, None]:
     用于非 FastAPI 依赖注入的场景（如后台任务、脚本等）
     """
     factory = get_session_factory()
+    async with factory() as session:
+        try:
+            yield session
+            await _commit_or_raise(session)
+        except BaseException:
+            await _rollback_for_cleanup(session)
+            raise
+
+
+@asynccontextmanager
+async def get_background_session_context() -> AsyncGenerator[AsyncSession, None]:
+    """
+    获取后台任务专用数据库会话（独立小连接池，不与 /v1/* 争抢）。
+
+    用于 rollup、alert、partition 等后台定时任务。
+    """
+    factory = get_background_session_factory()
     async with factory() as session:
         try:
             yield session

@@ -120,8 +120,6 @@ async def resolve_model_or_route(
     from bootstrap.config import settings
     from domains.gateway.application.resolve_model_cache import (
         CACHE_MISS,
-        hydrate_resolve_cache_entry,
-        is_negative_resolve_cache,
         peek_resolve_cache_entry,
         put_resolve_cache_entry,
     )
@@ -129,9 +127,7 @@ async def resolve_model_or_route(
     if settings.gateway_resolve_model_cache_enabled:
         cached = peek_resolve_cache_entry(team_id, cleaned, user_id=user_id)
         if cached is not CACHE_MISS:
-            if is_negative_resolve_cache(cached):
-                return None
-            return await hydrate_resolve_cache_entry(session, cached)
+            return cached  # type: ignore[return-value]
 
     resolved = await _resolve_model_or_route_uncached(session, team_id, cleaned, user_id=user_id)
     if settings.gateway_resolve_model_cache_enabled:

@@ -16,6 +16,7 @@ Gateway Presentation Dependencies - 网关认证依赖注入
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
 from typing import Annotated
 import uuid
@@ -39,6 +40,7 @@ from domains.gateway.presentation.platform_api_key_usage_middleware import (
 from domains.identity.application.permission_context_composer import (
     PermissionContextComposer,
 )
+from libs.iam.permission_context import PermissionContext
 from domains.identity.application.user_display import resolve_user_display_snapshot
 from domains.tenancy.presentation.team_dependencies import (
     CurrentTeam,
@@ -110,11 +112,20 @@ async def _gateway_principal_from_vkey_plain(
     access = build_gateway_access_use_case(db)
     record = await access.validate_bearer_virtual_key(plain)
 
-    await access.record_virtual_key_usage(record.id)
+    # usage 回写是 fire-and-forget 的排期任务，无需 await
+    access.record_virtual_key_usage(record.id)
 
-    team_role = await access.team_role_for_virtual_key_creator(
-        record.tenant_id, record.created_by_user_id
+    created_by = record.created_by_user_id
+    tenant_id = record.tenant_id
+
+    # 成员角色查询 与 team_ids 拉取可并行（独立 DB 查询）
+    team_role_task = asyncio.create_task(
+        access.team_role_for_virtual_key_creator(tenant_id, created_by)
     )
+    permission_ctx_task = asyncio.create_task(
+        _build_permission_context_for_vkey(db, created_by)
+    )
+    team_role, permission_ctx = await asyncio.gather(team_role_task, permission_ctx_task)
 
     try:
         caps = allowed_capabilities_from_storage(record.allowed_capabilities)
@@ -131,8 +142,8 @@ async def _gateway_principal_from_vkey_plain(
     vkey_principal = VirtualKeyPrincipal(
         vkey_id=record.id,
         vkey_name=record.name,
-        team_id=record.tenant_id,
-        user_id=record.created_by_user_id,
+        team_id=tenant_id,
+        user_id=created_by,
         allowed_models=tuple(record.allowed_models or ()),
         allowed_capabilities=caps,
         rpm_limit=record.rpm_limit,
@@ -143,18 +154,28 @@ async def _gateway_principal_from_vkey_plain(
     )
 
     composer = PermissionContextComposer(db)
-    composer.install(
-        await composer.compose_for_gateway_vkey(
-            created_by_user_id=record.created_by_user_id,
-            tenant_id=record.tenant_id,
-            team_role=team_role,
-        )
-    )
+    composer.install(permission_ctx.with_team(tenant_id, team_role))
 
     return GatewayPrincipal(
         vkey=vkey_principal,
-        team_id=record.tenant_id,
-        user_id=record.created_by_user_id,
+        team_id=tenant_id,
+        user_id=created_by,
+    )
+
+
+async def _build_permission_context_for_vkey(
+    db: AsyncSession,
+    created_by_user_id: uuid.UUID,
+) -> PermissionContext:
+    """为 Gateway vkey 构建基础 PermissionContext（不含 team_role）。"""
+    from domains.identity.application.permission_context_factory import (
+        build_permission_context_with_team_ids,
+    )
+
+    return await build_permission_context_with_team_ids(
+        db,
+        user_id=created_by_user_id,
+        role="user",
     )
 
 
