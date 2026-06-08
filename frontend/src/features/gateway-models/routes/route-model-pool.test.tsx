@@ -2,10 +2,11 @@
  * @see route-model-pool.tsx
  */
 
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
 import type { GatewayModel } from '@/api/gateway'
+import { TooltipProvider } from '@/components/ui/tooltip'
 
 import { RouteFallbackModelPicker, RouteOrderedModelPicker } from './route-model-pool'
 
@@ -116,5 +117,33 @@ describe('RouteFallbackModelPicker', () => {
     expect(screen.getByText('model-b')).toBeInTheDocument()
     expect(screen.queryByText('model-a')).not.toBeInTheDocument()
     expect(screen.queryByText('model-c')).not.toBeInTheDocument()
+  })
+
+  it('adds a model via combobox in RouteOrderedModelPicker', async () => {
+    const onSelectedChange = vi.fn()
+    render(
+      <TooltipProvider>
+        <RouteOrderedModelPicker
+          models={[MODEL_A, MODEL_B, MODEL_C]}
+          selected={[]}
+          onSelectedChange={onSelectedChange}
+          label="主模型"
+        />
+      </TooltipProvider>
+    )
+
+    // Click the "添加主模型" button to open the combobox
+    fireEvent.click(screen.getByRole('button', { name: '添加主模型' }))
+
+    // Wait for the combobox to open and show the list
+    await screen.findByPlaceholderText('搜索模型别名、通道…')
+
+    // Click on a model item to select it
+    fireEvent.click(screen.getByText('model-b'))
+
+    // Verify onSelectedChange was called with the new model added
+    await waitFor(() => {
+      expect(onSelectedChange).toHaveBeenCalledWith(['model-b'])
+    })
   })
 })
