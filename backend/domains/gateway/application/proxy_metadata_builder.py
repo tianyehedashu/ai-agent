@@ -243,6 +243,8 @@ class ProxyMetadataBuilder:
         virtual_model = str(raw_model).strip() if raw_model is not None else None
         if not virtual_model:
             return _MergeTimings()
+        # 客户端原始模型别名：供日志 route_name 使用，避免 fallback 到编码后的 Router model_name
+        meta["gateway_route_name"] = virtual_model
         cred_started = time.perf_counter()
         meta.update(
             await self.credential_metadata_for_virtual_model(

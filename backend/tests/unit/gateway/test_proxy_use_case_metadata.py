@@ -261,6 +261,7 @@ async def test_build_metadata_injects_gateway_route_snapshot_when_cache_hit(
     uc = ProxyUseCase(db_session)
     meta = await uc.metadata_builder.build(ctx, user_kwargs={"model": "vm1"})
     assert meta["gateway_route_snapshot"] == snap
+    assert meta["gateway_route_name"] == "vm1"
 
 
 @pytest.mark.asyncio

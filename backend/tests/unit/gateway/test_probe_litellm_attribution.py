@@ -58,5 +58,7 @@ def test_merge_probe_litellm_kwargs_sets_metadata_and_model_info() -> None:
     assert merged["metadata"]["gateway_team_id"] == str(tenant_id)
     mi = merged["litellm_params"]["model_info"]
     assert mi["id"] == str(target.model_id)
+    assert mi["gateway_model_name"] == "doubao-test"
+    assert mi["gateway_real_model"] == "doubao-test"
     assert mi["gateway_credential_id"] == str(target.credential_id)
     assert mi["gateway_credential_name"] == "cred-a"

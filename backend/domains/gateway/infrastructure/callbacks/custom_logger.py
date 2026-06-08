@@ -31,6 +31,7 @@ from domains.gateway.infrastructure.callbacks.cost_calculation import (
 )
 from domains.gateway.infrastructure.callbacks.request_log_persist_helpers import (
     gateway_provider_for_persist,
+    model_info_from_kwargs,
 )
 from domains.gateway.infrastructure.gateway_log_sampling import (
     should_persist_request_log_row,
@@ -544,6 +545,7 @@ def _normalize_route_model(
     deploy_id, deploy_name, entitlement_plan_id, provider_plan_id)``。
     """
     capability = str(metadata.get("gateway_capability", "chat"))
+    # route_name: 客户端原始模型别名（优先）；旧数据兼容 fallback 到 kwargs["model"]
     route_name = metadata.get("gateway_route_name") or kwargs.get("model")
     response_model_raw = getattr(response_obj, "model", None)
     response_model = (
@@ -551,7 +553,10 @@ def _normalize_route_model(
         if isinstance(response_model_raw, str) and response_model_raw.strip()
         else None
     )
-    real_model = response_model or kwargs.get("model")
+    # real_model: 上游响应 > Router model_info.gateway_real_model > kwargs["model"]
+    model_info = model_info_from_kwargs(kwargs)
+    deployment_real_model = model_info.get("gateway_real_model") if model_info else None
+    real_model = response_model or deployment_real_model or kwargs.get("model")
     real_model_str = (
         str(real_model).strip() if isinstance(real_model, str) and real_model.strip() else None
     )
@@ -559,7 +564,7 @@ def _normalize_route_model(
         str(route_name).strip() if isinstance(route_name, str) and route_name.strip() else None
     )
 
-    cred_id, _ = _credential_snapshots_for_persist(metadata, kwargs)
+    _cred_id, _ = _credential_snapshots_for_persist(metadata, kwargs)
     deploy_id, deploy_name = _deployment_from_model_info_kwargs(kwargs)
 
     provider = gateway_provider_for_persist(
@@ -1012,7 +1017,7 @@ async def _persist_event(
     )
 
     # 3. 时间 + 延迟
-    _start_dt, end_dt, latency_ms, ttfb_ms = _resolve_time_latency(
+    _start_dt, _end_dt, latency_ms, ttfb_ms = _resolve_time_latency(
         start_time, end_time, metadata
     )
 

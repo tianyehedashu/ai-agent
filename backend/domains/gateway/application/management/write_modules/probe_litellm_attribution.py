@@ -47,6 +47,7 @@ def probe_litellm_model_info(target: ProbeTarget, credential_name: str) -> dict[
     return {
         "id": str(target.model_id),
         "gateway_model_name": target.real_model,
+        "gateway_real_model": target.real_model,
         "gateway_credential_id": str(target.credential_id),
         "gateway_credential_name": credential_name,
     }
