@@ -22,6 +22,7 @@ from typing import Any
 import uuid
 
 from bootstrap.config import settings
+from domains.gateway.domain.cache_hit_flag import coerce_cache_hit_flag
 from domains.gateway.domain.normalized_usage import extract_normalized_usage
 from domains.gateway.infrastructure.callbacks.cost_calculation import (
     _calc_cost,
@@ -638,7 +639,7 @@ def _build_log_previews(
 
 
 def _resolve_client_info(
-    metadata: dict[str, Any]
+    metadata: dict[str, Any],
 ) -> tuple[Any, Any, Any, Any, str | None, str | None]:
     """提取快照字段 + client_type + client_ua。"""
     team_snapshot = metadata.get("gateway_team_snapshot")
@@ -891,10 +892,14 @@ def _resolve_usage_and_settlement(
     slo_dict = slo if isinstance(slo, dict) else None
     normalized = normalized.with_slo_fallback(slo_dict)
 
-    # cache_hit
-    cache_hit = bool(metadata.get("gateway_cache_hit") or kwargs.get("cache_hit"))
+    # cache_hit: prefer normalized cache-read tokens; explicit flags are fallback
+    cache_hit = normalized.cache_read_tokens > 0
+    if not cache_hit:
+        cache_hit = coerce_cache_hit_flag(
+            metadata.get("gateway_cache_hit")
+        ) or coerce_cache_hit_flag(kwargs.get("cache_hit"))
     if not cache_hit and isinstance(slo, dict):
-        cache_hit = bool(slo.get("cache_hit"))
+        cache_hit = coerce_cache_hit_flag(slo.get("cache_hit"))
 
     # 成本结算
     if status == "success":
@@ -1017,9 +1022,7 @@ async def _persist_event(
     )
 
     # 3. 时间 + 延迟
-    _start_dt, _end_dt, latency_ms, ttfb_ms = _resolve_time_latency(
-        start_time, end_time, metadata
-    )
+    _start_dt, _end_dt, latency_ms, ttfb_ms = _resolve_time_latency(start_time, end_time, metadata)
 
     # 4. Prompt / Response 摘要
     prompt_redacted, response_summary = _build_log_previews(kwargs, response_obj, metadata)

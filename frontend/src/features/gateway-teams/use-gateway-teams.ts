@@ -89,17 +89,23 @@ export function useGatewayMemberWorkspaceNameMap(enabled = true): Map<string, st
 
 export function useGatewayWritableTeams(enabled = true): GatewayTeam[] {
   const { data: teams = [] } = useGatewayTeams(enabled)
-  const { isPlatformAdmin } = useGatewayPermission()
+  const { isPlatformAdmin, isPlatformViewer } = useGatewayPermission()
 
-  return useMemo(() => filterGatewayWritableTeams(teams, isPlatformAdmin), [teams, isPlatformAdmin])
+  return useMemo(
+    () => filterGatewayWritableTeams(teams, isPlatformAdmin, isPlatformViewer),
+    [teams, isPlatformAdmin, isPlatformViewer]
+  )
 }
 
 /** 跨团队汇总等管理面：membership 团队 + 可写过滤（对齐后端 list_gateway_team_memberships） */
 export function useGatewayWritableMemberTeams(enabled = true): GatewayTeam[] {
   const { data: teams = [] } = useGatewayMemberTeams(enabled)
-  const { isPlatformAdmin } = useGatewayPermission()
+  const { isPlatformAdmin, isPlatformViewer } = useGatewayPermission()
 
-  return useMemo(() => filterGatewayWritableTeams(teams, isPlatformAdmin), [teams, isPlatformAdmin])
+  return useMemo(
+    () => filterGatewayWritableTeams(teams, isPlatformAdmin, isPlatformViewer),
+    [teams, isPlatformAdmin, isPlatformViewer]
+  )
 }
 
 /** 虚拟 Key 创建绑定工作区：membership 内全部团队（member+ 可建，对齐后端 RequiredTeamMember） */

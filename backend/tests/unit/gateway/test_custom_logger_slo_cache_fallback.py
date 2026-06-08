@@ -15,7 +15,64 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from domains.gateway.infrastructure.callbacks.custom_logger import _persist_event
+from domains.gateway.infrastructure.callbacks.custom_logger import (
+    _persist_event,
+    _resolve_usage_and_settlement,
+)
+
+
+def test_resolve_usage_marks_cache_hit_from_cached_tokens_without_flag() -> None:
+    """response usage 有 cache read tokens 时，不依赖 metadata flag 也应算命中。"""
+
+    response_obj = SimpleNamespace(
+        usage={
+            "prompt_tokens": 5000,
+            "completion_tokens": 200,
+            "prompt_tokens_details": {"cached_tokens": 3000},
+        },
+    )
+
+    with patch(
+        "domains.gateway.infrastructure.callbacks.custom_logger._calc_cost",
+        return_value=(Decimal("0"), "zero"),
+    ):
+        (
+            _input_tokens,
+            _output_tokens,
+            cached_tokens,
+            _cache_creation_tokens,
+            cache_hit,
+            _cost_usd,
+            _revenue_usd,
+            _pricing_snapshot,
+        ) = _resolve_usage_and_settlement(
+            metadata={},
+            kwargs={},
+            response_obj=response_obj,
+            status="success",
+        )
+
+    assert cached_tokens == 3000
+    assert cache_hit is True
+
+
+def test_resolve_usage_does_not_treat_false_strings_as_cache_hit() -> None:
+    """字符串 ``false`` / ``0`` 不能被 Python truthiness 误判为命中。"""
+
+    response_obj = SimpleNamespace(usage={"prompt_tokens": 100, "completion_tokens": 20})
+
+    with patch(
+        "domains.gateway.infrastructure.callbacks.custom_logger._calc_cost",
+        return_value=(Decimal("0"), "zero"),
+    ):
+        result = _resolve_usage_and_settlement(
+            metadata={"gateway_cache_hit": "false"},
+            kwargs={"cache_hit": "0", "standard_logging_object": {"cache_hit": "no"}},
+            response_obj=response_obj,
+            status="success",
+        )
+
+    assert result[4] is False
 
 
 @pytest.mark.asyncio

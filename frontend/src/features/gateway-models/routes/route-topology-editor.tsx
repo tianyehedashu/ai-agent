@@ -37,6 +37,7 @@ interface RouteTopologyEditorProps {
   pickerModels: readonly GatewayModel[]
   isSaving: boolean
   isDeleting?: boolean
+  teamLabel?: string | null
   readOnly?: boolean
   onSave: (id: string, body: GatewayRouteUpdateBody) => void
   onDelete?: (id: string) => void
@@ -48,6 +49,7 @@ interface RouteTopologyFormProps {
   pickerModels: readonly GatewayModel[]
   isSaving: boolean
   isDeleting?: boolean
+  teamLabel?: string | null
   readOnly?: boolean
   onSave: (id: string, body: GatewayRouteUpdateBody) => void
   onDelete?: (id: string) => void
@@ -59,6 +61,7 @@ function RouteTopologyForm({
   pickerModels,
   isSaving,
   isDeleting = false,
+  teamLabel,
   readOnly = false,
   onSave,
   onDelete,
@@ -140,11 +143,11 @@ function RouteTopologyForm({
   return (
     <div className="flex min-h-0 flex-col rounded-lg border bg-card">
       <div className="border-b p-4">
-        <p className="flex items-center gap-2 font-mono text-base font-semibold">
-          {route.virtual_model}
-          {readOnly ? (
-            <span className="rounded bg-muted px-1.5 py-0.5 font-sans text-[10px] font-normal text-muted-foreground">
-              系统
+        <p className="flex flex-wrap items-center gap-2 font-mono text-base font-semibold">
+          <span className="min-w-0 break-all">{route.virtual_model}</span>
+          {teamLabel ? (
+            <span className="max-w-full truncate rounded bg-muted px-1.5 py-0.5 font-sans text-[10px] font-normal text-muted-foreground">
+              {teamLabel}
             </span>
           ) : null}
         </p>
@@ -166,7 +169,9 @@ function RouteTopologyForm({
           </div>
         ) : (
           <p className="mt-2 text-xs text-muted-foreground">
-            系统级路由，仅可查看；团队可创建同名路由覆盖。
+            {route.source === 'system'
+              ? '系统级路由，仅可查看；团队可创建同名路由覆盖。'
+              : '当前账号无此团队路由编辑权限。'}
           </p>
         )}
       </div>
@@ -316,6 +321,7 @@ export function RouteTopologyEditor({
   pickerModels,
   isSaving,
   isDeleting,
+  teamLabel,
   readOnly: readOnlyProp = false,
   onSave,
   onDelete,
@@ -341,6 +347,7 @@ export function RouteTopologyEditor({
       pickerModels={pickerModels}
       isSaving={isSaving}
       isDeleting={isDeleting}
+      teamLabel={teamLabel}
       readOnly={readOnly}
       onSave={onSave}
       onDelete={readOnly ? undefined : onDelete}

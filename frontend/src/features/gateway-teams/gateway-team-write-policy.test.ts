@@ -40,6 +40,10 @@ describe('isGatewayTeamWritable', () => {
     expect(isGatewayTeamWritable(team({ id: 'a1', team_role: 'admin' }), false)).toBe(true)
     expect(isGatewayTeamWritable(team({ id: 'm1', team_role: 'member' }), false)).toBe(false)
   })
+
+  it('rejects platform viewer even for personal teams', () => {
+    expect(isGatewayTeamWritable(team({ id: 'p1', kind: 'personal' }), false, true)).toBe(false)
+  })
 })
 
 describe('filterGatewayWritableTeams', () => {
@@ -50,6 +54,11 @@ describe('filterGatewayWritableTeams', () => {
       team({ id: 'm1', team_role: 'member' }),
     ]
     expect(filterGatewayWritableTeams(teams, false).map((t) => t.id)).toEqual(['p1', 'a1'])
+  })
+
+  it('returns no writable teams for platform viewer', () => {
+    const teams = [team({ id: 'p1', kind: 'personal' }), team({ id: 'a1', team_role: 'admin' })]
+    expect(filterGatewayWritableTeams(teams, false, true)).toHaveLength(0)
   })
 })
 

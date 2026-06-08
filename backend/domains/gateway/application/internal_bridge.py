@@ -25,6 +25,7 @@ from domains.gateway.application.ports import (
     GatewayStreamChunk,
 )
 from domains.gateway.application.proxy_use_case import ProxyContext, ProxyUseCase
+from domains.gateway.domain.cache_hit_flag import coerce_cache_hit_flag
 from domains.gateway.domain.types import (
     GatewayCapability,
     VirtualKeyPrincipal,
@@ -125,7 +126,7 @@ def _to_gateway_response(data: dict[str, Any]) -> GatewayResponse:
         usage=usage if isinstance(usage, dict) else None,
         cost_usd=Decimal(str(data.get("cost_usd"))) if data.get("cost_usd") else None,
         model=data.get("model"),
-        cache_hit=bool(data.get("cache_hit")),
+        cache_hit=coerce_cache_hit_flag(data.get("cache_hit")),
         raw=data,
     )
 

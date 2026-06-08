@@ -3,7 +3,12 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link, useSearchParams } from 'react-router-dom'
 
-import { gatewayApi, type GatewayRoute, type GatewayRouteUpdateBody } from '@/api/gateway'
+import {
+  gatewayApi,
+  type GatewayRoute,
+  type GatewayRouteCreateBody,
+  type GatewayRouteUpdateBody,
+} from '@/api/gateway'
 import type { GatewayTeam } from '@/api/gateway/teams'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -21,6 +26,10 @@ import { enabledGatewayModels } from '@/features/gateway-models/utils'
 import { combineFetching } from '@/features/gateway-shared/combine-fetching'
 import { GatewayRefreshButton } from '@/features/gateway-shared/gateway-refresh-button'
 import {
+  filterGatewayWritableTeams,
+  isGatewayTeamWritable,
+} from '@/features/gateway-teams/gateway-team-write-policy'
+import {
   useGatewayMemberTeamNameMap,
   useGatewayMemberTeams,
 } from '@/features/gateway-teams/use-gateway-teams'
@@ -29,7 +38,6 @@ import { useGatewayTeamId, useGatewayTeamRecord } from '@/hooks/use-gateway-team
 import { useToast } from '@/hooks/use-toast'
 import { Route, Loader2, Search } from '@/lib/lucide-icons'
 import { cn } from '@/lib/utils'
-import { TeamRole, type TeamRoleValue } from '@/types/permissions'
 
 function canManageTeamRoutes(
   targetTeamId: string,
@@ -40,21 +48,35 @@ function canManageTeamRoutes(
   if (isPlatformViewer) return false
   if (isPlatformAdmin) return true
   const team = memberTeams.find((item) => item.id === targetTeamId)
-  const role = (team?.team_role as TeamRoleValue | null | undefined) ?? null
-  return role === TeamRole.OWNER || role === TeamRole.ADMIN
+  return team ? isGatewayTeamWritable(team, false) : false
+}
+
+function routeTeamLabel(
+  route: GatewayRoute,
+  teamNameById: ReadonlyMap<string, string>
+): string | null {
+  if (route.source === 'system') return '系统'
+  const ownerTeamId = resolveGatewayRouteTeamId(route)
+  if (!ownerTeamId) return null
+  return teamNameById.get(ownerTeamId) ?? ownerTeamId.slice(0, 8)
 }
 
 export function RouteWorkspace(): React.JSX.Element {
   const workspaceTeamId = useGatewayTeamId()
   const queryClient = useQueryClient()
-  const { canWrite, isPlatformAdmin, isPlatformViewer } = useGatewayPermission()
+  const { isPlatformAdmin, isPlatformViewer } = useGatewayPermission()
   const currentTeam = useGatewayTeamRecord(workspaceTeamId)
   const { data: memberTeams = [] } = useGatewayMemberTeams()
   const teamNameById = useGatewayMemberTeamNameMap()
-  const isPersonalTeam = currentTeam?.kind === 'personal'
-  const modelsHref = isPersonalTeam
-    ? `/gateway/teams/${workspaceTeamId}/models?tab=personal`
-    : `/gateway/teams/${workspaceTeamId}/models?tab=shared`
+  const createTeamOptions = useMemo(
+    () => filterGatewayWritableTeams(memberTeams, isPlatformAdmin, isPlatformViewer),
+    [memberTeams, isPlatformAdmin, isPlatformViewer]
+  )
+  const defaultCreateTeamId = useMemo(() => {
+    if (createTeamOptions.some((team) => team.id === workspaceTeamId)) return workspaceTeamId
+    return createTeamOptions[0]?.id ?? ''
+  }, [createTeamOptions, workspaceTeamId])
+  const canCreateRoutes = createTeamOptions.length > 0
   const { toast } = useToast()
   const [searchParams, setSearchParams] = useSearchParams()
   const routeIdFromUrl = searchParams.get('routeId') ?? ''
@@ -63,6 +85,15 @@ export function RouteWorkspace(): React.JSX.Element {
   const [search, setSearch] = useState('')
   const [createMode, setCreateMode] = useState(false)
   const [createFormKey, setCreateFormKey] = useState(0)
+  const [createTeamId, setCreateTeamId] = useState(defaultCreateTeamId)
+  const modelsLinkTeamId = createMode && createTeamId ? createTeamId : workspaceTeamId
+  const modelsLinkTeam =
+    memberTeams.find((team) => team.id === modelsLinkTeamId) ??
+    (modelsLinkTeamId === workspaceTeamId ? currentTeam : null)
+  const modelsHref =
+    modelsLinkTeam?.kind === 'personal'
+      ? `/gateway/teams/${modelsLinkTeamId}/models?tab=personal`
+      : `/gateway/teams/${modelsLinkTeamId}/models?tab=shared`
 
   const {
     routes,
@@ -78,13 +109,22 @@ export function RouteWorkspace(): React.JSX.Element {
     [routes, selectedId]
   )
 
+  useEffect(() => {
+    if (createTeamOptions.length === 0) {
+      if (createTeamId.length > 0) setCreateTeamId('')
+      return
+    }
+    if (createTeamOptions.some((team) => team.id === createTeamId)) return
+    setCreateTeamId(defaultCreateTeamId)
+  }, [createTeamOptions, createTeamId, defaultCreateTeamId])
+
   const activeTeamId = useMemo(() => {
-    if (createMode) return workspaceTeamId
+    if (createMode) return createTeamId
     const ownerTeamId = selectedRoute ? resolveGatewayRouteTeamId(selectedRoute) : null
     return ownerTeamId ?? workspaceTeamId
-  }, [createMode, selectedRoute, workspaceTeamId])
+  }, [createMode, createTeamId, selectedRoute, workspaceTeamId])
 
-  const needsRouteModels = createMode || selectedId !== null
+  const needsRouteModels = (createMode && createTeamId.length > 0) || selectedId !== null
 
   const {
     items: models,
@@ -108,6 +148,11 @@ export function RouteWorkspace(): React.JSX.Element {
         ? canManageTeamRoutes(ownerTeamId, memberTeams, isPlatformAdmin, isPlatformViewer)
         : false
     })()
+
+  const selectedRouteTeamLabel = selectedRoute ? routeTeamLabel(selectedRoute, teamNameById) : null
+  const createTeamLabel = createTeamId
+    ? (teamNameById.get(createTeamId) ?? createTeamId.slice(0, 8))
+    : null
 
   useEffect(() => {
     if (!routeIdFromUrl || routes.length === 0) return
@@ -138,8 +183,8 @@ export function RouteWorkspace(): React.JSX.Element {
   }, [routes, search, teamNameById])
 
   const createMutation = useMutation({
-    mutationFn: (body: Parameters<typeof gatewayApi.createRoute>[1]) =>
-      gatewayApi.createRoute(workspaceTeamId, body),
+    mutationFn: ({ teamId, body }: { teamId: string; body: GatewayRouteCreateBody }) =>
+      gatewayApi.createRoute(teamId, body),
     onSuccess: (created) => {
       invalidateGatewayRouteCaches(queryClient)
       setCreateMode(false)
@@ -213,6 +258,7 @@ export function RouteWorkspace(): React.JSX.Element {
   }
 
   function startCreate(): void {
+    setCreateTeamId(defaultCreateTeamId)
     setCreateMode(true)
     setCreateFormKey((k) => k + 1)
     setSearchParams(
@@ -227,6 +273,10 @@ export function RouteWorkspace(): React.JSX.Element {
 
   function cancelCreate(): void {
     setCreateMode(false)
+  }
+
+  function changeCreateTeam(teamId: string): void {
+    setCreateTeamId(teamId)
   }
 
   function handleSave(route: GatewayRoute, body: GatewayRouteUpdateBody): void {
@@ -254,7 +304,7 @@ export function RouteWorkspace(): React.JSX.Element {
           </Link>{' '}
           配置供给。
         </p>
-        {canWrite ? (
+        {canCreateRoutes ? (
           <Button
             size="sm"
             variant={createMode ? 'secondary' : 'default'}
@@ -314,13 +364,7 @@ export function RouteWorkspace(): React.JSX.Element {
             ) : (
               <ul className="divide-y">
                 {filteredRoutes.map((route) => {
-                  const ownerTeamId = resolveGatewayRouteTeamId(route)
-                  const teamLabel =
-                    route.source === 'system'
-                      ? '系统'
-                      : ownerTeamId
-                        ? (teamNameById.get(ownerTeamId) ?? '团队')
-                        : null
+                  const teamLabel = routeTeamLabel(route, teamNameById)
                   return (
                     <li key={route.id}>
                       <button
@@ -333,10 +377,10 @@ export function RouteWorkspace(): React.JSX.Element {
                           selectRoute(route.id)
                         }}
                       >
-                        <p className="flex items-center gap-2 font-mono text-sm font-medium">
-                          {route.virtual_model}
+                        <p className="flex min-w-0 items-center gap-2 font-mono text-sm font-medium">
+                          <span className="min-w-0 truncate">{route.virtual_model}</span>
                           {teamLabel ? (
-                            <span className="rounded bg-muted px-1.5 py-0.5 font-sans text-[10px] font-normal text-muted-foreground">
+                            <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 font-sans text-[10px] font-normal text-muted-foreground">
                               {teamLabel}
                             </span>
                           ) : null}
@@ -360,10 +404,18 @@ export function RouteWorkspace(): React.JSX.Element {
         {createMode ? (
           <CreateRoutePanel
             key={createFormKey}
+            targetTeamId={createTeamId}
+            targetTeamLabel={createTeamLabel}
+            targetTeams={createTeamOptions}
+            onTargetTeamChange={changeCreateTeam}
             pickerModels={pickerModels}
             modelsLoading={modelsLoading}
             onSubmit={(body) => {
-              createMutation.mutate(body)
+              if (!createTeamId) {
+                toast({ variant: 'destructive', title: '请选择所属团队' })
+                return
+              }
+              createMutation.mutate({ teamId: createTeamId, body })
             }}
             onCancel={cancelCreate}
             isSubmitting={createMutation.isPending}
@@ -375,6 +427,7 @@ export function RouteWorkspace(): React.JSX.Element {
             pickerModels={pickerModels}
             isSaving={updateMutation.isPending}
             isDeleting={deleteMutation.isPending}
+            teamLabel={selectedRouteTeamLabel}
             readOnly={selectedRoute !== null && !selectedRouteEditable}
             onSave={(_id, body) => {
               if (!selectedRoute) return
