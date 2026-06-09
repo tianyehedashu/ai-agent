@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
-from pathlib import Path
+from typing import TYPE_CHECKING
 
-from domains.agent.application.storage_config_service import StorageConfigService
 from domains.agent.domain.listing_studio.storage_config_policy import is_local_storage
 from domains.agent.domain.listing_studio.upload_policy import validate_image_upload
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+    from domains.agent.application.storage_config_service import StorageConfigService
 
 
 class ListingStudioImageService:
@@ -18,6 +22,7 @@ class ListingStudioImageService:
     async def get_upload_max_bytes(self) -> int:
         """返回当前配置允许的单张图片最大字节数。"""
         snapshot = await self._config_service.require_active_snapshot()
+        await self._config_service.release_read_transaction()
         return snapshot.image_upload_max_bytes
 
     async def upload_image(

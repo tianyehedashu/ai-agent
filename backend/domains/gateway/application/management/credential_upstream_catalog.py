@@ -240,8 +240,10 @@ class CredentialUpstreamCatalogService:
                 items=(),
                 message="无法解密凭据中的 API Key，请检查服务端密钥配置或重新保存凭据。",
                 http_status=None,
-            )
+        )
         profile = get_upstream_profile(row.profile_id, provider=row.provider)
+        if self._session.in_transaction():
+            await self._session.commit()
         raw = await self._port.fetch_models(
             list_url=url,
             api_key=api_key,

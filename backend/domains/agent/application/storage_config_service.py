@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 import time
-from typing import Any
-import uuid
+from typing import TYPE_CHECKING, Any
 
 from bootstrap.config import settings
 from domains.agent.application.ports.image_store_port import ImageStorePort, StorageConfigSnapshot
@@ -12,14 +11,19 @@ from domains.agent.domain.listing_studio.storage_config_policy import (
     normalize_storage_type,
     validate_storage_config,
 )
-from domains.agent.infrastructure.models.system_storage_config import SystemStorageConfig
-from domains.agent.infrastructure.repositories.system_storage_config_repository import (
-    SystemStorageConfigRepository,
-)
 from domains.agent.infrastructure.storage.build_image_store import build_image_store
 from libs.api.paths import effective_listing_studio_serve_prefix
 from libs.crypto import decrypt_value, derive_encryption_key, encrypt_value
+from libs.db.session_lifecycle import rollback_open_transaction
 from libs.exceptions import ValidationError
+
+if TYPE_CHECKING:
+    import uuid
+
+    from domains.agent.infrastructure.models.system_storage_config import SystemStorageConfig
+    from domains.agent.infrastructure.repositories.system_storage_config_repository import (
+        SystemStorageConfigRepository,
+    )
 
 _CACHE_TTL_SECONDS = 30
 
@@ -66,7 +70,12 @@ class StorageConfigService:
 
     async def build_image_store(self) -> ImageStorePort:
         snapshot = await self.require_active_snapshot()
+        await rollback_open_transaction(self._repo.db)
         return build_image_store(snapshot)
+
+    async def release_read_transaction(self) -> None:
+        """Release a read-only config transaction before slow non-DB work."""
+        await rollback_open_transaction(self._repo.db)
 
     def row_to_admin_dict(self, row: SystemStorageConfig) -> dict[str, Any]:
         """Admin 响应（不含 secret 明文）。"""
@@ -152,6 +161,7 @@ class StorageConfigService:
     async def test_connection(self) -> dict[str, str]:
         snapshot = await self.require_active_snapshot()
         storage_type = normalize_storage_type(snapshot)
+        await rollback_open_transaction(self._repo.db)
         store = build_image_store(snapshot)
         try:
             await store.test_connection(verify_public=snapshot.public_access)

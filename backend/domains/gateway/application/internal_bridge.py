@@ -168,6 +168,12 @@ async def _build_bridge_proxy_context(
     )
 
 
+async def _commit_bridge_setup(session: AsyncSession) -> None:
+    """Persist bridge team/vkey setup before proxy code may release read transactions."""
+    if session.in_transaction():
+        await session.commit()
+
+
 class GatewayBridge:
     """``GatewayProxyProtocol`` 的具体实现（见 ``application.ports``）。"""
 
@@ -227,6 +233,7 @@ class GatewayBridge:
                 capability=GatewayCapability.CHAT,
                 store_full_messages=store_full_messages,
             )
+            await _commit_bridge_setup(session)
             result = await ProxyUseCase(session).chat_completion(proxy_ctx, body)
 
         if stream:
@@ -281,6 +288,7 @@ class GatewayBridge:
                 capability=GatewayCapability.EMBEDDING,
                 store_full_messages=False,
             )
+            await _commit_bridge_setup(session)
             result = await ProxyUseCase(session).embedding(proxy_ctx, body)
         if isinstance(result, dict):
             data = result.get("data") or []

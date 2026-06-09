@@ -94,6 +94,7 @@ class ChatAgentRunMixin:
         agent_config = agent_config.model_copy(update={"model": resolved.model})
 
         execution_config = self.config_service.load_for_agent(agent_id=agent_id or "default")
+        await self._commit_before_external_wait()
 
         session_recreated_event = None
         if should_pre_create_persistent_sandbox(

@@ -22,6 +22,7 @@ from domains.gateway.domain.policies.volcengine_video import should_use_volcengi
 from domains.gateway.domain.proxy_policy import BudgetReservation
 from domains.gateway.domain.types import GatewayCapability
 from domains.gateway.infrastructure.router_singleton import get_router
+from libs.db.session_lifecycle import rollback_open_transaction
 
 if TYPE_CHECKING:
     from domains.gateway.application.model_or_route_resolution import ResolvedModelName
@@ -108,6 +109,7 @@ class ProxyNonChatMixin:
                 response = await self.litellm.direct_embedding(kwargs)
             else:
                 router = await get_router(self.session)
+                await rollback_open_transaction(self.session)
                 response = await router.aembedding(**kwargs)
         except Exception:
             await self.guard.release_budget_reservations(reservations)

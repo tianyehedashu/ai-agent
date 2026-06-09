@@ -13,6 +13,7 @@ from bootstrap.config import settings
 from domains.agent.infrastructure.llm.agent_llm_facade import AgentLlmFacade
 from domains.gateway.application.model_catalog_port import ModelCatalogPort
 from domains.gateway.application.scenario_defaults import require_scenario_default
+from libs.db.session_lifecycle import rollback_open_transaction
 from utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -136,6 +137,8 @@ class VideoPromptOptimizeUseCase:
 
         has_images = bool(accessible_urls)
         model = await self._resolve_chat_model(has_images=has_images)
+        if self._db is not None:
+            await rollback_open_transaction(self._db)
 
         messages: list[dict[str, Any]] = [
             {"role": "system", "content": effective_system},

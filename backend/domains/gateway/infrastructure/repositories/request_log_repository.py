@@ -44,6 +44,11 @@ def _request_log_list_defer_options() -> tuple:
     )
 
 
+def _success_only_metric(column: Any) -> Any:
+    """平均延迟类指标只使用成功请求；失败行返回 NULL 供 avg() 忽略。"""
+    return case((GatewayRequestLog.status == "success", column), else_=None)
+
+
 if TYPE_CHECKING:
     from datetime import datetime
     from uuid import UUID
@@ -314,8 +319,8 @@ class RequestLogRepository:
             func.sum(GatewayRequestLog.cost_usd).label("cost_usd"),
             func.sum(case((GatewayRequestLog.status == "success", 1), else_=0)).label("success"),
             func.sum(case((GatewayRequestLog.status != "success", 1), else_=0)).label("failure"),
-            func.avg(GatewayRequestLog.latency_ms).label("avg_latency"),
-            func.avg(GatewayRequestLog.ttfb_ms).label("avg_ttfb"),
+            func.avg(_success_only_metric(GatewayRequestLog.latency_ms)).label("avg_latency"),
+            func.avg(_success_only_metric(GatewayRequestLog.ttfb_ms)).label("avg_ttfb"),
         ).where(_sql_and(*clauses))
         row = (await self._session.execute(stmt)).one()
         return {
@@ -808,8 +813,10 @@ class RequestLogRepository:
                 func.sum(GatewayRequestLog.cached_tokens).label("cached_tokens"),
                 func.sum(GatewayRequestLog.cache_creation_tokens).label("cache_creation_tokens"),
                 func.sum(GatewayRequestLog.cost_usd).label("cost_usd"),
-                func.avg(GatewayRequestLog.latency_ms).label("avg_latency_ms"),
-                func.avg(GatewayRequestLog.ttfb_ms).label("avg_ttfb_ms"),
+                func.avg(_success_only_metric(GatewayRequestLog.latency_ms)).label(
+                    "avg_latency_ms"
+                ),
+                func.avg(_success_only_metric(GatewayRequestLog.ttfb_ms)).label("avg_ttfb_ms"),
                 func.sum(cache_hit_case).label("cache_hit_count"),
             ]
         )
@@ -863,8 +870,8 @@ class RequestLogRepository:
             func.sum(GatewayRequestLog.cached_tokens).label("cached_tokens"),
             func.sum(GatewayRequestLog.cache_creation_tokens).label("cache_creation_tokens"),
             func.sum(GatewayRequestLog.cost_usd).label("cost_usd"),
-            func.avg(GatewayRequestLog.latency_ms).label("avg_latency_ms"),
-            func.avg(GatewayRequestLog.ttfb_ms).label("avg_ttfb_ms"),
+            func.avg(_success_only_metric(GatewayRequestLog.latency_ms)).label("avg_latency_ms"),
+            func.avg(_success_only_metric(GatewayRequestLog.ttfb_ms)).label("avg_ttfb_ms"),
             func.sum(cache_hit_case).label("cache_hit_count"),
         ).where(_sql_and(*clauses))
         total_row = (await self._session.execute(totals_stmt)).one()

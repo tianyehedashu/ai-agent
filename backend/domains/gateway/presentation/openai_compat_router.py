@@ -45,6 +45,7 @@ from domains.gateway.presentation.proxy_request_context import (
     proxy_context_from_request,
     rate_limit_headers_for_context,
 )
+from domains.gateway.presentation.streaming_session import release_request_db_before_stream
 from libs.db.database import get_db
 from utils.logging import get_logger
 
@@ -86,6 +87,7 @@ async def chat_completions(
 
     if proxy_body.get("stream"):
         stream = cast("AsyncIterator[dict[str, Any]]", result)
+        await release_request_db_before_stream(db)
 
         async def _sse() -> AsyncIterator[bytes]:
             try:

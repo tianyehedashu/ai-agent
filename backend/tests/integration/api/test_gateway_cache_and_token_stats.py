@@ -9,15 +9,15 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from decimal import Decimal
 import time
 import types
 from typing import Any
 import uuid
 
-import pytest
 from httpx import AsyncClient
+import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -32,7 +32,6 @@ from domains.gateway.presentation.deps import (
 )
 from domains.tenancy.application.team_service import TeamService
 from libs.api.paths import api_v1_path
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -733,3 +732,98 @@ async def test_statistics_api_returns_cache_hit_count(
     assert totals["cache_hit_count"] == 2
     # cache_hit_rate = 2/3 ≈ 66.7%
     assert totals["cache_hit_rate"] == pytest.approx(2 / 3, rel=0.01)
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_dashboard_latency_averages_successful_requests_only(
+    dev_client: AsyncClient,
+    db_session: AsyncSession,
+    test_user: Any,
+    auth_headers: dict[str, str],
+) -> None:
+    """调用统计和概览的平均延迟只使用成功请求，失败请求仍计入请求/失败数。"""
+    team = await TeamService(db_session).ensure_personal_team(test_user.id)
+    await db_session.commit()
+
+    now = datetime.now(UTC)
+    credential_id = uuid.uuid4()
+    rows = [
+        ("success", 100, 20),
+        ("success", 300, 60),
+        ("failed", 900, 800),
+    ]
+    for i, (status, latency_ms, ttfb_ms) in enumerate(rows):
+        db_session.add(
+            GatewayRequestLog(
+                tenant_id=team.id,
+                user_id=test_user.id,
+                vkey_id=uuid.uuid4(),
+                credential_id=credential_id,
+                credential_name_snapshot="latency-cred",
+                route_name="latency-model",
+                provider="openai",
+                capability="chat",
+                status=status,
+                error_code="UpstreamError" if status != "success" else None,
+                error_message="upstream failed" if status != "success" else None,
+                input_tokens=10,
+                output_tokens=5,
+                cached_tokens=0,
+                cache_hit=False,
+                cost_usd=Decimal("0.0001"),
+                latency_ms=latency_ms,
+                ttfb_ms=ttfb_ms,
+                created_at=now,
+                request_id=f"req-latency-{i}",
+            )
+        )
+    await db_session.flush()
+
+    summary = await dev_client.get(
+        f"/api/v1/gateway/teams/{team.id}/dashboard/summary",
+        params={"days": 7},
+        headers=auth_headers,
+    )
+    assert summary.status_code == 200, summary.text
+    summary_body = summary.json()
+    assert summary_body["total_requests"] == 3
+    assert summary_body["success_count"] == 2
+    assert summary_body["failure_count"] == 1
+    assert summary_body["avg_latency_ms"] == pytest.approx(200)
+    assert summary_body["avg_ttfb_ms"] == pytest.approx(40)
+
+    stats = await dev_client.get(
+        f"/api/v1/gateway/teams/{team.id}/dashboard/statistics",
+        params={"days": 7, "group_by": "credential", "page": 1, "page_size": 20},
+        headers=auth_headers,
+    )
+    assert stats.status_code == 200, stats.text
+    stats_body = stats.json()
+    totals = stats_body["totals"]
+    assert totals["requests"] == 3
+    assert totals["success_count"] == 2
+    assert totals["failure_count"] == 1
+    assert totals["avg_latency_ms"] == pytest.approx(200)
+    assert totals["avg_ttfb_ms"] == pytest.approx(40)
+    assert stats_body["items"][0]["avg_latency_ms"] == pytest.approx(200)
+    assert stats_body["items"][0]["avg_ttfb_ms"] == pytest.approx(40)
+
+    failed_stats = await dev_client.get(
+        f"/api/v1/gateway/teams/{team.id}/dashboard/statistics",
+        params={
+            "days": 7,
+            "group_by": "credential",
+            "status": "failed",
+            "page": 1,
+            "page_size": 20,
+        },
+        headers=auth_headers,
+    )
+    assert failed_stats.status_code == 200, failed_stats.text
+    failed_totals = failed_stats.json()["totals"]
+    assert failed_totals["requests"] == 1
+    assert failed_totals["success_count"] == 0
+    assert failed_totals["failure_count"] == 1
+    assert failed_totals["avg_latency_ms"] == pytest.approx(0)
+    assert failed_totals["avg_ttfb_ms"] == pytest.approx(0)

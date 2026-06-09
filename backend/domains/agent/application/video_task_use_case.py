@@ -432,6 +432,7 @@ class VideoTaskUseCase:
         self, task: VideoGenTask, vendor_creator_id: int | None = None
     ) -> VideoGenTask:
         """提交任务到厂商（内部方法），通过 VideoAPIClient 调用 GIIKIN API。"""
+        await self._commit_before_vendor_wait()
         try:
             client = VideoAPIClient()
             workflow_id, run_id = await client.submit(
@@ -463,6 +464,7 @@ class VideoTaskUseCase:
 
     async def _poll_vendor(self, task: VideoGenTask) -> VideoGenTask:
         """轮询厂商状态（内部方法），通过 VideoAPIClient 查询 GIIKIN 工作流状态。"""
+        await self._commit_before_vendor_wait()
         try:
             client = VideoAPIClient()
             status, result = await client.poll(
@@ -538,6 +540,11 @@ class VideoTaskUseCase:
             task.video_url[:50] if task.video_url else None,
         )
         return task
+
+    async def _commit_before_vendor_wait(self) -> None:
+        """Release the current DB transaction before waiting on vendor APIs."""
+        if self.db.in_transaction():
+            await self.db.commit()
 
     def _to_dict(self, task: VideoGenTask) -> dict:
         """将任务转换为字典"""

@@ -110,6 +110,8 @@ async def _generate_images_background(
                 strength = item.get("strength")
 
                 try:
+                    if db.in_transaction():
+                        await db.commit()
                     result: ImageGenerationResult = await image_generator.generate(
                         prompt=prompt_text,
                         provider=provider,
@@ -230,12 +232,15 @@ class ProductImageGenTaskUseCase:
         )
         await self.db.flush()
         await self.db.refresh(task)
+        task_id = task.id
         task_dict = _task_to_dict(task)
+        if self.db.in_transaction():
+            await self.db.commit()
 
         if self.image_generator and prompts:
             bg = asyncio.create_task(
                 _generate_images_background(
-                    task_id=task.id,
+                    task_id=task_id,
                     prompts=prompts,
                     image_generator=self.image_generator,
                     user_id=user_id,

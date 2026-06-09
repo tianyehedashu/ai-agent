@@ -111,6 +111,7 @@ class ChatImageGenMixin:
             flush=False,
         )
         await self.db.flush()
+        await self._commit_before_external_wait()
 
         if is_new_session:
             yield AgentEvent.session_created(session_id)

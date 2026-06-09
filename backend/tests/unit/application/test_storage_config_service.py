@@ -82,6 +82,7 @@ class TestStorageConfigService:
     @pytest.mark.asyncio
     async def test_test_connection_local(self, tmp_path):
         repo = MagicMock()
+        repo.db.in_transaction.return_value = False
         row = _local_row()
         row.local_storage_path = str(tmp_path / "images")
         repo.get_active = AsyncMock(return_value=row)
@@ -94,6 +95,7 @@ class TestStorageConfigService:
     @pytest.mark.asyncio
     async def test_test_connection_s3_skips_public_when_disabled(self):
         repo = MagicMock()
+        repo.db.in_transaction.return_value = False
         row = SystemStorageConfig(
             id=uuid.uuid4(),
             storage_type="s3",

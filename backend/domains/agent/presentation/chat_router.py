@@ -29,6 +29,7 @@ from domains.tenancy.presentation.team_dependencies import merge_optional_gatewa
 from libs.api.deps import get_checkpoint_service, get_session_service
 from libs.api.params import coerce_optional_uuid
 from libs.db.database import get_db, get_session_context
+from libs.db.session_lifecycle import rollback_open_transaction
 from libs.iam.permission_context import PermissionContext, get_permission_context
 from utils.serialization import Serializer
 
@@ -219,6 +220,7 @@ async def chat(
             platform_user_role=current_user.role,
             team_id=request.gateway_team_id,
         )
+    await rollback_open_transaction(db)
 
     permission_context = get_permission_context()
 
@@ -291,6 +293,7 @@ async def resume_execution(
             platform_user_role=current_user.role,
             team_id=request.gateway_team_id,
         )
+    await rollback_open_transaction(db)
 
     permission_context = get_permission_context()
 

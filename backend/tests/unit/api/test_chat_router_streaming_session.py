@@ -26,6 +26,19 @@ class _FakeChatService:
         yield AgentEvent(type=EventType.TEXT, data={"content": "resumed"})
 
 
+class _FakeRequestSession:
+    def __init__(self, events: list[str]) -> None:
+        self._events = events
+        self._active = True
+
+    def in_transaction(self) -> bool:
+        return self._active
+
+    async def rollback(self) -> None:
+        self._events.append("rollback-request")
+        self._active = False
+
+
 @pytest.mark.asyncio
 async def test_chat_stream_creates_service_inside_generator_session(monkeypatch) -> None:
     user_id = uuid.uuid4()
@@ -40,7 +53,7 @@ async def test_chat_stream_creates_service_inside_generator_session(monkeypatch)
 
     events: list[str] = []
     stream_db = object()
-    injected_db = object()
+    injected_db = _FakeRequestSession(events)
     http_request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(checkpointer=None)))
     built = Mock(return_value=_FakeChatService())
 
@@ -76,6 +89,56 @@ async def test_chat_stream_creates_service_inside_generator_session(monkeypatch)
     finally:
         clear_permission_context()
 
-    assert events == ["enter-session", "build-service", "exit-session"]
+    assert events == ["rollback-request", "enter-session", "build-service", "exit-session"]
     assert built.call_count == 1
+    assert any("data: [DONE]" in str(chunk) for chunk in body)
+
+
+@pytest.mark.asyncio
+async def test_resume_stream_releases_request_session_before_generator(monkeypatch) -> None:
+    user_id = uuid.uuid4()
+    original_ctx = PermissionContext(user_id=user_id, role="user")
+    set_permission_context(original_ctx)
+
+    events: list[str] = []
+    stream_db = object()
+    injected_db = _FakeRequestSession(events)
+    http_request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(checkpointer=None)))
+
+    @asynccontextmanager
+    async def fake_session_context() -> AsyncGenerator[object, None]:
+        events.append("enter-session")
+        yield stream_db
+        events.append("exit-session")
+
+    async def fake_builder(seen_db: object, seen_request: object) -> _FakeChatService:
+        events.append("build-service")
+        assert seen_db is stream_db
+        assert seen_request is http_request
+        return _FakeChatService()
+
+    monkeypatch.setattr(chat_router, "get_session_context", fake_session_context)
+    monkeypatch.setattr(chat_router, "_build_stream_chat_service", fake_builder)
+
+    try:
+        response = await chat_router.resume_execution(
+            request=chat_router.ResumeRequest(
+                session_id=str(uuid.uuid4()),
+                checkpoint_id="cp-1",
+                action="approve",
+            ),
+            http_request=http_request,  # type: ignore[arg-type]
+            db=injected_db,  # type: ignore[arg-type]
+            current_user=CurrentUser(
+                id=str(user_id),
+                email="user@example.com",
+                name="User",
+            ),
+        )
+
+        body = [chunk async for chunk in response.body_iterator]
+    finally:
+        clear_permission_context()
+
+    assert events == ["rollback-request", "enter-session", "build-service", "exit-session"]
     assert any("data: [DONE]" in str(chunk) for chunk in body)

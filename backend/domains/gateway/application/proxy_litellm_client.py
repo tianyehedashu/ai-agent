@@ -42,6 +42,7 @@ from domains.gateway.infrastructure.upstream.volcengine_image_client import (
 from domains.gateway.infrastructure.upstream.volcengine_video_client import (
     perform_volcengine_video_create,
 )
+from libs.db.session_lifecycle import rollback_open_transaction
 from libs.exceptions import ValidationError
 
 if TYPE_CHECKING:
@@ -66,6 +67,9 @@ class ProxyLiteLLMClient:
 
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
+
+    async def _release_session_before_upstream(self) -> None:
+        await rollback_open_transaction(self._session)
 
     async def should_use_internal_direct_litellm(
         self,
@@ -103,6 +107,7 @@ class ProxyLiteLLMClient:
 
         ensure_gateway_callbacks()
         apply_upstream_timeout(kwargs)
+        await self._release_session_before_upstream()
         return await acompletion(**kwargs)
 
     async def direct_embedding(self, kwargs: dict[str, Any]) -> Any:
@@ -114,6 +119,7 @@ class ProxyLiteLLMClient:
 
         ensure_gateway_callbacks()
         apply_upstream_timeout(kwargs)
+        await self._release_session_before_upstream()
         return await aembedding(**kwargs)
 
     async def dashscope_direct_embedding(
@@ -142,6 +148,7 @@ class ProxyLiteLLMClient:
             model_id=model_id,
             input_payload=kwargs.get("input"),
         )
+        await self._release_session_before_upstream()
         return await perform_dashscope_embedding(request)
 
     @staticmethod
@@ -183,6 +190,7 @@ class ProxyLiteLLMClient:
 
         ensure_gateway_callbacks()
         apply_upstream_timeout(kwargs)
+        await self._release_session_before_upstream()
         return await litellm_anthropic_messages(**kwargs)
 
     async def router_anthropic_messages(self, kwargs: dict[str, Any]) -> Any:
@@ -201,6 +209,7 @@ class ProxyLiteLLMClient:
 
         ensure_gateway_callbacks()
         apply_upstream_timeout(kwargs)
+        await self._release_session_before_upstream()
         return await aspeech(**kwargs)
 
     async def router_speech(self, kwargs: dict[str, Any]) -> Any:
@@ -219,6 +228,7 @@ class ProxyLiteLLMClient:
 
         ensure_gateway_callbacks()
         apply_upstream_timeout(kwargs)
+        await self._release_session_before_upstream()
         return await arerank(**kwargs)
 
     async def router_rerank(self, kwargs: dict[str, Any]) -> Any:
@@ -237,6 +247,7 @@ class ProxyLiteLLMClient:
 
         ensure_gateway_callbacks()
         apply_upstream_timeout(kwargs)
+        await self._release_session_before_upstream()
         return await amoderation(**kwargs)
 
     async def router_moderation(self, kwargs: dict[str, Any]) -> Any:
@@ -255,6 +266,7 @@ class ProxyLiteLLMClient:
 
         ensure_gateway_callbacks()
         apply_upstream_timeout(kwargs)
+        await self._release_session_before_upstream()
         return await aimage_generation(**kwargs)
 
     async def router_image_generation(self, kwargs: dict[str, Any]) -> Any:
@@ -273,6 +285,7 @@ class ProxyLiteLLMClient:
 
         ensure_gateway_callbacks()
         apply_upstream_timeout(kwargs)
+        await self._release_session_before_upstream()
         return await atranscription(**kwargs)
 
     async def router_transcription(self, kwargs: dict[str, Any]) -> Any:
@@ -319,6 +332,7 @@ class ProxyLiteLLMClient:
             )
         except ValueError as exc:
             raise ValidationError(str(exc)) from exc
+        await self._release_session_before_upstream()
         return await perform_volcengine_image_generation(request)
 
     async def volcengine_direct_video_generation(
@@ -351,6 +365,7 @@ class ProxyLiteLLMClient:
             prompt=prompt.strip(),
             seconds=kwargs.get("seconds"),
         )
+        await self._release_session_before_upstream()
         task_data = await perform_volcengine_video_create(request)
         return map_volcengine_video_task_to_openai(task_data, fallback_model=model_id)
 
@@ -363,6 +378,7 @@ class ProxyLiteLLMClient:
 
         ensure_gateway_callbacks()
         apply_upstream_timeout(kwargs)
+        await self._release_session_before_upstream()
         return await avideo_generation(**kwargs)
 
     async def router_video_generation(self, kwargs: dict[str, Any]) -> Any:
@@ -405,7 +421,9 @@ class ProxyLiteLLMClient:
                 )
                 if dep is not None:
                     self._merge_deployment_params_into_kwargs(kwargs, dep)
+            await self._release_session_before_upstream()
             return await direct_call()
+        await self._release_session_before_upstream()
         result = router_fn(**kwargs)
         if isinstance(result, Awaitable):
             return await result

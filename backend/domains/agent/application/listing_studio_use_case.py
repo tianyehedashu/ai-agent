@@ -40,6 +40,7 @@ from domains.agent.infrastructure.repositories.listing_studio_job_repository imp
 from domains.agent.infrastructure.repositories.listing_studio_job_step_repository import (
     ListingStudioJobStepRepository,
 )
+from libs.db.session_lifecycle import rollback_open_transaction
 from libs.exceptions import NotFoundError, ValidationError
 from utils.logging import get_logger
 
@@ -203,6 +204,7 @@ class ListingStudioUseCase:
         full_input = self._build_full_input(job, capability_id, user_input)
         resolved_meta = meta_prompt or DEFAULT_PROMPTS.get(capability_id) or ""
         model_override = await self._resolve_model_override(capability_id, model_id)
+        await rollback_open_transaction(self.db)
 
         return await optimize_prompt_for_capability(
             capability_id,
@@ -272,6 +274,7 @@ class ListingStudioUseCase:
             error_message=None,
         )
         await self.db.flush()
+        await self._commit_before_external_wait()
 
         try:
             output = await runner(
@@ -307,6 +310,11 @@ class ListingStudioUseCase:
         await self.db.flush()
         await self.sync_job_status(job_id)
         return await self.get_job(job_id)
+
+    async def _commit_before_external_wait(self) -> None:
+        """Commit step state before waiting on external LLM work."""
+        if self.db.in_transaction():
+            await self.db.commit()
 
     async def sync_job_status(self, job_id: uuid.UUID) -> None:
         """根据所有 steps 的状态更新 Job 状态。"""

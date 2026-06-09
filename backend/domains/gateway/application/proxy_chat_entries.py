@@ -34,6 +34,7 @@ from domains.gateway.domain.upstream_call_shape_policy import (
 )
 from domains.gateway.domain.upstream_profile import UpstreamCallShape
 from domains.gateway.infrastructure.router_singleton import ensure_router_deployment
+from libs.db.session_lifecycle import rollback_open_transaction
 from utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -151,6 +152,7 @@ class ProxyChatMixin:
             ensure_litellm_router_team_metadata(prepared.kwargs, ctx.team_id)
             router = await ensure_router_deployment(self.session, encoded)
             apply_upstream_timeout(prepared.kwargs)
+            await rollback_open_transaction(self.session)
             return await router.acompletion(**prepared.kwargs)
 
         upstream_started = time.perf_counter()

@@ -260,6 +260,7 @@ class ChatUseCase(ChatImageGenMixin, ChatAgentRunMixin):
                 return
 
             await self._persist_picked_chat_model_ref(session_id, picked_chat_model_for_persist)
+            await self._commit_before_external_wait()
 
             if session_recreated_event:
                 yield session_recreated_event
@@ -474,11 +475,17 @@ class ChatUseCase(ChatImageGenMixin, ChatAgentRunMixin):
             )
             await self.db.flush()
         except Exception:
+            await self.db.rollback()
             logger.warning(
                 "Failed to persist chat_model_ref for session %s",
                 session_id[:8],
                 exc_info=True,
             )
+
+    async def _commit_before_external_wait(self) -> None:
+        """Close the current DB transaction before waiting on slow external work."""
+        if self.db.in_transaction():
+            await self.db.commit()
 
     @staticmethod
     def _normalize_reference_image_urls(raw: list[str]) -> list[str]:

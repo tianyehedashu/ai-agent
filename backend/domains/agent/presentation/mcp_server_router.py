@@ -71,6 +71,7 @@ from libs.api.deps import (
 )
 from libs.api.paths import public_api_url
 from libs.db.database import get_db
+from libs.db.session_lifecycle import rollback_open_transaction
 from utils.logging import get_logger
 
 if TYPE_CHECKING:
@@ -358,6 +359,7 @@ async def mcp_streamable_http_endpoint(
     if user_id is not None:
         user = await user_use_case.get_user_by_id(str(user_id))
         vendor_creator_id = user.vendor_creator_id if user else None
+    await rollback_open_transaction(db)
 
     logger.info(
         "MCP Streamable HTTP request: method=%s, server=%s, api_key_id=%s, user_id=%s, client_ip=%s",

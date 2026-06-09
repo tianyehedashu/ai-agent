@@ -8,20 +8,20 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Literal
 
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from bootstrap.config import settings
 from domains.agent.domain.services.title_rules import is_default_title
 from domains.agent.infrastructure.llm.agent_llm_facade import AgentLlmFacade
 from domains.gateway.application.scenario_defaults import require_scenario_default
-from domains.session.application.ports import TitleLlmPort
 from domains.session.application.session_use_case import SessionUseCase
 from domains.session.domain.entities.session import SessionDomainService, SessionOwner
-from domains.session.infrastructure.models.session import Session
 from utils.logging import get_logger
 
 if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
+
     from domains.gateway.application.model_catalog_port import ModelCatalogPort
+    from domains.session.application.ports import TitleLlmPort
+    from domains.session.infrastructure.models.session import Session
 
 logger = get_logger(__name__)
 
@@ -96,9 +96,11 @@ class TitleUseCase:
 
 只返回标题，不要其他内容。标题应该简洁明了，能够概括对话主题。"""
 
+            model = await self._resolve_fast_model()
+            await self._commit_before_title_llm()
             response = await self._title_llm.chat(
                 messages=[{"role": "user", "content": prompt}],
-                model=await self._resolve_fast_model(),
+                model=model,
                 max_tokens=20,
                 temperature=0.7,
             )
@@ -135,9 +137,11 @@ class TitleUseCase:
 
 只返回标题，不要其他内容。标题应该简洁明了，能够概括整个对话的主题。"""
 
+            model = await self._resolve_fast_model()
+            await self._commit_before_title_llm()
             response = await self._title_llm.chat(
                 messages=[{"role": "user", "content": prompt}],
-                model=await self._resolve_fast_model(),
+                model=model,
                 max_tokens=20,
                 temperature=0.7,
             )
@@ -248,3 +252,8 @@ class TitleUseCase:
 
         logger.warning("Invalid strategy or missing message: %s", strategy)
         return None
+
+    async def _commit_before_title_llm(self) -> None:
+        """Commit pending session work before waiting on the title LLM."""
+        if self.db.in_transaction():
+            await self.db.commit()

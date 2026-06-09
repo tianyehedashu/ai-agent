@@ -15,18 +15,17 @@ from domains.gateway.application.management.model_test_constants import (
 from domains.gateway.application.management.write_modules.probe_image_preview import (
     image_generation_probe_preview,
 )
+from domains.gateway.application.management.write_modules.probe_litellm_attribution import (
+    merge_probe_litellm_kwargs,
+)
 from domains.gateway.application.management.write_modules.probe_recording import (
     record_gateway_model_test_failure,
     record_gateway_model_test_success,
-)
-from domains.gateway.application.management.write_modules.probe_litellm_attribution import (
-    merge_probe_litellm_kwargs,
 )
 from domains.gateway.application.management.write_modules.probe_target import (
     EncryptedCredentialSnapshot,
     ProbeTarget,
 )
-from domains.gateway.infrastructure.router_singleton import ensure_gateway_callbacks
 from domains.gateway.application.management.write_modules.probe_video_preview import (
     video_generation_probe_preview,
 )
@@ -47,6 +46,7 @@ from domains.gateway.domain.policies.volcengine_video import (
     should_use_volcengine_direct_video,
 )
 from domains.gateway.domain.provider_env_catalog import image_probe_size
+from domains.gateway.infrastructure.router_singleton import ensure_gateway_callbacks
 from domains.gateway.infrastructure.upstream.dashscope_embedding_client import (
     perform_dashscope_embedding,
 )
@@ -172,16 +172,19 @@ class ProbeWritesMixin:
         api_base = credential.api_base
         probe_actor_id = await self._resolve_probe_actor_user_id(tenant_id, actor_user_id)
         ensure_gateway_callbacks()
+        if self._session.in_transaction():
+            await self._session.commit()
         from litellm import acompletion, aembedding, aimage_generation, avideo_generation
 
-        _litellm_kw = lambda base: merge_probe_litellm_kwargs(
-            base,
-            tenant_id=tenant_id,
-            actor_user_id=probe_actor_id,
-            target=target,
-            credential_name=credential.name,
-            credential_profile_id=getattr(credential, "profile_id", None),
-        )
+        def _litellm_kw(base: dict[str, Any]) -> dict[str, Any]:
+            return merge_probe_litellm_kwargs(
+                base,
+                tenant_id=tenant_id,
+                actor_user_id=probe_actor_id,
+                target=target,
+                credential_name=credential.name,
+                credential_profile_id=getattr(credential, "profile_id", None),
+            )
 
         try:
             if capability == "chat":
