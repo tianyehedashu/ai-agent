@@ -56,6 +56,8 @@ export interface GatewayUsageStatsResponse extends PaginatedList<GatewayUsageSta
 
 export type GatewayUsageStatsQuery = PageQuery & {
   days?: number
+  start?: string
+  end?: string
   usage_aggregation?: GatewayUsageAggregation
   group_by?: GatewayUsageStatsGroupBy
   credential_id?: string
@@ -72,6 +74,8 @@ function buildUsageStatsSearch(params?: GatewayUsageStatsQuery): Record<string, 
   const search: Record<string, string | string[]> = buildPageQuerySearch(params)
   if (!params) return search
   if (params.days !== undefined) search.days = String(params.days)
+  if (params.start) search.start = params.start
+  if (params.end) search.end = params.end
   if (params.usage_aggregation) search.usage_aggregation = params.usage_aggregation
   if (params.group_by) search.group_by = params.group_by
   if (params.credential_id) search.credential_id = params.credential_id

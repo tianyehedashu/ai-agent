@@ -22,6 +22,7 @@ import { PaginationControls } from '@/components/pagination-controls'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
 import { budgetsAdminHref } from '@/features/gateway-budget/paths'
 import { findQuotaRuleForStatsRow } from '@/features/gateway-budget/quota-rule-utils'
 import { useGatewayQuotaRules } from '@/features/gateway-budget/use-gateway-quota-rules'
@@ -42,6 +43,14 @@ import {
 } from '@/features/gateway-usage/usage-aggregation'
 import { UsageAggregationToggle } from '@/features/gateway-usage/usage-aggregation-toggle'
 import { UsageStatsCubeTable } from '@/features/gateway-usage/usage-stats-cube-table'
+import {
+  usageStatsCustomDateRange,
+  usageStatsDateRangeKey,
+  usageStatsDateRangeToQuery,
+  usageStatsDefaultDateRange,
+  usageStatsPresetDateRange,
+  type UsageStatsPresetDays,
+} from '@/features/gateway-usage/usage-stats-date-range'
 import { UsageStatsDetailSheet } from '@/features/gateway-usage/usage-stats-detail-sheet'
 import {
   applyDrillSegmentToFilterState,
@@ -79,7 +88,7 @@ const STATS_FILTER_TRIGGER_WIDE = 'h-9 min-w-[6.5rem] max-w-[14rem] shrink-0'
 
 const EMPTY_STATS_ITEMS: GatewayUsageStatsItem[] = []
 
-const RANGE_DAYS: { value: 1 | 7 | 30 | 90; label: string }[] = [
+const RANGE_DAYS: { value: UsageStatsPresetDays; label: string }[] = [
   { value: 1, label: '24 小时' },
   { value: 7, label: '7 天' },
   { value: 30, label: '30 天' },
@@ -201,7 +210,7 @@ function buildLogsNavigationState(
 
 function buildUsageStatsQueryKey(
   teamId: string,
-  days: number,
+  dateRangeKey: string,
   usageAggregation: GatewayUsageAggregation,
   groupBy: GatewayUsageStatsGroupBy,
   page: number,
@@ -212,7 +221,7 @@ function buildUsageStatsQueryKey(
     'gateway',
     'usage-stats',
     teamId,
-    days,
+    dateRangeKey,
     usageAggregation,
     groupBy,
     page,
@@ -238,7 +247,7 @@ export default function GatewayStatsPage(): React.JSX.Element {
   )
   const tableAnchorRef = useRef<HTMLDivElement>(null)
 
-  const [days, setDays] = useState<1 | 7 | 30 | 90>(7)
+  const [dateRange, setDateRange] = useState(usageStatsDefaultDateRange)
   const [usageAggregation, setUsageAggregation] = useState<GatewayUsageAggregation>('workspace')
   const platformAggBootstrapped = useRef(false)
   const [groupBy, setGroupBy] = useState<GatewayUsageStatsGroupBy>('credential')
@@ -248,6 +257,8 @@ export default function GatewayStatsPage(): React.JSX.Element {
   const [detailOpen, setDetailOpen] = useState(false)
 
   const crossTeamStatsEnabled = isCrossTeamUsageStatsEnabled(usageAggregation)
+  const dateRangeQuery = useMemo(() => usageStatsDateRangeToQuery(dateRange), [dateRange])
+  const dateRangeKey = useMemo(() => usageStatsDateRangeKey(dateRange), [dateRange])
 
   const filterCatalog = useUsageStatsFilterCatalog({
     teamId,
@@ -277,7 +288,7 @@ export default function GatewayStatsPage(): React.JSX.Element {
   const statsFilterKey = useMemo(
     () =>
       buildFilterKey([
-        days,
+        dateRangeKey,
         usageAggregation,
         groupBy,
         filterState.credentialId,
@@ -290,7 +301,7 @@ export default function GatewayStatsPage(): React.JSX.Element {
         filterState.vkeyId,
         drillSegments.map((s) => `${s.filterKey}:${s.filterValue}`).join('|'),
       ]),
-    [days, usageAggregation, groupBy, filterState, drillSegments]
+    [dateRangeKey, usageAggregation, groupBy, filterState, drillSegments]
   )
   const [page, setPage] = usePaginationPageForFilters(statsFilterKey)
 
@@ -361,7 +372,7 @@ export default function GatewayStatsPage(): React.JSX.Element {
   const { options: providerOptions, loading: providerOptionsLoading } =
     useUsageStatsProviderFilterOptions({
       teamId,
-      days,
+      dateRangeQuery,
       usageAggregation,
       baseFilters: providerDiscoveryFilters,
       registryProviders: registryProviderOptions,
@@ -370,27 +381,27 @@ export default function GatewayStatsPage(): React.JSX.Element {
 
   const queryParams = useMemo((): GatewayUsageStatsQuery => {
     return {
-      days,
+      ...dateRangeQuery,
       usage_aggregation: usageAggregation,
       group_by: groupBy,
       ...filterQueryFields,
       page,
       page_size: PAGE_SIZE,
     }
-  }, [days, usageAggregation, groupBy, filterQueryFields, page])
+  }, [dateRangeQuery, usageAggregation, groupBy, filterQueryFields, page])
 
   const breakdownBaseQuery = useMemo((): UsageStatsBreakdownBaseQuery => {
     return {
-      days,
+      ...dateRangeQuery,
       usage_aggregation: usageAggregation,
       ...filterQueryFields,
     }
-  }, [days, usageAggregation, filterQueryFields])
+  }, [dateRangeQuery, usageAggregation, filterQueryFields])
 
   const statsQuery = useQuery({
     queryKey: buildUsageStatsQueryKey(
       teamId,
-      days,
+      dateRangeKey,
       usageAggregation,
       groupBy,
       page,
@@ -623,6 +634,30 @@ export default function GatewayStatsPage(): React.JSX.Element {
     [usageAggregation, filterState, crossTeamStatsEnabled]
   )
 
+  const handlePresetRangeChange = useCallback(
+    (presetDays: UsageStatsPresetDays): void => {
+      setDateRange(usageStatsPresetDateRange(presetDays))
+      setPage(1)
+    },
+    [setPage]
+  )
+
+  const handleStartDateChange = useCallback(
+    (startDate: string): void => {
+      setDateRange((prev) => usageStatsCustomDateRange(startDate, prev.endDate))
+      setPage(1)
+    },
+    [setPage]
+  )
+
+  const handleEndDateChange = useCallback(
+    (endDate: string): void => {
+      setDateRange((prev) => usageStatsCustomDateRange(prev.startDate, endDate))
+      setPage(1)
+    },
+    [setPage]
+  )
+
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
@@ -648,16 +683,39 @@ export default function GatewayStatsPage(): React.JSX.Element {
               <Button
                 key={range.value}
                 size="sm"
-                variant={days === range.value ? 'default' : 'ghost'}
+                variant={dateRange.presetDays === range.value ? 'default' : 'ghost'}
                 className="h-7 px-3 text-xs"
                 type="button"
                 onClick={() => {
-                  setDays(range.value)
+                  handlePresetRangeChange(range.value)
                 }}
               >
                 {range.label}
               </Button>
             ))}
+          </div>
+          <div className="flex items-center gap-1 rounded-md border bg-background px-1 py-0.5">
+            <Input
+              type="date"
+              value={dateRange.startDate}
+              max={dateRange.endDate}
+              aria-label="统计开始日期"
+              className="h-7 w-[8.5rem] border-0 px-2 text-xs shadow-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-offset-0"
+              onChange={(event) => {
+                handleStartDateChange(event.target.value)
+              }}
+            />
+            <span className="text-xs text-muted-foreground">至</span>
+            <Input
+              type="date"
+              value={dateRange.endDate}
+              min={dateRange.startDate}
+              aria-label="统计结束日期"
+              className="h-7 w-[8.5rem] border-0 px-2 text-xs shadow-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-offset-0"
+              onChange={(event) => {
+                handleEndDateChange(event.target.value)
+              }}
+            />
           </div>
           <div className="hidden h-6 w-px bg-border sm:block" />
           <div className="flex flex-wrap gap-1">

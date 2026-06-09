@@ -6,6 +6,7 @@ import type { GatewayUsageAggregation } from '@/api/gateway/logs'
 import { providerProfilesApi } from '@/api/gateway/provider-profiles'
 import { statsApi, type GatewayUsageStatsQuery } from '@/api/gateway/stats'
 import type { GatewayFilterOption } from '@/features/gateway-usage/gateway-filter-combobox'
+import type { UsageStatsDateRangeQuery } from '@/features/gateway-usage/usage-stats-date-range'
 import {
   mergeProviderFilterOptions,
   providerFilterOptionsFromProfiles,
@@ -15,12 +16,12 @@ import { MAX_PAGE_SIZE } from '@/lib/pagination'
 
 export type UsageStatsProviderDiscoveryFilters = Omit<
   GatewayUsageStatsQuery,
-  'group_by' | 'page' | 'page_size' | 'provider' | 'days' | 'usage_aggregation'
+  'group_by' | 'page' | 'page_size' | 'provider' | 'days' | 'start' | 'end' | 'usage_aggregation'
 >
 
 export interface UseUsageStatsProviderFilterOptionsParams {
   teamId: string
-  days: number
+  dateRangeQuery: UsageStatsDateRangeQuery
   usageAggregation: GatewayUsageAggregation
   baseFilters: UsageStatsProviderDiscoveryFilters
   registryProviders: readonly GatewayFilterOption[]
@@ -34,7 +35,7 @@ export interface UsageStatsProviderFilterOptionsResult {
 
 export function useUsageStatsProviderFilterOptions({
   teamId,
-  days,
+  dateRangeQuery,
   usageAggregation,
   baseFilters,
   registryProviders,
@@ -53,13 +54,13 @@ export function useUsageStatsProviderFilterOptions({
       'stats-filter',
       'providers-by-usage',
       teamId,
-      days,
+      dateRangeQuery,
       usageAggregation,
       baseFilters,
     ],
     queryFn: () =>
       statsApi.usageStats(teamId, {
-        days,
+        ...dateRangeQuery,
         usage_aggregation: usageAggregation,
         group_by: 'provider',
         page: 1,

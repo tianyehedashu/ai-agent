@@ -28,6 +28,8 @@ function breakdownBaseQueryKey(teamId: string, baseQuery: UsageStatsBreakdownBas
   return buildFilterKey([
     teamId,
     baseQuery.days ?? 7,
+    baseQuery.start ?? '',
+    baseQuery.end ?? '',
     baseQuery.usage_aggregation ?? 'workspace',
     baseQuery.credential_id ?? '',
     baseQuery.user_id ?? '',

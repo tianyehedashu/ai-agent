@@ -53,6 +53,27 @@ router = APIRouter()
 PageDep = Annotated[PageParams, Depends(page_query_params)]
 
 
+def _normalize_query_datetime(value: datetime | None) -> datetime | None:
+    if value is None:
+        return None
+    if value.tzinfo is None or value.utcoffset() is None:
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
+
+
+def _resolve_dashboard_time_range(
+    *,
+    days: int,
+    start: datetime | None,
+    end: datetime | None,
+) -> tuple[datetime, datetime]:
+    resolved_end = _normalize_query_datetime(end) or datetime.now(UTC)
+    resolved_start = _normalize_query_datetime(start) or (resolved_end - timedelta(days=days))
+    if resolved_start > resolved_end:
+        raise ValidationError("start must be before or equal to end")
+    return resolved_start, resolved_end
+
+
 def _usage_stats_metric_response(
     metric: UsageStatisticsMetric,
     *,
@@ -122,12 +143,7 @@ async def dashboard_summary(
     user_id: uuid.UUID | None = None,
     model: str | None = Query(default=None, min_length=1, max_length=200),
 ) -> DashboardSummaryResponse:
-    if end is None:
-        end = datetime.now(UTC)
-    if start is None:
-        start = end - timedelta(days=days)
-    if start > end:
-        raise ValidationError("start must be before or equal to end")
+    start, end = _resolve_dashboard_time_range(days=days, start=start, end=end)
     summary = await reads.aggregate_request_log_summary(
         team,
         start,
@@ -178,6 +194,8 @@ async def dashboard_statistics(
         UsageAggregation.WORKSPACE,
         description=USAGE_AGGREGATION_QUERY_DESCRIPTION,
     ),
+    start: datetime | None = None,
+    end: datetime | None = None,
     group_by: UsageStatisticsGroupBy = Query(UsageStatisticsGroupBy.CREDENTIAL),
     credential_id: uuid.UUID | None = None,
     user_id: uuid.UUID | None = None,
@@ -191,8 +209,7 @@ async def dashboard_statistics(
     status_filter: str | None = Query(default=None, alias="status", min_length=1, max_length=40),
     vkey_id: uuid.UUID | None = None,
 ) -> UsageStatisticsResponse:
-    end = datetime.now(UTC)
-    start = end - timedelta(days=days)
+    start, end = _resolve_dashboard_time_range(days=days, start=start, end=end)
     summary, group_total = await reads.aggregate_usage_statistics(
         team,
         start,
@@ -259,6 +276,8 @@ async def dashboard_statistics_breakdown(
         UsageAggregation.WORKSPACE,
         description=USAGE_AGGREGATION_QUERY_DESCRIPTION,
     ),
+    start: datetime | None = None,
+    end: datetime | None = None,
     parent_group_by: UsageStatisticsGroupBy = Query(...),
     parent_group_key: str = Query(..., min_length=0, max_length=200),
     breakdown_by: UsageStatisticsBreakdownBy = Query(...),
@@ -275,8 +294,7 @@ async def dashboard_statistics_breakdown(
     status_filter: str | None = Query(default=None, alias="status", min_length=1, max_length=40),
     vkey_id: uuid.UUID | None = None,
 ) -> UsageStatisticsBreakdownResponse:
-    end = datetime.now(UTC)
-    start = end - timedelta(days=days)
+    start, end = _resolve_dashboard_time_range(days=days, start=start, end=end)
     summary = await reads.aggregate_usage_statistics_breakdown(
         team,
         start,

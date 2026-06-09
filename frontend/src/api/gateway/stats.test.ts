@@ -42,6 +42,8 @@ describe('statsApi usageStats query', () => {
 
     await statsApi.usageStats('team-1', {
       usage_aggregation: 'platform',
+      start: '2026-01-01T00:00:00.000Z',
+      end: '2026-01-31T23:59:59.999Z',
       provider: 'volcengine',
       group_by: 'model',
       page: 1,
@@ -49,9 +51,11 @@ describe('statsApi usageStats query', () => {
     })
 
     const url = (fetchMock.mock.calls[0] as [string])[0]
-    expect(url).toContain('usage_aggregation=platform')
-    expect(url).toContain('provider=volcengine')
+    const decodedUrl = decodeURIComponent(url)
+    expect(decodedUrl).toContain('usage_aggregation=platform')
+    expect(decodedUrl).toContain('start=2026-01-01T00:00:00.000Z')
+    expect(decodedUrl).toContain('end=2026-01-31T23:59:59.999Z')
+    expect(decodedUrl).toContain('provider=volcengine')
     expect(url).not.toMatch(/[?&]team_id=/)
-    expect(url).toContain('provider=volcengine')
   })
 })

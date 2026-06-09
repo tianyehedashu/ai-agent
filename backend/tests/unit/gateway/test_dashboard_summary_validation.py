@@ -9,8 +9,23 @@ import uuid
 
 import pytest
 
-from domains.gateway.presentation.routers.dashboard import dashboard_summary
+from domains.gateway.application.management.usage_reads import (
+    UsageStatisticsBreakdownSummary,
+    UsageStatisticsMetric,
+    UsageStatisticsSummary,
+)
+from domains.gateway.domain.usage_read_model import (
+    UsageAggregation,
+    UsageStatisticsBreakdownBy,
+    UsageStatisticsGroupBy,
+)
+from domains.gateway.presentation.routers.dashboard import (
+    dashboard_statistics,
+    dashboard_statistics_breakdown,
+    dashboard_summary,
+)
 from domains.tenancy.domain.management_context import ManagementTeamContext
+from libs.api.pagination import PageParams
 from libs.exceptions import ValidationError
 
 
@@ -28,6 +43,20 @@ def fake_team():
 @pytest.fixture
 def fake_reads():
     reads = MagicMock()
+    now = datetime.now(UTC)
+    empty_metric = UsageStatisticsMetric(
+        requests=0,
+        success_count=0,
+        failure_count=0,
+        input_tokens=0,
+        output_tokens=0,
+        cached_tokens=0,
+        cache_creation_tokens=0,
+        cost_usd=Decimal("0"),
+        avg_latency_ms=0.0,
+        avg_ttfb_ms=0.0,
+        cache_hit_count=0,
+    )
     reads.aggregate_request_log_summary = AsyncMock(
         return_value={
             "total": 10,
@@ -40,6 +69,27 @@ def fake_reads():
             "avg_ttfb_ms": 42.0,
             "by_client_type": [],
         }
+    )
+    reads.aggregate_usage_statistics = AsyncMock(
+        return_value=(
+            UsageStatisticsSummary(
+                start=now,
+                end=now,
+                group_by=UsageStatisticsGroupBy.CREDENTIAL,
+                totals=empty_metric,
+                items=[],
+            ),
+            0,
+        )
+    )
+    reads.aggregate_usage_statistics_breakdown = AsyncMock(
+        return_value=UsageStatisticsBreakdownSummary(
+            parent_group_by=UsageStatisticsGroupBy.USER,
+            parent_group_key="",
+            breakdown_by=UsageStatisticsBreakdownBy.CREDENTIAL,
+            parent_requests=0,
+            items=[],
+        )
     )
     return reads
 
@@ -150,3 +200,97 @@ async def test_dashboard_summary_passes_all_filter_params(fake_team, fake_reads)
     assert call_kwargs["credential_id"] == cid
     assert call_kwargs["user_id"] == uid
     assert call_kwargs["model"] == "gpt-4"
+
+
+@pytest.mark.asyncio
+async def test_dashboard_statistics_uses_explicit_date_range(fake_team, fake_reads) -> None:
+    """statistics 应优先使用 start/end，而不是 days 默认窗口。"""
+    start = datetime(2026, 1, 1, tzinfo=UTC)
+    end = datetime(2026, 1, 31, tzinfo=UTC)
+
+    await dashboard_statistics(
+        team=fake_team,
+        reads=fake_reads,
+        page=PageParams(),
+        days=7,
+        usage_aggregation=UsageAggregation.WORKSPACE,
+        start=start,
+        end=end,
+        group_by=UsageStatisticsGroupBy.MODEL,
+        credential_id=None,
+        user_id=None,
+        filter_team_id=None,
+        model=None,
+        provider=None,
+        capability=None,
+        status_filter=None,
+        vkey_id=None,
+    )
+
+    call_args = fake_reads.aggregate_usage_statistics.await_args
+    assert call_args.args[1] == start
+    assert call_args.args[2] == end
+
+
+@pytest.mark.asyncio
+async def test_dashboard_statistics_rejects_inverted_date_range(fake_team, fake_reads) -> None:
+    """statistics start > end 时应返回 422 错误。"""
+    end = datetime(2026, 1, 1, tzinfo=UTC)
+    start = end + timedelta(days=1)
+
+    with pytest.raises(ValidationError) as exc_info:
+        await dashboard_statistics(
+            team=fake_team,
+            reads=fake_reads,
+            page=PageParams(),
+            days=7,
+            usage_aggregation=UsageAggregation.WORKSPACE,
+            start=start,
+            end=end,
+            group_by=UsageStatisticsGroupBy.CREDENTIAL,
+            credential_id=None,
+            user_id=None,
+            filter_team_id=None,
+            model=None,
+            provider=None,
+            capability=None,
+            status_filter=None,
+            vkey_id=None,
+        )
+
+    assert "start must be before or equal to end" in str(exc_info.value)
+    fake_reads.aggregate_usage_statistics.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_dashboard_statistics_breakdown_uses_explicit_date_range(
+    fake_team, fake_reads
+) -> None:
+    """breakdown 应与主统计使用同一个 start/end 窗口。"""
+    start = datetime(2026, 2, 1, tzinfo=UTC)
+    end = datetime(2026, 2, 8, tzinfo=UTC)
+
+    await dashboard_statistics_breakdown(
+        team=fake_team,
+        reads=fake_reads,
+        days=7,
+        usage_aggregation=UsageAggregation.WORKSPACE,
+        start=start,
+        end=end,
+        parent_group_by=UsageStatisticsGroupBy.USER,
+        parent_group_key=str(uuid.uuid4()),
+        breakdown_by=UsageStatisticsBreakdownBy.CREDENTIAL,
+        top_n=3,
+        credential_id=None,
+        user_id=None,
+        filter_team_id=None,
+        model=None,
+        provider=None,
+        capability=None,
+        status_filter=None,
+        vkey_id=None,
+    )
+
+    call_args = fake_reads.aggregate_usage_statistics_breakdown.await_args
+    assert call_args.args[1] == start
+    assert call_args.args[2] == end
