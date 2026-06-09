@@ -26,7 +26,7 @@ export interface GatewayRoute {
   fallbacks_content_policy: string[]
   /** 上下文超长时的降级目标（更大窗口模型） */
   fallbacks_context_window: string[]
-  /** 主选模型选择策略：weighted / round-robin / ... */
+  /** 主选模型选择策略：simple-shuffle / weighted-pick / least-busy / ... */
   strategy: string
   retry_policy?: Record<string, unknown> | null
   enabled: boolean

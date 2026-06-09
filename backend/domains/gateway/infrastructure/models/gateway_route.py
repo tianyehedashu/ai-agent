@@ -41,7 +41,7 @@ class GatewayRoute(BaseModel, TenantScopedMixin):
         nullable=False,
         server_default="simple-shuffle",
         comment=(
-            "simple-shuffle / least-busy / latency-based-routing /"
+            "simple-shuffle / weighted-pick / least-busy / latency-based-routing /"
             " usage-based-routing-v2 / cost-based-routing"
         ),
     )

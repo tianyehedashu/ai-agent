@@ -64,8 +64,9 @@
 | A17 | `get_model_info` / `supports_*` | ◐ | `litellm_capability_hint.py` + `litellm_capability_mapping.py` → `LitellmCapabilityHintAdapter` | **写侧 + 探测** hint（vision/tools/json/reasoning/image_gen）；配置托管种子跳过；`PATCH resync_capabilities` 显式重算 |
 | **B. Router** |
 | B1 | `Router(model_list=…)` | ✅ | `router_singleton.py` → `get_router` / `reload_router` | 启动 warm-up + 管理面变更后 `set_model_list` |
-| B2 | `routing_strategy` | ✅ | 5 种（`domain/types.RoutingStrategy`） | 全局单策略：取 DB 路由表最高频；默认 `simple-shuffle` |
-| B2a | `simple-shuffle` | ✅ | 默认 / 种子路由 | 随机加权 |
+| B2 | `routing_strategy` | ✅ | 6 种（`domain/types.RoutingStrategy`） | 全局单策略：取 DB 路由表最高频；默认 `simple-shuffle`；`weighted-pick` 映射到 LiteLLM `simple-shuffle` |
+| B2a | `simple-shuffle` | ✅ | 默认 / 种子路由 | 随机；若 deployment 带 `weight` 则加权随机 |
+| B2f | `weighted-pick` | ✅ | 管理面可配 | 使用 `GatewayModel.weight` 做加权随机，底层复用 LiteLLM `simple-shuffle` |
 | B2b | `least-busy` | ✅ | 管理面可配 | |
 | B2c | `latency-based-routing` | ✅ | 管理面可配 | |
 | B2d | `usage-based-routing-v2` | ✅ | 管理面可配 | |
@@ -78,7 +79,7 @@
 | B8 | `redis_url`（跨进程 cooldown/TPM/RPM） | ✅ | `gateway_router_redis_url` 或 `redis_url` | 多 worker 共享 Router 状态 |
 | B9 | `enable_pre_call_checks` | ✅ | 固定 `True` | 与 ProviderPlanGuard 配合 |
 | B10 | deployment `rpm` / `tpm` | ✅ | 来自 `GatewayModel.rpm_limit` / `tpm_limit` | 写入 `litellm_params`；Anthropic 直连时会剔除（`filter_litellm_params_for_direct_anthropic`） |
-| B11 | deployment `weight` | ✅ | `GatewayModel.weight` → `model_info.weight` | 影响 shuffle 权重 |
+| B11 | deployment `weight` | ✅ | `GatewayModel.weight` → `litellm_params.weight` + `model_info.weight` | `litellm_params.weight` 影响 shuffle 权重；`model_info.weight` 用于展示/归因 |
 | B12 | `add_deployment` / `delete_deployment` | ◐ | 主要用 `set_model_list` 全量热更 | 未逐条增量 API |
 | B13 | Router `a*` 以外的能力 | ◐ | 见 A5–A8：部分走直连 SDK | speech/rerank/moderation/video 未统一经 Router |
 | B14 | Tag-based routing / Auto routing | ❌ | — | LiteLLM 高级路由；项目用自研 `GatewayRoute` + fallback 三类 |

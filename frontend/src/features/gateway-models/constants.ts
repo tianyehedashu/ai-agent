@@ -86,6 +86,7 @@ export const VIDEO_BATCH_TEST_CONCURRENCY = 1
 /** 与 backend domains.gateway.domain.types.RoutingStrategy 对齐 */
 export const ROUTING_STRATEGIES = [
   'simple-shuffle',
+  'weighted-pick',
   'least-busy',
   'usage-based-routing-v2',
   'latency-based-routing',
@@ -97,6 +98,7 @@ export type RoutingStrategy = (typeof ROUTING_STRATEGIES)[number]
 /** 路由策略中文展示（API 仍用英文枚举值） */
 export const ROUTING_STRATEGY_LABELS: Record<RoutingStrategy, string> = {
   'simple-shuffle': '简单随机',
+  'weighted-pick': '按权重路由',
   'least-busy': '最少繁忙',
   'usage-based-routing-v2': '按用量路由',
   'latency-based-routing': '按延迟路由',

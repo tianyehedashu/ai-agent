@@ -8,6 +8,7 @@ import uuid
 from domains.gateway.domain.router_model_name import encode_router_model_name
 from domains.gateway.infrastructure.router_singleton import (
     _models_to_deployments,
+    _resolve_strategy,
     _routes_to_virtual_deployments,
 )
 
@@ -108,6 +109,68 @@ def test_virtual_route_creates_one_deployment_per_primary(monkeypatch) -> None:
     assert [d["model_name"] for d in virtuals] == [route_key, route_key]
     cred_ids = {d["model_info"]["gateway_credential_id"] for d in virtuals}
     assert cred_ids == {str(cred_a), str(cred_b)}
+
+
+def test_virtual_route_deployments_include_litellm_weight(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "domains.gateway.infrastructure.router_singleton._build_litellm_params",
+        _stub_build_litellm_params,
+    )
+    team = uuid.uuid4()
+    cred_a, cred_b = uuid.uuid4(), uuid.uuid4()
+    m_a = _mk_model(
+        name="fast",
+        real_model="gpt-4o",
+        provider="openai",
+        cred_id=cred_a,
+        tenant_id=team,
+        weight=3,
+    )
+    m_b = _mk_model(
+        name="slow",
+        real_model="gpt-4o",
+        provider="openai",
+        cred_id=cred_b,
+        tenant_id=team,
+        weight=1,
+    )
+    route = _mk_route(virtual_model="weighted", primary_models=["fast", "slow"], tenant_id=team)
+    virtuals = _routes_to_virtual_deployments(
+        [route],
+        [m_a, m_b],
+        {cred_a: _mk_cred(id_=cred_a), cred_b: _mk_cred(id_=cred_b)},
+        reserved_model_names=frozenset({"fast", "slow"}),
+    )
+    assert [d["litellm_params"]["weight"] for d in virtuals] == [3, 1]
+    assert [d["model_info"]["weight"] for d in virtuals] == [3, 1]
+
+
+def test_invalid_deployment_weight_defaults_to_one(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "domains.gateway.infrastructure.router_singleton._build_litellm_params",
+        _stub_build_litellm_params,
+    )
+    cred = uuid.uuid4()
+    model = _mk_model(
+        name="zero",
+        real_model="gpt-4o",
+        provider="openai",
+        cred_id=cred,
+        weight=0,
+    )
+    out = _models_to_deployments([model], {cred: _mk_cred(id_=cred)})
+    assert out[0]["litellm_params"]["weight"] == 1
+    assert out[0]["model_info"]["weight"] == 1
+
+
+def test_weighted_pick_strategy_maps_to_litellm_simple_shuffle() -> None:
+    weighted = _mk_route(virtual_model="weighted", primary_models=["a"])
+    weighted.strategy = "weighted-pick"
+    simple = _mk_route(virtual_model="simple", primary_models=["b"])
+    simple.strategy = "simple-shuffle"
+
+    assert _resolve_strategy([weighted]) == "simple-shuffle"
+    assert _resolve_strategy([weighted, simple]) == "simple-shuffle"
 
 
 def test_virtual_route_skipped_when_shadowed_by_model_name(monkeypatch) -> None:

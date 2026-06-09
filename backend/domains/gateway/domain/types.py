@@ -130,9 +130,10 @@ def allowed_capabilities_from_storage(
 
 
 class RoutingStrategy(str, Enum):
-    """路由策略（对齐 LiteLLM Router）"""
+    """路由策略（Gateway API 字面量；部分会映射到 LiteLLM Router 原生策略）"""
 
     SIMPLE_SHUFFLE = "simple-shuffle"
+    WEIGHTED_PICK = "weighted-pick"
     LEAST_BUSY = "least-busy"
     LATENCY_BASED = "latency-based-routing"
     USAGE_BASED = "usage-based-routing-v2"

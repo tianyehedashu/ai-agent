@@ -6,7 +6,7 @@ LiteLLM Router Singleton + Factory
 特性：
 - 从 GatewayModel + ProviderCredential 拼装 model_list
 - 跨进程 cooldown：使用 redis_url 共享 cooldown / TPM / RPM 状态
-- 5 种 routing 策略，3 类 fallback
+- 6 种 routing 策略，3 类 fallback
 - 热重载：set_model_list / add_deployment / delete_deployment
 """
 
@@ -28,7 +28,7 @@ from domains.gateway.domain.router_model_name import (
     deployment_scope_team_id,
     encode_router_model_name,
 )
-from domains.gateway.domain.types import credential_api_scope
+from domains.gateway.domain.types import RoutingStrategy, credential_api_scope
 from domains.gateway.domain.upstream_call_shape_policy import (
     resolve_effective_upstream_call_shape,
 )
@@ -206,7 +206,9 @@ def _build_litellm_params(
 
 
 # Router deployment 专用，不应透传给 ``anthropic_messages`` 直连调用。
-_ROUTER_ONLY_LITELLM_PARAM_KEYS: frozenset[str] = frozenset({"rpm", "tpm", *_PRICING_INJECT_KEYS})
+_ROUTER_ONLY_LITELLM_PARAM_KEYS: frozenset[str] = frozenset(
+    {"rpm", "tpm", "weight", *_PRICING_INJECT_KEYS}
+)
 
 
 def filter_litellm_params_for_direct_anthropic(dep: dict[str, Any]) -> dict[str, Any]:
@@ -227,6 +229,14 @@ def _pricing_for_model(
     return pricing_lookup.get((src.provider, src.real_model, cap))
 
 
+def _normalize_deployment_weight(value: Any) -> int:
+    try:
+        weight = int(value)
+    except (TypeError, ValueError):
+        return 1
+    return weight if weight > 0 else 1
+
+
 def _build_deployment(
     *,
     model_name: str,
@@ -237,18 +247,23 @@ def _build_deployment(
 ) -> dict[str, Any]:
     """构造单个 deployment dict（model_list 一行）。"""
     pricing = _pricing_for_model(src, pricing_lookup)
+    deployment_weight = _normalize_deployment_weight(getattr(src, "weight", 1))
+    litellm_params = _build_litellm_params(
+        real_model=src.real_model,
+        provider=src.provider,
+        credential=cred,
+        rpm_limit=src.rpm_limit,
+        tpm_limit=src.tpm_limit,
+        tags=src.tags,
+        pricing=pricing,
+        upstream_call_shape=getattr(src, "upstream_call_shape", None),
+    )
+    # LiteLLM simple_shuffle reads deployment["litellm_params"]["weight"] for
+    # weighted selection; model_info.weight is retained for attribution/logging.
+    litellm_params["weight"] = deployment_weight
     return {
         "model_name": model_name,
-        "litellm_params": _build_litellm_params(
-            real_model=src.real_model,
-            provider=src.provider,
-            credential=cred,
-            rpm_limit=src.rpm_limit,
-            tpm_limit=src.tpm_limit,
-            tags=src.tags,
-            pricing=pricing,
-            upstream_call_shape=getattr(src, "upstream_call_shape", None),
-        ),
+        "litellm_params": litellm_params,
         "model_info": {
             "id": str(src.id),
             "team_id": (
@@ -257,7 +272,7 @@ def _build_deployment(
                 else None
             ),
             "capability": src.capability,
-            "weight": src.weight,
+            "weight": deployment_weight,
             "gateway_model_name": src.name,
             "gateway_real_model": src.real_model,
             "gateway_provider": src.provider,
@@ -418,17 +433,26 @@ def _routes_to_fallbacks(
     return general, cp, cw
 
 
-def _resolve_strategy(routes: list[GatewayRoute]) -> str:
+def _litellm_routing_strategy(strategy: str | None) -> str:
+    """将项目策略字面量映射为 LiteLLM Router 原生支持的 ``routing_strategy``。"""
+    if strategy == RoutingStrategy.WEIGHTED_PICK.value:
+        return RoutingStrategy.SIMPLE_SHUFFLE.value
+    return strategy or RoutingStrategy.SIMPLE_SHUFFLE.value
+
+
+def _resolve_strategy(routes: list[GatewayRoute | SystemGatewayRoute]) -> str:
     """全局策略选取：取最高频；如果都没设置默认 simple-shuffle
 
     （LiteLLM Router 单例只能一个 routing_strategy；
-    不同路由可通过 model_list weight 体现差异）
+    不同路由可通过 model_list weight 体现差异；weighted-pick 映射为
+    simple-shuffle，由 LiteLLM deployment weight 执行加权随机）
     """
     counts: dict[str, int] = {}
     for r in routes:
-        counts[r.strategy] = counts.get(r.strategy, 0) + 1
+        strategy = _litellm_routing_strategy(str(r.strategy or "").strip())
+        counts[strategy] = counts.get(strategy, 0) + 1
     if not counts:
-        return "simple-shuffle"
+        return RoutingStrategy.SIMPLE_SHUFFLE.value
     return max(counts.items(), key=lambda kv: kv[1])[0]
 
 

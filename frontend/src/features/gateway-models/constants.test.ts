@@ -25,6 +25,7 @@ describe('capabilityLabel', () => {
 describe('routingStrategyLabel', () => {
   it('returns Chinese label for known strategy', () => {
     expect(routingStrategyLabel('simple-shuffle')).toBe(ROUTING_STRATEGY_LABELS['simple-shuffle'])
+    expect(routingStrategyLabel('weighted-pick')).toBe('按权重路由')
     expect(routingStrategyLabel('usage-based-routing-v2')).toBe('按用量路由')
     expect(routingStrategyLabel('cost-based-routing')).toBe('按成本路由')
   })

@@ -58,13 +58,9 @@ class RouteWritesMixin:
         cleaned_virtual = (virtual_model or "").strip()
         if not cleaned_virtual:
             raise ValidationError("虚拟模型名不能为空")
-        existing = await self._routes.get_by_virtual_model_for_tenant(
-            tenant_id, cleaned_virtual
-        )
+        existing = await self._routes.get_by_virtual_model_for_tenant(tenant_id, cleaned_virtual)
         if existing is not None:
-            raise ValidationError(
-                f"虚拟模型名 '{cleaned_virtual}' 在当前工作区已存在路由"
-            )
+            raise ValidationError(f"虚拟模型名 '{cleaned_virtual}' 在当前工作区已存在路由")
         await self._validate_route_model_names(
             tenant_id,
             primary_models=primary_models,
@@ -94,7 +90,7 @@ class RouteWritesMixin:
             raise ManagementEntityNotFoundError("route", str(route_id))
         patch = dict(fields)
         if patch.get("strategy") is not None:
-            patch["strategy"] = validate_routing_strategy(str(patch["strategy"]))
+            patch["strategy"] = validate_routing_strategy(patch["strategy"])
         primary_models = patch.get("primary_models", existing.primary_models) or []
         fallbacks_general = patch.get("fallbacks_general", existing.fallbacks_general) or []
         fallbacks_content_policy = (

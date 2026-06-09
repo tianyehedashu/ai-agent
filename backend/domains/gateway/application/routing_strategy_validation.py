@@ -6,9 +6,9 @@ from domains.gateway.domain.types import RoutingStrategy
 from libs.exceptions import ValidationError
 
 
-def validate_routing_strategy(strategy: str) -> str:
+def validate_routing_strategy(strategy: str | RoutingStrategy) -> str:
     """返回规范化策略字面量；非法时抛 ``ValidationError``。"""
-    raw = (strategy or "").strip()
+    raw = strategy.value if isinstance(strategy, RoutingStrategy) else str(strategy or "").strip()
     if not raw:
         raise ValidationError("routing strategy 不能为空")
     try:
