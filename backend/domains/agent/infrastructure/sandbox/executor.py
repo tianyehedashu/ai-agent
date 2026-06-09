@@ -253,6 +253,11 @@ class PersistentDockerExecutor(SandboxExecutor):
     # 容器名称前缀，用于识别和清理
     CONTAINER_PREFIX = "sandbox-"
 
+    # Docker daemon 探测/清理超时（秒）；避免 Docker Desktop 异常时
+    # 让 startup hook 无限期挂起后端进程
+    DOCKER_PROBE_TIMEOUT_SECONDS = 10
+    DOCKER_RM_TIMEOUT_SECONDS = 30
+
     def __init__(
         self,
         image: str = "python:3.11-slim",
@@ -326,23 +331,30 @@ class PersistentDockerExecutor(SandboxExecutor):
 
         # pylint: disable=too-many-branches
         def run() -> list[str]:
-            # 列出所有沙箱容器
-            result = subprocess.run(
-                [
-                    "docker",
-                    "ps",
-                    "-a",
-                    "--filter",
-                    f"name={cls.CONTAINER_PREFIX}",
-                    "--format",
-                    "{{.Names}}\t{{.Status}}",
-                ],
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                check=False,
-            )
+            try:
+                result = subprocess.run(
+                    [
+                        "docker",
+                        "ps",
+                        "-a",
+                        "--filter",
+                        f"name={cls.CONTAINER_PREFIX}",
+                        "--format",
+                        "{{.Names}}\t{{.Status}}",
+                    ],
+                    capture_output=True,
+                    text=True,
+                    encoding="utf-8",
+                    errors="replace",
+                    check=False,
+                    timeout=cls.DOCKER_PROBE_TIMEOUT_SECONDS,
+                )
+            except (subprocess.TimeoutExpired, OSError) as exc:
+                logger.warning(
+                    "Skipping orphan cleanup: `docker ps` unavailable (%s)",
+                    exc,
+                )
+                return []
 
             if result.returncode != 0:
                 return []
@@ -382,11 +394,13 @@ class PersistentDockerExecutor(SandboxExecutor):
                     should_cleanup = True
 
                 if should_cleanup:
-                    subprocess.run(
-                        ["docker", "rm", "-f", container_name],
-                        capture_output=True,
-                        check=False,
-                    )
+                    with contextlib.suppress(subprocess.TimeoutExpired, OSError):
+                        subprocess.run(
+                            ["docker", "rm", "-f", container_name],
+                            capture_output=True,
+                            check=False,
+                            timeout=cls.DOCKER_RM_TIMEOUT_SECONDS,
+                        )
                     cleaned.append(container_name)
                     logger.info("Cleaned up orphaned container: %s", container_name)
 
@@ -404,34 +418,42 @@ class PersistentDockerExecutor(SandboxExecutor):
         """
 
         def run() -> list[str]:
-            # 列出所有沙箱容器
-            result = subprocess.run(
-                [
-                    "docker",
-                    "ps",
-                    "-aq",
-                    "--filter",
-                    f"name={cls.CONTAINER_PREFIX}",
-                ],
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                check=False,
-            )
+            try:
+                result = subprocess.run(
+                    [
+                        "docker",
+                        "ps",
+                        "-aq",
+                        "--filter",
+                        f"name={cls.CONTAINER_PREFIX}",
+                    ],
+                    capture_output=True,
+                    text=True,
+                    encoding="utf-8",
+                    errors="replace",
+                    check=False,
+                    timeout=cls.DOCKER_PROBE_TIMEOUT_SECONDS,
+                )
+            except (subprocess.TimeoutExpired, OSError) as exc:
+                logger.warning(
+                    "Skipping cleanup_all: `docker ps` unavailable (%s)",
+                    exc,
+                )
+                return []
 
             if result.returncode != 0 or not result.stdout.strip():
                 return []
 
             container_ids = result.stdout.strip().split("\n")
 
-            # 批量删除
             if container_ids:
-                subprocess.run(
-                    ["docker", "rm", "-f", *container_ids],
-                    capture_output=True,
-                    check=False,
-                )
+                with contextlib.suppress(subprocess.TimeoutExpired, OSError):
+                    subprocess.run(
+                        ["docker", "rm", "-f", *container_ids],
+                        capture_output=True,
+                        check=False,
+                        timeout=cls.DOCKER_RM_TIMEOUT_SECONDS,
+                    )
                 logger.info("Cleaned up %d sandbox containers", len(container_ids))
 
             return container_ids
