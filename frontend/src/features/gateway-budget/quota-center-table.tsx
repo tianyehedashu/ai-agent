@@ -179,8 +179,8 @@ const QuotaCenterTableRow = memo(function QuotaCenterTableRow({
       <td className="px-4 py-2 text-xs tabular-nums">
         {usage ? (
           <>
-            USD {usage.current_usd.toFixed(4)} /{' '}
-            {limitUsd !== null ? `$${limitUsd.toFixed(2)}` : '∞'}
+            USD {Number.parseFloat(String(usage.current_usd)).toFixed(4)} /{' '}
+            {limitUsd !== null ? `$${Number.parseFloat(String(limitUsd)).toFixed(2)}` : '∞'}
             <br />
             Token {usage.current_tokens} / {limitTok ?? '∞'}
           </>

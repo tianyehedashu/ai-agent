@@ -111,7 +111,7 @@ export function QuotaOverviewCards({
       />
       <KpiCard
         title="本月累计用量"
-        value={`$${totalUsd.toFixed(2)}`}
+        value={`$${Number.parseFloat(String(totalUsd)).toFixed(2)}`}
         sub={`${totalTokens.toLocaleString()} Token · ${totalRequests.toLocaleString()} 请求`}
         isLoading={isLoading}
       />
