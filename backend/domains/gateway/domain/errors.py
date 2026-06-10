@@ -4,6 +4,8 @@ Gateway Domain Errors - 领域错误
 
 from __future__ import annotations
 
+from contextlib import suppress
+
 from domains.tenancy.domain.errors import (
     PersonalTeamNotInitializedError,
     TeamNotFoundError,
@@ -193,23 +195,61 @@ class CapabilityNotAllowedError(GatewayError):
         self.capability = capability
 
 
-class BudgetExceededError(GatewayError):
-    """预算超限"""
+class QuotaExhaustedError(GatewayError):
+    """配额耗尽统一基类。
 
-    def __init__(self, scope: str, period: str, limit: float, used: float) -> None:
-        super().__init__(f"{scope}/{period} 预算已用尽: 限额 {limit}, 已用 {used}")
+    涵盖 platform 预算、upstream 厂商套餐、downstream 客户权益三层配额。
+    子类保留独立构造签名以便调用方按场景传参，内部统一映射到基类字段。
+    """
+
+    def __init__(
+        self,
+        *,
+        layer: str,
+        scope: str,
+        quota_label: str,
+        reason: str,
+        limit: float,
+        used: float,
+        retry_after: int | None = None,
+    ) -> None:
+        super().__init__(
+            f"[{layer}] {scope}/{quota_label} 配额已耗尽 (reason={reason}): "
+            f"限额 {limit}, 已用 {used}"
+        )
+        self.layer = layer
         self.scope = scope
-        self.period = period
+        self.quota_label = quota_label
+        self.reason = reason
         self.limit = limit
         self.used = used
+        self.retry_after = retry_after
 
 
-class EntitlementPlanExhaustedError(GatewayError):
-    """下游客户套餐 (EntitlementPlan) 滚动桶耗尽
+class BudgetExceededError(QuotaExhaustedError):
+    """平台预算（platform 层）超限。"""
 
-    发生于客户向网关调用前的入站校验阶段（``ProxyUseCase`` 入口）。语义为
-    "客户已购额度用完"，**不**可经 fallback 突破；HTTP 429 + 业务码
-    ``gateway/entitlement_exhausted``。``retry_at`` 表示最早窗口内成员到期时刻。
+    def __init__(self, scope: str, period: str, limit: float, used: float) -> None:
+        super().__init__(
+            layer="platform",
+            scope=scope,
+            quota_label=period,
+            reason="usd",
+            limit=limit,
+            used=used,
+        )
+
+    @property
+    def period(self) -> str:
+        """向后兼容：period 即 quota_label。"""
+        return self.quota_label
+
+
+class EntitlementPlanExhaustedError(QuotaExhaustedError):
+    """下游客户套餐 (EntitlementPlan) 滚动桶耗尽。
+
+    发生于客户向网关调用前的入站校验阶段。语义为"客户已购额度用完"，
+    **不**可经 fallback 突破；HTTP 429 + 业务码 ``gateway/entitlement_exhausted``。
     """
 
     def __init__(
@@ -220,19 +260,34 @@ class EntitlementPlanExhaustedError(GatewayError):
         reason: str,
         retry_at: str | None = None,
     ) -> None:
-        super().__init__(f"客户套餐 {plan_id} 的 {quota_label} 配额已耗尽 (reason={reason})")
-        self.plan_id = plan_id
-        self.quota_label = quota_label
-        self.reason = reason
-        self.retry_at = retry_at
+        retry_after = None
+        if retry_at:
+            from datetime import UTC, datetime
+
+            with suppress(Exception):
+                dt = datetime.fromisoformat(retry_at)
+                retry_after = max(0, int((dt - datetime.now(UTC)).total_seconds()))
+        super().__init__(
+            layer="downstream",
+            scope=plan_id,
+            quota_label=quota_label,
+            reason=reason,
+            limit=0.0,
+            used=0.0,
+            retry_after=retry_after,
+        )
+
+    @property
+    def plan_id(self) -> str:
+        """向后兼容：plan_id 即 scope。"""
+        return self.scope
 
 
-class ProviderPlanExhaustedError(GatewayError):
-    """上游厂商套餐 (ProviderPlan) 滚动桶耗尽
+class ProviderPlanExhaustedError(QuotaExhaustedError):
+    """上游厂商套餐 (ProviderPlan) 滚动桶耗尽。
 
-    发生于 LiteLLM Router 选中某个 deployment 后的 pre-call 钩子；语义为
-    "对应凭据的厂商订阅 / 预付费包的 quota 用完"。Router 会将该 deployment
-    cooldown，自动切下条凭据 / fallback 模型；调用方一般不会直接看到该错误。
+    发生于 LiteLLM Router 选中 deployment 后的 pre-call 钩子；Router 会
+    cooldown 该 deployment，自动 fallback；调用方一般不直接看到此错误。
     """
 
     def __init__(
@@ -243,11 +298,25 @@ class ProviderPlanExhaustedError(GatewayError):
         reason: str,
         cooldown_seconds: int,
     ) -> None:
-        super().__init__(f"上游套餐 {plan_id} 的 {quota_label} 配额已耗尽 (reason={reason})")
-        self.plan_id = plan_id
-        self.quota_label = quota_label
-        self.reason = reason
-        self.cooldown_seconds = cooldown_seconds
+        super().__init__(
+            layer="upstream",
+            scope=plan_id,
+            quota_label=quota_label,
+            reason=reason,
+            limit=0.0,
+            used=0.0,
+            retry_after=cooldown_seconds,
+        )
+
+    @property
+    def plan_id(self) -> str:
+        """向后兼容：plan_id 即 scope。"""
+        return self.scope
+
+    @property
+    def cooldown_seconds(self) -> int:
+        """向后兼容：cooldown_seconds 即 retry_after。"""
+        return self.retry_after or 0
 
 
 class RateLimitExceededError(GatewayError):
@@ -295,6 +364,7 @@ __all__ = [
     "PlatformApiKeyInvalidError",
     "PlatformApiKeyMissingGatewayProxyScopeError",
     "ProviderPlanExhaustedError",
+    "QuotaExhaustedError",
     "RateLimitExceededError",
     "RouteNotFoundError",
     "SystemCredentialAdminRequiredError",

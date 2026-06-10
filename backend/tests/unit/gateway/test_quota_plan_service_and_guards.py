@@ -537,3 +537,14 @@ async def test_provider_plan_guard_mark_upstream_exhausted_forces_quota(
     assert forced_plan_id == plan_id
     assert specs[0].reset_strategy == "calendar_daily_utc"
     assert reason == "upstream_signal:RateLimitError"
+
+
+@pytest.mark.unit
+def test_quota_plan_service_has_no_internal_lru_cache() -> None:
+    """简化缓存层级：确认 QuotaPlanService 不再持有进程内 LRU 缓存。"""
+    from domains.gateway.application.quota_plan_service import QuotaPlanService
+
+    assert not hasattr(QuotaPlanService, "_snapshot_cache")
+    # 同时确认旧缓存相关方法已移除
+    for method in ("_cache_bucket", "_cache_get", "_cache_put", "_invalidate_cache"):
+        assert not hasattr(QuotaPlanService, method), f"遗留缓存方法: {method}"

@@ -23,6 +23,7 @@ from domains.gateway.domain.errors import (
     NoPersonalTeamForProxyError,
     PlatformApiKeyInvalidError,
     PlatformApiKeyMissingGatewayProxyScopeError,
+    QuotaExhaustedError,
     SystemCredentialAdminRequiredError,
     SystemVirtualKeyForbiddenError,
     VirtualKeyDecryptError,
@@ -63,22 +64,30 @@ if TYPE_CHECKING:
 _ProblemBuilder = Callable[[Exception], ProblemContext]
 
 
-def _entitlement_exhausted_problem(exc: Exception) -> ProblemContext:
-    assert isinstance(exc, EntitlementPlanExhaustedError)
+def _quota_exhausted_problem(exc: Exception) -> ProblemContext:
+    """统一配额耗尽错误映射（platform / upstream / downstream 共用）。"""
+    assert isinstance(exc, QuotaExhaustedError)
     headers: dict[str, str] = {}
-    if exc.retry_at:
-        headers["X-Plan-Retry-At"] = exc.retry_at
+    if exc.retry_after is not None and exc.retry_after > 0:
+        headers["Retry-After"] = str(exc.retry_after)
+    code = GATEWAY_ENTITLEMENT_EXHAUSTED
+    if isinstance(exc, EntitlementPlanExhaustedError):
+        code = GATEWAY_ENTITLEMENT_EXHAUSTED
+    extra: dict[str, object] = {
+        "layer": exc.layer,
+        "scope": exc.scope,
+        "quota_label": exc.quota_label,
+        "reason": exc.reason,
+        "limit": exc.limit,
+        "used": exc.used,
+        "retry_after": exc.retry_after,
+    }
     return ProblemContext(
         status_code=status.HTTP_429_TOO_MANY_REQUESTS,
         detail=str(exc),
         title=default_title_for_status(status.HTTP_429_TOO_MANY_REQUESTS),
-        code=GATEWAY_ENTITLEMENT_EXHAUSTED,
-        extra={
-            "plan_id": exc.plan_id,
-            "quota_label": exc.quota_label,
-            "reason": exc.reason,
-            "retry_at": exc.retry_at,
-        },
+        code=code,
+        extra=extra,
         headers=headers or None,
     )
 
@@ -252,7 +261,7 @@ _DOMAIN_PROBLEM_BUILDERS: list[tuple[tuple[type[Exception], ...], _ProblemBuilde
             code=SYSTEM_CREDENTIAL_ADMIN_REQUIRED,
         ),
     ),
-    ((EntitlementPlanExhaustedError,), _entitlement_exhausted_problem),
+    ((QuotaExhaustedError,), _quota_exhausted_problem),
     (
         (GatewayModelNotFoundError,),
         lambda exc: ProblemContext(

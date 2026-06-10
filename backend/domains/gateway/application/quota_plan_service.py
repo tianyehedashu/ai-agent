@@ -15,10 +15,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
-import time
 import uuid
 
 from domains.gateway.domain.quota_plan import (
@@ -35,9 +33,6 @@ from libs.db.redis import get_redis_client
 from utils.logging import get_logger
 
 logger = get_logger(__name__)
-
-
-SNAPSHOT_CACHE_TTL_SECONDS = 30
 
 
 def _quota_key_base(ns: QuotaPlanNamespace, plan_id: uuid.UUID, quota_id: uuid.UUID) -> str:
@@ -71,18 +66,8 @@ def _bucket_ttl_seconds(spec: PlanQuotaSpec) -> int:
     return spec.window_seconds + 120
 
 
-@dataclass
-class _SnapshotCacheEntry:
-    snapshot: PlanQuotaSnapshot
-    expires_at: float
-
-
 class QuotaPlanService:
     """通用 Plan 配额管理 - 上下游共用。"""
-
-    def __init__(self) -> None:
-        # key: (ns, plan_id, quota_id, minute_unix_30s_bucket)
-        self._snapshot_cache: dict[tuple[str, uuid.UUID, uuid.UUID, int], _SnapshotCacheEntry] = {}
 
     # ------------------------------------------------------------------
     # check_and_reserve
@@ -186,8 +171,6 @@ class QuotaPlanService:
             for r in reservations:
                 await self._release_one(ns, plan_id, r)
             raise
-        # 失效缓存以避免读到旧用量（commit/release 同样处理）
-        self._invalidate_cache(ns, plan_id, [s.quota_id for s in specs])
         return QuotaPlanCheckResult(allowed=True, snapshots=snapshots, reservations=reservations)
 
     # ------------------------------------------------------------------
@@ -226,7 +209,6 @@ class QuotaPlanService:
             pipe.expire(bkey, ttl)
             pipe.expire(ikey, ttl)
             await pipe.execute()
-        self._invalidate_cache(ns, plan_id, [s.quota_id for s in specs])
 
     # ------------------------------------------------------------------
     # release
@@ -239,7 +221,6 @@ class QuotaPlanService:
     ) -> None:
         for r in reservations:
             await self._release_one(ns, plan_id, r)
-        self._invalidate_cache(ns, plan_id, [r.spec.quota_id for r in reservations])
 
     async def _release_one(
         self,
@@ -338,7 +319,6 @@ class QuotaPlanService:
                     spec.quota_id,
                     exc,
                 )
-        self._invalidate_cache(ns, plan_id, [s.quota_id for s in specs])
 
     # ------------------------------------------------------------------
     # snapshot
@@ -352,16 +332,7 @@ class QuotaPlanService:
         now: datetime | None = None,
     ) -> list[PlanQuotaSnapshot]:
         when = now or datetime.now(UTC)
-        results: list[PlanQuotaSnapshot] = []
-        for spec in specs:
-            cached = self._cache_get(ns, plan_id, spec, when)
-            if cached is not None:
-                results.append(cached)
-                continue
-            snap = await self._compute_snapshot(ns, plan_id, spec, when)
-            self._cache_put(ns, plan_id, spec, when, snap)
-            results.append(snap)
-        return results
+        return [await self._compute_snapshot(ns, plan_id, spec, when) for spec in specs]
 
     async def _compute_snapshot(
         self,
@@ -457,61 +428,6 @@ class QuotaPlanService:
             earliest_minute_in_window=min(minutes) if minutes else None,
         )
 
-    # ------------------------------------------------------------------
-    # 进程内缓存（30s）
-    # ------------------------------------------------------------------
-    def _cache_bucket(self, when: datetime) -> int:
-        # 30 秒一格
-        return int(when.timestamp() // SNAPSHOT_CACHE_TTL_SECONDS)
-
-    def _cache_get(
-        self,
-        ns: QuotaPlanNamespace,
-        plan_id: uuid.UUID,
-        spec: PlanQuotaSpec,
-        when: datetime,
-    ) -> PlanQuotaSnapshot | None:
-        key = (ns, plan_id, spec.quota_id, self._cache_bucket(when))
-        entry = self._snapshot_cache.get(key)
-        if entry is None:
-            return None
-        if entry.expires_at < time.time():
-            self._snapshot_cache.pop(key, None)
-            return None
-        return entry.snapshot
-
-    def _cache_put(
-        self,
-        ns: QuotaPlanNamespace,
-        plan_id: uuid.UUID,
-        spec: PlanQuotaSpec,
-        when: datetime,
-        snap: PlanQuotaSnapshot,
-    ) -> None:
-        key = (ns, plan_id, spec.quota_id, self._cache_bucket(when))
-        self._snapshot_cache[key] = _SnapshotCacheEntry(
-            snapshot=snap,
-            expires_at=time.time() + SNAPSHOT_CACHE_TTL_SECONDS,
-        )
-        # 简单清理过期条目
-        if len(self._snapshot_cache) > 4096:
-            now_ts = time.time()
-            stale = [k for k, v in self._snapshot_cache.items() if v.expires_at < now_ts]
-            for k in stale:
-                self._snapshot_cache.pop(k, None)
-
-    def _invalidate_cache(
-        self,
-        ns: QuotaPlanNamespace,
-        plan_id: uuid.UUID,
-        quota_ids: list[uuid.UUID],
-    ) -> None:
-        for qid in quota_ids:
-            for key in list(self._snapshot_cache.keys()):
-                if key[0] == ns and key[1] == plan_id and key[2] == qid:
-                    self._snapshot_cache.pop(key, None)
-
-
 _quota_plan_service_singleton: QuotaPlanService | None = None
 
 
@@ -523,7 +439,6 @@ def get_quota_plan_service() -> QuotaPlanService:
 
 
 __all__ = [
-    "SNAPSHOT_CACHE_TTL_SECONDS",
     "QuotaPlanService",
     "get_quota_plan_service",
 ]
