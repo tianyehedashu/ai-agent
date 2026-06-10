@@ -24,6 +24,7 @@ from domains.gateway.domain.litellm_model_id import (
     build_litellm_model_id,
     resolve_litellm_custom_llm_provider,
 )
+from domains.gateway.domain.policies.deployment_weight import coerce_deployment_weight
 from domains.gateway.domain.router_model_name import (
     deployment_scope_team_id,
     encode_router_model_name,
@@ -229,14 +230,6 @@ def _pricing_for_model(
     return pricing_lookup.get((src.provider, src.real_model, cap))
 
 
-def _normalize_deployment_weight(value: Any) -> int:
-    try:
-        weight = int(value)
-    except (TypeError, ValueError):
-        return 1
-    return weight if weight > 0 else 1
-
-
 def _build_deployment(
     *,
     model_name: str,
@@ -247,7 +240,7 @@ def _build_deployment(
 ) -> dict[str, Any]:
     """构造单个 deployment dict（model_list 一行）。"""
     pricing = _pricing_for_model(src, pricing_lookup)
-    deployment_weight = _normalize_deployment_weight(getattr(src, "weight", 1))
+    deployment_weight = coerce_deployment_weight(getattr(src, "weight", 1))
     litellm_params = _build_litellm_params(
         real_model=src.real_model,
         provider=src.provider,

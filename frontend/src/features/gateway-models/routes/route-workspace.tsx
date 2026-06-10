@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from 'react'
+﻿import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link, useSearchParams } from 'react-router-dom'
@@ -223,6 +223,37 @@ export function RouteWorkspace(): React.JSX.Element {
     },
   })
 
+  const updateModelWeightMutation = useMutation({
+    mutationFn: ({ teamId, id, weight }: { teamId: string; id: string; weight: number }) =>
+      gatewayApi.updateModel(teamId, id, { weight }),
+    onSuccess: () => {
+      invalidateGatewayRouteCaches(queryClient)
+      void refetchModels()
+      toast({ title: '权重已更新' })
+    },
+    onError: (e: Error) => {
+      toast({ variant: 'destructive', title: '权重更新失败', description: e.message })
+    },
+  })
+
+  const updateModelWeight = useCallback(
+    (teamId: string, modelName: string, weight: number): void => {
+      if (!teamId) return
+      const target = models.find((m) => m.name === modelName)
+      if (!target) {
+        toast({
+          variant: 'destructive',
+          title: '权重更新失败',
+          description: `未找到模型「${modelName}」，请等待模型列表加载完成后再调整权重。`,
+        })
+        return
+      }
+      if (target.weight === weight) return
+      updateModelWeightMutation.mutate({ teamId, id: target.id, weight })
+    },
+    [models, toast, updateModelWeightMutation]
+  )
+
   const deleteMutation = useMutation({
     mutationFn: ({ teamId, id }: { teamId: string; id: string }) =>
       gatewayApi.deleteRoute(teamId, id),
@@ -419,6 +450,9 @@ export function RouteWorkspace(): React.JSX.Element {
             }}
             onCancel={cancelCreate}
             isSubmitting={createMutation.isPending}
+            onUpdateModelWeight={(name, weight) => {
+              updateModelWeight(createTeamId, name, weight)
+            }}
           />
         ) : (
           <RouteTopologyEditor
@@ -436,6 +470,12 @@ export function RouteWorkspace(): React.JSX.Element {
             onDelete={() => {
               if (!selectedRoute) return
               handleDelete(selectedRoute)
+            }}
+            onUpdateModelWeight={(name, weight) => {
+              if (!selectedRoute) return
+              const ownerTeamId = resolveGatewayRouteTeamId(selectedRoute)
+              if (!ownerTeamId) return
+              updateModelWeight(ownerTeamId, name, weight)
             }}
           />
         )}

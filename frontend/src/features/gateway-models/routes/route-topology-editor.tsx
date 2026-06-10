@@ -25,6 +25,7 @@ import {
   RouteOrderedModelPicker,
 } from '@/features/gateway-models/routes/route-model-pool'
 import { RoutingStrategySelect } from '@/features/gateway-models/routes/routing-strategy-select'
+import { isWeightedRoutingStrategy } from '@/features/gateway-models/routes/routing-strategy-utils'
 import { excludeModelsFromList, stringArraysEqual } from '@/features/gateway-models/utils'
 import { GATEWAY_DISPLAY_CURRENCY } from '@/features/gateway-pricing/display-currency'
 import { useGatewayModelPrices } from '@/features/gateway-pricing/use-gateway-model-prices'
@@ -41,6 +42,7 @@ interface RouteTopologyEditorProps {
   readOnly?: boolean
   onSave: (id: string, body: GatewayRouteUpdateBody) => void
   onDelete?: (id: string) => void
+  onUpdateModelWeight?: (modelName: string, weight: number) => void
 }
 
 interface RouteTopologyFormProps {
@@ -53,6 +55,7 @@ interface RouteTopologyFormProps {
   readOnly?: boolean
   onSave: (id: string, body: GatewayRouteUpdateBody) => void
   onDelete?: (id: string) => void
+  onUpdateModelWeight?: (modelName: string, weight: number) => void
 }
 
 function RouteTopologyForm({
@@ -65,6 +68,7 @@ function RouteTopologyForm({
   readOnly = false,
   onSave,
   onDelete,
+  onUpdateModelWeight,
 }: RouteTopologyFormProps): React.JSX.Element {
   // readOnly 已由父组件基于路由所属团队角色判断（canManageTeamRoutes），
   // 无需再用 canWrite（基于当前工作区团队）做冗余检查——跨团队视图下二者可能不一致。
@@ -127,6 +131,8 @@ function RouteTopologyForm({
     !stringArraysEqual(fallbacksGeneral, route.fallbacks_general) ||
     !stringArraysEqual(fallbacksContentPolicy, route.fallbacks_content_policy) ||
     !stringArraysEqual(fallbacksContextWindow, route.fallbacks_context_window)
+
+  const weightedMode = isWeightedRoutingStrategy(strategy)
 
   function handleSave(): void {
     if (validationIssues.length > 0) return
@@ -217,7 +223,16 @@ function RouteTopologyForm({
           label="主模型（按优先级从上到下）"
           priceByName={priceByName}
           currency={GATEWAY_DISPLAY_CURRENCY}
+          showWeight={weightedMode}
+          onWeightChange={editable ? onUpdateModelWeight : undefined}
         />
+
+        {weightedMode ? (
+          <p className="-mt-2 text-xs text-muted-foreground">
+            按权重路由：主模型行内的 <span className="font-mono">w</span>{' '}
+            字段保存即生效（直接更新模型 weight）。
+          </p>
+        ) : null}
 
         <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
           <CollapsibleTrigger asChild>
@@ -325,6 +340,7 @@ export function RouteTopologyEditor({
   readOnly: readOnlyProp = false,
   onSave,
   onDelete,
+  onUpdateModelWeight,
 }: RouteTopologyEditorProps): React.JSX.Element {
   if (!route) {
     return (
@@ -351,6 +367,7 @@ export function RouteTopologyEditor({
       readOnly={readOnly}
       onSave={onSave}
       onDelete={readOnly ? undefined : onDelete}
+      onUpdateModelWeight={readOnly ? undefined : onUpdateModelWeight}
     />
   )
 }

@@ -112,3 +112,49 @@ async def test_update_personal_model_image_type_sets_vision_tag(
     reloaded = await repo.get_for_tenant(model_id, tenant_id)
     assert reloaded is not None
     assert reloaded.tags.get("supports_vision") is True
+
+
+@pytest.mark.asyncio
+async def test_update_personal_model_weight_round_trips(
+    db_session, test_user, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """个人模型 weight 字段应能通过 update_personal_model 持久化，用于 weighted-pick 路由。"""
+    tenant_id, model_id, user_uuid = await _seed_personal_model(db_session, test_user)
+    writes = GatewayManagementWriteService(db_session)
+
+    monkeypatch.setattr(
+        writes,
+        "_ensure_personal_tenant_id",
+        AsyncMock(return_value=tenant_id),
+    )
+    monkeypatch.setattr(writes, "reload_litellm_router", AsyncMock(return_value=None))
+
+    updated = await writes.update_personal_model(user_uuid, model_id, fields={"weight": 7})
+    assert updated.weight == 7
+
+    repo = GatewayModelRepository(db_session)
+    reloaded = await repo.get_for_tenant(model_id, tenant_id)
+    assert reloaded is not None
+    assert reloaded.weight == 7
+
+
+@pytest.mark.asyncio
+async def test_update_personal_model_rejects_non_positive_weight(
+    db_session, test_user, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from libs.exceptions import ValidationError
+
+    tenant_id, model_id, user_uuid = await _seed_personal_model(db_session, test_user)
+    writes = GatewayManagementWriteService(db_session)
+
+    monkeypatch.setattr(
+        writes,
+        "_ensure_personal_tenant_id",
+        AsyncMock(return_value=tenant_id),
+    )
+    monkeypatch.setattr(writes, "reload_litellm_router", AsyncMock(return_value=None))
+
+    with pytest.raises(ValidationError):
+        await writes.update_personal_model(user_uuid, model_id, fields={"weight": 0})
+    with pytest.raises(ValidationError):
+        await writes.update_personal_model(user_uuid, model_id, fields={"weight": "abc"})

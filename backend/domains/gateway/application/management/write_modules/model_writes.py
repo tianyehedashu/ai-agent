@@ -35,6 +35,7 @@ from domains.gateway.domain.policies.credential_scope import (
     registry_target_for_credential_scope,
     team_model_credential_scope_allowed,
 )
+from domains.gateway.domain.policies.deployment_weight import assert_deployment_weight
 from domains.gateway.domain.types import (
     CONFIG_MANAGED_BY,
     GATEWAY_MODEL_MANAGED_BY_TAG,
@@ -178,10 +179,10 @@ class ModelWritesMixin:
         model_created_by_user_id: uuid.UUID | None = None,
     ) -> None:
         from domains.gateway.domain.policies.team_model_access import (
+            actor_created_model,
             assert_can_create_model_on_team_credential,
             assert_can_delete_team_model_on_credential,
             assert_can_update_team_model_on_credential,
-            actor_created_model,
         )
 
         # 模型创建者对自己创建的模型拥有 update/delete 权限（无需检查凭据归属）
@@ -319,6 +320,8 @@ class ModelWritesMixin:
             update_fields["real_model"] = str(incoming["model_id"]).strip()
         if incoming.get("is_active") is not None:
             update_fields["enabled"] = incoming["is_active"]
+        if incoming.get("weight") is not None:
+            update_fields["weight"] = assert_deployment_weight(incoming["weight"])
         if model_types_raw is not None:
             if not model_types_raw:
                 raise ValidationError("model_types 不能为空")
@@ -841,6 +844,8 @@ class ModelWritesMixin:
             if prefix_msg:
                 raise ValidationError(prefix_msg)
             update_fields["real_model"] = raw_rm
+        if "weight" in update_fields and update_fields["weight"] is not None:
+            update_fields["weight"] = assert_deployment_weight(update_fields["weight"])
         if "upstream_call_shape" in update_fields:
             shape_raw = update_fields["upstream_call_shape"]
             if shape_raw is None or (isinstance(shape_raw, str) and not shape_raw.strip()):

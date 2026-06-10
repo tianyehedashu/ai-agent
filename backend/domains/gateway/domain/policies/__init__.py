@@ -16,6 +16,11 @@ from domains.gateway.domain.policies.credential_scope import (
     registry_target_for_credential_scope,
     team_model_credential_scope_allowed,
 )
+from domains.gateway.domain.policies.deployment_weight import (
+    MIN_DEPLOYMENT_WEIGHT,
+    assert_deployment_weight,
+    coerce_deployment_weight,
+)
 from domains.gateway.domain.policies.gateway_admin import assert_platform_admin
 from domains.gateway.domain.policies.model_selection import registry_kind_for_merged_row
 from domains.gateway.domain.policies.pricing_visibility import (
@@ -42,14 +47,17 @@ __all__ = [
     "BudgetListFilters",
     "BudgetTeamContext",
     "GatewayModelRegistryTarget",
+    "MIN_DEPLOYMENT_WEIGHT",
     "SystemModelVisibilitySnapshot",
     "UsageLogAccessSnapshot",
     "actor_owns_non_system_vkey",
+    "assert_deployment_weight",
     "assert_platform_admin",
     "assert_system_credential_mutation_allowed",
     "budget_target_allowed",
     "can_view_margin_dashboard",
     "can_view_pricing_cost_fields",
+    "coerce_deployment_weight",
     "filter_budget_rows",
     "is_system_credential_scope",
     "member_can_view_request_log_record",

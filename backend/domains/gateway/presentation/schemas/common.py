@@ -10,6 +10,7 @@ import uuid
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from domains.gateway.domain.margin_read_model import MarginGroupBy
+from domains.gateway.domain.policies.deployment_weight import MIN_DEPLOYMENT_WEIGHT
 from domains.gateway.domain.types import RoutingStrategy, VirtualKeyBatchRevokeReason
 from domains.gateway.domain.usage_read_model import (
     UsageStatisticsBreakdownBy,
@@ -322,7 +323,7 @@ class GatewayModelCreate(BaseModel):
     real_model: str
     credential_id: uuid.UUID
     provider: str
-    weight: int = 1
+    weight: int = Field(default=MIN_DEPLOYMENT_WEIGHT, ge=MIN_DEPLOYMENT_WEIGHT)
     rpm_limit: int | None = None
     tpm_limit: int | None = None
     tags: dict[str, Any] | None = None
@@ -351,7 +352,7 @@ class MultiCredentialGatewayModelCreate(BaseModel):
         default=RoutingStrategy.SIMPLE_SHUFFLE,
         description="LiteLLM Router 调度策略（见 RoutingStrategy 枚举）",
     )
-    weight: int = 1
+    weight: int = Field(default=MIN_DEPLOYMENT_WEIGHT, ge=MIN_DEPLOYMENT_WEIGHT)
     rpm_limit: int | None = None
     tpm_limit: int | None = None
     tags: dict[str, Any] | None = None
@@ -386,7 +387,7 @@ class GatewayModelUpdate(BaseModel):
         default=None,
         description="产品特性类型（text/image/image_gen/video）；写入 tags supports_*",
     )
-    weight: int | None = None
+    weight: int | None = Field(default=None, ge=MIN_DEPLOYMENT_WEIGHT)
     rpm_limit: int | None = None
     tpm_limit: int | None = None
     enabled: bool | None = None
@@ -647,6 +648,11 @@ class PersonalModelUpdate(BaseModel):
     )
     is_active: bool | None = None
     enabled: bool | None = None
+    weight: int | None = Field(
+        default=None,
+        ge=MIN_DEPLOYMENT_WEIGHT,
+        description="weighted-pick 路由策略下的加权随机权重；正整数，留空保持原值",
+    )
 
     @model_validator(mode="after")
     def _normalize_enabled(self) -> Self:

@@ -84,6 +84,80 @@ describe('RouteOrderedModelPicker', () => {
 
     expect(onSelectedChange).toHaveBeenCalledWith(['model-b'])
   })
+
+  it('hides weight input when showWeight is false', () => {
+    render(
+      <RouteOrderedModelPicker
+        models={[MODEL_A]}
+        selected={['model-a']}
+        onSelectedChange={vi.fn()}
+        label="主模型"
+      />
+    )
+    expect(screen.queryByLabelText(/权重/)).not.toBeInTheDocument()
+  })
+
+  it('renders weight input prefilled with current model weight when showWeight=true', () => {
+    const heavy = gatewayModel({ id: '4', name: 'model-h', weight: 5 })
+    render(
+      <RouteOrderedModelPicker
+        models={[heavy]}
+        selected={['model-h']}
+        onSelectedChange={vi.fn()}
+        showWeight
+        onWeightChange={vi.fn()}
+        label="主模型"
+      />
+    )
+    const input = screen.getByLabelText('权重 model-h')
+    expect(input).toHaveValue('5')
+  })
+
+  it('commits weight change on blur and ignores invalid values', () => {
+    const onWeightChange = vi.fn()
+    render(
+      <RouteOrderedModelPicker
+        models={[MODEL_A]}
+        selected={['model-a']}
+        onSelectedChange={vi.fn()}
+        showWeight
+        onWeightChange={onWeightChange}
+        label="主模型"
+      />
+    )
+    const input = screen.getByLabelText('权重 model-a')
+
+    fireEvent.change(input, { target: { value: '3' } })
+    fireEvent.blur(input)
+    expect(onWeightChange).toHaveBeenCalledWith('model-a', 3)
+
+    onWeightChange.mockClear()
+    fireEvent.change(input, { target: { value: 'abc' } })
+    fireEvent.blur(input)
+    expect(onWeightChange).not.toHaveBeenCalled()
+
+    fireEvent.change(input, { target: { value: '0' } })
+    fireEvent.blur(input)
+    expect(onWeightChange).not.toHaveBeenCalled()
+  })
+
+  it('skips callback when weight value is unchanged', () => {
+    const onWeightChange = vi.fn()
+    render(
+      <RouteOrderedModelPicker
+        models={[MODEL_A]}
+        selected={['model-a']}
+        onSelectedChange={vi.fn()}
+        showWeight
+        onWeightChange={onWeightChange}
+        label="主模型"
+      />
+    )
+    const input = screen.getByLabelText('权重 model-a')
+    fireEvent.change(input, { target: { value: '1' } })
+    fireEvent.blur(input)
+    expect(onWeightChange).not.toHaveBeenCalled()
+  })
 })
 
 describe('RouteFallbackModelPicker', () => {

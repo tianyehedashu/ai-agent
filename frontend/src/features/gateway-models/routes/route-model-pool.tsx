@@ -7,6 +7,7 @@ import { ModelStatusBadge } from '@/components/model-status-badge'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { TooltipProvider } from '@/components/ui/tooltip'
+import { RouteDeploymentWeightInput } from '@/features/gateway-models/routes/route-deployment-weight-input'
 import { RouteModelAddCombobox } from '@/features/gateway-models/routes/route-model-add-combobox'
 import {
   moveOrderedModelList,
@@ -47,6 +48,8 @@ interface RouteSelectedModelRowProps {
   onRemove: (name: string) => void
   priceRow?: MyPriceRow
   currency?: DisplayCurrency
+  showWeight?: boolean
+  onWeightChange?: (modelName: string, weight: number) => void
 }
 
 const RouteSelectedModelRow = memo(function RouteSelectedModelRow({
@@ -59,7 +62,11 @@ const RouteSelectedModelRow = memo(function RouteSelectedModelRow({
   onRemove,
   priceRow,
   currency = GATEWAY_DISPLAY_CURRENCY,
+  showWeight = false,
+  onWeightChange,
 }: RouteSelectedModelRowProps): React.JSX.Element {
+  const weightEditable = showWeight && !disabled && onWeightChange !== undefined
+
   return (
     <li
       className={cn(PICKER_ROW_CV, 'flex items-center gap-2 rounded px-1 py-1 hover:bg-muted/30')}
@@ -70,6 +77,14 @@ const RouteSelectedModelRow = memo(function RouteSelectedModelRow({
         </span>
       ) : null}
       <span className="min-w-0 flex-1 truncate font-mono text-sm">{model.name}</span>
+      {showWeight && onWeightChange ? (
+        <RouteDeploymentWeightInput
+          modelName={model.name}
+          currentWeight={model.weight}
+          disabled={!weightEditable}
+          onChange={onWeightChange}
+        />
+      ) : null}
       <PricingBadge row={priceRow} currency={currency} className="hidden lg:inline" />
       <ModelStatusBadge
         status={model.last_test_status}
@@ -138,6 +153,8 @@ interface RouteOrderedModelPickerProps {
   showOrderControls?: boolean
   priceByName?: Map<string, MyPriceRow>
   currency?: DisplayCurrency
+  showWeight?: boolean
+  onWeightChange?: (modelName: string, weight: number) => void
 }
 
 export function RouteOrderedModelPicker({
@@ -150,6 +167,8 @@ export function RouteOrderedModelPicker({
   showOrderControls = true,
   priceByName,
   currency = GATEWAY_DISPLAY_CURRENCY,
+  showWeight = false,
+  onWeightChange,
 }: RouteOrderedModelPickerProps): React.JSX.Element {
   const modelsByName = useMemo(() => buildModelsByName(models), [models])
   const selectedSet = useMemo(() => new Set(selected), [selected])
@@ -227,6 +246,8 @@ export function RouteOrderedModelPicker({
                     onRemove={handleRemove}
                     priceRow={priceByName?.get(model.name)}
                     currency={currency}
+                    showWeight={showWeight}
+                    onWeightChange={onWeightChange}
                   />
                 ))}
               </ul>

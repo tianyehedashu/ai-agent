@@ -67,6 +67,8 @@ export interface PersonalGatewayModelUpdateBody {
   model_types?: ModelType[]
   resync_capabilities?: boolean
   is_active?: boolean
+  /** weighted-pick 策略下的加权随机权重；正整数 */
+  weight?: number
 }
 
 // 测试结果与团队侧共用类型，从 models 模块导出，避免重复声明

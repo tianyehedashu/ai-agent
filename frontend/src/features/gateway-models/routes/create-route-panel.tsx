@@ -12,6 +12,7 @@ import {
   RouteOrderedModelPicker,
 } from '@/features/gateway-models/routes/route-model-pool'
 import { RoutingStrategySelect } from '@/features/gateway-models/routes/routing-strategy-select'
+import { isWeightedRoutingStrategy } from '@/features/gateway-models/routes/routing-strategy-utils'
 import { excludeModelsFromList } from '@/features/gateway-models/utils'
 import { GATEWAY_DISPLAY_CURRENCY } from '@/features/gateway-pricing/display-currency'
 import { useGatewayModelPrices } from '@/features/gateway-pricing/use-gateway-model-prices'
@@ -31,6 +32,7 @@ interface CreateRoutePanelProps {
   onSubmit: (body: GatewayRouteCreateBody) => void
   onCancel: () => void
   isSubmitting?: boolean
+  onUpdateModelWeight?: (modelName: string, weight: number) => void
 }
 
 export function CreateRoutePanel({
@@ -43,6 +45,7 @@ export function CreateRoutePanel({
   onSubmit,
   onCancel,
   isSubmitting = false,
+  onUpdateModelWeight,
 }: CreateRoutePanelProps): React.JSX.Element {
   const { byName: priceByName } = useGatewayModelPrices(GATEWAY_DISPLAY_CURRENCY)
   const [virtualModel, setVirtualModel] = useState('')
@@ -175,7 +178,16 @@ export function CreateRoutePanel({
               label="主模型（按优先级从上到下）"
               priceByName={priceByName}
               currency={GATEWAY_DISPLAY_CURRENCY}
+              showWeight={isWeightedRoutingStrategy(strategy)}
+              onWeightChange={onUpdateModelWeight}
             />
+
+            {isWeightedRoutingStrategy(strategy) ? (
+              <p className="-mt-2 text-xs text-muted-foreground">
+                按权重路由：行内 <span className="font-mono">w</span> 字段保存即生效（直接更新模型
+                weight）。
+              </p>
+            ) : null}
 
             <RouteFallbackModelPicker
               models={pickerModels}
