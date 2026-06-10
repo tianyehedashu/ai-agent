@@ -13,6 +13,10 @@ export interface GatewayBudget {
   id: string
   target_kind: 'system' | 'tenant' | 'key' | 'user'
   target_id: string | null
+  /** 仅成员总量/模型护栏行非空：护栏所属团队（按团队隔离） */
+  tenant_id?: string | null
+  /** 仅「成员 + 凭据(+模型)」行非空 */
+  credential_id?: string | null
   period: 'daily' | 'monthly' | 'total'
   /** 仅限制某一模型时填写，否则为 null */
   model_name: string | null

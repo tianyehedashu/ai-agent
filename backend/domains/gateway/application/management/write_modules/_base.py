@@ -277,6 +277,20 @@ class GatewayManagementWriteBaseMixin:
             tenant_id=tenant_id,
             is_platform_admin=is_platform_admin,
         )
+        # 团队轴：成员护栏行（tenant_id 非空）须属于当前团队，
+        # 防止同一成员所在的其他团队管理员跨团队删除/操作。
+        if budget.tenant_id is not None and budget.tenant_id != tenant_id:
+            raise ManagementEntityNotFoundError("budget", str(budget_id))
+        # 凭据轴：成员+凭据行的凭据须在当前团队可见集合内（凭据天然绑定团队）。
+        if budget.credential_id is not None:
+            try:
+                await self._assert_credential_in_team(
+                    budget.credential_id,
+                    tenant_id=tenant_id,
+                    is_platform_admin=is_platform_admin,
+                )
+            except CredentialNotFoundError as exc:
+                raise ManagementEntityNotFoundError("budget", str(budget_id)) from exc
 
     async def reload_litellm_router(self, *, tenant_id: uuid.UUID | None = None) -> None:
         from domains.gateway.application.gateway_cache_invalidation import (

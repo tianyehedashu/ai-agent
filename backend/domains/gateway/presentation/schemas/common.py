@@ -919,6 +919,8 @@ class BudgetResponse(BaseModel):
     id: uuid.UUID
     target_kind: str
     target_id: uuid.UUID | None = None
+    tenant_id: uuid.UUID | None = None
+    credential_id: uuid.UUID | None = None
     period: str
     model_name: str | None = None
     limit_usd: Decimal | None = None

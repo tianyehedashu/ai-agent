@@ -228,6 +228,8 @@ async def test_delete_budget_allows_tenant_budget() -> None:
             id=budget_id,
             target_kind="tenant",
             target_id=tenant_id,
+            tenant_id=None,
+            credential_id=None,
         )
     )
     writes._teams.list_team_members = AsyncMock(return_value=[])
@@ -241,6 +243,108 @@ async def test_delete_budget_allows_tenant_budget() -> None:
 
     writes._budgets.delete.assert_awaited_once_with(budget_id)
     writes._teams.list_team_members.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_delete_budget_rejects_other_team_member_guardrail() -> None:
+    """成员护栏行按团队隔离：同一成员所在他团队的管理员不能跨团队删除。"""
+    session = MagicMock()
+    writes = GatewayManagementWriteService(session)
+    budget_id = uuid.uuid4()
+    tenant_id = uuid.uuid4()
+    other_team = uuid.uuid4()
+    member_id = uuid.uuid4()
+
+    writes._budgets.get = AsyncMock(
+        return_value=SimpleNamespace(
+            id=budget_id,
+            target_kind="user",
+            target_id=member_id,
+            tenant_id=other_team,
+            credential_id=None,
+        )
+    )
+    # 该成员同时也在当前团队，target 归属校验本身会通过。
+    writes._teams.list_team_members = AsyncMock(
+        return_value=[SimpleNamespace(user_id=member_id)]
+    )
+    writes._budgets.delete = AsyncMock(return_value=True)
+
+    with pytest.raises(ManagementEntityNotFoundError):
+        await writes.delete_budget(
+            budget_id,
+            tenant_id=tenant_id,
+            is_platform_admin=False,
+        )
+
+    writes._budgets.delete.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_delete_budget_rejects_foreign_credential_scoped_budget() -> None:
+    """成员+凭据行：凭据不在本团队可见集合内（他团队凭据）时不可删除。"""
+    session = MagicMock()
+    writes = GatewayManagementWriteService(session)
+    budget_id = uuid.uuid4()
+    tenant_id = uuid.uuid4()
+    member_id = uuid.uuid4()
+    foreign_cred = uuid.uuid4()
+
+    writes._budgets.get = AsyncMock(
+        return_value=SimpleNamespace(
+            id=budget_id,
+            target_kind="user",
+            target_id=member_id,
+            tenant_id=None,
+            credential_id=foreign_cred,
+        )
+    )
+    writes._teams.list_team_members = AsyncMock(
+        return_value=[SimpleNamespace(user_id=member_id)]
+    )
+    writes._creds.get_bindable_for_team_gateway_model = AsyncMock(return_value=None)
+    writes._budgets.delete = AsyncMock(return_value=True)
+
+    with pytest.raises(ManagementEntityNotFoundError):
+        await writes.delete_budget(
+            budget_id,
+            tenant_id=tenant_id,
+            is_platform_admin=False,
+        )
+
+    writes._budgets.delete.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_delete_budget_allows_member_guardrail_in_team() -> None:
+    """成员护栏行属于本团队时可正常删除。"""
+    session = MagicMock()
+    writes = GatewayManagementWriteService(session)
+    budget_id = uuid.uuid4()
+    tenant_id = uuid.uuid4()
+    member_id = uuid.uuid4()
+
+    writes._budgets.get = AsyncMock(
+        return_value=SimpleNamespace(
+            id=budget_id,
+            target_kind="user",
+            target_id=member_id,
+            tenant_id=tenant_id,
+            credential_id=None,
+        )
+    )
+    writes._teams.list_team_members = AsyncMock(
+        return_value=[SimpleNamespace(user_id=member_id)]
+    )
+    writes._budgets.delete = AsyncMock(return_value=True)
+
+    await writes.delete_budget(
+        budget_id,
+        tenant_id=tenant_id,
+        is_platform_admin=False,
+    )
+
+    writes._budgets.delete.assert_awaited_once_with(budget_id)
 
 
 @pytest.mark.asyncio

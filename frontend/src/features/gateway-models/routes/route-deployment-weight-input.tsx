@@ -5,8 +5,8 @@ import { parseDeploymentWeight } from '@/features/gateway-models/routes/routing-
 
 interface RouteDeploymentWeightInputProps {
   modelName: string
-  /** 当前持久化值 */
-  currentWeight: number
+  /** 当前展示值（调用方可传草稿值，失焦/Enter 时经 onChange 回传） */
+  value: number
   disabled?: boolean
   onChange: (modelName: string, weight: number) => void
 }
@@ -14,26 +14,26 @@ interface RouteDeploymentWeightInputProps {
 /** deployment 权重行内编辑框。仅按权重路由（weighted-pick）时展示。 */
 export function RouteDeploymentWeightInput({
   modelName,
-  currentWeight,
+  value,
   disabled = false,
   onChange,
 }: RouteDeploymentWeightInputProps): React.JSX.Element {
-  const [draft, setDraft] = useState<string>(String(currentWeight))
+  const [draft, setDraft] = useState<string>(String(value))
 
   useEffect(() => {
-    setDraft(String(currentWeight))
-  }, [currentWeight])
+    setDraft(String(value))
+  }, [value])
 
   const commit = useCallback((): void => {
     if (disabled) return
     const next = parseDeploymentWeight(draft)
     if (next === null) {
-      setDraft(String(currentWeight))
+      setDraft(String(value))
       return
     }
-    if (next === currentWeight) return
+    if (next === value) return
     onChange(modelName, next)
-  }, [draft, modelName, currentWeight, onChange, disabled])
+  }, [draft, modelName, value, onChange, disabled])
 
   return (
     <span className="flex shrink-0 items-center gap-1">

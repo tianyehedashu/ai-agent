@@ -18,6 +18,7 @@ import { useInfiniteGatewayModelPages } from '@/features/gateway-models/hooks/us
 import { CreateRoutePanel } from '@/features/gateway-models/routes/create-route-panel'
 import { invalidateGatewayRouteCaches } from '@/features/gateway-models/routes/query-keys'
 import { RouteTopologyEditor } from '@/features/gateway-models/routes/route-topology-editor'
+import type { DeploymentWeightChange } from '@/features/gateway-models/routes/use-deployment-weight-drafts'
 import {
   resolveGatewayRouteTeamId,
   useVisibleGatewayRoutes,
@@ -182,11 +183,48 @@ export function RouteWorkspace(): React.JSX.Element {
     })
   }, [routes, search, teamNameById])
 
+  /** 权重属于模型（deployment）；保存/创建路由时将草稿变更解析为模型 ID 一并提交 */
+  const resolveWeightUpdates = useCallback(
+    (weightChanges: readonly DeploymentWeightChange[]): { modelId: string; weight: number }[] =>
+      weightChanges.flatMap((change) => {
+        const target = models.find((m) => m.name === change.modelName)
+        return target && target.weight !== change.weight
+          ? [{ modelId: target.id, weight: change.weight }]
+          : []
+      }),
+    [models]
+  )
+
+  const applyWeightUpdates = useCallback(
+    async (
+      teamId: string,
+      weightUpdates: readonly { modelId: string; weight: number }[]
+    ): Promise<void> => {
+      await Promise.all(
+        weightUpdates.map((update) =>
+          gatewayApi.updateModel(teamId, update.modelId, { weight: update.weight })
+        )
+      )
+    },
+    []
+  )
+
   const createMutation = useMutation({
-    mutationFn: ({ teamId, body }: { teamId: string; body: GatewayRouteCreateBody }) =>
-      gatewayApi.createRoute(teamId, body),
+    mutationFn: async ({
+      teamId,
+      body,
+      weightUpdates,
+    }: {
+      teamId: string
+      body: GatewayRouteCreateBody
+      weightUpdates: readonly { modelId: string; weight: number }[]
+    }) => {
+      await applyWeightUpdates(teamId, weightUpdates)
+      return gatewayApi.createRoute(teamId, body)
+    },
     onSuccess: (created) => {
       invalidateGatewayRouteCaches(queryClient)
+      void refetchModels()
       setCreateMode(false)
       setSelectedId(created.id)
       setSearchParams(
@@ -205,54 +243,29 @@ export function RouteWorkspace(): React.JSX.Element {
   })
 
   const updateMutation = useMutation({
-    mutationFn: ({
+    mutationFn: async ({
       teamId,
       id,
       body,
+      weightUpdates,
     }: {
       teamId: string
       id: string
       body: GatewayRouteUpdateBody
-    }) => gatewayApi.updateRoute(teamId, id, body),
+      weightUpdates: readonly { modelId: string; weight: number }[]
+    }) => {
+      await applyWeightUpdates(teamId, weightUpdates)
+      await gatewayApi.updateRoute(teamId, id, body)
+    },
     onSuccess: () => {
       invalidateGatewayRouteCaches(queryClient)
+      void refetchModels()
       toast({ title: '路由已更新' })
     },
     onError: (e: Error) => {
       toast({ variant: 'destructive', title: '更新失败', description: e.message })
     },
   })
-
-  const updateModelWeightMutation = useMutation({
-    mutationFn: ({ teamId, id, weight }: { teamId: string; id: string; weight: number }) =>
-      gatewayApi.updateModel(teamId, id, { weight }),
-    onSuccess: () => {
-      invalidateGatewayRouteCaches(queryClient)
-      void refetchModels()
-      toast({ title: '权重已更新' })
-    },
-    onError: (e: Error) => {
-      toast({ variant: 'destructive', title: '权重更新失败', description: e.message })
-    },
-  })
-
-  const updateModelWeight = useCallback(
-    (teamId: string, modelName: string, weight: number): void => {
-      if (!teamId) return
-      const target = models.find((m) => m.name === modelName)
-      if (!target) {
-        toast({
-          variant: 'destructive',
-          title: '权重更新失败',
-          description: `未找到模型「${modelName}」，请等待模型列表加载完成后再调整权重。`,
-        })
-        return
-      }
-      if (target.weight === weight) return
-      updateModelWeightMutation.mutate({ teamId, id: target.id, weight })
-    },
-    [models, toast, updateModelWeightMutation]
-  )
 
   const deleteMutation = useMutation({
     mutationFn: ({ teamId, id }: { teamId: string; id: string }) =>
@@ -310,10 +323,19 @@ export function RouteWorkspace(): React.JSX.Element {
     setCreateTeamId(teamId)
   }
 
-  function handleSave(route: GatewayRoute, body: GatewayRouteUpdateBody): void {
+  function handleSave(
+    route: GatewayRoute,
+    body: GatewayRouteUpdateBody,
+    weightChanges: readonly DeploymentWeightChange[]
+  ): void {
     const ownerTeamId = resolveGatewayRouteTeamId(route)
     if (!ownerTeamId) return
-    updateMutation.mutate({ teamId: ownerTeamId, id: route.id, body })
+    updateMutation.mutate({
+      teamId: ownerTeamId,
+      id: route.id,
+      body,
+      weightUpdates: resolveWeightUpdates(weightChanges),
+    })
   }
 
   function handleDelete(route: GatewayRoute): void {
@@ -441,18 +463,19 @@ export function RouteWorkspace(): React.JSX.Element {
             onTargetTeamChange={changeCreateTeam}
             pickerModels={pickerModels}
             modelsLoading={modelsLoading}
-            onSubmit={(body) => {
+            onSubmit={(body, weightChanges) => {
               if (!createTeamId) {
                 toast({ variant: 'destructive', title: '请选择所属团队' })
                 return
               }
-              createMutation.mutate({ teamId: createTeamId, body })
+              createMutation.mutate({
+                teamId: createTeamId,
+                body,
+                weightUpdates: resolveWeightUpdates(weightChanges),
+              })
             }}
             onCancel={cancelCreate}
             isSubmitting={createMutation.isPending}
-            onUpdateModelWeight={(name, weight) => {
-              updateModelWeight(createTeamId, name, weight)
-            }}
           />
         ) : (
           <RouteTopologyEditor
@@ -463,19 +486,13 @@ export function RouteWorkspace(): React.JSX.Element {
             isDeleting={deleteMutation.isPending}
             teamLabel={selectedRouteTeamLabel}
             readOnly={selectedRoute !== null && !selectedRouteEditable}
-            onSave={(_id, body) => {
+            onSave={(_id, body, weightChanges) => {
               if (!selectedRoute) return
-              handleSave(selectedRoute, body)
+              handleSave(selectedRoute, body, weightChanges)
             }}
             onDelete={() => {
               if (!selectedRoute) return
               handleDelete(selectedRoute)
-            }}
-            onUpdateModelWeight={(name, weight) => {
-              if (!selectedRoute) return
-              const ownerTeamId = resolveGatewayRouteTeamId(selectedRoute)
-              if (!ownerTeamId) return
-              updateModelWeight(ownerTeamId, name, weight)
             }}
           />
         )}

@@ -13,6 +13,10 @@ import {
 } from '@/features/gateway-models/routes/route-model-pool'
 import { RoutingStrategySelect } from '@/features/gateway-models/routes/routing-strategy-select'
 import { isWeightedRoutingStrategy } from '@/features/gateway-models/routes/routing-strategy-utils'
+import {
+  useDeploymentWeightDrafts,
+  type DeploymentWeightChange,
+} from '@/features/gateway-models/routes/use-deployment-weight-drafts'
 import { excludeModelsFromList } from '@/features/gateway-models/utils'
 import { GATEWAY_DISPLAY_CURRENCY } from '@/features/gateway-pricing/display-currency'
 import { useGatewayModelPrices } from '@/features/gateway-pricing/use-gateway-model-prices'
@@ -29,10 +33,9 @@ interface CreateRoutePanelProps {
   onTargetTeamChange: (teamId: string) => void
   pickerModels: readonly GatewayModel[]
   modelsLoading?: boolean
-  onSubmit: (body: GatewayRouteCreateBody) => void
+  onSubmit: (body: GatewayRouteCreateBody, weightChanges: readonly DeploymentWeightChange[]) => void
   onCancel: () => void
   isSubmitting?: boolean
-  onUpdateModelWeight?: (modelName: string, weight: number) => void
 }
 
 export function CreateRoutePanel({
@@ -45,7 +48,6 @@ export function CreateRoutePanel({
   onSubmit,
   onCancel,
   isSubmitting = false,
-  onUpdateModelWeight,
 }: CreateRoutePanelProps): React.JSX.Element {
   const { byName: priceByName } = useGatewayModelPrices(GATEWAY_DISPLAY_CURRENCY)
   const [virtualModel, setVirtualModel] = useState('')
@@ -55,6 +57,11 @@ export function CreateRoutePanel({
   const [fallbacksContextWindow, setFallbacksContextWindow] = useState<string[]>([])
   const [strategy, setStrategy] = useState<RoutingStrategy>(DEFAULT_STRATEGY)
   const [advancedOpen, setAdvancedOpen] = useState(false)
+  const {
+    weightByName,
+    setWeight,
+    changes: weightDraftChanges,
+  } = useDeploymentWeightDrafts(pickerModels)
   const selectableModelNames = useMemo(
     () => new Set(pickerModels.map((model) => model.name)),
     [pickerModels]
@@ -91,16 +98,28 @@ export function CreateRoutePanel({
     !isSubmitting &&
     !modelsLoading
 
+  // 仅按权重路由且仍在主模型池内的权重草稿才会随创建提交
+  const weightChanges = useMemo(
+    () =>
+      isWeightedRoutingStrategy(strategy)
+        ? weightDraftChanges.filter((change) => primaryModels.includes(change.modelName))
+        : [],
+    [strategy, weightDraftChanges, primaryModels]
+  )
+
   function handleSubmit(): void {
     if (!canSubmit) return
-    onSubmit({
-      virtual_model: virtualModel.trim(),
-      primary_models: primaryModels,
-      fallbacks_general: excludeModelsFromList(fallbacksGeneral, primaryModels),
-      fallbacks_content_policy: excludeModelsFromList(fallbacksContentPolicy, primaryModels),
-      fallbacks_context_window: excludeModelsFromList(fallbacksContextWindow, primaryModels),
-      strategy,
-    })
+    onSubmit(
+      {
+        virtual_model: virtualModel.trim(),
+        primary_models: primaryModels,
+        fallbacks_general: excludeModelsFromList(fallbacksGeneral, primaryModels),
+        fallbacks_content_policy: excludeModelsFromList(fallbacksContentPolicy, primaryModels),
+        fallbacks_context_window: excludeModelsFromList(fallbacksContextWindow, primaryModels),
+        strategy,
+      },
+      weightChanges
+    )
   }
 
   return (
@@ -179,13 +198,14 @@ export function CreateRoutePanel({
               priceByName={priceByName}
               currency={GATEWAY_DISPLAY_CURRENCY}
               showWeight={isWeightedRoutingStrategy(strategy)}
-              onWeightChange={onUpdateModelWeight}
+              weightByName={weightByName}
+              onWeightChange={setWeight}
             />
 
             {isWeightedRoutingStrategy(strategy) ? (
               <p className="-mt-2 text-xs text-muted-foreground">
-                按权重路由：行内 <span className="font-mono">w</span> 字段保存即生效（直接更新模型
-                weight）。
+                按权重路由：行内 <span className="font-mono">w</span>{' '}
+                字段修改后，点击「创建」生效（更新模型 weight）。
               </p>
             ) : null}
 

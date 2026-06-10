@@ -26,6 +26,10 @@ import {
 } from '@/features/gateway-models/routes/route-model-pool'
 import { RoutingStrategySelect } from '@/features/gateway-models/routes/routing-strategy-select'
 import { isWeightedRoutingStrategy } from '@/features/gateway-models/routes/routing-strategy-utils'
+import {
+  useDeploymentWeightDrafts,
+  type DeploymentWeightChange,
+} from '@/features/gateway-models/routes/use-deployment-weight-drafts'
 import { excludeModelsFromList, stringArraysEqual } from '@/features/gateway-models/utils'
 import { GATEWAY_DISPLAY_CURRENCY } from '@/features/gateway-pricing/display-currency'
 import { useGatewayModelPrices } from '@/features/gateway-pricing/use-gateway-model-prices'
@@ -40,9 +44,12 @@ interface RouteTopologyEditorProps {
   isDeleting?: boolean
   teamLabel?: string | null
   readOnly?: boolean
-  onSave: (id: string, body: GatewayRouteUpdateBody) => void
+  onSave: (
+    id: string,
+    body: GatewayRouteUpdateBody,
+    weightChanges: readonly DeploymentWeightChange[]
+  ) => void
   onDelete?: (id: string) => void
-  onUpdateModelWeight?: (modelName: string, weight: number) => void
 }
 
 interface RouteTopologyFormProps {
@@ -53,9 +60,12 @@ interface RouteTopologyFormProps {
   isDeleting?: boolean
   teamLabel?: string | null
   readOnly?: boolean
-  onSave: (id: string, body: GatewayRouteUpdateBody) => void
+  onSave: (
+    id: string,
+    body: GatewayRouteUpdateBody,
+    weightChanges: readonly DeploymentWeightChange[]
+  ) => void
   onDelete?: (id: string) => void
-  onUpdateModelWeight?: (modelName: string, weight: number) => void
 }
 
 function RouteTopologyForm({
@@ -68,7 +78,6 @@ function RouteTopologyForm({
   readOnly = false,
   onSave,
   onDelete,
-  onUpdateModelWeight,
 }: RouteTopologyFormProps): React.JSX.Element {
   // readOnly 已由父组件基于路由所属团队角色判断（canManageTeamRoutes），
   // 无需再用 canWrite（基于当前工作区团队）做冗余检查——跨团队视图下二者可能不一致。
@@ -89,6 +98,7 @@ function RouteTopologyForm({
     ...route.fallbacks_context_window,
   ])
   const [advancedOpen, setAdvancedOpen] = useState(false)
+  const { weightByName, setWeight, changes: weightDraftChanges } = useDeploymentWeightDrafts(models)
 
   const setPrimaryModelsAndPruneFallbacks = useCallback((next: string[]): void => {
     setPrimaryModels(next)
@@ -124,26 +134,40 @@ function RouteTopologyForm({
     registeredNames,
   ])
 
+  const weightedMode = isWeightedRoutingStrategy(strategy)
+
+  // 仅按权重路由且仍在主模型池内的权重草稿才会随保存提交
+  const weightChanges = useMemo(
+    () =>
+      weightedMode
+        ? weightDraftChanges.filter((change) => primaryModels.includes(change.modelName))
+        : [],
+    [weightedMode, weightDraftChanges, primaryModels]
+  )
+
   const dirty =
     !stringArraysEqual(primaryModels, route.primary_models) ||
     strategy !== route.strategy ||
     enabled !== route.enabled ||
     !stringArraysEqual(fallbacksGeneral, route.fallbacks_general) ||
     !stringArraysEqual(fallbacksContentPolicy, route.fallbacks_content_policy) ||
-    !stringArraysEqual(fallbacksContextWindow, route.fallbacks_context_window)
-
-  const weightedMode = isWeightedRoutingStrategy(strategy)
+    !stringArraysEqual(fallbacksContextWindow, route.fallbacks_context_window) ||
+    weightChanges.length > 0
 
   function handleSave(): void {
     if (validationIssues.length > 0) return
-    onSave(route.id, {
-      primary_models: primaryModels,
-      fallbacks_general: excludeModelsFromList(fallbacksGeneral, primaryModels),
-      fallbacks_content_policy: excludeModelsFromList(fallbacksContentPolicy, primaryModels),
-      fallbacks_context_window: excludeModelsFromList(fallbacksContextWindow, primaryModels),
-      strategy,
-      enabled,
-    })
+    onSave(
+      route.id,
+      {
+        primary_models: primaryModels,
+        fallbacks_general: excludeModelsFromList(fallbacksGeneral, primaryModels),
+        fallbacks_content_policy: excludeModelsFromList(fallbacksContentPolicy, primaryModels),
+        fallbacks_context_window: excludeModelsFromList(fallbacksContextWindow, primaryModels),
+        strategy,
+        enabled,
+      },
+      weightChanges
+    )
   }
 
   return (
@@ -224,13 +248,14 @@ function RouteTopologyForm({
           priceByName={priceByName}
           currency={GATEWAY_DISPLAY_CURRENCY}
           showWeight={weightedMode}
-          onWeightChange={editable ? onUpdateModelWeight : undefined}
+          weightByName={weightByName}
+          onWeightChange={editable ? setWeight : undefined}
         />
 
         {weightedMode ? (
           <p className="-mt-2 text-xs text-muted-foreground">
             按权重路由：主模型行内的 <span className="font-mono">w</span>{' '}
-            字段保存即生效（直接更新模型 weight）。
+            字段修改后，点击「保存路由」生效（更新模型 weight）。
           </p>
         ) : null}
 
@@ -340,7 +365,6 @@ export function RouteTopologyEditor({
   readOnly: readOnlyProp = false,
   onSave,
   onDelete,
-  onUpdateModelWeight,
 }: RouteTopologyEditorProps): React.JSX.Element {
   if (!route) {
     return (
@@ -367,7 +391,6 @@ export function RouteTopologyEditor({
       readOnly={readOnly}
       onSave={onSave}
       onDelete={readOnly ? undefined : onDelete}
-      onUpdateModelWeight={readOnly ? undefined : onUpdateModelWeight}
     />
   )
 }

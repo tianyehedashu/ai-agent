@@ -142,6 +142,7 @@ class TestGatewayBudgetsApi:
         matching = GatewayBudget(
             target_kind="user",
             target_id=test_user.id,
+            tenant_id=team.id,
             period="monthly",
             model_name="gpt-4",
             limit_usd=Decimal("20"),
@@ -149,6 +150,7 @@ class TestGatewayBudgetsApi:
         other = GatewayBudget(
             target_kind="user",
             target_id=test_user.id,
+            tenant_id=team.id,
             period="monthly",
             model_name="claude-3",
             limit_usd=Decimal("30"),

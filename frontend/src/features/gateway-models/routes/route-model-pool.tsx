@@ -49,6 +49,8 @@ interface RouteSelectedModelRowProps {
   priceRow?: MyPriceRow
   currency?: DisplayCurrency
   showWeight?: boolean
+  /** 权重展示值（草稿优先）；未提供时回退 model.weight */
+  weight?: number
   onWeightChange?: (modelName: string, weight: number) => void
 }
 
@@ -63,6 +65,7 @@ const RouteSelectedModelRow = memo(function RouteSelectedModelRow({
   priceRow,
   currency = GATEWAY_DISPLAY_CURRENCY,
   showWeight = false,
+  weight,
   onWeightChange,
 }: RouteSelectedModelRowProps): React.JSX.Element {
   const weightEditable = showWeight && !disabled && onWeightChange !== undefined
@@ -80,7 +83,7 @@ const RouteSelectedModelRow = memo(function RouteSelectedModelRow({
       {showWeight && onWeightChange ? (
         <RouteDeploymentWeightInput
           modelName={model.name}
-          currentWeight={model.weight}
+          value={weight ?? model.weight}
           disabled={!weightEditable}
           onChange={onWeightChange}
         />
@@ -154,6 +157,8 @@ interface RouteOrderedModelPickerProps {
   priceByName?: Map<string, MyPriceRow>
   currency?: DisplayCurrency
   showWeight?: boolean
+  /** 权重展示值（modelName → 草稿值），未命中回退 model.weight */
+  weightByName?: ReadonlyMap<string, number>
   onWeightChange?: (modelName: string, weight: number) => void
 }
 
@@ -168,6 +173,7 @@ export function RouteOrderedModelPicker({
   priceByName,
   currency = GATEWAY_DISPLAY_CURRENCY,
   showWeight = false,
+  weightByName,
   onWeightChange,
 }: RouteOrderedModelPickerProps): React.JSX.Element {
   const modelsByName = useMemo(() => buildModelsByName(models), [models])
@@ -247,6 +253,7 @@ export function RouteOrderedModelPicker({
                     priceRow={priceByName?.get(model.name)}
                     currency={currency}
                     showWeight={showWeight}
+                    weight={weightByName?.get(model.name)}
                     onWeightChange={onWeightChange}
                   />
                 ))}

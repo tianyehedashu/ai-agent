@@ -199,6 +199,7 @@ sequenceDiagram
 ## 10. 已知边界
 
 - `gw:budget_uc` 索引仅 `add`，删除规则时不 `srem`：为**只读的"可能存在"过滤器**，假阳性仅触发一次配置缓存查询（返回空、不误扣），并随 35 天 TTL 自愈。删除规则的**正确性**由 `invalidate_gateway_budget_config_cache` 保证。
-- 成员额度已按团队隔离（见 §9.1）。**单一语义、无回填**：迁移 `20260612_gbt` 仅加列与改索引；历史 `tenant_id IS NULL` 的成员护栏行不再被热路径匹配，需在团队内重建。
+- 成员额度已按团队隔离（见 §9.1）。迁移 `20260612_gbt` 仅加列与改索引；历史 `tenant_id IS NULL` 的成员护栏行曾既不可见也不被热路径匹配（数据黑洞）。迁移 `20260615_gbtb` 已按确定性规则回填（shared 团队优先、加入最早；选定团队下已重建同坐标新行的历史行直接删除）；仅无任何活跃团队成员资格的行保持 NULL（不可达，留待人工清理）。
+- 删除/归属校验（`_assert_budget_in_team`）除 target 归属外，还校验成员护栏行的 `tenant_id == 当前团队`、成员+凭据行的凭据在当前团队可见集合内，防止同一成员所在他团队管理员跨团队删除。
 - metadata/model_info 丢失时 Phase2 跳过（与 ProviderPlan 一致的 fail-open：无规则则放行）。
 - 不改 `EntitlementPlan`/`ProviderPlan` 语义；不改造 `identity/UserQuota`（旧身份配额并行存在）。

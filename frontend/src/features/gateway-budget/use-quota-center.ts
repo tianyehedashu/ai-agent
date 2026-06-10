@@ -21,9 +21,10 @@ import { formatTeamMemberDisplay } from '@/types/permissions'
 import { parseOptionalInt, parseOptionalUsd } from './budget-form-utils'
 import { buildBudgetModelOptions, type BudgetModelOption } from './budget-model-options'
 import { quotaRuleRowId, type QuotaRuleLabelContext } from './quota-rule-utils'
+import { gatewayBudgetsBaseQueryKey } from './use-gateway-budgets'
 import {
   GATEWAY_QUOTA_META_STALE_MS,
-  gatewayQuotaRulesQueryKey,
+  gatewayQuotaRulesBaseQueryKey,
   useGatewayQuotaRules,
 } from './use-gateway-quota-rules'
 
@@ -271,6 +272,9 @@ function useQuotaCenterImpl(): QuotaCenterState {
   const periodFilter = searchParams.get('period') ?? 'all'
   // 成员自助：从凭据详情「设置我的限额 →」带入的凭据预填，用于预加载凭据元数据并自动开抽屉。
   const credentialPrefill = mode === 'member' ? searchParams.get('credential_id') : null
+  // 管理员：统计页「设配额」/ 凭据详情跳转带入的成员、凭据预填。
+  const userPrefill = mode === 'admin' ? searchParams.get('user_id') : null
+  const adminCredentialPrefill = mode === 'admin' ? searchParams.get('credential_id') : null
 
   const [batchOpen, setBatchOpen] = useState(false)
   const [batchValues, setBatchValues] = useState<QuotaBatchFormValues>(DEFAULT_BATCH_FORM)
@@ -357,15 +361,9 @@ function useQuotaCenterImpl(): QuotaCenterState {
     return { memberLabels, keyLabels, credentialLabels }
   }, [membersQuery.data, keysQuery.data, credsQuery.data])
 
-  const filteredItems = useMemo(() => {
-    let items = rulesQuery.data ?? []
-    if (periodFilter !== 'all') {
-      items = items.filter(
-        (r) => r.key.period === periodFilter || (r.key.period === null && periodFilter === 'total')
-      )
-    }
-    return items
-  }, [rulesQuery.data, periodFilter])
+  // 周期等筛选由后端 list 参数完成（滚动窗口型 upstream/downstream 规则的保留规则在服务端），
+  // 此处不再二次过滤，避免与服务端语义不一致导致规则"消失"。
+  const filteredItems = useMemo(() => rulesQuery.data ?? [], [rulesQuery.data])
 
   const selectedRule = useMemo(
     () => filteredItems.find((r) => quotaRuleRowId(r) === selectedId) ?? null,
@@ -378,8 +376,8 @@ function useQuotaCenterImpl(): QuotaCenterState {
         ? gatewayApi.batchUpsertSelfQuotaRules(teamId, rules)
         : gatewayApi.batchUpsertQuotaRules(teamId, rules),
     onSuccess: (result: QuotaRuleBatchUpsertResponse) => {
-      void queryClient.invalidateQueries({ queryKey: ['gateway-quota-rules', teamId] })
-      void queryClient.invalidateQueries({ queryKey: ['gateway-budgets', teamId] })
+      void queryClient.invalidateQueries({ queryKey: gatewayQuotaRulesBaseQueryKey(teamId) })
+      void queryClient.invalidateQueries({ queryKey: gatewayBudgetsBaseQueryKey(teamId) })
       if (result.failed.length > 0) {
         toast({
           title: `部分成功：${String(result.succeeded.length)} 条`,
@@ -402,8 +400,8 @@ function useQuotaCenterImpl(): QuotaCenterState {
         ? gatewayApi.deleteSelfQuotaRule(teamId, budgetId)
         : gatewayApi.deleteBudget(teamId, budgetId),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: gatewayQuotaRulesQueryKey(teamId) })
-      void queryClient.invalidateQueries({ queryKey: ['gateway-budgets', teamId] })
+      void queryClient.invalidateQueries({ queryKey: gatewayQuotaRulesBaseQueryKey(teamId) })
+      void queryClient.invalidateQueries({ queryKey: gatewayBudgetsBaseQueryKey(teamId) })
       setSelectedId(null)
       toast({ title: '已删除配额规则' })
     },
@@ -570,6 +568,40 @@ function useQuotaCenterImpl(): QuotaCenterState {
     })
     setBatchOpen(true)
   }, [credentialPrefill, modelFilter, credentialOptions])
+
+  // 管理员：统计页「设配额」（user_id）/ 凭据详情（credential_id + layer=upstream）跳转预填并自动开抽屉。
+  const consumedAdminPrefillRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (mode !== 'admin') return
+    if (userPrefill === null && adminCredentialPrefill === null) return
+    const token = `${userPrefill ?? ''}|${adminCredentialPrefill ?? ''}`
+    if (consumedAdminPrefillRef.current === token) return
+    consumedAdminPrefillRef.current = token
+    const model = modelFilter.trim()
+    const modelFields = {
+      allModels: model === '',
+      modelNames: model === '' ? [] : [model],
+    }
+    if (userPrefill !== null) {
+      setBatchValues({
+        ...DEFAULT_BATCH_FORM,
+        subjectMode: 'users',
+        userIds: [userPrefill],
+        credentialIds: adminCredentialPrefill ? [adminCredentialPrefill] : [],
+        ...modelFields,
+      })
+    } else if (adminCredentialPrefill !== null) {
+      // 仅凭据无成员：platform 层凭据维度必须挂在成员上，故落到 upstream 层。
+      setBatchValues({
+        ...DEFAULT_BATCH_FORM,
+        layer: 'upstream',
+        allCredentials: false,
+        credentialIds: [adminCredentialPrefill],
+        ...modelFields,
+      })
+    }
+    setBatchOpen(true)
+  }, [mode, userPrefill, adminCredentialPrefill, modelFilter])
 
   const selectRule = useCallback((rule: QuotaRule) => {
     setSelectedId(quotaRuleRowId(rule))
