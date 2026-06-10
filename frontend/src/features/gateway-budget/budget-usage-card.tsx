@@ -47,8 +47,8 @@ function QuotaUsageRow({ rule }: { rule: QuotaRule }): React.JSX.Element {
         <>
           <div className="space-y-0.5 text-xs tabular-nums">
             <div>
-              USD {usage.current_usd.toFixed(4)} /{' '}
-              {limitUsd !== null ? `$${limitUsd.toFixed(2)}` : '∞'}
+              USD {parseFloat(String(usage.current_usd)).toFixed(4)} /{' '}
+              {limitUsd !== null ? `$${parseFloat(String(limitUsd)).toFixed(2)}` : '∞'}
             </div>
             <div>
               Token {usage.current_tokens} / {limitTok ?? '∞'}
