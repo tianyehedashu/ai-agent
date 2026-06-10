@@ -51,8 +51,9 @@ import {
 } from '@/features/gateway-usage/usage-aggregation'
 import { UsageAggregationToggle } from '@/features/gateway-usage/usage-aggregation-toggle'
 import { useLogFilterCatalog } from '@/features/gateway-usage/use-log-filter-catalog'
+import { useTeamMemberFilterSearch } from '@/features/gateway-usage/use-team-member-filter-search'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
-import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
+import { useGatewayTeamId, useGatewayTeamRecord } from '@/hooks/use-gateway-team-id'
 import {
   AlertCircle,
   CheckCircle2,
@@ -117,6 +118,7 @@ interface LogsLocationState {
 
 export default function GatewayLogsPage(): React.JSX.Element {
   const teamId = useGatewayTeamId()
+  const teamRecord = useGatewayTeamRecord(teamId)
   const { isPlatformAdmin } = useGatewayPermission()
   const aggregationOptions = useMemo(
     () => gatewayUsageAggregationOptions(isPlatformAdmin),
@@ -175,8 +177,17 @@ export default function GatewayLogsPage(): React.JSX.Element {
   })
 
   // 筛选目录数据
-  const { credentialOptions, memberOptions, keyOptions, modelOptions } = useLogFilterCatalog({
+  const { credentialOptions, keyOptions, modelOptions } = useLogFilterCatalog({
     teamId,
+  })
+
+  // 人员筛选：workspace 模式下使用服务端搜索（支持大量成员场景）
+  const isPersonalTeam = teamRecord?.kind === 'personal'
+  const showMemberFilter = usageAggregation !== 'user' && !isPersonalTeam
+  const memberFilter = useTeamMemberFilterSearch({
+    teamId,
+    selectedUserId: userFilter,
+    enabled: showMemberFilter,
   })
 
   // URL 同步：筛选变化时更新 query params（保留非日志相关参数）
@@ -312,7 +323,7 @@ export default function GatewayLogsPage(): React.JSX.Element {
     statusFilter !== 'all' ||
     capabilityFilter !== 'all' ||
     dateRange !== 'today' ||
-    userFilter !== GATEWAY_FILTER_ALL ||
+    (showMemberFilter && userFilter !== GATEWAY_FILTER_ALL) ||
     credentialFilter !== GATEWAY_FILTER_ALL ||
     vkeyFilter !== GATEWAY_FILTER_ALL ||
     modelFilter !== GATEWAY_FILTER_ALL
@@ -324,7 +335,7 @@ export default function GatewayLogsPage(): React.JSX.Element {
       capability: capabilityFilter === 'all' ? undefined : capabilityFilter,
       start: rangeStart.toISOString(),
       end: rangeEnd.toISOString(),
-      user_id: userFilter === GATEWAY_FILTER_ALL ? undefined : userFilter,
+      user_id: showMemberFilter && userFilter !== GATEWAY_FILTER_ALL ? userFilter : undefined,
       credential_id: credentialFilter === GATEWAY_FILTER_ALL ? undefined : credentialFilter,
       vkey_id: vkeyFilter === GATEWAY_FILTER_ALL ? undefined : vkeyFilter,
       model: modelFilter === GATEWAY_FILTER_ALL ? undefined : modelFilter,
@@ -335,6 +346,7 @@ export default function GatewayLogsPage(): React.JSX.Element {
       capabilityFilter,
       rangeStart,
       rangeEnd,
+      showMemberFilter,
       userFilter,
       credentialFilter,
       vkeyFilter,
@@ -559,16 +571,23 @@ export default function GatewayLogsPage(): React.JSX.Element {
             </SelectContent>
           </Select>
 
-          <GatewayFilterCombobox
-            value={userFilter}
-            onChange={(next) => {
-              setUserFilter(next)
-              resetListPosition()
-            }}
-            options={memberOptions}
-            placeholder="用户"
-            active={userFilter !== GATEWAY_FILTER_ALL}
-          />
+          {showMemberFilter ? (
+            <GatewayFilterCombobox
+              value={userFilter}
+              onChange={(next) => {
+                setUserFilter(next)
+                resetListPosition()
+              }}
+              options={memberFilter.options}
+              placeholder="用户"
+              active={userFilter !== GATEWAY_FILTER_ALL}
+              searchMode="server"
+              onSearchQueryChange={memberFilter.onSearchQueryChange}
+              onOpenChange={memberFilter.onPickerOpenChange}
+              remoteSearching={memberFilter.remoteSearching}
+              loading={memberFilter.resolvingSelection}
+            />
+          ) : null}
 
           <GatewayFilterCombobox
             value={credentialFilter}

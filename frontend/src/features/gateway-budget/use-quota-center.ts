@@ -20,6 +20,7 @@ import { formatTeamMemberDisplay } from '@/types/permissions'
 
 import { parseOptionalInt, parseOptionalUsd } from './budget-form-utils'
 import { buildBudgetModelOptions, type BudgetModelOption } from './budget-model-options'
+import { quotaRuleToBatchFormValues, type EditingRuleInfo } from './quota-batch-from-rule'
 import { quotaRuleRowId, type QuotaRuleLabelContext } from './quota-rule-utils'
 import { gatewayBudgetsBaseQueryKey } from './use-gateway-budgets'
 import {
@@ -255,6 +256,9 @@ export interface QuotaCenterState {
   modelsLoading: boolean
   onModelPickerOpenChange?: (open: boolean) => void
   batchPreviewCount: number
+  /** 当前处于编辑状态的规则信息；null 表示创建/批量模式 */
+  editingRuleId: string | null
+  onEditRule: (rule: QuotaRule) => void
 }
 
 function useQuotaCenterImpl(): QuotaCenterState {
@@ -279,6 +283,8 @@ function useQuotaCenterImpl(): QuotaCenterState {
   const [batchOpen, setBatchOpen] = useState(false)
   const [batchValues, setBatchValues] = useState<QuotaBatchFormValues>(DEFAULT_BATCH_FORM)
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [editingRuleId, setEditingRuleId] = useState<string | null>(null)
+  const editingInfoRef = useRef<EditingRuleInfo | null>(null)
 
   const listParams = useMemo(
     () => ({
@@ -387,7 +393,7 @@ function useQuotaCenterImpl(): QuotaCenterState {
       } else {
         toast({ title: `已保存 ${String(result.succeeded.length)} 条配额规则` })
       }
-      setBatchOpen(false)
+      handleSetBatchOpen(false)
     },
     onError: (err: Error) => {
       toast({ title: '保存失败', description: err.message, variant: 'destructive' })
@@ -468,7 +474,11 @@ function useQuotaCenterImpl(): QuotaCenterState {
 
   const submitBatch = useCallback(() => {
     let formValues = resolvedBatchValues
-    if (mode === 'member') {
+    // 编辑模式：保留原始维度，仅改限额与模型
+    if (editingRuleId && editingInfoRef.current) {
+      formValues = resolvedBatchValues
+      // 不强制覆盖为成员自助锁定
+    } else if (mode === 'member') {
       // 成员自助：强制锁定为本人 + platform，凭据必选。
       if (selfUserId === null) {
         toast({ title: '无法识别当前用户', variant: 'destructive' })
@@ -489,6 +499,10 @@ function useQuotaCenterImpl(): QuotaCenterState {
         userIds: [selfUserId],
         keyIds: [],
       }
+    } else if (editingRuleId) {
+      // 编辑模式兜底：若校验通过且非 member/admin 兜底路径，
+      // 直接按表单值提交（维度已锁定，仅限额变更）。
+      formValues = resolvedBatchValues
     }
     const rules = buildBatchRules(formValues)
     if (!rules || rules.length === 0) {
@@ -504,7 +518,7 @@ function useQuotaCenterImpl(): QuotaCenterState {
       return
     }
     batchMutation.mutate(rules)
-  }, [resolvedBatchValues, batchMutation, toast, mode, selfUserId])
+  }, [resolvedBatchValues, batchMutation, toast, mode, selfUserId, editingRuleId])
 
   const confirmDelete = useCallback(
     (rule: QuotaRule) => {
@@ -611,6 +625,33 @@ function useQuotaCenterImpl(): QuotaCenterState {
     setSelectedId(null)
   }, [])
 
+  const onEditRule = useCallback(
+    (rule: QuotaRule) => {
+      const parsed = quotaRuleToBatchFormValues(rule)
+      if (!parsed) {
+        toast({
+          title: '暂不支持编辑此规则',
+          description: '上游/下游配额及计划类规则请在凭据/Key 页管理。',
+          variant: 'destructive',
+        })
+        return
+      }
+      editingInfoRef.current = parsed.info
+      setEditingRuleId(parsed.info.budgetId)
+      setBatchValues(parsed.values)
+      setBatchOpen(true)
+    },
+    [toast]
+  )
+
+  const handleSetBatchOpen = useCallback((open: boolean) => {
+    setBatchOpen(open)
+    if (!open) {
+      setEditingRuleId(null)
+      editingInfoRef.current = null
+    }
+  }, [])
+
   const refresh = useCallback(() => {
     void rulesQuery.refetch()
   }, [rulesQuery])
@@ -633,7 +674,7 @@ function useQuotaCenterImpl(): QuotaCenterState {
     periodFilter,
     setFilter,
     batchOpen,
-    setBatchOpen,
+    setBatchOpen: handleSetBatchOpen,
     batchValues,
     setBatchValues,
     submitBatch,
@@ -651,6 +692,8 @@ function useQuotaCenterImpl(): QuotaCenterState {
     modelsLoading: modelPages.isLoading || routesQuery.isLoading,
     onModelPickerOpenChange: modelPages.onPickerOpenChange,
     batchPreviewCount,
+    editingRuleId,
+    onEditRule,
   }
 }
 

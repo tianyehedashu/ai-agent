@@ -237,18 +237,21 @@ class PricingCatalogReadService:
             user_id=user_id,
         )
         cred_names = await build_credential_name_map_for_models(self.session, models)
+
+        items = [
+            (model.id, model.provider, model.real_model, model.capability)
+            for model in models
+        ]
+        resolved_map = await svc.resolve_downstream_rate_batch(
+            tenant_id=team_id,
+            entitlement_plan_id=None,
+            items=items,
+        )
+
         out: list[dict[str, Any]] = []
         for model in models:
-            try:
-                resolved = await svc.resolve_downstream_rate(
-                    tenant_id=team_id,
-                    entitlement_plan_id=None,
-                    gateway_model_id=model.id,
-                    provider=model.provider,
-                    upstream_model=model.real_model,
-                    capability=model.capability,
-                )
-            except RateUnavailableError:
+            resolved = resolved_map.get(model.id)
+            if resolved is None:
                 continue
             strategy = resolved_inheritance_strategy(resolved) or "upstream_passthrough"
             out.append(

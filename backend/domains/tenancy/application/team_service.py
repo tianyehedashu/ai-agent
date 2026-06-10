@@ -215,6 +215,22 @@ class TeamService:
     async def list_team_members(self, team_id: uuid.UUID) -> list[TeamMember]:
         return await self._members.list_by_team(team_id)
 
+    async def list_team_members_page(
+        self,
+        team_id: uuid.UUID,
+        *,
+        page: int = 1,
+        page_size: int = 20,
+        search: str | None = None,
+    ) -> tuple[list[TeamMember], int]:
+        """分页列出团队成员（可选按邮箱/姓名搜索）。返回 (items, total)。"""
+        offset = (max(1, page) - 1) * page_size
+        total = await self._members.count_by_team_with_search(team_id, search=search)
+        items = await self._members.list_by_team_page(
+            team_id, offset=offset, limit=page_size, search=search
+        )
+        return items, total
+
     async def update_team(
         self,
         team_id: uuid.UUID,

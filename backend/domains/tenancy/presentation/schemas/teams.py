@@ -59,6 +59,10 @@ class TeamMemberResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class TeamMemberListResponse(PaginatedListResponse[TeamMemberResponse]):
+    """团队成员分页列表。"""
+
+
 class TeamMemberLookupResponse(BaseModel):
     """按邮箱查找用户（团队 admin 添加成员前，不暴露平台 role）。"""
 
@@ -84,6 +88,7 @@ __all__ = [
     "TeamInviteCandidateListResponse",
     "TeamInviteCandidateResponse",
     "TeamMemberAdd",
+    "TeamMemberListResponse",
     "TeamMemberLookupResponse",
     "TeamMemberResponse",
     "TeamResponse",

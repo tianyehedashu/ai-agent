@@ -162,6 +162,7 @@ export function QuotaCenterWorkspace(): React.JSX.Element {
           formDisabled={ws.formDisabled}
           labelContext={ws.labelContext}
           onSelect={ws.selectRule}
+          onEdit={ws.onEditRule}
           onDelete={ws.confirmDelete}
           onBatchDelete={ws.confirmBatchDelete}
         />
@@ -196,6 +197,7 @@ export function QuotaCenterWorkspace(): React.JSX.Element {
             modelOptions={ws.modelOptions}
             modelsLoading={ws.modelsLoading}
             onModelPickerOpenChange={ws.onModelPickerOpenChange}
+            editingRuleId={ws.editingRuleId}
           />
         </Suspense>
       ) : null}

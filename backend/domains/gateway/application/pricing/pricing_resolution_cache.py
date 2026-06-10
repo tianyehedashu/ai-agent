@@ -28,9 +28,11 @@ def pricing_resolution_cache_key(
     tenant_id: uuid.UUID | None,
     gateway_model_id: uuid.UUID | None,
     entitlement_plan_id: uuid.UUID | None,
+    provider: str,
+    upstream_model: str,
     capability: str,
 ) -> str:
-    return f"{tenant_id}:{gateway_model_id}:{entitlement_plan_id}:{capability}"
+    return f"{tenant_id}:{gateway_model_id}:{entitlement_plan_id}:{provider}:{upstream_model}:{capability}"
 
 
 @dataclass(frozen=True)

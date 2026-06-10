@@ -51,6 +51,8 @@ export interface QuotaBatchDrawerProps {
   modelOptions: BudgetModelOption[]
   modelsLoading?: boolean
   onModelPickerOpenChange?: (open: boolean) => void
+  /** 编辑模式：锁定维度字段不可改，标题显示「编辑配额」 */
+  editingRuleId?: string | null
 }
 
 function MetaListPlaceholder({
@@ -104,6 +106,7 @@ export function QuotaBatchDrawer({
   modelOptions,
   modelsLoading = false,
   onModelPickerOpenChange,
+  editingRuleId,
 }: QuotaBatchDrawerProps): React.JSX.Element {
   const [memberQuery, setMemberQuery] = useState('')
   const [keyQuery, setKeyQuery] = useState('')
@@ -119,11 +122,15 @@ export function QuotaBatchDrawer({
       <SheetContent className="flex max-h-[100dvh] w-full flex-col sm:max-w-lg">
         <OverlayScope className="flex min-h-0 flex-1 flex-col">
           <SheetHeader className="shrink-0 pr-8 text-left">
-            <SheetTitle>{isMember ? '设置我的配额' : '批量设置配额'}</SheetTitle>
+            <SheetTitle>
+              {editingRuleId ? '编辑配额' : isMember ? '设置我的配额' : '批量设置配额'}
+            </SheetTitle>
             <SheetDescription>
-              {isMember
-                ? '为本人在「自己创建的团队凭据」上设置平台消费限额（自我约束）。选择凭据与模型后填写限额。'
-                : '选择层级与维度组合，统一应用限额。平台配额按全团队/成员/虚拟 Key；上游需指定凭据；下游按虚拟 Key 写入权益套餐。'}
+              {editingRuleId
+                ? '修改当前配额规则的限额。主体与层级不可变更（如需换主体请删除后新建）。'
+                : isMember
+                  ? '为本人在「自己创建的团队凭据」上设置平台消费限额（自我约束）。选择凭据与模型后填写限额。'
+                  : '选择层级与维度组合，统一应用限额。平台配额按全团队/成员/虚拟 Key；上游需指定凭据；下游按虚拟 Key 写入权益套餐。'}
             </SheetDescription>
           </SheetHeader>
 
@@ -202,7 +209,7 @@ export function QuotaBatchDrawer({
                         patchQuotaBatchFormForLayer(values, layer as QuotaBatchFormValues['layer'])
                       )
                     }}
-                    disabled={disabled}
+                    disabled={disabled || !!editingRuleId}
                   >
                     <SelectTrigger id="quota-batch-layer">
                       <SelectValue placeholder="选择层级" />
@@ -238,7 +245,7 @@ export function QuotaBatchDrawer({
                             )
                           )
                         }}
-                        disabled={disabled}
+                        disabled={disabled || !!editingRuleId}
                       >
                         <SelectTrigger id="quota-batch-subject">
                           <SelectValue placeholder="选择主体" />
@@ -565,9 +572,11 @@ export function QuotaBatchDrawer({
               <label className="flex cursor-pointer items-center gap-2 text-sm">
                 <Checkbox
                   checked={values.allModels}
-                  disabled={disabled}
+                  disabled={disabled || !!editingRuleId}
                   onCheckedChange={(checked) => {
-                    onChange({ ...values, allModels: checked === true })
+                    if (!editingRuleId) {
+                      onChange({ ...values, allModels: checked === true })
+                    }
                   }}
                 />
                 全模型汇总
@@ -577,14 +586,15 @@ export function QuotaBatchDrawer({
                   <Label>模型（可多选，逐条添加）</Label>
                   <BudgetModelCombobox
                     value=""
+                    disabled={disabled || !!editingRuleId}
                     onChange={(name) => {
-                      if (name && !values.modelNames.includes(name)) {
+                      if (name && !values.modelNames.includes(name) && !editingRuleId) {
                         onChange({ ...values, modelNames: [...values.modelNames, name] })
                       }
                     }}
                     options={modelOptions}
                     loading={modelsLoading}
-                    placeholder="选择模型…"
+                    placeholder={editingRuleId ? '（编辑模式不可切换模型）' : '选择模型…'}
                     onPopoverOpenChange={onModelPickerOpenChange}
                   />
                   {values.modelNames.length > 0 ? (
@@ -596,12 +606,14 @@ export function QuotaBatchDrawer({
                           size="sm"
                           variant="secondary"
                           className="h-7 text-xs"
-                          disabled={disabled}
+                          disabled={disabled || !!editingRuleId}
                           onClick={() => {
-                            onChange({
-                              ...values,
-                              modelNames: values.modelNames.filter((n) => n !== name),
-                            })
+                            if (!editingRuleId) {
+                              onChange({
+                                ...values,
+                                modelNames: values.modelNames.filter((n) => n !== name),
+                              })
+                            }
                           }}
                         >
                           {name} ×

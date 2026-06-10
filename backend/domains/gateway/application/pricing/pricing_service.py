@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -142,6 +143,8 @@ class PricingService:
                 tenant_id=tenant_id,
                 gateway_model_id=gateway_model_id,
                 entitlement_plan_id=entitlement_plan_id,
+                provider=provider,
+                upstream_model=upstream_model,
                 capability=capability,
             )
             cached = await get_cached_resolution_async(key)
@@ -167,6 +170,8 @@ class PricingService:
                     tenant_id=tenant_id,
                     gateway_model_id=gateway_model_id,
                     entitlement_plan_id=entitlement_plan_id,
+                    provider=provider,
+                    upstream_model=upstream_model,
                     capability=capability,
                 ),
                 resolved,
@@ -184,66 +189,49 @@ class PricingService:
         capability: str,
         at: datetime,
     ) -> ResolvedPricing:
-        hit_chain: list[str] = []
-        row: DownstreamModelPricing | None = None
+        tasks: list[asyncio.Task[DownstreamModelPricing | None]] = []
+        labels: list[str] = []
+
+        def _add_task(scope: str, scope_id: uuid.UUID | None, model_id: uuid.UUID | None) -> None:
+            tasks.append(
+                asyncio.create_task(
+                    self._downstream.get_active_for_scope(
+                        scope=scope, scope_id=scope_id, gateway_model_id=model_id, at=at
+                    )
+                )
+            )
+            labels.append(scope)
 
         if entitlement_plan_id is not None:
-            row = await self._downstream.get_active_for_scope(
-                scope="entitlement_plan",
-                scope_id=entitlement_plan_id,
-                gateway_model_id=gateway_model_id,
-                at=at,
-            )
-            if row is None and gateway_model_id is not None:
-                row = await self._downstream.get_active_for_scope(
-                    scope="entitlement_plan",
-                    scope_id=entitlement_plan_id,
-                    gateway_model_id=None,
-                    at=at,
-                )
-            if row is not None:
-                hit_chain.append("entitlement_plan")
+            _add_task("entitlement_plan", entitlement_plan_id, gateway_model_id)
+            if gateway_model_id is not None:
+                _add_task("entitlement_plan", entitlement_plan_id, None)
+        if tenant_id is not None:
+            _add_task("tenant", tenant_id, gateway_model_id)
+            if gateway_model_id is not None:
+                _add_task("tenant", tenant_id, None)
+        _add_task("global", None, gateway_model_id)
+        if gateway_model_id is not None:
+            _add_task("global", None, None)
 
-        if row is None and tenant_id is not None:
-            row = await self._downstream.get_active_for_scope(
-                scope="tenant",
-                scope_id=tenant_id,
-                gateway_model_id=gateway_model_id,
-                at=at,
+        upstream_task = asyncio.create_task(
+            self._upstream.get_active(
+                provider=provider, upstream_model=upstream_model, capability=capability, at=at
             )
-            if row is None and gateway_model_id is not None:
-                row = await self._downstream.get_active_for_scope(
-                    scope="tenant",
-                    scope_id=tenant_id,
-                    gateway_model_id=None,
-                    at=at,
-                )
-            if row is not None:
-                hit_chain.append("tenant")
-
-        if row is None:
-            row = await self._downstream.get_active_for_scope(
-                scope="global",
-                scope_id=None,
-                gateway_model_id=gateway_model_id,
-                at=at,
-            )
-            if row is None and gateway_model_id is not None:
-                row = await self._downstream.get_active_for_scope(
-                    scope="global",
-                    scope_id=None,
-                    gateway_model_id=None,
-                    at=at,
-                )
-            if row is not None:
-                hit_chain.append("global")
-
-        upstream_row = await self._upstream.get_active(
-            provider=provider,
-            upstream_model=upstream_model,
-            capability=capability,
-            at=at,
         )
+
+        hit_chain: list[str] = []
+        row: DownstreamModelPricing | None = None
+        for r in await asyncio.gather(*tasks):
+            if r is not None:
+                row = r
+                break
+        if row is not None:
+            scope = row.scope
+            if scope in labels:
+                hit_chain.append(scope)
+
+        upstream_row = await upstream_task
         upstream_rate = _row_to_rate(upstream_row) if upstream_row else None
         upstream_extra = _upstream_extra_snapshot(upstream_row)
 
@@ -288,6 +276,74 @@ class PricingService:
             downstream_strategy=row.inheritance_strategy,
             upstream_extra=upstream_extra,
         )
+
+    async def resolve_downstream_rate_batch(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        entitlement_plan_id: uuid.UUID | None,
+        items: list[tuple[uuid.UUID, str, str, str]],
+        at: datetime | None = None,
+    ) -> dict[uuid.UUID, ResolvedPricing]:
+        """批量解析下游定价；利用缓存命中 + asyncio.gather 并行化。
+
+        ``items`` 每项为 ``(gateway_model_id, provider, upstream_model, capability)``。
+        返回映射：gateway_model_id -> ResolvedPricing（不含异常项）。
+        """
+        from domains.gateway.application.pricing.pricing_resolution_cache import (
+            get_cached_resolution_async,
+            pricing_resolution_cache_key,
+            set_cached_resolution_async,
+        )
+
+        at = at or datetime.now(UTC)
+        results: dict[uuid.UUID, ResolvedPricing] = {}
+        to_fetch: list[tuple[uuid.UUID, str, str, str]] = []
+
+        for model_id, provider, upstream_model, capability in items:
+            key = pricing_resolution_cache_key(
+                tenant_id=tenant_id,
+                gateway_model_id=model_id,
+                entitlement_plan_id=entitlement_plan_id,
+                provider=provider,
+                upstream_model=upstream_model,
+                capability=capability,
+            )
+            cached = await get_cached_resolution_async(key)
+            if cached is not None:
+                results[model_id] = cached
+            else:
+                to_fetch.append((model_id, provider, upstream_model, capability))
+
+        async def _fetch(model_id: uuid.UUID, provider: str, upstream_model: str, capability: str) -> tuple[uuid.UUID, ResolvedPricing | None]:
+            try:
+                resolved = await self._resolve_downstream_rate_uncached(
+                    tenant_id=tenant_id,
+                    entitlement_plan_id=entitlement_plan_id,
+                    gateway_model_id=model_id,
+                    provider=provider,
+                    upstream_model=upstream_model,
+                    capability=capability,
+                    at=at,
+                )
+                key = pricing_resolution_cache_key(
+                    tenant_id=tenant_id,
+                    gateway_model_id=model_id,
+                    entitlement_plan_id=entitlement_plan_id,
+                    provider=provider,
+                    upstream_model=upstream_model,
+                    capability=capability,
+                )
+                await set_cached_resolution_async(key, resolved)
+                return (model_id, resolved)
+            except RateUnavailableError:
+                return (model_id, None)
+
+        coros = [_fetch(m, p, u, c) for m, p, u, c in to_fetch]
+        for model_id, resolved in await asyncio.gather(*coros):
+            if resolved is not None:
+                results[model_id] = resolved
+        return results
 
     async def calculate(
         self,

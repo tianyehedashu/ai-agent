@@ -214,6 +214,7 @@ async def init_db() -> None:
         pool_pre_ping=True,
         # 周期性回收长时间空闲的连接，进一步降低脏连接概率。
         pool_recycle=300,
+        connect_args={"command_timeout": 30},
     )
     _register_dirty_connection_recycle(_engine)
     _register_slow_query_logging(_engine)
@@ -234,6 +235,7 @@ async def init_db() -> None:
         max_overflow=settings.database_background_max_overflow,
         pool_pre_ping=True,
         pool_recycle=300,
+        connect_args={"command_timeout": 30},
     )
     _register_dirty_connection_recycle(_background_engine)
     # 后台池不记录慢 SQL（避免日志洪水）

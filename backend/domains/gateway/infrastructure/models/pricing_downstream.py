@@ -14,6 +14,7 @@ from sqlalchemy import (
     Numeric,
     String,
     UniqueConstraint,
+    func,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -80,6 +81,14 @@ class DownstreamModelPricing(BaseModel):
             "gateway_model_id",
             "effective_from",
             "effective_to",
+        ),
+        Index(
+            "ix_downstream_model_pricing_lookup_active",
+            "scope",
+            "scope_id",
+            "gateway_model_id",
+            "effective_from",
+            postgresql_where=effective_to.is_(None),
         ),
         CheckConstraint(
             "(inheritance_strategy = 'manual' AND input_cost_per_token IS NOT NULL "

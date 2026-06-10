@@ -42,6 +42,16 @@ export interface TeamMember {
   user_name?: string | null
 }
 
+/** 团队成员分页列表参数 */
+export interface ListTeamMembersPageParams {
+  search?: string
+  page: number
+  page_size?: number
+}
+
+/** 团队成员分页列表响应 */
+export type TeamMemberListResponse = PaginatedList<TeamMember>
+
 /** 按邮箱查找用户（团队 admin 添加成员前） */
 export interface TeamMemberLookup {
   id: string
@@ -87,8 +97,15 @@ export const teamsApi = {
     apiClient.patch<GatewayTeam>(`${GATEWAY_API_BASE}/teams/${id}`, body),
   /** 删除团队（仅 owner） */
   deleteTeam: (id: string) => apiClient.delete<unknown>(`${GATEWAY_API_BASE}/teams/${id}`),
-  /** 列出指定团队成员 */
+  /** 列出指定团队成员（全量，向后兼容） */
   listMembers: (teamId: string) => apiClient.get<TeamMember[]>(teamGatewayPath(teamId, '/members')),
+  /** 分页列出团队成员（支持搜索，用于筛选下拉等场景） */
+  listMembersPage: (teamId: string, params: ListTeamMembersPageParams) =>
+    apiClient.get<TeamMemberListResponse>(teamGatewayPath(teamId, '/members'), {
+      search: params.search,
+      page: params.page,
+      page_size: params.page_size,
+    }),
   /** 按邮箱查找已注册用户（仅 admin+） */
   lookupMemberByEmail: (teamId: string, email: string) =>
     apiClient.get<TeamMemberLookup>(teamGatewayPath(teamId, '/members/lookup'), { email }),

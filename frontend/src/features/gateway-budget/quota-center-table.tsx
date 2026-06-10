@@ -8,7 +8,7 @@ import type { QuotaRule } from '@/api/gateway/quota-rules'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
-import { ArrowDown, ArrowUp, Loader2, Trash2 } from '@/lib/lucide-icons'
+import { ArrowDown, ArrowUp, Loader2, Pencil, Trash2 } from '@/lib/lucide-icons'
 import { cn } from '@/lib/utils'
 
 import {
@@ -30,6 +30,7 @@ export interface QuotaCenterTableProps {
   labelContext: QuotaRuleLabelContext
   onSelect: (rule: QuotaRule) => void
   onDelete: (rule: QuotaRule) => void
+  onEdit?: (rule: QuotaRule) => void
   onBatchDelete?: (rules: QuotaRule[]) => void
 }
 
@@ -123,6 +124,7 @@ interface QuotaCenterTableRowProps {
   labelContext: QuotaRuleLabelContext
   onSelect: (rule: QuotaRule) => void
   onToggleCheck: (rule: QuotaRule, checked: boolean) => void
+  onEdit: (rule: QuotaRule) => void
   onDelete: (rule: QuotaRule) => void
 }
 
@@ -134,6 +136,7 @@ const QuotaCenterTableRow = memo(function QuotaCenterTableRow({
   labelContext,
   onSelect,
   onToggleCheck,
+  onEdit,
   onDelete,
 }: QuotaCenterTableRowProps): React.JSX.Element {
   const { ratio, barColor } = computeQuotaRuleUsageRatio(rule)
@@ -211,19 +214,36 @@ const QuotaCenterTableRow = memo(function QuotaCenterTableRow({
           e.stopPropagation()
         }}
       >
-        {canDelete ? (
-          <Button
-            size="icon"
-            variant="ghost"
-            className="h-7 w-7"
-            disabled={formDisabled}
-            onClick={() => {
-              onDelete(rule)
-            }}
-          >
-            <Trash2 className="h-3.5 w-3.5 text-destructive" />
-          </Button>
-        ) : null}
+        <div className="flex items-center gap-1">
+          {rule.source_ref.budget_id !== null ? (
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-7 w-7"
+              disabled={formDisabled}
+              onClick={() => {
+                onEdit(rule)
+              }}
+              title="编辑配额"
+            >
+              <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
+            </Button>
+          ) : null}
+          {canDelete ? (
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-7 w-7"
+              disabled={formDisabled}
+              onClick={() => {
+                onDelete(rule)
+              }}
+              title="删除配额"
+            >
+              <Trash2 className="h-3.5 w-3.5 text-destructive" />
+            </Button>
+          ) : null}
+        </div>
       </td>
     </tr>
   )
@@ -237,6 +257,7 @@ export function QuotaCenterTable({
   labelContext,
   onSelect,
   onDelete,
+  onEdit,
   onBatchDelete,
 }: QuotaCenterTableProps): React.JSX.Element {
   const [sort, setSort] = useState<SortState | null>({ key: 'usage', dir: 'desc' })
@@ -368,6 +389,7 @@ export function QuotaCenterTable({
                   labelContext={labelContext}
                   onSelect={onSelect}
                   onToggleCheck={toggleRow}
+                  onEdit={onEdit ?? (() => {})}
                   onDelete={onDelete}
                 />
               )

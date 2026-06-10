@@ -45,6 +45,8 @@ def test_local_cache_does_not_retain_orm_rows() -> None:
         tenant_id=None,
         gateway_model_id=None,
         entitlement_plan_id=None,
+        provider="openai",
+        upstream_model="gpt-4",
         capability="chat",
     )
     rate = PricingRate(

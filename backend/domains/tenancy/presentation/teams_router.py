@@ -18,6 +18,7 @@ from domains.tenancy.presentation.schemas.teams import (
     TeamCreate,
     TeamInviteCandidateListResponse,
     TeamMemberAdd,
+    TeamMemberListResponse,
     TeamMemberLookupResponse,
     TeamMemberResponse,
     TeamResponse,
@@ -171,16 +172,54 @@ async def delete_team(
         raise ValidationError(str(exc)) from exc
 
 
-@router.get("/teams/{team_id}/members", response_model=list[TeamMemberResponse])
+@router.get(
+    "/teams/{team_id}/members",
+    responses={
+        200: {
+            "description": "不传 page/page_size 时返回全量列表；传时分页+搜索",
+            "content": {
+                "application/json": {
+                    "schema": {
+                        "oneOf": [
+                            {
+                                "type": "array",
+                                "items": {"$ref": "#/components/schemas/TeamMemberResponse"},
+                            },
+                            {"$ref": "#/components/schemas/TeamMemberListResponse"},
+                        ]
+                    }
+                }
+            },
+        }
+    },
+)
 async def list_team_members(
     team_id: uuid.UUID,
     team: RequiredTeamMember,
     svc: TeamSvc,
     user_service: UserSvc,
-) -> list[TeamMemberResponse]:
-    members = await svc.list_team_members(team_id)
-    enriched = await enrich_team_members(members, user_service)
-    return _to_member_responses(enriched)
+    page: Annotated[int, Query(ge=1)] | None = None,
+    page_size: Annotated[int, Query(ge=1, le=200)] | None = None,
+    search: Annotated[str | None, Query(min_length=1, max_length=100)] = None,
+) -> list[TeamMemberResponse] | TeamMemberListResponse:
+    """列出团队成员。不传 page/page_size 时返回全量列表（向后兼容）；传时分页+搜索。"""
+    if page is None or page_size is None:
+        members = await svc.list_team_members(team_id)
+        enriched = await enrich_team_members(members, user_service)
+        return _to_member_responses(enriched)
+    items, total = await svc.list_team_members_page(
+        team_id, page=page, page_size=page_size, search=search
+    )
+    enriched = await enrich_team_members(items, user_service)
+    from libs.api.pagination import build_page
+
+    result = build_page(
+        items=_to_member_responses(enriched),
+        total=total,
+        page=page,
+        page_size=page_size,
+    )
+    return TeamMemberListResponse.model_validate(result.model_dump())
 
 
 @router.get(

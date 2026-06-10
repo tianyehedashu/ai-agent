@@ -1,0 +1,1 @@
+DROP INDEX IF EXISTS ix_downstream_model_pricing_lookup_active;

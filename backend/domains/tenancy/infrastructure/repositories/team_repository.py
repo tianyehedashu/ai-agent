@@ -4,8 +4,10 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import and_, select
+from sqlalchemy import and_, func, or_, select
+from sqlalchemy.orm import aliased
 
+from domains.identity.infrastructure.models.user import User
 from domains.tenancy.infrastructure.models.team import Team, TeamMember
 
 if TYPE_CHECKING:
@@ -149,6 +151,51 @@ class TeamMemberRepository:
             .where(TeamMember.team_id == team_id)
             .order_by(TeamMember.role, TeamMember.created_at)
         )
+        result = await self._session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def count_by_team_with_search(
+        self,
+        team_id: uuid.UUID,
+        *,
+        search: str | None = None,
+    ) -> int:
+        """按团队统计成员数（可选按邮箱/姓名搜索过滤）。"""
+        stmt = select(func.count()).select_from(TeamMember).where(TeamMember.team_id == team_id)
+        if search:
+            UserAlias = aliased(User)
+            stmt = stmt.join(UserAlias, UserAlias.id == TeamMember.user_id).where(
+                or_(
+                    UserAlias.email.ilike(f"%{search}%"),
+                    UserAlias.name.ilike(f"%{search}%"),
+                )
+            )
+        result = await self._session.execute(stmt)
+        return result.scalar_one()
+
+    async def list_by_team_page(
+        self,
+        team_id: uuid.UUID,
+        *,
+        offset: int = 0,
+        limit: int = 20,
+        search: str | None = None,
+    ) -> list[TeamMember]:
+        """分页列出团队成员（可选按邮箱/姓名搜索过滤）。"""
+        stmt = (
+            select(TeamMember)
+            .where(TeamMember.team_id == team_id)
+            .order_by(TeamMember.role, TeamMember.created_at)
+        )
+        if search:
+            UserAlias = aliased(User)
+            stmt = stmt.join(UserAlias, UserAlias.id == TeamMember.user_id).where(
+                or_(
+                    UserAlias.email.ilike(f"%{search}%"),
+                    UserAlias.name.ilike(f"%{search}%"),
+                )
+            )
+        stmt = stmt.offset(offset).limit(limit)
         result = await self._session.execute(stmt)
         return list(result.scalars().all())
 
