@@ -42,6 +42,7 @@ interface RouteTopologyEditorProps {
   pickerModels: readonly GatewayModel[]
   isSaving: boolean
   isDeleting?: boolean
+  modelsLoading?: boolean
   teamLabel?: string | null
   readOnly?: boolean
   onSave: (
@@ -58,6 +59,7 @@ interface RouteTopologyFormProps {
   pickerModels: readonly GatewayModel[]
   isSaving: boolean
   isDeleting?: boolean
+  modelsLoading?: boolean
   teamLabel?: string | null
   readOnly?: boolean
   onSave: (
@@ -74,6 +76,7 @@ function RouteTopologyForm({
   pickerModels,
   isSaving,
   isDeleting = false,
+  modelsLoading = false,
   teamLabel,
   readOnly = false,
   onSave,
@@ -108,6 +111,7 @@ function RouteTopologyForm({
   }, [])
 
   const validationIssues = useMemo(() => {
+    if (modelsLoading) return []
     const issues: string[] = []
     for (const name of primaryModels) {
       const m = modelsByName.get(name)
@@ -132,6 +136,7 @@ function RouteTopologyForm({
     fallbacksContextWindow,
     modelsByName,
     registeredNames,
+    modelsLoading,
   ])
 
   const weightedMode = isWeightedRoutingStrategy(strategy)
@@ -361,6 +366,7 @@ export function RouteTopologyEditor({
   pickerModels,
   isSaving,
   isDeleting,
+  modelsLoading,
   teamLabel,
   readOnly: readOnlyProp = false,
   onSave,
@@ -387,6 +393,7 @@ export function RouteTopologyEditor({
       pickerModels={pickerModels}
       isSaving={isSaving}
       isDeleting={isDeleting}
+      modelsLoading={modelsLoading}
       teamLabel={teamLabel}
       readOnly={readOnly}
       onSave={onSave}

@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link, useSearchParams } from 'react-router-dom'
@@ -484,6 +484,7 @@ export function RouteWorkspace(): React.JSX.Element {
             pickerModels={pickerModels}
             isSaving={updateMutation.isPending}
             isDeleting={deleteMutation.isPending}
+            modelsLoading={modelsLoading}
             teamLabel={selectedRouteTeamLabel}
             readOnly={selectedRoute !== null && !selectedRouteEditable}
             onSave={(_id, body, weightChanges) => {
