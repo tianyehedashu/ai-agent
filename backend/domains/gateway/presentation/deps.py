@@ -16,7 +16,6 @@ Gateway Presentation Dependencies - 网关认证依赖注入
 
 from __future__ import annotations
 
-import asyncio
 from dataclasses import dataclass
 from typing import Annotated
 import uuid
@@ -40,7 +39,6 @@ from domains.gateway.presentation.platform_api_key_usage_middleware import (
 from domains.identity.application.permission_context_composer import (
     PermissionContextComposer,
 )
-from libs.iam.permission_context import PermissionContext
 from domains.identity.application.user_display import resolve_user_display_snapshot
 from domains.tenancy.presentation.team_dependencies import (
     CurrentTeam,
@@ -54,6 +52,7 @@ from domains.tenancy.presentation.team_dependencies import (
 from libs.db.database import get_db
 from libs.exceptions import AIAgentError, AuthenticationError
 from libs.exceptions.codes import INTERNAL_ERROR
+from libs.iam.permission_context import PermissionContext
 from utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -112,20 +111,17 @@ async def _gateway_principal_from_vkey_plain(
     access = build_gateway_access_use_case(db)
     record = await access.validate_bearer_virtual_key(plain)
 
-    # usage 回写是 fire-and-forget 的排期任务，无需 await
-    access.record_virtual_key_usage(record.id)
+    # usage 回写是 fire-and-forget 的排期任务（内部仅调度后台任务，无 IO）
+    await access.record_virtual_key_usage(record.id)
 
     created_by = record.created_by_user_id
     tenant_id = record.tenant_id
 
-    # 成员角色查询 与 team_ids 拉取可并行（独立 DB 查询）
-    team_role_task = asyncio.create_task(
-        access.team_role_for_virtual_key_creator(tenant_id, created_by)
-    )
-    permission_ctx_task = asyncio.create_task(
-        _build_permission_context_for_vkey(db, created_by)
-    )
-    team_role, permission_ctx = await asyncio.gather(team_role_task, permission_ctx_task)
+    # 注意：team_role 与 permission_ctx 都基于同一 AsyncSession 做 DB 查询，
+    # SQLAlchemy AsyncSession **不支持并发使用**（会触发
+    # greenlet_spawn / await_only 错误），必须顺序 await。
+    team_role = await access.team_role_for_virtual_key_creator(tenant_id, created_by)
+    permission_ctx = await _build_permission_context_for_vkey(db, created_by)
 
     try:
         caps = allowed_capabilities_from_storage(record.allowed_capabilities)

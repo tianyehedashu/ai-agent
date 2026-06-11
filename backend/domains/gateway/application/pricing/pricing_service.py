@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -189,49 +188,47 @@ class PricingService:
         capability: str,
         at: datetime,
     ) -> ResolvedPricing:
-        tasks: list[asyncio.Task[DownstreamModelPricing | None]] = []
-        labels: list[str] = []
+        # 注意：``self._upstream`` 与 ``self._downstream`` 共享同一 ``AsyncSession``
+        # （见 ``build_pricing_service``）。SQLAlchemy AsyncSession **不支持并发使用**
+        # （会触发 greenlet_spawn / await_only 错误），所有查询必须顺序 await。
+        # 顺序短路（命中即停）通常比原来的全量并发更快。
+        plan: list[tuple[str, uuid.UUID | None, uuid.UUID | None]] = []
 
-        def _add_task(scope: str, scope_id: uuid.UUID | None, model_id: uuid.UUID | None) -> None:
-            tasks.append(
-                asyncio.create_task(
-                    self._downstream.get_active_for_scope(
-                        scope=scope, scope_id=scope_id, gateway_model_id=model_id, at=at
-                    )
-                )
-            )
-            labels.append(scope)
+        def _plan(
+            scope: str, scope_id: uuid.UUID | None, model_id: uuid.UUID | None
+        ) -> None:
+            plan.append((scope, scope_id, model_id))
 
         if entitlement_plan_id is not None:
-            _add_task("entitlement_plan", entitlement_plan_id, gateway_model_id)
+            _plan("entitlement_plan", entitlement_plan_id, gateway_model_id)
             if gateway_model_id is not None:
-                _add_task("entitlement_plan", entitlement_plan_id, None)
+                _plan("entitlement_plan", entitlement_plan_id, None)
         if tenant_id is not None:
-            _add_task("tenant", tenant_id, gateway_model_id)
+            _plan("tenant", tenant_id, gateway_model_id)
             if gateway_model_id is not None:
-                _add_task("tenant", tenant_id, None)
-        _add_task("global", None, gateway_model_id)
+                _plan("tenant", tenant_id, None)
+        _plan("global", None, gateway_model_id)
         if gateway_model_id is not None:
-            _add_task("global", None, None)
+            _plan("global", None, None)
 
-        upstream_task = asyncio.create_task(
-            self._upstream.get_active(
-                provider=provider, upstream_model=upstream_model, capability=capability, at=at
-            )
-        )
-
+        labels = [scope for scope, _, _ in plan]
         hit_chain: list[str] = []
         row: DownstreamModelPricing | None = None
-        for r in await asyncio.gather(*tasks):
+        for scope, scope_id, model_id in plan:
+            r = await self._downstream.get_active_for_scope(
+                scope=scope, scope_id=scope_id, gateway_model_id=model_id, at=at
+            )
             if r is not None:
                 row = r
                 break
         if row is not None:
-            scope = row.scope
-            if scope in labels:
-                hit_chain.append(scope)
+            scope_label = row.scope
+            if scope_label in labels:
+                hit_chain.append(scope_label)
 
-        upstream_row = await upstream_task
+        upstream_row = await self._upstream.get_active(
+            provider=provider, upstream_model=upstream_model, capability=capability, at=at
+        )
         upstream_rate = _row_to_rate(upstream_row) if upstream_row else None
         upstream_extra = _upstream_extra_snapshot(upstream_row)
 
@@ -285,10 +282,13 @@ class PricingService:
         items: list[tuple[uuid.UUID, str, str, str]],
         at: datetime | None = None,
     ) -> dict[uuid.UUID, ResolvedPricing]:
-        """批量解析下游定价；利用缓存命中 + asyncio.gather 并行化。
+        """批量解析下游定价；优先走缓存命中，未命中项顺序 await。
 
         ``items`` 每项为 ``(gateway_model_id, provider, upstream_model, capability)``。
         返回映射：gateway_model_id -> ResolvedPricing（不含异常项）。
+
+        注：各 _fetch 调用共享同一 ``AsyncSession``，不能用 ``asyncio.gather``
+        并发（会触发 SQLAlchemy ``greenlet_spawn`` 错误）。
         """
         from domains.gateway.application.pricing.pricing_resolution_cache import (
             get_cached_resolution_async,
@@ -339,8 +339,11 @@ class PricingService:
             except RateUnavailableError:
                 return (model_id, None)
 
-        coros = [_fetch(m, p, u, c) for m, p, u, c in to_fetch]
-        for model_id, resolved in await asyncio.gather(*coros):
+        # 同一 AsyncSession 不支持并发使用：每个 _fetch 内部会顺序触发多次
+        # downstream/upstream 查询，外层也必须顺序 await（见
+        # ``_resolve_downstream_rate_uncached`` 中的注释）。
+        for m, p, u, c in to_fetch:
+            model_id, resolved = await _fetch(m, p, u, c)
             if resolved is not None:
                 results[model_id] = resolved
         return results
