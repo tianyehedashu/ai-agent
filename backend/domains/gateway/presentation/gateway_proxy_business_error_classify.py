@@ -39,25 +39,82 @@ class ProxyUseCaseBusinessFailure:
     retry_after: int | None = None
 
 
+@dataclass(frozen=True)
+class _UpstreamStatusMapping:
+    """上游 HTTP 状态码到 OpenAI / Anthropic error type 的稳定映射。"""
+
+    openai_error_type: str
+    anthropic_error_type: str
+    http_status: int | None = None  # None = 透传上游 status_code
+
+
+# 仅覆盖网关需要原样透传语义的状态码；429 走 _upstream_rate_limit_failure，5xx 统一收敛 502。
+_UPSTREAM_STATUS_MAP: dict[int, _UpstreamStatusMapping] = {
+    400: _UpstreamStatusMapping("invalid_request_error", "invalid_request_error"),
+    401: _UpstreamStatusMapping("authentication_error", "authentication_error"),
+    403: _UpstreamStatusMapping("permission_error", "permission_error"),
+    404: _UpstreamStatusMapping("model_not_found", "not_found_error"),
+    408: _UpstreamStatusMapping("timeout", "api_error"),
+    413: _UpstreamStatusMapping("request_too_large", "request_too_large"),
+    422: _UpstreamStatusMapping("invalid_request_error", "invalid_request_error"),
+}
+
+
+def _extract_upstream_message(exc: Exception) -> str:
+    """取上游异常的人类可读 message，去除 ``litellm.`` 前缀。"""
+    raw = getattr(exc, "message", None)
+    if isinstance(raw, str) and raw.strip():
+        msg = raw.strip()
+        if msg.startswith("litellm."):
+            prefix_end = msg.find(": ")
+            if prefix_end >= 0:
+                msg = msg[prefix_end + 2 :].strip()
+        return msg
+    return str(exc)
+
+
 def _upstream_rate_limit_failure(
     exc: Exception,
     *,
     retry_after: int | None = None,
 ) -> ProxyUseCaseBusinessFailure:
-    message = str(exc)
-    raw_message = getattr(exc, "message", None)
-    if isinstance(raw_message, str) and raw_message.strip():
-        message = raw_message.strip()
-        if message.startswith("litellm."):
-            prefix_end = message.find(": ")
-            if prefix_end >= 0:
-                message = message[prefix_end + 2 :].strip()
     return ProxyUseCaseBusinessFailure(
         http_status=status.HTTP_429_TOO_MANY_REQUESTS,
-        message=message,
+        message=_extract_upstream_message(exc),
         openai_error_type="rate_limit_exceeded",
         anthropic_error_type="rate_limit_error",
         retry_after=retry_after,
+    )
+
+
+def _classify_by_upstream_status(
+    exc: Exception, upstream_status: int
+) -> ProxyUseCaseBusinessFailure | None:
+    """按上游真实 HTTP 状态码分流，避免被 Router cooldown 装饰吞噬原始语义。
+
+    覆盖：401/403/404/408/413/422 透传；429 走限流；5xx 收敛为 502。
+    其余状态码返回 ``None`` 让后续分支兜底。
+    """
+    if upstream_status == status.HTTP_429_TOO_MANY_REQUESTS:
+        return _upstream_rate_limit_failure(
+            exc,
+            retry_after=upstream_exception_retry_after(exc),
+        )
+    if upstream_status >= 500:
+        return ProxyUseCaseBusinessFailure(
+            http_status=status.HTTP_502_BAD_GATEWAY,
+            message=_extract_upstream_message(exc),
+            openai_error_type="api_error",
+            anthropic_error_type="api_error",
+        )
+    mapping = _UPSTREAM_STATUS_MAP.get(upstream_status)
+    if mapping is None:
+        return None
+    return ProxyUseCaseBusinessFailure(
+        http_status=mapping.http_status or upstream_status,
+        message=_extract_upstream_message(exc),
+        openai_error_type=mapping.openai_error_type,
+        anthropic_error_type=mapping.anthropic_error_type,
     )
 
 
@@ -106,6 +163,13 @@ def classify_proxy_use_case_business_error(exc: Exception) -> ProxyUseCaseBusine
             openai_error_type="entitlement_exhausted",
             anthropic_error_type="rate_limit_error",
         )
+    # 优先按上游真实 status_code 分流；LiteLLM Router 会给原始异常 setattr ``cooldown_time``，
+    # 若先走 cooldown 判定，401/403/404 等会被错误吞成 429。
+    upstream_status = upstream_exception_http_status(exc)
+    if upstream_status is not None:
+        failure = _classify_by_upstream_status(exc, upstream_status)
+        if failure is not None:
+            return failure
     if is_router_deployment_cooldown(exc):
         retry_after = router_cooldown_retry_after(exc)
         message = (
@@ -119,12 +183,6 @@ def classify_proxy_use_case_business_error(exc: Exception) -> ProxyUseCaseBusine
             openai_error_type="rate_limit_exceeded",
             anthropic_error_type="rate_limit_error",
             retry_after=retry_after,
-        )
-    upstream_status = upstream_exception_http_status(exc)
-    if upstream_status == status.HTTP_429_TOO_MANY_REQUESTS:
-        return _upstream_rate_limit_failure(
-            exc,
-            retry_after=upstream_exception_retry_after(exc),
         )
     if isinstance(exc, GuardrailBlockedError):
         return ProxyUseCaseBusinessFailure(
@@ -155,10 +213,7 @@ def classify_proxy_use_case_business_error(exc: Exception) -> ProxyUseCaseBusine
             anthropic_error_type="api_error",
         )
     if isinstance(exc, httpx.HTTPStatusError):
-        upstream_status = exc.response.status_code
-        http_status = (
-            status.HTTP_502_BAD_GATEWAY if upstream_status >= 500 else status.HTTP_400_BAD_REQUEST
-        )
+        raw_status = exc.response.status_code
         message = str(exc)
         with suppress(Exception):
             body = exc.response.json()
@@ -168,10 +223,38 @@ def classify_proxy_use_case_business_error(exc: Exception) -> ProxyUseCaseBusine
                     message = str(err["message"])
                 elif body.get("message"):
                     message = str(body["message"])
+        if raw_status == status.HTTP_429_TOO_MANY_REQUESTS:
+            retry_after_raw = exc.response.headers.get("retry-after") if exc.response else None
+            retry_after: int | None = None
+            if retry_after_raw is not None:
+                with suppress(ValueError):
+                    retry_after = int(str(retry_after_raw).strip())
+            return ProxyUseCaseBusinessFailure(
+                http_status=status.HTTP_429_TOO_MANY_REQUESTS,
+                message=message,
+                openai_error_type="rate_limit_exceeded",
+                anthropic_error_type="rate_limit_error",
+                retry_after=retry_after,
+            )
+        if raw_status >= 500:
+            return ProxyUseCaseBusinessFailure(
+                http_status=status.HTTP_502_BAD_GATEWAY,
+                message=message,
+                openai_error_type="api_error",
+                anthropic_error_type="api_error",
+            )
+        mapping = _UPSTREAM_STATUS_MAP.get(raw_status)
+        if mapping is not None:
+            return ProxyUseCaseBusinessFailure(
+                http_status=mapping.http_status or raw_status,
+                message=message,
+                openai_error_type=mapping.openai_error_type,
+                anthropic_error_type=mapping.anthropic_error_type,
+            )
         return ProxyUseCaseBusinessFailure(
-            http_status=http_status,
+            http_status=status.HTTP_400_BAD_REQUEST,
             message=message,
-            openai_error_type="api_error" if upstream_status >= 500 else "invalid_request_error",
+            openai_error_type="invalid_request_error",
             anthropic_error_type="api_error",
         )
     if isinstance(exc, ValueError):
