@@ -95,6 +95,7 @@ export function QuotaCenterWorkspace(): React.JSX.Element {
           pending={ws.batchPending}
           previewCount={ws.batchPreviewCount}
           mode={ws.mode}
+          teamName={ws.teamName}
           memberOptions={ws.memberOptions}
           keyOptions={ws.keyOptions}
           credentialOptions={ws.credentialOptions}

@@ -10,10 +10,13 @@ import {
   type QuotaRuleLayer,
   type QuotaRuleUpsertBody,
 } from '@/api/gateway'
+import { useGatewayVirtualKeys } from '@/features/gateway-keys/use-gateway-virtual-keys'
+import { useGatewayRoutes } from '@/features/gateway-models/hooks/use-gateway-routes'
 import { useInfiniteGatewayModelPages } from '@/features/gateway-models/hooks/use-infinite-gateway-model-pages'
 import { GATEWAY_MODELS_STALE_MS } from '@/features/gateway-models/utils'
+import { useGatewayTeamMembers } from '@/features/gateway-teams/use-gateway-team-members'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
-import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
+import { useGatewayTeamId, useGatewayTeamRecord } from '@/hooks/use-gateway-team-id'
 import { useToast } from '@/hooks/use-toast'
 import { useCurrentUser } from '@/stores/user'
 import { formatTeamMemberDisplay } from '@/types/permissions'
@@ -224,6 +227,7 @@ export type QuotaCenterMode = 'admin' | 'member'
 
 export interface QuotaCenterState {
   teamId: string
+  teamName: string
   mode: QuotaCenterMode
   formDisabled: boolean
   isLoading: boolean
@@ -250,7 +254,13 @@ export interface QuotaCenterState {
   refresh: () => void
   memberOptions: { id: string; label: string }[]
   keyOptions: { id: string; label: string }[]
-  credentialOptions: { id: string; label: string; isLegacy?: boolean }[]
+  credentialOptions: {
+    id: string
+    label: string
+    provider: string
+    scope: string | null
+    isLegacy?: boolean
+  }[]
   metaLoading: boolean
   modelOptions: BudgetModelOption[]
   modelsLoading: boolean
@@ -265,6 +275,7 @@ export interface QuotaCenterState {
 
 function useQuotaCenterImpl(): QuotaCenterState {
   const teamId = useGatewayTeamId()
+  const teamRecord = useGatewayTeamRecord(teamId)
   const { toast } = useToast()
   const { isAdmin, isPlatformViewer } = useGatewayPermission()
   const currentUser = useCurrentUser()
@@ -302,21 +313,14 @@ function useQuotaCenterImpl(): QuotaCenterState {
 
   const needsPickerData = batchOpen || modelFilter.trim() !== ''
   const needsLabelData =
-    batchOpen || (rulesQuery.data?.length ?? 0) > 0 || credentialPrefill !== null
+    batchOpen || (rulesQuery.data?.length ?? 0) > 0 || credentialPrefill !== null || isAdmin
 
-  const keysQuery = useQuery({
-    queryKey: ['gateway', 'keys', teamId],
-    queryFn: () => gatewayApi.listKeys(teamId),
+  const keysQuery = useGatewayVirtualKeys(teamId, {
     enabled: teamId.length > 0 && needsLabelData,
     staleTime: GATEWAY_QUOTA_META_STALE_MS,
   })
 
-  const membersQuery = useQuery({
-    queryKey: ['gateway', 'members', teamId],
-    queryFn: () => gatewayApi.listMembers(teamId),
-    enabled: teamId.length > 0 && needsLabelData,
-    staleTime: GATEWAY_QUOTA_META_STALE_MS,
-  })
+  const membersQuery = useGatewayTeamMembers(teamId)
 
   const credsQuery = useQuery({
     queryKey: ['gateway', 'credential-summaries', teamId],
@@ -331,9 +335,7 @@ function useQuotaCenterImpl(): QuotaCenterState {
     { enabled: needsPickerData, prefetchMode: 'open' }
   )
 
-  const routesQuery = useQuery({
-    queryKey: ['gateway', 'routes', teamId],
-    queryFn: () => gatewayApi.listRoutes(teamId),
+  const routesQuery = useGatewayRoutes(teamId, {
     enabled: teamId.length > 0 && needsPickerData,
     staleTime: GATEWAY_MODELS_STALE_MS,
   })
@@ -431,19 +433,38 @@ function useQuotaCenterImpl(): QuotaCenterState {
   )
 
   const credentialOptions = useMemo(() => {
-    let creds = credsQuery.data ?? []
+    const raw = credsQuery.data ?? []
     if (mode === 'member') {
       // 成员自助：展示「本人创建的团队凭据」+「无明确创建者的团队凭据」（legacy 凭据，
       // 由管理员或系统创建，成员同样在使用）。个人 BYOK 凭据在凭据页就地设限。
-      creds = creds.filter(
-        (c) =>
+      const result: {
+        id: string
+        label: string
+        provider: string
+        scope: string | null
+        isLegacy?: boolean
+      }[] = []
+      for (const c of raw) {
+        if (
           selfUserId !== null &&
           (c.created_by_user_id === selfUserId || c.created_by_user_id === null)
-      )
+        ) {
+          result.push({
+            id: c.id,
+            label: c.name,
+            provider: c.provider,
+            scope: c.scope,
+            isLegacy: c.created_by_user_id === null,
+          })
+        }
+      }
+      return result
     }
-    return creds.map((c) => ({
+    return raw.map((c) => ({
       id: c.id,
       label: c.name,
+      provider: c.provider,
+      scope: c.scope,
       isLegacy: c.created_by_user_id === null,
     }))
   }, [credsQuery.data, mode, selfUserId])
@@ -679,6 +700,7 @@ function useQuotaCenterImpl(): QuotaCenterState {
 
   return {
     teamId,
+    teamName: teamRecord?.name ?? teamId.slice(0, 8),
     mode,
     // 平台只读账号全站不可写；成员模式下若无法识别本人则禁用自助写入。
     formDisabled: isPlatformViewer || (mode === 'member' && selfUserId === null),

@@ -7,7 +7,9 @@ import { keysApi } from '@/api/gateway/keys'
 import type { GatewayUsageAggregation } from '@/api/gateway/logs'
 import { fetchAllManagedTeamModelPages } from '@/api/gateway/models'
 import { teamsApi } from '@/api/gateway/teams'
+import { useGatewayVirtualKeys } from '@/features/gateway-keys/use-gateway-virtual-keys'
 import { useInfiniteGatewayModelPages } from '@/features/gateway-models/hooks/use-infinite-gateway-model-pages'
+import { gatewayTeamMembersQueryKey } from '@/features/gateway-teams/use-gateway-team-members'
 import type { GatewayFilterOption } from '@/features/gateway-usage/gateway-filter-combobox'
 import {
   credentialFilterOptions,
@@ -65,14 +67,12 @@ export function useUsageStatsFilterCatalog({
   })
 
   const teamMembersQuery = useQuery({
-    queryKey: ['gateway', 'members', teamId],
+    queryKey: gatewayTeamMembersQueryKey(teamId),
     queryFn: () => teamsApi.listMembers(teamId),
     enabled: showMemberFilter && !usePlatformUserDirectory && !useCrossTeamCatalog,
   })
 
-  const teamKeysQuery = useQuery({
-    queryKey: ['gateway', 'keys', teamId],
-    queryFn: () => keysApi.listKeys(teamId),
+  const teamKeysQuery = useGatewayVirtualKeys(teamId, {
     enabled: !useCrossTeamCatalog,
   })
 

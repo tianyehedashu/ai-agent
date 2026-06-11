@@ -10,7 +10,7 @@ import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 
 import { credentialsApi } from '@/api/gateway/credentials'
-import { keysApi } from '@/api/gateway/keys'
+import { useGatewayVirtualKeys } from '@/features/gateway-keys/use-gateway-virtual-keys'
 import { useInfiniteGatewayModelPages } from '@/features/gateway-models/hooks/use-infinite-gateway-model-pages'
 import type { GatewayFilterOption } from '@/features/gateway-usage/gateway-filter-combobox'
 import {
@@ -38,10 +38,7 @@ export function useLogFilterCatalog({ teamId }: UseLogFilterCatalogParams): LogF
     queryFn: () => credentialsApi.listCredentialSummaries(teamId),
   })
 
-  const teamKeysQuery = useQuery({
-    queryKey: ['gateway', 'keys', teamId],
-    queryFn: () => keysApi.listKeys(teamId),
-  })
+  const teamKeysQuery = useGatewayVirtualKeys(teamId)
 
   const teamModels = useInfiniteGatewayModelPages(
     teamId,

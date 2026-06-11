@@ -60,9 +60,16 @@ export interface QuotaBatchWizardProps {
   previewCount: number
   /** admin=全维度；member=仅本人 + 本人凭据的平台配额自助 */
   mode?: 'admin' | 'member'
+  teamName?: string
   memberOptions: { id: string; label: string }[]
   keyOptions: { id: string; label: string }[]
-  credentialOptions: { id: string; label: string; isLegacy?: boolean }[]
+  credentialOptions: {
+    id: string
+    label: string
+    provider: string
+    scope: string | null
+    isLegacy?: boolean
+  }[]
   metaLoading?: boolean
   modelOptions: BudgetModelOption[]
   modelsLoading?: boolean
@@ -78,18 +85,21 @@ type Step = 1 | 2 | 3
 /* ------------------------------------------------------------------ */
 
 function useFilteredOptions(
-  options: { id: string; label: string }[],
+  items: readonly { id: string; label: string }[],
   query: string
-): { id: string; label: string }[] {
+): readonly { id: string; label: string }[] {
+  const q = query.trim().toLowerCase()
   return useMemo(() => {
-    const q = query.trim().toLowerCase()
-    if (!q) return options
-    return options.filter((o) => o.label.toLowerCase().includes(q))
-  }, [options, query])
+    if (!q) return items
+    return items.filter((o) => o.label.toLowerCase().includes(q))
+  }, [items, q])
 }
 
 /** 展开批量表单为预览规则列表（复用 buildBatchRules 逻辑的简化版） */
-function expandPreviewRules(values: QuotaBatchFormValues): {
+function expandPreviewRules(
+  values: QuotaBatchFormValues,
+  teamName?: string
+): {
   layer: string
   subject: string
   credential: string
@@ -123,7 +133,7 @@ function expandPreviewRules(values: QuotaBatchFormValues): {
   if (values.layer === 'platform') {
     const subjects: { label: string; target_kind: string; target_id?: string }[] = []
     if (values.subjectMode === 'tenant') {
-      subjects.push({ label: '全团队', target_kind: 'tenant' })
+      subjects.push({ label: teamName ?? '当前团队', target_kind: 'tenant' })
     } else if (values.subjectMode === 'users') {
       for (const uid of values.userIds) {
         subjects.push({ label: uid.slice(0, 8), target_kind: 'user', target_id: uid })
@@ -277,10 +287,11 @@ const SelectableList = memo(function SelectableList({
   showSelectAll?: boolean
 }): React.JSX.Element {
   const [query, setQuery] = useState('')
-  const filtered = useFilteredOptions(
-    items.map((item) => ({ id: item.id, label: item.label })),
-    query
+  const mappedItems = useMemo(
+    () => items.map((item) => ({ id: item.id, label: item.label })),
+    [items]
   )
+  const filtered = useFilteredOptions(mappedItems, query)
   const itemLegacyMap = useMemo(() => {
     const m = new Map<string, boolean>()
     for (const item of items) {
@@ -423,6 +434,7 @@ function StepTarget({
   onChange,
   disabled,
   mode,
+  teamName,
   memberOptions,
   keyOptions,
   credentialOptions,
@@ -516,7 +528,7 @@ function StepTarget({
                     <SelectValue placeholder="选择主体" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="tenant">全团队</SelectItem>
+                    <SelectItem value="tenant">{teamName ?? '当前团队'}</SelectItem>
                     <SelectItem value="users">指定成员</SelectItem>
                     <SelectItem value="keys">虚拟 Key</SelectItem>
                   </SelectContent>
@@ -524,7 +536,7 @@ function StepTarget({
                 {values.subjectMode === 'tenant' ? (
                   <p className="text-xs text-muted-foreground">
                     对当前团队全体生效一条平台护栏（与成员/Key
-                    规则可并存）。全团队护栏不区分凭据，如需按凭据限制请选择「指定成员」。
+                    规则可并存）。团队级护栏不区分凭据，如需按凭据限制请选择「指定成员」。
                   </p>
                 ) : null}
                 {isEditing ? (
@@ -980,9 +992,10 @@ function StepPreview({
   previewCount,
   pending,
   mode,
+  teamName,
 }: QuotaBatchWizardProps & { previewCount: number }): React.JSX.Element {
   const isMember = mode === 'member'
-  const rows = useMemo(() => expandPreviewRules(values), [values])
+  const rows = useMemo(() => expandPreviewRules(values, teamName), [values, teamName])
 
   return (
     <div className="space-y-4">
