@@ -11,6 +11,7 @@ import { computeQuotaRuleUsageRatio, LAYER_LABELS } from './quota-rule-utils'
 interface QuotaOverviewCardsProps {
   rules: QuotaRule[]
   isLoading?: boolean
+  mode?: 'admin' | 'member'
 }
 
 function KpiCard({
@@ -51,6 +52,7 @@ function KpiCard({
 export function QuotaOverviewCards({
   rules,
   isLoading,
+  mode,
 }: QuotaOverviewCardsProps): React.JSX.Element {
   // 按层级统计
   const layerCounts = { platform: 0, upstream: 0, downstream: 0 }
@@ -91,6 +93,29 @@ export function QuotaOverviewCards({
   }
 
   const totalCount = rules.length
+
+  // P21: 成员模式简化为个人视角
+  if (mode === 'member') {
+    return (
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <KpiCard title="我的配额数" value={String(totalCount)} isLoading={isLoading} />
+        <KpiCard
+          title="本月已用"
+          value={`$${totalUsd.toFixed(2)}`}
+          sub={`${totalTokens.toLocaleString()} Token`}
+          isLoading={isLoading}
+        />
+        <KpiCard
+          title="即将重置"
+          value={String(nearResetCount)}
+          sub={nearResetCount > 0 ? '24h 内重置' : undefined}
+          variant={nearResetCount > 0 ? 'warning' : 'default'}
+          isLoading={isLoading}
+        />
+      </div>
+    )
+  }
+
   const layerSub = `${LAYER_LABELS.platform} ${String(layerCounts.platform)} · ${LAYER_LABELS.upstream} ${String(layerCounts.upstream)} · ${LAYER_LABELS.downstream} ${String(layerCounts.downstream)}`
   const alertSub = dangerCount > 0 ? `其中 ${String(dangerCount)} 条已超限` : undefined
 

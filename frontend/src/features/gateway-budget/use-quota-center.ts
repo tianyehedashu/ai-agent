@@ -250,7 +250,7 @@ export interface QuotaCenterState {
   refresh: () => void
   memberOptions: { id: string; label: string }[]
   keyOptions: { id: string; label: string }[]
-  credentialOptions: { id: string; label: string }[]
+  credentialOptions: { id: string; label: string; isLegacy?: boolean }[]
   metaLoading: boolean
   modelOptions: BudgetModelOption[]
   modelsLoading: boolean
@@ -259,6 +259,8 @@ export interface QuotaCenterState {
   /** 当前处于编辑状态的规则信息；null 表示创建/批量模式 */
   editingRuleId: string | null
   onEditRule: (rule: QuotaRule) => void
+  /** 编辑模式下删除当前规则并关闭向导 */
+  deleteEditingRule: () => void
 }
 
 function useQuotaCenterImpl(): QuotaCenterState {
@@ -431,10 +433,19 @@ function useQuotaCenterImpl(): QuotaCenterState {
   const credentialOptions = useMemo(() => {
     let creds = credsQuery.data ?? []
     if (mode === 'member') {
-      // 成员自助仅能设置「本人创建的团队凭据」（个人 BYOK 凭据在凭据页就地设限）。
-      creds = creds.filter((c) => selfUserId !== null && c.created_by_user_id === selfUserId)
+      // 成员自助：展示「本人创建的团队凭据」+「无明确创建者的团队凭据」（legacy 凭据，
+      // 由管理员或系统创建，成员同样在使用）。个人 BYOK 凭据在凭据页就地设限。
+      creds = creds.filter(
+        (c) =>
+          selfUserId !== null &&
+          (c.created_by_user_id === selfUserId || c.created_by_user_id === null)
+      )
     }
-    return creds.map((c) => ({ id: c.id, label: c.name }))
+    return creds.map((c) => ({
+      id: c.id,
+      label: c.name,
+      isLegacy: c.created_by_user_id === null,
+    }))
   }, [credsQuery.data, mode, selfUserId])
 
   const credentialIds = useMemo(() => credentialOptions.map((c) => c.id), [credentialOptions])
@@ -486,8 +497,9 @@ function useQuotaCenterImpl(): QuotaCenterState {
       }
       if (resolvedBatchValues.credentialIds.length === 0) {
         toast({
-          title: '请选择本人凭据',
-          description: '自助配额须指定本人创建的凭据',
+          title: '请选择凭据',
+          description:
+            '自助配额须选择至少一个凭据。如列表为空，请先在凭据页添加团队凭据，或联系管理员。',
           variant: 'destructive',
         })
         return
@@ -527,10 +539,22 @@ function useQuotaCenterImpl(): QuotaCenterState {
         toast({ title: '计划类配额请至凭据/Key 页管理', variant: 'destructive' })
         return
       }
+      // P11: 删除确认 — 直接执行删除，由调用方展示确认对话框
       deleteMutation.mutate(budgetId)
     },
     [deleteMutation, toast]
   )
+
+  /** 编辑模式下删除当前规则 */
+  const deleteEditingRule = useCallback(() => {
+    if (!editingRuleId) return
+    const budgetId = editingRuleId
+    deleteMutation.mutate(budgetId, {
+      onSuccess: () => {
+        setBatchOpen(false)
+      },
+    })
+  }, [editingRuleId, deleteMutation])
 
   const confirmBatchDelete = useCallback(
     async (rules: QuotaRule[]) => {
@@ -542,18 +566,15 @@ function useQuotaCenterImpl(): QuotaCenterState {
         })
         return
       }
-      let succeeded = 0
-      let failed = 0
-      for (const rule of deletable) {
-        const budgetId = rule.source_ref.budget_id
-        if (!budgetId) continue
-        try {
-          await deleteMutation.mutateAsync(budgetId)
-          succeeded++
-        } catch {
-          failed++
-        }
-      }
+      const results = await Promise.allSettled(
+        deletable.map((r) => {
+          const budgetId = r.source_ref.budget_id
+          // deletable 已过滤 budget_id !== null，此处安全断言
+          return deleteMutation.mutateAsync(budgetId as string)
+        })
+      )
+      const succeeded = results.filter((r) => r.status === 'fulfilled').length
+      const failed = results.filter((r) => r.status === 'rejected').length
       if (failed > 0) {
         toast({
           title: `批量删除完成：${String(succeeded)} 条成功，${String(failed)} 条失败`,
@@ -694,6 +715,7 @@ function useQuotaCenterImpl(): QuotaCenterState {
     batchPreviewCount,
     editingRuleId,
     onEditRule,
+    deleteEditingRule,
   }
 }
 

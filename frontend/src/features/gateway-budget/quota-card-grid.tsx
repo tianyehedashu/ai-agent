@@ -34,6 +34,9 @@ interface QuotaCardGridProps {
   viewMode: QuotaViewMode
   onViewModeChange: (mode: QuotaViewMode) => void
   onSelect: (rule: QuotaRule) => void
+  onEdit?: (rule: QuotaRule) => void
+  onDelete?: (rule: QuotaRule) => void
+  formDisabled?: boolean
 }
 
 function groupRulesBy(
@@ -125,6 +128,9 @@ export function QuotaCardGrid({
   viewMode,
   onViewModeChange,
   onSelect,
+  onEdit,
+  onDelete,
+  formDisabled = false,
 }: QuotaCardGridProps): React.JSX.Element {
   const [groupBy, setGroupBy] = useState<QuotaGroupBy>('none')
   const [sortBy, setSortBy] = useState<'usage_desc' | 'usage_asc' | 'name'>('usage_desc')
@@ -261,6 +267,9 @@ export function QuotaCardGrid({
                     labelContext={labelContext}
                     isSelected={selectedId === rowId}
                     onClick={onSelect}
+                    onEdit={onEdit}
+                    onDelete={onDelete}
+                    formDisabled={formDisabled}
                   />
                 )
               })}

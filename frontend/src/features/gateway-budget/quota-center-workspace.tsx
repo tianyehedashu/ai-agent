@@ -4,6 +4,17 @@
 
 import { lazy, Suspense, useState } from 'react'
 
+import type { QuotaRule } from '@/api/gateway/quota-rules'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import {
@@ -23,15 +34,79 @@ import { QuotaOverviewCards } from './quota-overview-cards'
 import { LAYER_LABELS } from './quota-rule-utils'
 import { useQuotaCenter } from './use-quota-center'
 
-const QuotaBatchDrawer = lazy(async () => {
-  const mod = await import('./quota-batch-drawer')
-  return { default: mod.QuotaBatchDrawer }
+const QuotaBatchWizard = lazy(async () => {
+  const mod = await import('./quota-batch-wizard')
+  return { default: mod.QuotaBatchWizard }
 })
 
 export function QuotaCenterWorkspace(): React.JSX.Element {
   const ws = useQuotaCenter()
   const [viewMode, setViewMode] = useState<'table' | 'card'>('table')
   const isMember = ws.mode === 'member'
+
+  // P11: 删除确认对话框状态
+  const [deleteTarget, setDeleteTarget] = useState<QuotaRule | null>(null)
+  const [batchDeleteTargets, setBatchDeleteTargets] = useState<QuotaRule[] | null>(null)
+
+  const handleDelete = (rule: QuotaRule): void => {
+    if (rule.source_ref.budget_id === null) return
+    setDeleteTarget(rule)
+  }
+
+  const handleBatchDelete = (rules: QuotaRule[]): void => {
+    const deletable = rules.filter((r) => r.source_ref.budget_id !== null)
+    if (deletable.length === 0) return
+    setBatchDeleteTargets(deletable)
+  }
+
+  const confirmDeleteAction = (): void => {
+    if (deleteTarget) {
+      ws.confirmDelete(deleteTarget)
+      setDeleteTarget(null)
+    }
+  }
+
+  const confirmBatchDeleteAction = async (): Promise<void> => {
+    if (batchDeleteTargets) {
+      await ws.confirmBatchDelete(batchDeleteTargets)
+      setBatchDeleteTargets(null)
+    }
+  }
+
+  // 向导模式：batchOpen 时显示向导，否则显示列表
+  if (ws.batchOpen) {
+    return (
+      <Suspense
+        fallback={
+          <div className="flex items-center justify-center py-12 text-muted-foreground">
+            加载中…
+          </div>
+        }
+      >
+        <QuotaBatchWizard
+          values={ws.batchValues}
+          onChange={ws.setBatchValues}
+          onSubmit={ws.submitBatch}
+          onBack={() => {
+            ws.setBatchOpen(false)
+          }}
+          onDelete={ws.editingRuleId ? ws.deleteEditingRule : undefined}
+          disabled={ws.formDisabled}
+          pending={ws.batchPending}
+          previewCount={ws.batchPreviewCount}
+          mode={ws.mode}
+          memberOptions={ws.memberOptions}
+          keyOptions={ws.keyOptions}
+          credentialOptions={ws.credentialOptions}
+          metaLoading={ws.metaLoading}
+          modelOptions={ws.modelOptions}
+          modelsLoading={ws.modelsLoading}
+          onModelPickerOpenChange={ws.onModelPickerOpenChange}
+          editingRuleId={ws.editingRuleId}
+        />
+      </Suspense>
+    )
+  }
 
   return (
     <div className="space-y-4">
@@ -40,7 +115,7 @@ export function QuotaCenterWorkspace(): React.JSX.Element {
           <h2 className="text-2xl font-semibold">{isMember ? '我的配额' : '配额中心'}</h2>
           <p className="text-sm text-muted-foreground">
             {isMember
-              ? '查看与我相关的配额，并为本人在「自己创建的团队凭据」上自助设置消费限额。'
+              ? '查看与我相关的配额，并为可用凭据自助设置消费限额。'
               : '统一管理平台消费护栏、上游厂商额度与下游客户权益；按层级区分，支持批量设置。'}
           </p>
         </div>
@@ -143,14 +218,14 @@ export function QuotaCenterWorkspace(): React.JSX.Element {
         </div>
       </div>
 
-      <QuotaOverviewCards rules={ws.filteredItems} isLoading={ws.isLoading} />
+      <QuotaOverviewCards rules={ws.filteredItems} isLoading={ws.isLoading} mode={ws.mode} />
 
       {ws.formDisabled ? (
         <p className="text-sm text-muted-foreground">当前为只读模式，无法修改配额。</p>
       ) : null}
       {isMember && !ws.formDisabled ? (
         <p className="text-xs text-muted-foreground">
-          自助配额仅作用于本人在「自己创建的团队凭据」上的消费；个人 BYOK 凭据请在凭据页就地设限。
+          自助配额约束您本人在所选凭据上的消费；个人 BYOK 凭据请在凭据页就地设限。
         </p>
       ) : null}
 
@@ -163,8 +238,8 @@ export function QuotaCenterWorkspace(): React.JSX.Element {
           labelContext={ws.labelContext}
           onSelect={ws.selectRule}
           onEdit={ws.onEditRule}
-          onDelete={ws.confirmDelete}
-          onBatchDelete={ws.confirmBatchDelete}
+          onDelete={handleDelete}
+          onBatchDelete={handleBatchDelete}
         />
       ) : (
         <QuotaCardGrid
@@ -175,32 +250,64 @@ export function QuotaCenterWorkspace(): React.JSX.Element {
           viewMode={viewMode}
           onViewModeChange={setViewMode}
           onSelect={ws.selectRule}
+          onEdit={ws.onEditRule}
+          onDelete={handleDelete}
+          formDisabled={ws.formDisabled}
         />
       )}
 
-      {ws.batchOpen ? (
-        <Suspense fallback={null}>
-          <QuotaBatchDrawer
-            open={ws.batchOpen}
-            onOpenChange={ws.setBatchOpen}
-            values={ws.batchValues}
-            onChange={ws.setBatchValues}
-            onSubmit={ws.submitBatch}
-            disabled={ws.formDisabled}
-            pending={ws.batchPending}
-            previewCount={ws.batchPreviewCount}
-            mode={ws.mode}
-            memberOptions={ws.memberOptions}
-            keyOptions={ws.keyOptions}
-            credentialOptions={ws.credentialOptions}
-            metaLoading={ws.metaLoading}
-            modelOptions={ws.modelOptions}
-            modelsLoading={ws.modelsLoading}
-            onModelPickerOpenChange={ws.onModelPickerOpenChange}
-            editingRuleId={ws.editingRuleId}
-          />
-        </Suspense>
-      ) : null}
+      {/* P11: 删除确认对话框 */}
+      <AlertDialog
+        open={deleteTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null)
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>确认删除配额规则？</AlertDialogTitle>
+            <AlertDialogDescription>
+              此操作不可撤销。删除后该配额规则将立即失效，相关消费将不再受此限额约束。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmDeleteAction}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              确认删除
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={batchDeleteTargets !== null}
+        onOpenChange={(open) => {
+          if (!open) setBatchDeleteTargets(null)
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              确认批量删除 {batchDeleteTargets?.length ?? 0} 条配额规则？
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              此操作不可撤销。删除后所选配额规则将立即失效，相关消费将不再受此限额约束。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmBatchDeleteAction}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              确认删除
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

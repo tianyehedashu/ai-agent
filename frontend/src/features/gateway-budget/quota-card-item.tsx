@@ -1,10 +1,14 @@
 /**
- * 配额规则卡片单项：展示主体、层级、模型、限额与使用率。
+ * 配额规则卡片单项：展示主体、层级、模型、限额与使用率，支持编辑/删除操作。
  */
+
+import { Link } from 'react-router-dom'
 
 import type { QuotaRule } from '@/api/gateway/quota-rules'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
+import { Pencil, Trash2 } from '@/lib/lucide-icons'
 import { cn } from '@/lib/utils'
 
 import {
@@ -19,6 +23,9 @@ export interface QuotaCardItemProps {
   labelContext: QuotaRuleLabelContext
   onClick?: (rule: QuotaRule) => void
   isSelected?: boolean
+  onEdit?: (rule: QuotaRule) => void
+  onDelete?: (rule: QuotaRule) => void
+  formDisabled?: boolean
 }
 
 export function QuotaCardItem({
@@ -26,11 +33,17 @@ export function QuotaCardItem({
   labelContext,
   onClick,
   isSelected,
+  onEdit,
+  onDelete,
+  formDisabled = false,
 }: QuotaCardItemProps): React.JSX.Element {
   const { ratio, barColor } = computeQuotaRuleUsageRatio(rule)
   const limitUsd = rule.limits.limit_usd
   const limitTok = rule.limits.limit_tokens
   const usage = rule.usage
+  const canEdit = rule.source_ref.budget_id !== null
+  const canDelete = rule.source_ref.budget_id !== null
+  const isPlanRule = rule.source_ref.budget_id === null
 
   const layerColor: Record<string, string> = {
     platform: 'bg-blue-500/10 text-blue-600',
@@ -65,12 +78,44 @@ export function QuotaCardItem({
               {rule.key.model_name ?? '全模型'}
             </div>
           </div>
-          <Badge
-            variant="secondary"
-            className={cn('shrink-0 text-[10px]', layerColor[rule.key.layer])}
-          >
-            {LAYER_LABELS[rule.key.layer]}
-          </Badge>
+          <div className="flex items-center gap-1">
+            <Badge
+              variant="secondary"
+              className={cn('shrink-0 text-[10px]', layerColor[rule.key.layer])}
+            >
+              {LAYER_LABELS[rule.key.layer]}
+            </Badge>
+            {canEdit && onEdit ? (
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-6 w-6"
+                disabled={formDisabled}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onEdit(rule)
+                }}
+                title="编辑配额"
+              >
+                <Pencil className="h-3 w-3 text-muted-foreground" />
+              </Button>
+            ) : null}
+            {canDelete && onDelete ? (
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-6 w-6"
+                disabled={formDisabled}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onDelete(rule)
+                }}
+                title="删除配额"
+              >
+                <Trash2 className="h-3 w-3 text-destructive" />
+              </Button>
+            ) : null}
+          </div>
         </div>
       </CardHeader>
       <CardContent className="space-y-3 pt-0">
@@ -102,6 +147,30 @@ export function QuotaCardItem({
             </span>
           </div>
         </div>
+        {isPlanRule ? (
+          <div className="flex items-center justify-between">
+            <span className="inline-flex items-center rounded-md bg-blue-50 px-1.5 py-0.5 text-[11px] font-medium text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
+              {rule.plan_label ?? '计划'}
+            </span>
+            <Link
+              to={
+                rule.key.layer === 'upstream'
+                  ? `/gateway/credentials${rule.key.credential_id ? `?id=${rule.key.credential_id}` : ''}`
+                  : `/gateway/virtual-keys${rule.key.access_id ? `?id=${rule.key.access_id}` : ''}`
+              }
+              className="text-[11px] text-primary hover:underline"
+              onClick={(e) => {
+                e.stopPropagation()
+              }}
+            >
+              去{rule.key.layer === 'upstream' ? '凭据' : 'Key'}页管理
+            </Link>
+          </div>
+        ) : (
+          <div>
+            <span className="text-[11px] text-muted-foreground">自定义</span>
+          </div>
+        )}
       </CardContent>
     </Card>
   )

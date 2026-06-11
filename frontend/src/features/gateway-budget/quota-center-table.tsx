@@ -4,6 +4,8 @@
 
 import { memo, useMemo, useState } from 'react'
 
+import { Link } from 'react-router-dom'
+
 import type { QuotaRule } from '@/api/gateway/quota-rules'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -21,6 +23,30 @@ import {
   resolveQuotaRuleSubjectLabel,
   type QuotaRuleLabelContext,
 } from './quota-rule-utils'
+
+/** upstream/downstream 规则的管理页路由提示（P16: 带 ID 参数直接定位） */
+function PlanRuleManagementHint({
+  layer,
+  id,
+}: {
+  layer: 'upstream' | 'downstream'
+  id?: string
+}): React.JSX.Element {
+  const label = layer === 'upstream' ? '凭据' : 'Key'
+  const basePath = layer === 'upstream' ? '/gateway/credentials' : '/gateway/virtual-keys'
+  const path = id ? `${basePath}?id=${id}` : basePath
+  return (
+    <Link
+      to={path}
+      className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+      onClick={(e) => {
+        e.stopPropagation()
+      }}
+    >
+      去{label}页管理
+    </Link>
+  )
+}
 
 export interface QuotaCenterTableProps {
   items: QuotaRule[]
@@ -144,6 +170,13 @@ const QuotaCenterTableRow = memo(function QuotaCenterTableRow({
   const limitTok = rule.limits.limit_tokens
   const usage = rule.usage
   const canDelete = rule.source_ref.budget_id !== null
+  const isPlanRule = rule.source_ref.budget_id === null
+  const planLayer =
+    rule.key.layer === 'upstream'
+      ? ('upstream' as const)
+      : rule.key.layer === 'downstream'
+        ? ('downstream' as const)
+        : null
 
   return (
     <tr
@@ -208,6 +241,16 @@ const QuotaCenterTableRow = memo(function QuotaCenterTableRow({
           <span className="text-xs text-muted-foreground">—</span>
         )}
       </td>
+      {/* P12: 来源列 */}
+      <td className="px-4 py-2">
+        {rule.plan_label ? (
+          <span className="inline-flex items-center rounded-md bg-blue-50 px-1.5 py-0.5 text-xs font-medium text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
+            {rule.plan_label}
+          </span>
+        ) : (
+          <span className="text-xs text-muted-foreground">自定义</span>
+        )}
+      </td>
       <td
         className="px-4 py-2"
         onClick={(e) => {
@@ -242,6 +285,12 @@ const QuotaCenterTableRow = memo(function QuotaCenterTableRow({
             >
               <Trash2 className="h-3.5 w-3.5 text-destructive" />
             </Button>
+          ) : null}
+          {isPlanRule && planLayer ? (
+            <PlanRuleManagementHint
+              layer={planLayer}
+              id={rule.key.credential_id ?? rule.key.access_id ?? undefined}
+            />
           ) : null}
         </div>
       </td>
@@ -358,13 +407,14 @@ export function QuotaCenterTable({
                 onSort={handleSort}
               />
               <SortHeader label="使用率" sortKey="usage" currentSort={sort} onSort={handleSort} />
+              <th className="px-4 py-2 text-left font-medium">来源</th>
               <th className="px-4 py-2 text-left font-medium" />
             </tr>
           </thead>
           <tbody>
             {isLoading ? (
               <tr>
-                <td colSpan={9} className="px-4 py-8 text-center text-muted-foreground">
+                <td colSpan={10} className="px-4 py-8 text-center text-muted-foreground">
                   <Loader2 className="mx-auto mb-2 h-4 w-4 animate-spin" />
                   加载中…
                 </td>
@@ -372,7 +422,7 @@ export function QuotaCenterTable({
             ) : null}
             {!isLoading && items.length === 0 ? (
               <tr>
-                <td colSpan={9} className="px-4 py-8 text-center text-muted-foreground">
+                <td colSpan={10} className="px-4 py-8 text-center text-muted-foreground">
                   暂无配额规则
                 </td>
               </tr>
