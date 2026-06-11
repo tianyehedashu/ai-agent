@@ -87,20 +87,70 @@ class TestInlineVisionImageUrlsInMessages:
 class TestInlineVisionImageUrlsInKwargs:
     @pytest.mark.asyncio
     async def test_no_messages_passthrough(self) -> None:
-        session = MagicMock()
         kwargs = {"model": "gpt-4"}
         port = MagicMock()
-        assert await inline_vision_image_urls_in_kwargs(session, kwargs, image_port=port) == kwargs
+        assert await inline_vision_image_urls_in_kwargs(kwargs, image_port=port) == kwargs
 
     @pytest.mark.asyncio
-    async def test_uses_registry_when_port_omitted(self) -> None:
-        session = MagicMock()
+    async def test_uses_isolated_session_when_port_omitted(self) -> None:
         port = MagicMock()
         port.resolve_local_image_path = AsyncMock(return_value=None)
-        kwargs = {"messages": [{"role": "user", "content": []}]}
-        with patch(
-            "domains.gateway.application.proxy_vision_image_urls.get_listing_studio_local_image_port",
-            return_value=port,
-        ) as get_port:
-            await inline_vision_image_urls_in_kwargs(session, kwargs)
-        get_port.assert_called_once_with(session)
+        isolated = MagicMock()
+        # 必须含 image_url part，才会绕过 `_messages_have_image_url_parts` 早返、进入 session 分支
+        kwargs = {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": "/api/v1/listing-studio/images/x.png"},
+                        },
+                    ],
+                }
+            ]
+        }
+
+        class _SessionCtx:
+            async def __aenter__(self) -> MagicMock:
+                return isolated
+
+            async def __aexit__(self, *_args: object) -> None:
+                return None
+
+        with (
+            patch(
+                "domains.gateway.application.proxy_vision_image_urls.get_session_context",
+                return_value=_SessionCtx(),
+            ),
+            patch(
+                "domains.gateway.application.proxy_vision_image_urls.get_listing_studio_local_image_port",
+                return_value=port,
+            ) as get_port,
+        ):
+            await inline_vision_image_urls_in_kwargs(kwargs)
+
+        get_port.assert_called_once_with(isolated)
+
+    @pytest.mark.asyncio
+    async def test_short_circuits_without_image_url_parts(self) -> None:
+        """messages 中无 ``type=="image_url"`` part 时，不应创建 session / 查 image_port。"""
+        kwargs = {
+            "messages": [
+                {"role": "system", "content": "hi"},
+                {"role": "user", "content": [{"type": "text", "text": "plain"}]},
+            ]
+        }
+        with (
+            patch(
+                "domains.gateway.application.proxy_vision_image_urls.get_session_context",
+            ) as get_session,
+            patch(
+                "domains.gateway.application.proxy_vision_image_urls.get_listing_studio_local_image_port",
+            ) as get_port,
+        ):
+            result = await inline_vision_image_urls_in_kwargs(kwargs)
+
+        assert result is kwargs  # 原对象返回，零拷贝
+        get_session.assert_not_called()
+        get_port.assert_not_called()

@@ -5,6 +5,7 @@ PII Guardrail 单元测试：脱敏正则覆盖手机/邮箱/身份证/银行卡
 from __future__ import annotations
 
 from domains.gateway.domain.pii_redaction_policy import (
+    hash_messages_streaming,
     hash_original,
     redact_messages,
     redact_text,
@@ -60,3 +61,49 @@ def test_hash_original_stable():
     b = hash_original("hello world")
     assert a == b
     assert len(a) == 64
+
+
+def test_redact_messages_unchanged_message_shares_object():
+    """未命中 PII 的消息应复用原对象（内存优化）。"""
+    clean = {"role": "assistant", "content": "一切正常"}
+    messages = [
+        {"role": "user", "content": "手机 13800138000"},
+        clean,
+    ]
+    redacted, _hits = redact_messages(messages)
+    assert redacted[1] is clean  # 未命中分支不拷贝
+    assert redacted[0] is not messages[0]  # 命中分支仍新分配
+
+
+def test_redact_messages_list_content_unchanged_shares_parts():
+    """content 为 list 且未命中时应复用原消息与原 part。"""
+    text_part = {"type": "text", "text": "hello"}
+    msg = {"role": "user", "content": [text_part, {"type": "image_url", "url": "x"}]}
+    redacted, hits = redact_messages([msg])
+    assert hits == []
+    assert redacted[0] is msg
+
+
+def test_hash_messages_streaming_matches_join_hash():
+    """流式 hash 与 ``hash_original(\"\\n\".join(...))`` 字节级一致。"""
+    messages = [
+        {"role": "user", "content": "手机 13912345678"},
+        {"role": "assistant", "content": "好的"},
+        {"role": "tool", "content": [{"type": "text", "text": "non-str-skipped"}]},
+        {"role": "user", "content": "邮箱 a@b.com"},
+    ]
+    expected = hash_original(
+        "\n".join(
+            str(m.get("content", ""))
+            for m in messages
+            if isinstance(m.get("content"), str)
+        )
+    )
+    assert hash_messages_streaming(messages) == expected
+
+
+def test_hash_messages_streaming_empty():
+    assert hash_messages_streaming([]) == hash_original("")
+    assert hash_messages_streaming(
+        [{"role": "user", "content": [{"type": "text", "text": "non-str"}]}]
+    ) == hash_original("")

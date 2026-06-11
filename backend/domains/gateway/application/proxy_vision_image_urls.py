@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import base64
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from domains.gateway.application.listing_studio_image_port_registry import (
     get_listing_studio_local_image_port,
@@ -14,10 +14,8 @@ from domains.gateway.domain.policies.vision_image_url import (
     parse_listing_studio_image_filename,
     should_inline_vision_image_url,
 )
+from libs.db.database import get_session_context
 from utils.logging import get_logger
-
-if TYPE_CHECKING:
-    from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = get_logger(__name__)
 
@@ -98,24 +96,58 @@ async def inline_vision_image_urls_in_messages(
     return out if any_changed else messages
 
 
+def _messages_have_image_url_parts(messages: list[Any]) -> bool:
+    """预扫：仅当存在至少一条 ``content`` block 为 ``type=="image_url"`` 时返回 True。
+
+    用于让 :func:`inline_vision_image_urls_in_kwargs` 在无图请求上避免创建独立的
+    ``AsyncSession`` 与 ``StorageConfigService`` 查询 —— 表论/外部行为与原路径完全等价
+    （原路径在这种场景也仅返回同一 ``messages`` 对象），仅仅提前结束。
+    """
+    for msg in messages:
+        if not isinstance(msg, dict):
+            continue
+        content = msg.get("content")
+        if not isinstance(content, list):
+            continue
+        for part in content:
+            if isinstance(part, dict) and part.get("type") == "image_url":
+                return True
+    return False
+
+
 async def inline_vision_image_urls_in_kwargs(
-    session: AsyncSession,
     kwargs: dict[str, Any],
     *,
     image_port: ListingStudioLocalImagePort | None = None,
 ) -> dict[str, Any]:
-    """在 LiteLLM 调用前处理 kwargs.messages 中的参考图 URL。"""
+    """在 LiteLLM 调用前处理 kwargs.messages 中的参考图 URL。
+
+    默认端口经 **独立** ``AsyncSession`` 构建：``StorageConfigService.build_image_store``
+    会在读配置后 ``rollback`` 以释放连接；若复用 FastAPI 请求级 session，会破坏同请求
+    后续 ORM 访问（``greenlet_spawn`` / ``await_only``）。
+
+    性能：当 ``image_port`` 未注入且 messages 中没有任何 ``type=="image_url"`` block 时，
+    直接返回原 kwargs，**不创建 session / 不查 DB**。与打开 session 后发现无图再空走一
+    轮的之前版本表论等价。
+    """
     messages = kwargs.get("messages")
     if not isinstance(messages, list):
         return kwargs
-    port = image_port or get_listing_studio_local_image_port(session)
-    new_messages = await inline_vision_image_urls_in_messages(messages, port)
+    if image_port is not None:
+        new_messages = await inline_vision_image_urls_in_messages(messages, image_port)
+    else:
+        if not _messages_have_image_url_parts(messages):
+            return kwargs
+        async with get_session_context() as isolated:
+            port = get_listing_studio_local_image_port(isolated)
+            new_messages = await inline_vision_image_urls_in_messages(messages, port)
     if new_messages is messages:
         return kwargs
     return {**kwargs, "messages": new_messages}
 
 
 __all__ = [
+    "_messages_have_image_url_parts",
     "inline_vision_image_urls_in_kwargs",
     "inline_vision_image_urls_in_messages",
 ]

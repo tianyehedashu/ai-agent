@@ -11,6 +11,7 @@ from typing import Any
 
 from domains.gateway.domain.pii_redaction_policy import (
     PiiPatterns,
+    hash_messages_streaming,
     hash_original,
     redact_messages,
     redact_text,
@@ -64,13 +65,9 @@ def _build_pii_guardrail_instance(
                 if hits:
                     metadata = data.setdefault("metadata", {})
                     metadata.setdefault("pii_redactions", []).extend(hits)
-                    metadata["pii_prompt_hash"] = hash_original(
-                        "\n".join(
-                            str(m.get("content", ""))
-                            for m in messages
-                            if isinstance(m.get("content"), str)
-                        )
-                    )
+                    # 流式增量 SHA256，避免一次性拼接 messages 量级临时字符串。
+                    # 与 ``hash_original("\n".join(...))`` 输出字节级一致。
+                    metadata["pii_prompt_hash"] = hash_messages_streaming(messages)
                     data["messages"] = redacted
             return data
 
@@ -94,6 +91,7 @@ __all__ = [
     "GatewayPiiGuardrail",
     "PiiPatterns",
     "_build_pii_guardrail_instance",
+    "hash_messages_streaming",
     "hash_original",
     "redact_messages",
     "redact_text",
