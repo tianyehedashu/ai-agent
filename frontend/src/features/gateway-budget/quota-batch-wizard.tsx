@@ -348,7 +348,7 @@ const SelectableList = memo(function SelectableList({
           </Button>
         ) : null}
       </div>
-      <div className="max-h-44 space-y-1.5 overflow-y-auto rounded-md border p-2">
+      <div className="max-h-64 space-y-1.5 overflow-y-auto rounded-md border p-2">
         {loading ? (
           <p className="flex items-center gap-2 py-3 text-sm text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
