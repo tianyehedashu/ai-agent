@@ -453,18 +453,18 @@ function useQuotaCenterImpl(): QuotaCenterState {
             scope: c.scope,
           })
         }
-        // 团队凭据：本人创建的或无明确创建者的（legacy）
-        else if (
-          selfUserId !== null &&
-          (c.created_by_user_id === selfUserId || c.created_by_user_id === null)
-        ) {
-          result.push({
-            id: c.id,
-            label: c.name,
-            provider: c.provider,
-            scope: c.scope,
-            isLegacy: c.created_by_user_id === null,
-          })
+        // 团队凭据：本人创建的或无明确创建者的（legacy，包括 undefined 和 null）
+        else if (selfUserId !== null) {
+          const creatorId = c.created_by_user_id
+          if (creatorId === selfUserId || creatorId === null || creatorId === undefined) {
+            result.push({
+              id: c.id,
+              label: c.name,
+              provider: c.provider,
+              scope: c.scope,
+              isLegacy: creatorId === null || creatorId === undefined,
+            })
+          }
         }
       }
       return result
@@ -474,7 +474,7 @@ function useQuotaCenterImpl(): QuotaCenterState {
       label: c.name,
       provider: c.provider,
       scope: c.scope,
-      isLegacy: c.created_by_user_id === null,
+      isLegacy: c.created_by_user_id === null || c.created_by_user_id === undefined,
     }))
   }, [credsQuery.data, mode, selfUserId])
 
