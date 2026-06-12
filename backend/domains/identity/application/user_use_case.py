@@ -23,6 +23,7 @@ from domains.identity.application.token_service import TokenPair, TokenService
 from domains.identity.domain.policies.platform_role_policy import (
     assert_bootstrap_grant_admin,
     assert_bootstrap_revoke_admin,
+    assert_emergency_grant_admin,
     assert_can_change_platform_role,
 )
 from domains.identity.domain.policies.platform_user_admin_policy import (
@@ -358,9 +359,9 @@ class UserUseCase:
         )
 
     async def bootstrap_set_admin_by_email(
-        self, email: str, *, revoke: bool = False
+        self, email: str, *, revoke: bool = False, force: bool = False
     ) -> UserSummary:
-        """CLI/bootstrap：首个 admin 授权或多人时撤销 admin（不经过 HTTP 登录态）。"""
+        """CLI/bootstrap：首个 admin 授权、应急提权（--force）或多人时撤销 admin。"""
         user = await self.user_repo.get_by_email_insensitive(email)
         if user is None:
             raise NotFoundError("User", email.strip())
@@ -372,6 +373,9 @@ class UserUseCase:
                 admin_count=admin_count,
             )
             new_role = Role.USER.value
+        elif force:
+            assert_emergency_grant_admin(target_current_role=user.role)
+            new_role = Role.ADMIN.value
         else:
             assert_bootstrap_grant_admin(
                 target_current_role=user.role,

@@ -10,6 +10,9 @@
 
     # 撤销 admin（至少需 2 名 admin；日常请用设置页）
     uv run python scripts/set_admin.py --email user@example.com --revoke
+
+    # 应急：已有 admin 时仍提升指定用户
+    uv run python scripts/set_admin.py --email user@example.com --force
 """
 
 from __future__ import annotations
@@ -32,7 +35,11 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
 from bootstrap.config import settings
 from domains.identity.application.user_use_case import UserUseCase
+from libs.db.database import close_db, get_session_context, init_db
+from libs.db.orm_registry import register_all_orm_models
 from libs.exceptions import AIAgentError, NotFoundError
+
+register_all_orm_models()
 
 
 async def _session_factory() -> tuple[AsyncSession, object]:
@@ -67,30 +74,33 @@ async def list_users() -> None:
         await engine.dispose()
 
 
-async def set_admin(email: str, *, revoke: bool = False) -> bool:
+async def set_admin(email: str, *, revoke: bool = False, force: bool = False) -> bool:
     """通过 UserUseCase + domain policy 设置或撤销平台 admin。"""
-    session, engine = await _session_factory()
+    await init_db()
     try:
-        use_case = UserUseCase(session)
-        try:
-            summary = await use_case.bootstrap_set_admin_by_email(email, revoke=revoke)
-        except NotFoundError:
-            print(f"错误: 未找到邮箱为 '{email}' 的用户")
-            return False
-        except AIAgentError as exc:
-            print(f"错误: {exc.message}")
-            return False
+        async with get_session_context() as session:
+            use_case = UserUseCase(session)
+            try:
+                summary = await use_case.bootstrap_set_admin_by_email(
+                    email,
+                    revoke=revoke,
+                    force=force,
+                )
+            except NotFoundError:
+                print(f"错误: 未找到邮箱为 '{email}' 的用户")
+                return False
+            except AIAgentError as exc:
+                print(f"错误: {exc.message}")
+                return False
 
-        action = "撤销平台管理员" if revoke else "设置为平台管理员"
-        print(f"成功: 已将 {summary.email} {action}")
-        print(f"  - 用户ID: {summary.id}")
-        print(f"  - 用户名: {summary.name or '-'}")
-        print(f"  - 当前角色: {summary.role}")
-        await session.commit()
-        return True
+            action = "撤销平台管理员" if revoke else "设置为平台管理员"
+            print(f"成功: 已将 {summary.email} {action}")
+            print(f"  - 用户ID: {summary.id}")
+            print(f"  - 用户名: {summary.name or '-'}")
+            print(f"  - 当前角色: {summary.role}")
+            return True
     finally:
-        await session.close()
-        await engine.dispose()
+        await close_db()
 
 
 def main() -> None:
@@ -103,13 +113,21 @@ def main() -> None:
         action="store_true",
         help="撤销平台 admin（至少 2 名 admin 时可用）",
     )
+    parser.add_argument(
+        "--force",
+        "-f",
+        action="store_true",
+        help="应急提权：已有 admin 时仍将目标用户设为 admin",
+    )
 
     args = parser.parse_args()
 
     if args.list:
         asyncio.run(list_users())
     elif args.email:
-        asyncio.run(set_admin(args.email, revoke=args.revoke))
+        if args.force and args.revoke:
+            parser.error("--force 与 --revoke 不能同时使用")
+        asyncio.run(set_admin(args.email, revoke=args.revoke, force=args.force))
     else:
         parser.print_help()
 
