@@ -63,7 +63,7 @@ function actorCreatedModel(model: GatewayModel, viewerUserId: string | null | un
   return viewerUserId !== null && viewerUserId !== undefined && viewerUserId === creatorId
 }
 
-/** 团队模型：凭据 owner、模型创建者或 legacy admin+；系统模型：平台管理员 */
+/** 团队模型：凭据 owner、模型创建者、legacy admin+ 或 team admin/owner（与 delete 对齐）；系统模型：平台管理员 */
 export function canManageGatewayModel(
   model: GatewayModel,
   viewerUserId: string | null | undefined,
@@ -77,6 +77,8 @@ export function canManageGatewayModel(
   if (actorOwnsTeamModel(model, viewerUserId)) return true
   if (actorCreatedModel(model, viewerUserId)) return true
   if (isLegacyTeamModel(model) && canWrite) return true
+  // 与 canDeleteGatewayModel 对齐：团队 admin/owner 可禁用他人凭据上的模型
+  if (canWrite && !isLegacyTeamModel(model)) return true
   return false
 }
 
@@ -123,4 +125,23 @@ export function canResyncGatewayModelCapabilities(
 /** member+ 可尝试注册团队模型（具体凭据绑定仍受 canBindCredentialForTeamModel 约束） */
 export function canRegisterTeamGatewayModel(): boolean {
   return true
+}
+
+/** 个人模型：仅资源 owner 可写；列表/详情 API 已按用户隔离，缺 user_id 时视为可写会话内资源。 */
+export function canManagePersonalGatewayModel(
+  ownerUserId: string | null | undefined,
+  viewerUserId: string | null | undefined,
+  hasAuthSession: boolean
+): boolean {
+  if (!hasAuthSession) return false
+  if (!ownerUserId) return true
+  return viewerUserId !== null && viewerUserId !== undefined && viewerUserId === ownerUserId
+}
+
+export function canDeletePersonalGatewayModel(
+  ownerUserId: string | null | undefined,
+  viewerUserId: string | null | undefined,
+  hasAuthSession: boolean
+): boolean {
+  return canManagePersonalGatewayModel(ownerUserId, viewerUserId, hasAuthSession)
 }

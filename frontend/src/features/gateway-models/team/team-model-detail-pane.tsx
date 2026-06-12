@@ -4,30 +4,24 @@ import { useQuery } from '@tanstack/react-query'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 
 import { gatewayApi, type GatewayModelUpdateBody } from '@/api/gateway'
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
 import type { UsagePeriodDays } from '@/features/gateway-models/constants'
 import { parseModelsScopeTab } from '@/features/gateway-models/constants'
+import { GatewayModelDeleteConfirmDialog } from '@/features/gateway-models/detail/gateway-model-delete-confirm-dialog'
+import {
+  ModelDetailLoadingState,
+  ModelDetailNotFoundState,
+} from '@/features/gateway-models/detail/model-detail-states'
+import { ModelInspector } from '@/features/gateway-models/detail/model-inspector'
 import { useGatewayModelMutations } from '@/features/gateway-models/hooks/use-gateway-model-mutations'
 import {
   systemModelsFilteredHref,
   teamModelsFilteredHref,
   teamModelsIndexHref,
 } from '@/features/gateway-models/paths'
+import { indexUsageByRouteName } from '@/features/gateway-models/usage-summary-index'
 import { resolveTeamModelsRegistryScope } from '@/features/gateway-models/utils'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
-import { Loader2 } from '@/lib/lucide-icons'
-
-import { ModelInspector } from './model-inspector'
 
 interface TeamModelDetailPaneProps {
   modelId: string
@@ -64,8 +58,8 @@ export function TeamModelDetailPane({ modelId }: TeamModelDetailPaneProps): Reac
     enabled: trySystemFallback,
   })
 
-  const resolvedModel = primaryModel ?? systemFallbackModel ?? null
-  const resolvedRouteName = resolvedModel?.name ?? ''
+  const model = primaryModel ?? systemFallbackModel ?? null
+  const resolvedRouteName = model?.name ?? ''
 
   const listHref =
     credentialFilter !== ''
@@ -98,15 +92,10 @@ export function TeamModelDetailPane({ modelId }: TeamModelDetailPaneProps): Reac
     enabled: canWrite || isPlatformAdmin,
   })
 
-  const usageByRouteName = useMemo(() => {
-    const m = new Map<string, NonNullable<typeof usageSummary>['items'][number]>()
-    for (const row of usageSummary?.items ?? []) {
-      m.set(row.route_name, row)
-    }
-    return m
-  }, [usageSummary])
-
-  const model = resolvedModel
+  const usageByRouteName = useMemo(
+    () => indexUsageByRouteName(usageSummary?.items),
+    [usageSummary?.items]
+  )
 
   const { updateModelMutation, testMutation, deleteModelMutation } = useGatewayModelMutations({
     credentialId: credentialFilter || undefined,
@@ -152,21 +141,16 @@ export function TeamModelDetailPane({ modelId }: TeamModelDetailPaneProps): Reac
     deleteModelMutation.mutate({ id: modelId })
   }, [modelId, deleteModelMutation])
 
+  const isResyncing =
+    updateModelMutation.isPending && updateModelMutation.variables.body.resync_capabilities === true
+  const isSaving = updateModelMutation.isPending && !isResyncing
+
   if (isLoading || (trySystemFallback && systemFallbackLoading && !model)) {
-    return (
-      <div className="flex items-center justify-center gap-2 py-16 text-sm text-muted-foreground">
-        <Loader2 className="h-4 w-4 animate-spin" />
-        加载模型…
-      </div>
-    )
+    return <ModelDetailLoadingState />
   }
 
   if (!model) {
-    return (
-      <p className="py-12 text-center text-sm text-muted-foreground">
-        未找到该模型，可能已被删除或你无权访问。
-      </p>
-    )
+    return <ModelDetailNotFoundState />
   }
 
   return (
@@ -179,7 +163,8 @@ export function TeamModelDetailPane({ modelId }: TeamModelDetailPaneProps): Reac
         usageRow={usageByRouteName.get(model.name)}
         usageLoading={usageLoading}
         isTesting={testMutation.isPending && testMutation.variables.id === model.id}
-        isSaving={updateModelMutation.isPending}
+        isSaving={isSaving}
+        isResyncing={isResyncing}
         isDeleting={deleteModelMutation.isPending}
         onTest={handleTest}
         onSave={handleSave}
@@ -188,26 +173,14 @@ export function TeamModelDetailPane({ modelId }: TeamModelDetailPaneProps): Reac
         onDelete={handleDelete}
       />
 
-      <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>删除模型</AlertDialogTitle>
-            <AlertDialogDescription>
-              {`确定删除模型「${model.name}」？将同步更新虚拟 Key / 路由中的模型白名单，并清理相关授权与预算行。此操作不可撤销。`}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={deleteModelMutation.isPending}>取消</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              disabled={deleteModelMutation.isPending}
-              onClick={handleConfirmDelete}
-            >
-              {deleteModelMutation.isPending ? '删除中…' : '确认删除'}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <GatewayModelDeleteConfirmDialog
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
+        displayLabel={model.name}
+        scope="team"
+        pending={deleteModelMutation.isPending}
+        onConfirm={handleConfirmDelete}
+      />
     </>
   )
 }

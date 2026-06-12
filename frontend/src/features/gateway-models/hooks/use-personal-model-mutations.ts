@@ -17,6 +17,7 @@ export function invalidatePersonalModelCaches(
   queryClient: ReturnType<typeof useQueryClient>
 ): void {
   void queryClient.invalidateQueries({ queryKey: ['gateway', 'my-models'] })
+  void queryClient.invalidateQueries({ queryKey: ['gateway', 'unified-models'] })
   void queryClient.invalidateQueries({ queryKey: ['gateway-models-available'] })
 }
 
@@ -58,9 +59,11 @@ export function usePersonalModelMutations(
   const updateMutation = useMutation({
     mutationFn: ({ id, body }: { id: string; body: PersonalGatewayModelUpdateBody }) =>
       gatewayApi.updateMyModel(id, body),
-    onSuccess: (updated) => {
+    onSuccess: (updated, { body }) => {
       invalidatePersonalModelCaches(queryClient)
-      toast({ title: '模型已更新' })
+      toast({
+        title: body.resync_capabilities ? '能力已从 LiteLLM 同步' : '模型已更新',
+      })
       options?.onUpdateSuccess?.(updated)
     },
     onError: (e: Error) => {

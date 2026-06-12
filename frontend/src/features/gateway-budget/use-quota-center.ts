@@ -5,223 +5,60 @@ import { useSearchParams } from 'react-router-dom'
 
 import {
   gatewayApi,
+  fetchAllManagedTeamModelPages,
   type QuotaRule,
-  type QuotaRuleBatchUpsertResponse,
   type QuotaRuleLayer,
   type QuotaRuleUpsertBody,
 } from '@/api/gateway'
+import {
+  collectQuotaBatchTargetTeamIds,
+  filterMemberSelfServiceCredentialSummaries,
+  filterPlatformQuotaCredentialSummaries,
+  filterUpstreamQuotaCredentialSummaries,
+  useActorCredentialSummaries,
+} from '@/features/gateway-credentials/hooks/use-actor-credential-summaries'
 import { useGatewayVirtualKeys } from '@/features/gateway-keys/use-gateway-virtual-keys'
 import { useGatewayRoutes } from '@/features/gateway-models/hooks/use-gateway-routes'
 import { useInfiniteGatewayModelPages } from '@/features/gateway-models/hooks/use-infinite-gateway-model-pages'
 import { GATEWAY_MODELS_STALE_MS } from '@/features/gateway-models/utils'
 import { useGatewayTeamMembers } from '@/features/gateway-teams/use-gateway-team-members'
+import { useGatewayWritableTeams } from '@/features/gateway-teams/use-gateway-teams'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useGatewayTeamId, useGatewayTeamRecord } from '@/hooks/use-gateway-team-id'
 import { useToast } from '@/hooks/use-toast'
 import { useCurrentUser } from '@/stores/user'
 import { formatTeamMemberDisplay } from '@/types/permissions'
 
-import { parseOptionalInt, parseOptionalUsd } from './budget-form-utils'
-import { buildBudgetModelOptions, type BudgetModelOption } from './budget-model-options'
+import {
+  buildBudgetModelOptions,
+  buildUpstreamQuotaModelOptions,
+  upstreamQuotaModelOptionLabel,
+  type BudgetModelOption,
+} from './budget-model-options'
+import {
+  DEFAULT_BATCH_FORM,
+  expandBatchFormValues,
+  type QuotaBatchFormValues,
+} from './quota-batch-form'
 import { quotaRuleToBatchFormValues, type EditingRuleInfo } from './quota-batch-from-rule'
+import { buildBatchRules } from './quota-batch-rules'
+import { executeQuotaBatchUpsert } from './quota-batch-upsert'
 import { quotaRuleRowId, type QuotaRuleLabelContext } from './quota-rule-utils'
 import { gatewayBudgetsBaseQueryKey } from './use-gateway-budgets'
 import {
   GATEWAY_QUOTA_META_STALE_MS,
   gatewayQuotaRulesBaseQueryKey,
+  gatewayQuotaRulesQueryKey,
   useGatewayQuotaRules,
 } from './use-gateway-quota-rules'
 
-export interface QuotaBatchFormValues {
-  layer: QuotaRuleLayer
-  subjectMode: 'tenant' | 'users' | 'keys'
-  userIds: string[]
-  keyIds: string[]
-  credentialIds: string[]
-  modelNames: string[]
-  allModels: boolean
-  allCredentials: boolean
-  period: 'daily' | 'monthly' | 'total'
-  windowSeconds: string
-  quotaLabel: string
-  limit_usd: string
-  limit_tokens: string
-  limit_requests: string
-}
-
-export const DEFAULT_BATCH_FORM: QuotaBatchFormValues = {
-  layer: 'platform',
-  subjectMode: 'tenant',
-  userIds: [],
-  keyIds: [],
-  credentialIds: [],
-  modelNames: [],
-  allModels: true,
-  allCredentials: true,
-  period: 'monthly',
-  windowSeconds: '0',
-  quotaLabel: 'default',
-  limit_usd: '',
-  limit_tokens: '',
-  limit_requests: '',
-}
-
-/** 切换层级时清理与当前层级无关的字段，避免预览条数异常 */
-export function patchQuotaBatchFormForLayer(
-  values: QuotaBatchFormValues,
-  layer: QuotaRuleLayer
-): QuotaBatchFormValues {
-  if (layer === 'platform') {
-    const subjectMode = values.subjectMode
-    return {
-      ...values,
-      layer,
-      subjectMode,
-      // 仅「指定成员」可附带凭据维度；其余主体清空凭据选择。
-      credentialIds: subjectMode === 'users' ? values.credentialIds : [],
-      userIds: subjectMode === 'users' ? values.userIds : [],
-      keyIds: subjectMode === 'keys' ? values.keyIds : [],
-    }
-  }
-  if (layer === 'upstream') {
-    return {
-      ...values,
-      layer,
-      subjectMode: 'tenant',
-      userIds: [],
-      keyIds: [],
-    }
-  }
-  return {
-    ...values,
-    layer,
-    subjectMode: 'keys',
-    userIds: [],
-    credentialIds: [],
-  }
-}
-
-export function patchQuotaBatchFormForSubjectMode(
-  values: QuotaBatchFormValues,
-  subjectMode: QuotaBatchFormValues['subjectMode']
-): QuotaBatchFormValues {
-  return {
-    ...values,
-    subjectMode,
-    userIds: subjectMode === 'users' ? values.userIds : [],
-    keyIds: subjectMode === 'keys' ? values.keyIds : [],
-    credentialIds: subjectMode === 'users' ? values.credentialIds : [],
-  }
-}
-
-function expandBatchFormValues(
-  values: QuotaBatchFormValues,
-  credentialIds: readonly string[]
-): QuotaBatchFormValues {
-  if (values.layer === 'upstream' && values.allCredentials) {
-    return {
-      ...values,
-      allCredentials: false,
-      credentialIds: [...credentialIds],
-    }
-  }
-  return values
-}
-
-function buildBatchRules(values: QuotaBatchFormValues): QuotaRuleUpsertBody[] | null {
-  const lu = parseOptionalUsd(values.limit_usd)
-  const lt = parseOptionalInt(values.limit_tokens)
-  const lr = parseOptionalInt(values.limit_requests)
-  if (lu === null && lt === null && lr === null) return null
-
-  const models = values.allModels ? [null] : values.modelNames.map((m) => m || null)
-  if (!values.allModels && models.length === 0) return null
-
-  const rules: QuotaRuleUpsertBody[] = []
-
-  if (values.layer === 'platform') {
-    const subjects: { target_kind: QuotaRuleUpsertBody['target_kind']; target_id?: string }[] = []
-    if (values.subjectMode === 'tenant') {
-      subjects.push({ target_kind: 'tenant' })
-    } else if (values.subjectMode === 'users') {
-      for (const uid of values.userIds) {
-        subjects.push({ target_kind: 'user', target_id: uid })
-      }
-    } else {
-      for (const kid of values.keyIds) {
-        subjects.push({ target_kind: 'key', target_id: kid })
-      }
-    }
-    if (subjects.length === 0) return null
-    // 仅 target_kind=user 允许附带凭据（成员+凭据+模型）；选了凭据时做成员×凭据×模型笛卡尔积。
-    for (const sub of subjects) {
-      const credTargets =
-        sub.target_kind === 'user' && values.credentialIds.length > 0
-          ? values.credentialIds
-          : [null]
-      for (const credId of credTargets) {
-        for (const model of models) {
-          const body: QuotaRuleUpsertBody = {
-            layer: 'platform',
-            target_kind: sub.target_kind,
-            period: values.period,
-          }
-          if (sub.target_id) body.target_id = sub.target_id
-          if (credId) body.credential_id = credId
-          if (model) body.model_name = model
-          if (lu !== null) body.limit_usd = lu
-          if (lt !== null) body.limit_tokens = lt
-          if (lr !== null) body.limit_requests = lr
-          rules.push(body)
-        }
-      }
-    }
-    return rules
-  }
-
-  if (values.layer === 'upstream') {
-    const creds = values.allCredentials ? [] : values.credentialIds
-    if (!values.allCredentials && creds.length === 0) return null
-    const credentialTargets = values.allCredentials ? [null] : creds
-    const ws = parseOptionalInt(values.windowSeconds) ?? 0
-    for (const credId of credentialTargets) {
-      for (const model of models) {
-        const body: QuotaRuleUpsertBody = {
-          layer: 'upstream',
-          window_seconds: ws,
-          quota_label: values.quotaLabel.trim() || 'default',
-        }
-        if (credId) body.credential_id = credId
-        if (model) body.model_name = model
-        if (lu !== null) body.limit_usd = lu
-        if (lt !== null) body.limit_tokens = lt
-        if (lr !== null) body.limit_requests = lr
-        rules.push(body)
-      }
-    }
-    return rules
-  }
-
-  const ws = parseOptionalInt(values.windowSeconds) ?? 0
-  if (values.keyIds.length === 0) return null
-  for (const kid of values.keyIds) {
-    for (const model of models) {
-      const body: QuotaRuleUpsertBody = {
-        layer: 'downstream',
-        access_kind: 'vkey',
-        access_id: kid,
-        window_seconds: ws,
-        quota_label: values.quotaLabel.trim() || 'default',
-      }
-      if (model) body.model_name = model
-      if (lu !== null) body.limit_usd = lu
-      if (lt !== null) body.limit_tokens = lt
-      if (lr !== null) body.limit_requests = lr
-      rules.push(body)
-    }
-  }
-  return rules
-}
+export type { QuotaBatchFormValues } from './quota-batch-form'
+export {
+  DEFAULT_BATCH_FORM,
+  patchQuotaBatchFormForLayer,
+  patchQuotaBatchFormForSubjectMode,
+} from './quota-batch-form'
+export { buildBatchRules } from './quota-batch-rules'
 
 export type QuotaCenterMode = 'admin' | 'member'
 
@@ -232,6 +69,7 @@ export interface QuotaCenterState {
   formDisabled: boolean
   isLoading: boolean
   isRefreshing: boolean
+  listLoadError: string | null
   filteredItems: QuotaRule[]
   selectedRule: QuotaRule | null
   selectedId: string | null
@@ -263,7 +101,11 @@ export interface QuotaCenterState {
   }[]
   metaLoading: boolean
   modelOptions: BudgetModelOption[]
+  /** 批量向导内模型下拉（上游层按所选凭据过滤 real_model） */
+  batchModelOptions: BudgetModelOption[]
   modelsLoading: boolean
+  batchModelsLoading: boolean
+  batchModelOptionMetaLabel?: (option: BudgetModelOption) => string
   onModelPickerOpenChange?: (open: boolean) => void
   batchPreviewCount: number
   /** 当前处于编辑状态的规则信息；null 表示创建/批量模式 */
@@ -277,7 +119,7 @@ function useQuotaCenterImpl(): QuotaCenterState {
   const teamId = useGatewayTeamId()
   const teamRecord = useGatewayTeamRecord(teamId)
   const { toast } = useToast()
-  const { isAdmin, isPlatformViewer } = useGatewayPermission()
+  const { isAdmin, isPlatformViewer, isPlatformAdmin } = useGatewayPermission()
   const currentUser = useCurrentUser()
   const selfUserId = currentUser?.id ?? null
   const mode: QuotaCenterMode = isAdmin ? 'admin' : 'member'
@@ -322,12 +164,10 @@ function useQuotaCenterImpl(): QuotaCenterState {
 
   const membersQuery = useGatewayTeamMembers(teamId)
 
-  const credsQuery = useQuery({
-    queryKey: ['gateway', 'credential-summaries', teamId],
-    queryFn: () => gatewayApi.listCredentialSummaries(teamId),
-    enabled: teamId.length > 0 && needsLabelData,
-    staleTime: GATEWAY_QUOTA_META_STALE_MS,
-  })
+  const writableTeams = useGatewayWritableTeams(needsLabelData)
+  const adminTeamIds = useMemo(() => new Set(writableTeams.map((team) => team.id)), [writableTeams])
+
+  const actorCredentials = useActorCredentialSummaries({ enabled: needsLabelData })
 
   const modelPages = useInfiniteGatewayModelPages(
     teamId,
@@ -365,11 +205,11 @@ function useQuotaCenterImpl(): QuotaCenterState {
       keyLabels.set(k.id, k.name)
     }
     const credentialLabels = new Map<string, string>()
-    for (const c of credsQuery.data ?? []) {
+    for (const c of actorCredentials.list) {
       credentialLabels.set(c.id, c.name)
     }
     return { memberLabels, keyLabels, credentialLabels }
-  }, [membersQuery.data, keysQuery.data, credsQuery.data])
+  }, [membersQuery.data, keysQuery.data, actorCredentials.list])
 
   // 周期等筛选由后端 list 参数完成（滚动窗口型 upstream/downstream 规则的保留规则在服务端），
   // 此处不再二次过滤，避免与服务端语义不一致导致规则"消失"。
@@ -382,13 +222,27 @@ function useQuotaCenterImpl(): QuotaCenterState {
 
   const batchMutation = useMutation({
     mutationFn: (rules: QuotaRuleUpsertBody[]) =>
-      mode === 'member'
-        ? gatewayApi.batchUpsertSelfQuotaRules(teamId, rules)
-        : gatewayApi.batchUpsertQuotaRules(teamId, rules),
-    onSuccess: (result: QuotaRuleBatchUpsertResponse) => {
-      void queryClient.invalidateQueries({ queryKey: gatewayQuotaRulesBaseQueryKey(teamId) })
-      void queryClient.invalidateQueries({ queryKey: gatewayBudgetsBaseQueryKey(teamId) })
-      if (result.failed.length > 0) {
+      executeQuotaBatchUpsert(teamId, rules, actorCredentials.contextTeamIdByCredentialId, mode),
+    onSuccess: (result, rules) => {
+      const targetTeamIds = collectQuotaBatchTargetTeamIds(
+        teamId,
+        rules,
+        actorCredentials.contextTeamIdByCredentialId
+      )
+      for (const targetTeamId of targetTeamIds) {
+        void queryClient.invalidateQueries({
+          queryKey: gatewayQuotaRulesBaseQueryKey(targetTeamId),
+        })
+        void queryClient.invalidateQueries({ queryKey: gatewayBudgetsBaseQueryKey(targetTeamId) })
+      }
+      void queryClient.refetchQueries({ queryKey: gatewayQuotaRulesQueryKey(teamId, listParams) })
+      if (result.succeeded.length === 0 && result.failed.length === 0) {
+        toast({
+          title: '未写入任何配额规则',
+          description: '请检查表单并重试；若持续失败请联系管理员查看后端日志。',
+          variant: 'destructive',
+        })
+      } else if (result.failed.length > 0) {
         toast({
           title: `部分成功：${String(result.succeeded.length)} 条`,
           description: result.failed.map((f) => f.error).join('；'),
@@ -432,36 +286,113 @@ function useQuotaCenterImpl(): QuotaCenterState {
     [setSearchParams]
   )
 
-  const credentialOptions = useMemo(() => {
-    const raw = credsQuery.data ?? []
+  const pickerCredentials = useMemo(() => {
+    const raw = actorCredentials.list
     if (mode === 'member') {
-      // 成员自助：展示所有可见凭据（后端已按 ACL 过滤）
-      // 个人 BYOK + 团队凭据（含他人创建的）+ 系统凭据
-      return raw.map((c) => ({
-        id: c.id,
-        label: c.name,
-        provider: c.provider,
-        scope: c.scope,
-        isLegacy:
-          c.scope === 'team' &&
-          (c.created_by_user_id === null || c.created_by_user_id === undefined),
-      }))
+      return filterMemberSelfServiceCredentialSummaries(raw, teamId)
     }
-    return raw.map((c) => ({
+    if (batchValues.layer === 'upstream') {
+      return filterUpstreamQuotaCredentialSummaries(raw, adminTeamIds, isPlatformAdmin)
+    }
+    return filterPlatformQuotaCredentialSummaries(raw, teamId, isPlatformAdmin)
+  }, [actorCredentials.list, mode, batchValues.layer, teamId, adminTeamIds, isPlatformAdmin])
+
+  const credentialOptions = useMemo(() => {
+    return pickerCredentials.map((c) => ({
       id: c.id,
       label: c.name,
       provider: c.provider,
       scope: c.scope,
-      isLegacy: c.created_by_user_id === null || c.created_by_user_id === undefined,
+      isLegacy:
+        c.scope === 'team' && (c.created_by_user_id === null || c.created_by_user_id === undefined),
     }))
-  }, [credsQuery.data, mode])
+  }, [pickerCredentials])
 
-  const credentialIds = useMemo(() => credentialOptions.map((c) => c.id), [credentialOptions])
+  const pickerCredentialIds = useMemo(() => credentialOptions.map((c) => c.id), [credentialOptions])
 
   const resolvedBatchValues = useMemo(
-    () => expandBatchFormValues(batchValues, credentialIds),
-    [batchValues, credentialIds]
+    () => expandBatchFormValues(batchValues, pickerCredentialIds),
+    [batchValues, pickerCredentialIds]
   )
+
+  const upstreamCredentialIds = useMemo(
+    () => (batchValues.layer === 'upstream' ? resolvedBatchValues.credentialIds : []),
+    [batchValues.layer, resolvedBatchValues.credentialIds]
+  )
+
+  const upstreamModelsQuery = useQuery({
+    queryKey: [
+      'gateway',
+      'quota-batch',
+      'upstream-models',
+      upstreamCredentialIds.slice().sort().join('|'),
+    ],
+    queryFn: () => fetchAllManagedTeamModelPages({ registry_scope: 'callable' }),
+    enabled: batchOpen && batchValues.layer === 'upstream' && upstreamCredentialIds.length > 0,
+    staleTime: GATEWAY_MODELS_STALE_MS,
+  })
+
+  const upstreamModelsForSelection = useMemo(() => {
+    const credSet = new Set(upstreamCredentialIds)
+    return (upstreamModelsQuery.data ?? []).filter((model) => credSet.has(model.credential_id))
+  }, [upstreamCredentialIds, upstreamModelsQuery.data])
+
+  const upstreamModelAliasByReal = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const model of upstreamModelsForSelection) {
+      const realModel = model.real_model.trim()
+      if (!realModel || map.has(realModel)) continue
+      map.set(realModel, model.name)
+    }
+    return map
+  }, [upstreamModelsForSelection])
+
+  const batchModelOptions = useMemo(() => {
+    if (batchValues.layer !== 'upstream') {
+      return modelOptions
+    }
+    return buildUpstreamQuotaModelOptions({
+      models: upstreamModelsForSelection,
+      credentialIds: upstreamCredentialIds,
+      existingModelNames,
+    })
+  }, [
+    batchValues.layer,
+    existingModelNames,
+    modelOptions,
+    upstreamCredentialIds,
+    upstreamModelsForSelection,
+  ])
+
+  const batchModelOptionMetaLabel = useMemo(():
+    | ((option: BudgetModelOption) => string)
+    | undefined => {
+    if (batchValues.layer !== 'upstream') return undefined
+    return (option: BudgetModelOption): string =>
+      upstreamQuotaModelOptionLabel(option, upstreamModelAliasByReal)
+  }, [batchValues.layer, upstreamModelAliasByReal])
+
+  const prevUpstreamCredentialKeyRef = useRef('')
+  useEffect(() => {
+    if (batchValues.layer !== 'upstream') {
+      prevUpstreamCredentialKeyRef.current = ''
+      return
+    }
+    const key = upstreamCredentialIds.slice().sort().join('|')
+    if (prevUpstreamCredentialKeyRef.current === key) return
+    prevUpstreamCredentialKeyRef.current = key
+    if (batchValues.allModels || batchValues.modelNames.length === 0) return
+    const valid = new Set(batchModelOptions.map((option) => option.name))
+    const pruned = batchValues.modelNames.filter((name) => valid.has(name))
+    if (pruned.length === batchValues.modelNames.length) return
+    setBatchValues((values) => ({ ...values, modelNames: pruned }))
+  }, [
+    batchModelOptions,
+    batchValues.allModels,
+    batchValues.layer,
+    batchValues.modelNames,
+    upstreamCredentialIds,
+  ])
 
   const batchPreviewCount = useMemo(() => {
     let v = resolvedBatchValues
@@ -617,8 +548,22 @@ function useQuotaCenterImpl(): QuotaCenterState {
   useEffect(() => {
     if (mode !== 'admin') return
     if (userPrefill === null && adminCredentialPrefill === null) return
+    if (actorCredentials.isLoading) return
     const token = `${userPrefill ?? ''}|${adminCredentialPrefill ?? ''}`
     if (consumedAdminPrefillRef.current === token) return
+    if (
+      adminCredentialPrefill !== null &&
+      userPrefill === null &&
+      !pickerCredentials.some((c) => c.id === adminCredentialPrefill)
+    ) {
+      consumedAdminPrefillRef.current = token
+      toast({
+        title: '无法预填凭据',
+        description: '该凭据不在你可管理的上游配额范围内，或尚未加载完成。',
+        variant: 'destructive',
+      })
+      return
+    }
     consumedAdminPrefillRef.current = token
     const model = modelFilter.trim()
     const modelFields = {
@@ -644,7 +589,15 @@ function useQuotaCenterImpl(): QuotaCenterState {
       })
     }
     setBatchOpen(true)
-  }, [mode, userPrefill, adminCredentialPrefill, modelFilter])
+  }, [
+    mode,
+    userPrefill,
+    adminCredentialPrefill,
+    modelFilter,
+    actorCredentials.isLoading,
+    pickerCredentials,
+    toast,
+  ])
 
   const selectRule = useCallback((rule: QuotaRule) => {
     setSelectedId(quotaRuleRowId(rule))
@@ -685,6 +638,12 @@ function useQuotaCenterImpl(): QuotaCenterState {
     void rulesQuery.refetch()
   }, [rulesQuery])
 
+  const listLoadError = useMemo((): string | null => {
+    if (!rulesQuery.isError) return null
+    const err = rulesQuery.error
+    return err instanceof Error ? err.message : '加载配额规则失败'
+  }, [rulesQuery.isError, rulesQuery.error])
+
   return {
     teamId,
     teamName: teamRecord?.name ?? teamId.slice(0, 8),
@@ -693,6 +652,7 @@ function useQuotaCenterImpl(): QuotaCenterState {
     formDisabled: isPlatformViewer || (mode === 'member' && selfUserId === null),
     isLoading: rulesQuery.isLoading,
     isRefreshing: rulesQuery.isFetching,
+    listLoadError,
     filteredItems,
     selectedRule,
     selectedId,
@@ -717,9 +677,15 @@ function useQuotaCenterImpl(): QuotaCenterState {
     keyOptions,
     credentialOptions,
     metaLoading:
-      batchOpen && (membersQuery.isLoading || keysQuery.isLoading || credsQuery.isLoading),
+      batchOpen && (membersQuery.isLoading || keysQuery.isLoading || actorCredentials.isLoading),
     modelOptions,
+    batchModelOptions,
     modelsLoading: modelPages.isLoading || routesQuery.isLoading,
+    batchModelsLoading:
+      batchValues.layer === 'upstream'
+        ? upstreamModelsQuery.isLoading
+        : modelPages.isLoading || routesQuery.isLoading,
+    batchModelOptionMetaLabel,
     onModelPickerOpenChange: modelPages.onPickerOpenChange,
     batchPreviewCount,
     editingRuleId,
