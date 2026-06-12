@@ -1,4 +1,7 @@
-"""团队模型写侧权限：凭据绑定 create/update/delete 规则。"""
+"""团队模型写侧权限：凭据绑定 create / update / delete 规则。
+
+create 较严（仅凭据 owner 或 legacy admin+）；update/delete 对 team admin/owner 对齐（可启停/删除他人凭据上的模型）。
+"""
 
 from __future__ import annotations
 
@@ -56,7 +59,8 @@ def can_update_team_model_on_credential(
     team_role: str,
     is_platform_admin: bool,
 ) -> bool:
-    return can_create_model_on_team_credential(
+    """与 delete 对齐：团队 admin/owner 可更新（含启用/禁用）他人凭据上的模型。"""
+    return can_delete_team_model_on_credential(
         credential,
         actor_user_id=actor_user_id,
         team_role=team_role,
