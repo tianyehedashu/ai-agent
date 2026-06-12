@@ -3,7 +3,11 @@ import { describe, expect, it } from 'vitest'
 import type { GatewayModel } from '@/api/gateway/models'
 import type { GatewayRoute } from '@/api/gateway/routes'
 
-import { buildBudgetModelOptions, groupBudgetModelOptions } from './budget-model-options'
+import {
+  buildBudgetModelOptions,
+  buildUpstreamQuotaModelOptions,
+  groupBudgetModelOptions,
+} from './budget-model-options'
 
 function model(partial: Partial<GatewayModel> & Pick<GatewayModel, 'name'>): GatewayModel {
   return {
@@ -123,5 +127,20 @@ describe('groupBudgetModelOptions', () => {
     expect(grouped.registry.map((o) => o.name)).toEqual(['gpt-4'])
     expect(grouped.route.map((o) => o.name)).toEqual(['route-a'])
     expect(grouped.legacy.map((o) => o.name)).toEqual(['legacy-x'])
+  })
+})
+
+describe('buildUpstreamQuotaModelOptions', () => {
+  it('filters by credential and uses real_model as option name', () => {
+    const options = buildUpstreamQuotaModelOptions({
+      models: [
+        model({ name: 'alias-a', real_model: 'gpt-4o', credential_id: 'c1' }),
+        model({ name: 'alias-b', real_model: 'gpt-4o-mini', credential_id: 'c2' }),
+        model({ name: 'alias-c', real_model: 'claude-3', credential_id: 'c1' }),
+      ],
+      credentialIds: ['c1'],
+      existingModelNames: [],
+    })
+    expect(options.map((o) => o.name).sort()).toEqual(['claude-3', 'gpt-4o'])
   })
 })

@@ -188,6 +188,12 @@ export function findQuotaRuleForStatsRow(
   return null
 }
 
+/** API 用量/限额字段可能是 number 或 numeric string，统一解析为有限数值。 */
+export function parseQuotaNumeric(value: unknown): number {
+  const parsed = Number.parseFloat(String(value))
+  return Number.isFinite(parsed) ? parsed : 0
+}
+
 export function computeQuotaRuleUsageRatio(rule: QuotaRule): {
   ratio: number
   barColor: string
@@ -198,8 +204,14 @@ export function computeQuotaRuleUsageRatio(rule: QuotaRule): {
   if (!usage || (limitUsd === null && limitTok === null)) {
     return { ratio: 0, barColor: 'bg-muted' }
   }
-  const usdRatio = limitUsd !== null && limitUsd > 0 ? usage.current_usd / limitUsd : 0
-  const tokRatio = limitTok !== null && limitTok > 0 ? usage.current_tokens / limitTok : 0
+  const usdRatio =
+    limitUsd !== null && limitUsd > 0
+      ? parseQuotaNumeric(usage.current_usd) / parseQuotaNumeric(limitUsd)
+      : 0
+  const tokRatio =
+    limitTok !== null && limitTok > 0
+      ? parseQuotaNumeric(usage.current_tokens) / parseQuotaNumeric(limitTok)
+      : 0
   const ratio = Math.max(usdRatio, tokRatio)
   const barColor = ratio >= 1 ? 'bg-destructive' : ratio >= 0.9 ? 'bg-amber-500' : 'bg-emerald-500'
   return { ratio, barColor }

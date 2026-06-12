@@ -8,6 +8,7 @@ import type { QuotaRule } from '@/api/gateway/quota-rules'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
+import { credentialsListHref } from '@/features/gateway-models/paths'
 import { Pencil, Trash2 } from '@/lib/lucide-icons'
 import { cn } from '@/lib/utils'
 
@@ -15,6 +16,7 @@ import {
   computeQuotaRuleUsageRatio,
   formatQuotaRulePeriod,
   LAYER_LABELS,
+  parseQuotaNumeric,
   type QuotaRuleLabelContext,
 } from './quota-rule-utils'
 
@@ -132,18 +134,18 @@ export function QuotaCardItem({
         <div className="grid grid-cols-2 gap-2 text-xs tabular-nums">
           <div>
             <span className="text-muted-foreground">USD</span>{' '}
-            <span>{usage ? usage.current_usd.toFixed(2) : '—'}</span>
+            <span>{usage ? parseQuotaNumeric(usage.current_usd).toFixed(2) : '—'}</span>
             <span className="text-muted-foreground">
               {' '}
-              / {limitUsd !== null ? `$${limitUsd.toFixed(2)}` : '∞'}
+              / {limitUsd !== null ? `$${parseQuotaNumeric(limitUsd).toFixed(2)}` : '∞'}
             </span>
           </div>
           <div>
             <span className="text-muted-foreground">Token</span>{' '}
-            <span>{usage ? usage.current_tokens.toLocaleString() : '—'}</span>
+            <span>{usage ? parseQuotaNumeric(usage.current_tokens).toLocaleString() : '—'}</span>
             <span className="text-muted-foreground">
               {' '}
-              / {limitTok !== null ? limitTok.toLocaleString() : '∞'}
+              / {limitTok !== null ? parseQuotaNumeric(limitTok).toLocaleString() : '∞'}
             </span>
           </div>
         </div>
@@ -155,7 +157,9 @@ export function QuotaCardItem({
             <Link
               to={
                 rule.key.layer === 'upstream'
-                  ? `/gateway/credentials${rule.key.credential_id ? `?id=${rule.key.credential_id}` : ''}`
+                  ? credentialsListHref(rule.key.team_id, {
+                      credentialId: rule.key.credential_id ?? undefined,
+                    })
                   : `/gateway/virtual-keys${rule.key.access_id ? `?id=${rule.key.access_id}` : ''}`
               }
               className="text-[11px] text-primary hover:underline"

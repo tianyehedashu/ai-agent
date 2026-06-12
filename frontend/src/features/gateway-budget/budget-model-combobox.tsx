@@ -34,6 +34,7 @@ export interface BudgetModelComboboxProps {
   className?: string
   id?: string
   onPopoverOpenChange?: (open: boolean) => void
+  getOptionMetaLabel?: (option: BudgetModelOption) => string
 }
 
 function commandItemValue(option: BudgetModelOption): string {
@@ -50,6 +51,7 @@ export function BudgetModelCombobox({
   className,
   id,
   onPopoverOpenChange,
+  getOptionMetaLabel = budgetModelOptionLabel,
 }: Readonly<BudgetModelComboboxProps>): React.JSX.Element {
   const [open, setOpen] = useState(false)
 
@@ -132,7 +134,7 @@ export function BudgetModelCombobox({
                       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
                         <span className="truncate">{option.name}</span>
                         <span className="text-[11px] text-muted-foreground">
-                          {budgetModelOptionLabel(option)}
+                          {getOptionMetaLabel(option)}
                         </span>
                       </div>
                     </CommandItem>
