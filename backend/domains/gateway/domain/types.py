@@ -216,6 +216,7 @@ class VirtualKeyPrincipal:
     store_full_messages: bool
     guardrail_enabled: bool
     is_system: bool
+    granted_team_ids: tuple[uuid.UUID, ...] = ()  # 含主属；跨团队聚合 vkey 核心字段
 
 
 @dataclass(frozen=True)

@@ -83,8 +83,10 @@ def filter_virtual_keys_visible_to_actor(
 def assert_vkey_team_header_compatible(
     bound_team_id: UUID,
     x_team_id: str | None,
+    *,
+    granted_team_ids: tuple[UUID, ...] = (),
 ) -> None:
-    """``sk-gw-*`` 已绑定团队；非空且冲突的 ``X-Team-Id`` 视为客户端误用。"""
+    """``sk-gw-*`` 已绑定团队；非空且不在主属 ∪ grants 内的 ``X-Team-Id`` 视为客户端误用。"""
     trimmed = (x_team_id or "").strip()
     if not trimmed:
         return
@@ -92,7 +94,9 @@ def assert_vkey_team_header_compatible(
         header_team_id = UUID(trimmed)
     except ValueError as exc:
         raise GatewayTeamHeaderInvalidError(trimmed) from exc
-    if header_team_id != bound_team_id:
+    # 主属 team 或 granted team 均放行
+    allowed = {bound_team_id, *granted_team_ids}
+    if header_team_id not in allowed:
         raise GatewayVkeyTeamHeaderMismatchError()
 
 
