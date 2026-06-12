@@ -7,12 +7,12 @@
 from __future__ import annotations
 
 import asyncio
+
 from sqlalchemy import select, update
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from domains.gateway.infrastructure.models.provider_credential import ProviderCredential
 from domains.tenancy.infrastructure.models.team import TeamMember
-from libs.db.session import get_db_session
+from libs.db.database import get_db_session
 
 
 async def fix_credential_created_by_user_id() -> None:
