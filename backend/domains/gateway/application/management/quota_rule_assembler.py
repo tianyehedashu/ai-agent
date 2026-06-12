@@ -79,13 +79,28 @@ async def assemble_team_quota_rules(
         )
     rules.extend(budget_to_quota_rule(b, team_id=team_id) for b in budgets)
 
-    if creds:
-        plans_by_cred = await reads.list_provider_plans_with_quotas_for_credentials(
-            [c.id for c in creds]
+    # 上游配额：actor 维度聚合（跨 membership 团队），与凭据页 / 配额中心 picker 一致。
+    if actor_user_id is not None:
+        playground_items = await reads.list_playground_credential_summaries_for_actor(
+            actor_user_id,
+            is_platform_admin=is_platform_admin,
         )
-        for cred in creds:
-            for plan in plans_by_cred.get(cred.id, ()):
-                rules.extend(flatten_provider_plan(plan, team_id=team_id))
+        upstream_cred_ids = [
+            item.credential.id
+            for item in playground_items
+            if item.credential.scope != "user"
+        ]
+        context_team_by_cred = {
+            item.credential.id: item.context_team_id for item in playground_items
+        }
+        if upstream_cred_ids:
+            plans_by_cred = await reads.list_provider_plans_with_quotas_for_credentials(
+                upstream_cred_ids
+            )
+            for cred_id in upstream_cred_ids:
+                ctx_team = context_team_by_cred.get(cred_id) or team_id
+                for plan in plans_by_cred.get(cred_id, ()):
+                    rules.extend(flatten_provider_plan(plan, team_id=ctx_team))
 
     vkeys = await reads.list_virtual_keys_for_team(
         team_id,

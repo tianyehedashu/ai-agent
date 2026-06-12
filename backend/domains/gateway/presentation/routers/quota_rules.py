@@ -74,6 +74,7 @@ async def batch_upsert_quota_rules(
         commands,
         tenant_id=team.team_id,
         is_platform_admin=team.is_platform_admin,
+        actor_user_id=team.user_id,
     )
     return QuotaRuleBatchUpsertResponse(
         succeeded=[quota_rule_to_response(row) for row in result.succeeded],

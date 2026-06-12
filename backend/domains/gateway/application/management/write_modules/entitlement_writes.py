@@ -171,6 +171,7 @@ class EntitlementWritesMixin:
         credential_id: uuid.UUID,
         tenant_id: uuid.UUID,
         is_platform_admin: bool,
+        actor_user_id: uuid.UUID | None = None,
         real_model: str | None,
         label: str,
         valid_from: datetime,
@@ -197,11 +198,10 @@ class EntitlementWritesMixin:
         )
         for q in quotas or []:
             await self._provider_plans.add_quota(plan_id=plan.id, **q)
-        from domains.gateway.application.gateway_cache_invalidation import (
-            invalidate_gateway_quota_rule_cache_for_team,
+        await self._invalidate_upstream_quota_rule_list_cache(
+            tenant_id=tenant_id,
+            actor_user_id=actor_user_id,
         )
-
-        await invalidate_gateway_quota_rule_cache_for_team(tenant_id)
         return plan
 
     async def update_provider_plan(
@@ -211,6 +211,7 @@ class EntitlementWritesMixin:
         credential_id: uuid.UUID,
         tenant_id: uuid.UUID,
         is_platform_admin: bool,
+        actor_user_id: uuid.UUID | None = None,
         fields: dict[str, Any],
         quotas: list[dict[str, Any]] | None = None,
     ) -> ProviderPlan:
@@ -224,11 +225,10 @@ class EntitlementWritesMixin:
         result = await self._provider_plans.get(plan_id)
         if result is None:
             raise ManagementEntityNotFoundError("provider_plan", str(plan_id))
-        from domains.gateway.application.gateway_cache_invalidation import (
-            invalidate_gateway_quota_rule_cache_for_team,
+        await self._invalidate_upstream_quota_rule_list_cache(
+            tenant_id=tenant_id,
+            actor_user_id=actor_user_id,
         )
-
-        await invalidate_gateway_quota_rule_cache_for_team(tenant_id)
         return result
 
     async def delete_provider_plan(
@@ -238,6 +238,7 @@ class EntitlementWritesMixin:
         credential_id: uuid.UUID,
         tenant_id: uuid.UUID,
         is_platform_admin: bool,
+        actor_user_id: uuid.UUID | None = None,
     ) -> None:
         await self._assert_credential_in_team(
             credential_id, tenant_id=tenant_id, is_platform_admin=is_platform_admin
@@ -246,11 +247,10 @@ class EntitlementWritesMixin:
         ok = await self._provider_plans.delete(plan_id)
         if not ok:
             raise ManagementEntityNotFoundError("provider_plan", str(plan_id))
-        from domains.gateway.application.gateway_cache_invalidation import (
-            invalidate_gateway_quota_rule_cache_for_team,
+        await self._invalidate_upstream_quota_rule_list_cache(
+            tenant_id=tenant_id,
+            actor_user_id=actor_user_id,
         )
-
-        await invalidate_gateway_quota_rule_cache_for_team(tenant_id)
 
     async def create_entitlement_plan(
         self,

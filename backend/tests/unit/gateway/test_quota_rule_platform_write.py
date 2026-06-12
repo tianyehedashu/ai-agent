@@ -133,7 +133,11 @@ async def test_self_service_owned_credential_uses_ownership_assert() -> None:
     )
 
     kind, target_id, budget_tenant, period = await svc._resolve_platform_target(
-        cmd, tenant_id=tenant_id, is_platform_admin=False, actor_user_id=user_id
+        cmd,
+        tenant_id=tenant_id,
+        is_platform_admin=False,
+        actor_user_id=user_id,
+        member_self_service=True,
     )
 
     assert (kind, target_id, budget_tenant, period) == ("user", user_id, None, "monthly")
@@ -160,7 +164,11 @@ async def test_self_service_rejects_other_user_target() -> None:
 
     with pytest.raises(ValidationError):
         await svc._resolve_platform_target(
-            cmd, tenant_id=uuid.uuid4(), is_platform_admin=False, actor_user_id=uuid.uuid4()
+            cmd,
+            tenant_id=uuid.uuid4(),
+            is_platform_admin=False,
+            actor_user_id=uuid.uuid4(),
+            member_self_service=True,
         )
 
     svc._assert_credential_owned_by_actor.assert_not_awaited()
@@ -181,7 +189,11 @@ async def test_self_service_requires_credential() -> None:
 
     with pytest.raises(ValidationError):
         await svc._resolve_platform_target(
-            cmd, tenant_id=uuid.uuid4(), is_platform_admin=False, actor_user_id=user_id
+            cmd,
+            tenant_id=uuid.uuid4(),
+            is_platform_admin=False,
+            actor_user_id=user_id,
+            member_self_service=True,
         )
 
     svc._assert_credential_owned_by_actor.assert_not_awaited()
@@ -200,7 +212,11 @@ async def test_self_service_rejects_non_user_kind() -> None:
 
     with pytest.raises(ValidationError):
         await svc._resolve_platform_target(
-            cmd, tenant_id=uuid.uuid4(), is_platform_admin=False, actor_user_id=uuid.uuid4()
+            cmd,
+            tenant_id=uuid.uuid4(),
+            is_platform_admin=False,
+            actor_user_id=uuid.uuid4(),
+            member_self_service=True,
         )
 
 
@@ -224,3 +240,29 @@ async def test_self_service_batch_rejects_non_platform_layer() -> None:
     assert result.succeeded == []
     assert len(result.failed) == 1
     assert result.failed[0].index == 0
+
+
+@pytest.mark.asyncio
+async def test_admin_batch_with_actor_user_id_allows_tenant_target() -> None:
+    """管理员 batch 传 actor_user_id 时 platform tenant 配额仍走团队管理员校验链。"""
+    svc = _writes()
+    tenant_id = uuid.uuid4()
+    actor_user_id = uuid.uuid4()
+    cmd = QuotaRuleUpsertCommand(
+        layer="platform",
+        target_kind="tenant",
+        period="daily",
+        limit_usd=Decimal("25"),
+    )
+
+    kind, target_id, budget_tenant, period = await svc._resolve_platform_target(
+        cmd,
+        tenant_id=tenant_id,
+        is_platform_admin=False,
+        actor_user_id=actor_user_id,
+        member_self_service=False,
+    )
+
+    assert (kind, target_id, budget_tenant, period) == ("tenant", tenant_id, None, "daily")
+    svc._assert_budget_target_in_team.assert_awaited_once()
+    svc._assert_credential_owned_by_actor.assert_not_awaited()

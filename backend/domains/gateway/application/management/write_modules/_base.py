@@ -148,6 +148,43 @@ class GatewayManagementWriteBaseMixin:
         if row is None:
             raise CredentialNotFoundError(str(credential_id))
 
+    async def _assert_upstream_credential_writable(
+        self,
+        credential_id: uuid.UUID,
+        *,
+        actor_user_id: uuid.UUID,
+        is_platform_admin: bool,
+        request_tenant_id: uuid.UUID,
+    ) -> uuid.UUID:
+        """上游配额：凭据须为团队/系统 scope，且 actor 对该凭据所属团队有 admin（或平台管理员写 system）。
+
+        返回用于 quota rule 展示的 ``team_id``（系统凭据回退为请求上下文团队）。
+        """
+        from domains.tenancy.domain.policies.team_role import is_admin_or_owner_team_role
+
+        row = await self._creds.get(credential_id)
+        if row is not None:
+            if row.scope == "user" or row.tenant_id is None:
+                raise ValidationError("upstream 配额仅支持团队或系统凭据")
+            if is_platform_admin:
+                return row.tenant_id
+            memberships = await self._teams.list_gateway_team_memberships(
+                actor_user_id,
+                is_platform_admin=False,
+            )
+            for membership in memberships:
+                if membership.team_id == row.tenant_id and is_admin_or_owner_team_role(
+                    membership.role
+                ):
+                    return row.tenant_id
+            raise CredentialNotFoundError(str(credential_id))
+
+        if is_platform_admin:
+            sys_row = await self._system_creds.get(credential_id)
+            if sys_row is not None:
+                return request_tenant_id
+        raise CredentialNotFoundError(str(credential_id))
+
     async def _assert_credential_owned_by_actor(
         self, credential_id: uuid.UUID, *, actor_user_id: uuid.UUID, tenant_id: uuid.UUID
     ) -> None:
@@ -300,6 +337,45 @@ class GatewayManagementWriteBaseMixin:
                 )
             except CredentialNotFoundError as exc:
                 raise ManagementEntityNotFoundError("budget", str(budget_id)) from exc
+
+    async def _invalidate_quota_rule_list_cache(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        actor_user_id: uuid.UUID | None = None,
+        upstream_changed: bool = False,
+    ) -> None:
+        """失效配额中心列表缓存。
+
+        上游规则在 assembler 中按 actor 跨团队聚合，写入任一团队后须刷新 actor
+        全部 membership 团队的列表缓存，否则其它团队页仍命中旧快照。
+        """
+        from domains.gateway.application.gateway_cache_invalidation import (
+            invalidate_gateway_quota_rule_cache_for_team,
+        )
+
+        team_ids: set[uuid.UUID] = {tenant_id}
+        if upstream_changed and actor_user_id is not None:
+            memberships = await self._teams.list_gateway_team_memberships(
+                actor_user_id,
+                is_platform_admin=False,
+            )
+            team_ids.update(m.team_id for m in memberships)
+        for team_id in team_ids:
+            await invalidate_gateway_quota_rule_cache_for_team(team_id)
+
+    async def _invalidate_upstream_quota_rule_list_cache(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        actor_user_id: uuid.UUID | None,
+    ) -> None:
+        """上游 ProviderPlan 变更后失效配额中心列表缓存（含 actor 各 membership 团队）。"""
+        await self._invalidate_quota_rule_list_cache(
+            tenant_id=tenant_id,
+            actor_user_id=actor_user_id,
+            upstream_changed=True,
+        )
 
     async def reload_litellm_router(self, *, tenant_id: uuid.UUID | None = None) -> None:
         from domains.gateway.application.gateway_cache_invalidation import (

@@ -6,7 +6,7 @@ import type { QuotaRule } from '@/api/gateway/quota-rules'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
 
-import { computeQuotaRuleUsageRatio, LAYER_LABELS } from './quota-rule-utils'
+import { computeQuotaRuleUsageRatio, LAYER_LABELS, parseQuotaNumeric } from './quota-rule-utils'
 
 interface QuotaOverviewCardsProps {
   rules: QuotaRule[]
@@ -69,10 +69,9 @@ export function QuotaOverviewCards({
     layerCounts[rule.key.layer]++
 
     if (rule.usage) {
-      totalUsd += typeof rule.usage.current_usd === 'number' ? rule.usage.current_usd : 0
-      totalTokens += typeof rule.usage.current_tokens === 'number' ? rule.usage.current_tokens : 0
-      totalRequests +=
-        typeof rule.usage.current_requests === 'number' ? rule.usage.current_requests : 0
+      totalUsd += parseQuotaNumeric(rule.usage.current_usd)
+      totalTokens += parseQuotaNumeric(rule.usage.current_tokens)
+      totalRequests += parseQuotaNumeric(rule.usage.current_requests)
 
       const { ratio } = computeQuotaRuleUsageRatio(rule)
       if (ratio >= 1) dangerCount++
@@ -102,7 +101,7 @@ export function QuotaOverviewCards({
         <KpiCard title="我的配额数" value={String(totalCount)} isLoading={isLoading} />
         <KpiCard
           title="本月已用"
-          value={`$${totalUsd.toFixed(2)}`}
+          value={`$${parseQuotaNumeric(totalUsd).toFixed(2)}`}
           sub={`${totalTokens.toLocaleString()} Token`}
           isLoading={isLoading}
         />
@@ -137,7 +136,7 @@ export function QuotaOverviewCards({
       />
       <KpiCard
         title="本月累计用量"
-        value={`$${Number.parseFloat(String(totalUsd)).toFixed(2)}`}
+        value={`$${parseQuotaNumeric(totalUsd).toFixed(2)}`}
         sub={`${totalTokens.toLocaleString()} Token · ${totalRequests.toLocaleString()} 请求`}
         isLoading={isLoading}
       />

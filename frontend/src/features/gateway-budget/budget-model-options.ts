@@ -70,6 +70,58 @@ export function buildBudgetModelOptions(input: {
   return [...options].sort(sortOptions)
 }
 
+/** 上游配额：按所选凭据过滤，选项值为 upstream real_model（非 Gateway 别名）。 */
+export function buildUpstreamQuotaModelOptions(input: {
+  models: readonly GatewayModel[]
+  credentialIds: readonly string[]
+  existingModelNames: readonly (string | null | undefined)[]
+}): BudgetModelOption[] {
+  const credSet = new Set(input.credentialIds)
+  const seenReal = new Set<string>()
+  const options: BudgetModelOption[] = []
+
+  for (const model of input.models) {
+    if (!credSet.has(model.credential_id)) continue
+    const realModel = model.real_model.trim()
+    if (!realModel || seenReal.has(realModel)) continue
+    seenReal.add(realModel)
+    options.push({
+      name: realModel,
+      group: 'registry',
+      provider: model.provider,
+      capability: model.capability,
+      registryKind: model.registry_kind,
+      enabled: model.enabled,
+    })
+  }
+
+  for (const raw of input.existingModelNames) {
+    const name = (raw ?? '').trim()
+    if (!name || seenReal.has(name)) continue
+    seenReal.add(name)
+    options.push({
+      name,
+      group: 'legacy',
+    })
+  }
+
+  return [...options].sort(sortOptions)
+}
+
+export function upstreamQuotaModelOptionLabel(
+  option: BudgetModelOption,
+  aliasByRealModel?: ReadonlyMap<string, string>
+): string {
+  if (option.group === 'legacy') return '历史配置'
+  const alias = aliasByRealModel?.get(option.name)
+  const base = budgetModelOptionLabel(option)
+  return alias
+    ? `${option.name} · ${alias}`
+    : base === '注册模型'
+      ? option.name
+      : `${option.name} · ${base}`
+}
+
 export function budgetModelOptionLabel(option: BudgetModelOption): string {
   if (option.group === 'route') return '虚拟路由'
   if (option.group === 'legacy') return '历史配置'

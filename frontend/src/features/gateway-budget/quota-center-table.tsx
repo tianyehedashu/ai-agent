@@ -10,6 +10,7 @@ import type { QuotaRule } from '@/api/gateway/quota-rules'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
+import { credentialsListHref } from '@/features/gateway-models/paths'
 import { ArrowDown, ArrowUp, Loader2, Pencil, Trash2 } from '@/lib/lucide-icons'
 import { cn } from '@/lib/utils'
 
@@ -28,13 +29,18 @@ import {
 function PlanRuleManagementHint({
   layer,
   id,
+  contextTeamId,
 }: {
   layer: 'upstream' | 'downstream'
   id?: string
+  /** 规则所属团队（跨团队 upstream 时与 URL teamId 可能不同） */
+  contextTeamId: string
 }): React.JSX.Element {
   const label = layer === 'upstream' ? '凭据' : 'Key'
-  const basePath = layer === 'upstream' ? '/gateway/credentials' : '/gateway/virtual-keys'
-  const path = id ? `${basePath}?id=${id}` : basePath
+  const path =
+    layer === 'upstream'
+      ? credentialsListHref(contextTeamId, { credentialId: id })
+      : `/gateway/virtual-keys${id ? `?id=${id}` : ''}`
   return (
     <Link
       to={path}
@@ -290,6 +296,7 @@ const QuotaCenterTableRow = memo(function QuotaCenterTableRow({
             <PlanRuleManagementHint
               layer={planLayer}
               id={rule.key.credential_id ?? rule.key.access_id ?? undefined}
+              contextTeamId={rule.key.team_id}
             />
           ) : null}
         </div>

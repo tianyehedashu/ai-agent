@@ -1,15 +1,13 @@
 /**
  * 调用日志页筛选下拉的数据源 Hook。
  *
- * 复用统计页 catalog 逻辑，但仅聚焦当前团队数据（日志页不涉及跨团队/全平台 catalog）。
+ * 凭据筛选项与统一凭据 / 配额中心一致，使用 actor 维度聚合（非 URL `:teamId`）。
  * 人员筛选已改用 useTeamMemberFilterSearch（服务端搜索），本 hook 不再提供 memberOptions。
  */
 
 import { useMemo } from 'react'
 
-import { useQuery } from '@tanstack/react-query'
-
-import { credentialsApi } from '@/api/gateway/credentials'
+import { useActorCredentialSummaries } from '@/features/gateway-credentials/hooks/use-actor-credential-summaries'
 import { useGatewayVirtualKeys } from '@/features/gateway-keys/use-gateway-virtual-keys'
 import { useInfiniteGatewayModelPages } from '@/features/gateway-models/hooks/use-infinite-gateway-model-pages'
 import type { GatewayFilterOption } from '@/features/gateway-usage/gateway-filter-combobox'
@@ -33,10 +31,7 @@ export interface LogFilterCatalogResult {
 }
 
 export function useLogFilterCatalog({ teamId }: UseLogFilterCatalogParams): LogFilterCatalogResult {
-  const teamCredentialsQuery = useQuery({
-    queryKey: ['gateway', 'credential-summaries', teamId],
-    queryFn: () => credentialsApi.listCredentialSummaries(teamId),
-  })
+  const actorCredentials = useActorCredentialSummaries()
 
   const teamKeysQuery = useGatewayVirtualKeys(teamId)
 
@@ -47,8 +42,8 @@ export function useLogFilterCatalog({ teamId }: UseLogFilterCatalogParams): LogF
   )
 
   const credentialOptions = useMemo(
-    () => credentialFilterOptions(teamCredentialsQuery.data ?? []),
-    [teamCredentialsQuery.data]
+    () => credentialFilterOptions(actorCredentials.list),
+    [actorCredentials.list]
   )
 
   const keyOptions = useMemo(() => keyFilterOptions(teamKeysQuery.data ?? []), [teamKeysQuery.data])
@@ -62,7 +57,7 @@ export function useLogFilterCatalog({ teamId }: UseLogFilterCatalogParams): LogF
     credentialOptions,
     keyOptions,
     modelOptions,
-    credentialsLoading: teamCredentialsQuery.isLoading,
+    credentialsLoading: actorCredentials.isLoading,
     keysLoading: teamKeysQuery.isLoading,
     modelsLoading: teamModels.isLoading,
   }

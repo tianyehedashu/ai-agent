@@ -100,8 +100,9 @@ export function QuotaCenterWorkspace(): React.JSX.Element {
           keyOptions={ws.keyOptions}
           credentialOptions={ws.credentialOptions}
           metaLoading={ws.metaLoading}
-          modelOptions={ws.modelOptions}
-          modelsLoading={ws.modelsLoading}
+          modelOptions={ws.batchModelOptions}
+          modelsLoading={ws.batchModelsLoading}
+          modelOptionMetaLabel={ws.batchModelOptionMetaLabel}
           onModelPickerOpenChange={ws.onModelPickerOpenChange}
           editingRuleId={ws.editingRuleId}
         />
@@ -220,6 +221,12 @@ export function QuotaCenterWorkspace(): React.JSX.Element {
       </div>
 
       <QuotaOverviewCards rules={ws.filteredItems} isLoading={ws.isLoading} mode={ws.mode} />
+
+      {ws.listLoadError ? (
+        <p className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+          配额列表加载失败：{ws.listLoadError}（请刷新或检查后端是否已更新部署）
+        </p>
+      ) : null}
 
       {ws.formDisabled ? (
         <p className="text-sm text-muted-foreground">当前为只读模式，无法修改配额。</p>

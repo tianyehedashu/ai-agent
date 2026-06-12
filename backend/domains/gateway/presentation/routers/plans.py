@@ -69,6 +69,7 @@ async def create_provider_plan(
         credential_id=credential_id,
         tenant_id=team.team_id,
         is_platform_admin=team.is_platform_admin,
+        actor_user_id=team.user_id,
         real_model=body.real_model,
         label=body.label,
         valid_from=body.valid_from,
@@ -109,6 +110,7 @@ async def update_provider_plan(
         credential_id=credential_id,
         tenant_id=team.team_id,
         is_platform_admin=team.is_platform_admin,
+        actor_user_id=team.user_id,
         fields=fields,
         quotas=quotas_input,
     )
@@ -133,6 +135,7 @@ async def delete_provider_plan(
         credential_id=credential_id,
         tenant_id=team.team_id,
         is_platform_admin=team.is_platform_admin,
+        actor_user_id=team.user_id,
     )
 
 

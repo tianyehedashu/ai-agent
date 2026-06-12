@@ -2,11 +2,11 @@ import { useMemo } from 'react'
 
 import { useQuery } from '@tanstack/react-query'
 
-import { credentialsApi, fetchAllManagedTeamCredentials } from '@/api/gateway/credentials'
 import { keysApi } from '@/api/gateway/keys'
 import type { GatewayUsageAggregation } from '@/api/gateway/logs'
 import { fetchAllManagedTeamModelPages } from '@/api/gateway/models'
 import { teamsApi } from '@/api/gateway/teams'
+import { useActorCredentialSummaries } from '@/features/gateway-credentials/hooks/use-actor-credential-summaries'
 import { useGatewayVirtualKeys } from '@/features/gateway-keys/use-gateway-virtual-keys'
 import { useInfiniteGatewayModelPages } from '@/features/gateway-models/hooks/use-infinite-gateway-model-pages'
 import { gatewayTeamMembersQueryKey } from '@/features/gateway-teams/use-gateway-team-members'
@@ -53,18 +53,7 @@ export function useUsageStatsFilterCatalog({
   const usePlatformUserDirectory =
     useCrossTeamCatalog && usageAggregation === 'platform' && isPlatformAdmin
 
-  const teamCredentialsQuery = useQuery({
-    queryKey: ['gateway', 'credential-summaries', teamId],
-    queryFn: () => credentialsApi.listCredentialSummaries(teamId),
-    enabled: !useCrossTeamCatalog,
-  })
-
-  const managedCredentialsQuery = useQuery({
-    queryKey: ['gateway', 'stats-filter-catalog', 'managed-credentials'],
-    queryFn: () => fetchAllManagedTeamCredentials(),
-    enabled: useCrossTeamCatalog,
-    staleTime: 60_000,
-  })
+  const actorCredentials = useActorCredentialSummaries()
 
   const teamMembersQuery = useQuery({
     queryKey: gatewayTeamMembersQueryKey(teamId),
@@ -96,9 +85,7 @@ export function useUsageStatsFilterCatalog({
     staleTime: 60_000,
   })
 
-  const credentials = useCrossTeamCatalog
-    ? (managedCredentialsQuery.data ?? [])
-    : (teamCredentialsQuery.data ?? [])
+  const credentials = actorCredentials.list
 
   const models: readonly { name: string; real_model: string; provider: string }[] =
     useCrossTeamCatalog ? (managedModelsQuery.data ?? []) : teamModels.items
@@ -130,9 +117,7 @@ export function useUsageStatsFilterCatalog({
     modelOptions,
     registryProviderOptions,
     keyOptions,
-    credentialsLoading: useCrossTeamCatalog
-      ? managedCredentialsQuery.isLoading
-      : teamCredentialsQuery.isLoading,
+    credentialsLoading: actorCredentials.isLoading,
     membersLoading: usePlatformUserDirectory ? false : teamMembersQuery.isLoading,
     modelsLoading: useCrossTeamCatalog ? managedModelsQuery.isLoading : teamModels.isLoading,
     keysLoading: useCrossTeamCatalog ? managedKeysQuery.isLoading : teamKeysQuery.isLoading,
