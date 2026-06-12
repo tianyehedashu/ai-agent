@@ -8,7 +8,10 @@ import type { GatewayCredentialUpdateBody, ProviderCredential } from '@/api/gate
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { GatewayCredentialsPanelFallback } from '@/features/gateway-credentials/components/gateway-credentials-panel-fallback'
 import { ManagedCredentialRow } from '@/features/gateway-credentials/managed-credential-row'
+import { ManagedCredentialsTableHead } from '@/features/gateway-credentials/managed-credentials-table-head'
+import type { CredentialsListTab } from '@/features/gateway-models/paths'
 import { useGatewayTeamNameMap } from '@/features/gateway-teams/use-gateway-teams'
 
 export interface ManagedCredentialsTableProps {
@@ -22,10 +25,13 @@ export interface ManagedCredentialsTableProps {
   canWrite: boolean
   isPlatformAdmin: boolean
   listVariant: 'team' | 'system'
+  listTab?: CredentialsListTab
   emptyHint: string
   emptyState?: React.ReactNode
   toolbar?: React.ReactNode
   footer?: React.ReactNode
+  /** 嵌入 ListShell 时不重复 Card 外壳 */
+  embedded?: boolean
   onAdd: () => void
   onDelete: (c: ProviderCredential) => void
   updateMutation: {
@@ -48,10 +54,12 @@ export function ManagedCredentialsTable({
   canWrite,
   isPlatformAdmin,
   listVariant,
+  listTab,
   emptyHint,
   emptyState,
   toolbar,
   footer,
+  embedded = false,
   onAdd,
   onDelete,
   updateMutation,
@@ -64,73 +72,76 @@ export function ManagedCredentialsTable({
   const isEmpty = !isLoading && itemCount === 0
   const showEmptyPanel = isEmpty && emptyState !== undefined
   const showLegacyEmptyRow = isEmpty && emptyState === undefined
-  const showCenteredLoading = isLoading && itemCount === 0 && emptyState !== undefined
+  const showCenteredLoading = isLoading && itemCount === 0 && embedded
   const showTable = itemCount > 0 || showLegacyEmptyRow
+
+  const tableBody = (
+    <ScrollArea className="w-full overscroll-y-contain">
+      <table className="w-full min-w-[720px] text-sm">
+        <ManagedCredentialsTableHead
+          layout="full"
+          showAffiliationColumn={showAffiliationColumn}
+          listVariant={listVariant}
+        />
+        <tbody>
+          {isLoading && itemCount === 0 && !embedded ? (
+            <tr>
+              <td colSpan={colCount} className="px-4 py-6 text-center text-muted-foreground">
+                加载中…
+              </td>
+            </tr>
+          ) : null}
+          {showLegacyEmptyRow ? (
+            <tr>
+              <td colSpan={colCount} className="px-4 py-8 text-center text-muted-foreground">
+                <span className="mr-3">{emptyHint}</span>
+                {showAdd && showEmptyAddButton ? (
+                  <Button size="sm" variant="secondary" onClick={onAdd}>
+                    新增
+                  </Button>
+                ) : null}
+              </td>
+            </tr>
+          ) : null}
+          {items?.map((c) => (
+            <ManagedCredentialRow
+              key={`${c.id}:${c.tenant_id ?? routeTeamId}`}
+              credential={c}
+              routeTeamId={routeTeamId}
+              listVariant={listVariant}
+              layout="full"
+              showAffiliationColumn={showAffiliationColumn}
+              teamNameById={teamNameById}
+              viewerUserId={viewerUserId}
+              canWrite={canWrite}
+              isPlatformAdmin={isPlatformAdmin}
+              listTab={listTab}
+              onDelete={onDelete}
+              updateMutation={updateMutation}
+            />
+          ))}
+        </tbody>
+      </table>
+    </ScrollArea>
+  )
+
+  if (embedded) {
+    if (showCenteredLoading) {
+      return <GatewayCredentialsPanelFallback />
+    }
+    if (showEmptyPanel) {
+      return <>{emptyState}</>
+    }
+    return showTable ? tableBody : <></>
+  }
 
   return (
     <Card>
       {toolbar ? <div className="border-b p-3">{toolbar}</div> : null}
       <CardContent className="p-0">
-        {showCenteredLoading ? (
-          <div className="px-4 py-12 text-center text-sm text-muted-foreground">加载中…</div>
-        ) : null}
+        {showCenteredLoading ? <GatewayCredentialsPanelFallback /> : null}
         {showEmptyPanel ? <div className="p-4">{emptyState}</div> : null}
-        {showTable && !showEmptyPanel ? (
-          <ScrollArea className="w-full overscroll-y-contain">
-            <table className="w-full min-w-[720px] text-sm">
-              <thead className="border-b bg-muted/30 text-xs uppercase text-muted-foreground">
-                <tr>
-                  <th className="px-4 py-2 text-left font-medium">名称</th>
-                  <th className="px-4 py-2 text-left font-medium">API Key</th>
-                  <th className="px-4 py-2 text-left font-medium">提供商</th>
-                  <th className="px-4 py-2 text-left font-medium">作用域</th>
-                  {showAffiliation ? (
-                    <th className="px-4 py-2 text-left font-medium">归属</th>
-                  ) : null}
-                  <th className="px-4 py-2 text-left font-medium">api_base</th>
-                  <th className="px-4 py-2 text-left font-medium">启用</th>
-                  <th className="px-4 py-2 text-left font-medium">操作</th>
-                </tr>
-              </thead>
-              <tbody>
-                {isLoading && itemCount === 0 ? (
-                  <tr>
-                    <td colSpan={colCount} className="px-4 py-6 text-center text-muted-foreground">
-                      加载中…
-                    </td>
-                  </tr>
-                ) : null}
-                {showLegacyEmptyRow ? (
-                  <tr>
-                    <td colSpan={colCount} className="px-4 py-8 text-center text-muted-foreground">
-                      <span className="mr-3">{emptyHint}</span>
-                      {showAdd && showEmptyAddButton ? (
-                        <Button size="sm" variant="secondary" onClick={onAdd}>
-                          新增
-                        </Button>
-                      ) : null}
-                    </td>
-                  </tr>
-                ) : null}
-                {items?.map((c) => (
-                  <ManagedCredentialRow
-                    key={`${c.id}:${c.tenant_id ?? routeTeamId}`}
-                    credential={c}
-                    routeTeamId={routeTeamId}
-                    listVariant={listVariant}
-                    showAffiliationColumn={showAffiliationColumn}
-                    teamNameById={teamNameById}
-                    viewerUserId={viewerUserId}
-                    canWrite={canWrite}
-                    isPlatformAdmin={isPlatformAdmin}
-                    onDelete={onDelete}
-                    updateMutation={updateMutation}
-                  />
-                ))}
-              </tbody>
-            </table>
-          </ScrollArea>
-        ) : null}
+        {showTable && !showEmptyPanel ? tableBody : null}
       </CardContent>
       {footer ? <div className="border-t px-3 py-2">{footer}</div> : null}
     </Card>

@@ -26,6 +26,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { CredentialBudgetSection } from '@/features/gateway-budget/credential-budget-section'
+import { GatewayCredentialsPanelFallback } from '@/features/gateway-credentials/components/gateway-credentials-panel-fallback'
 import { isConfigManagedSystemCredential } from '@/features/gateway-credentials/config-managed-credential'
 import { CredentialDeleteConfirmDialog } from '@/features/gateway-credentials/credential-delete-confirm-dialog'
 import { CredentialEditFields } from '@/features/gateway-credentials/credential-edit-fields'
@@ -42,17 +43,16 @@ import {
   CredentialTeamBadge,
   CredentialVisibilityBadge,
 } from '@/features/gateway-credentials/credential-scope-display'
+import { useCredentialActiveToggle } from '@/features/gateway-credentials/hooks/use-credential-active-toggle'
 import { useProviderProfilesCatalog } from '@/features/gateway-credentials/hooks/use-provider-profiles-catalog'
 import { getProviderSchema, providerLabel } from '@/features/gateway-credentials/provider-schemas'
+import { invalidateGatewayCredentialCaches } from '@/features/gateway-credentials/query-keys'
 import { SystemCredentialVisibilityCard } from '@/features/gateway-credentials/system-credential-visibility-card'
 import { managedCredentialUpstreamScope } from '@/features/gateway-credentials/types'
 import { invalidateCredentialSummariesCache } from '@/features/gateway-credentials/use-credential-directory'
 import { useCredentialEditForm } from '@/features/gateway-credentials/use-credential-edit-form'
 import { useInfiniteGatewayModelPages } from '@/features/gateway-models/hooks/use-infinite-gateway-model-pages'
-import {
-  credentialsSystemBrowseIndexHref,
-  credentialsTeamListHref,
-} from '@/features/gateway-models/paths'
+import { credentialsListHref } from '@/features/gateway-models/paths'
 import { gatewayModelsByCredentialInvalidatePrefix } from '@/features/gateway-models/query-keys'
 import { GatewayRefreshButton } from '@/features/gateway-shared/gateway-refresh-button'
 import { switchGatewayTeam } from '@/features/gateway-teams/navigate-team'
@@ -85,7 +85,6 @@ export default function GatewayCredentialDetailPage(): React.JSX.Element {
   const { credentialId } = useParams<{ credentialId: string }>()
   const id = credentialId ?? ''
   const [searchParams, setSearchParams] = useSearchParams()
-  const [addModelsOpen, setAddModelsOpen] = useState(false)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const queryClient = useQueryClient()
   const { toast } = useToast()
@@ -122,18 +121,14 @@ export default function GatewayCredentialDetailPage(): React.JSX.Element {
   const canManageVisibility = canManageSystemCredentialVisibility(isPlatformAdmin)
   const configManaged = cred !== undefined && isConfigManagedSystemCredential(cred)
   const upstreamScope = cred ? managedCredentialUpstreamScope(cred.scope) : 'team'
-  const credentialsListHref =
-    cred?.scope === 'system'
-      ? credentialsSystemBrowseIndexHref(teamId)
-      : credentialsTeamListHref(teamId)
+  const credentialsListBackHref = credentialsListHref(teamId)
   const schema = cred ? getProviderSchema(cred.provider) : undefined
 
   const addModelsFromUrl = searchParams.get('addModels') === '1'
-  const showAddModelsDialog = Boolean(cred) && editable && (addModelsOpen || addModelsFromUrl)
+  const showAddModelsDialog = Boolean(cred) && editable && addModelsFromUrl
 
   const handleAddModelsOpenChange = useCallback(
     (open: boolean) => {
-      setAddModelsOpen(open)
       if (!open && addModelsFromUrl) {
         setSearchParams(
           (prev) => {
@@ -149,52 +144,33 @@ export default function GatewayCredentialDetailPage(): React.JSX.Element {
   )
 
   const openAddModelsDialog = useCallback(() => {
-    setAddModelsOpen(true)
-  }, [])
+    setSearchParams(
+      (prev) => {
+        const n = new URLSearchParams(prev)
+        n.set('addModels', '1')
+        return n
+      },
+      { replace: true }
+    )
+  }, [setSearchParams])
 
-  // 头部「启用/禁用」走独立 mutation + 乐观更新，UI 即时响应，不再依赖本地 isActive state
-  const toggleActiveMutation = useMutation({
-    mutationFn: (nextActive: boolean) =>
-      gatewayApi.updateCredential(teamId, id, { is_active: nextActive }),
-    onMutate: async (nextActive: boolean) => {
-      await queryClient.cancelQueries({ queryKey: ['gateway', 'credential', teamId, id] })
-      const previous = queryClient.getQueryData<ProviderCredential>([
-        'gateway',
-        'credential',
-        teamId,
-        id,
-      ])
-      if (previous) {
-        queryClient.setQueryData<ProviderCredential>(['gateway', 'credential', teamId, id], {
-          ...previous,
-          is_active: nextActive,
-        })
-      }
-      return { previous }
-    },
-    onError: (e: Error, _next, ctx) => {
-      if (ctx?.previous) {
-        queryClient.setQueryData(['gateway', 'credential', teamId, id], ctx.previous)
-      }
-      toast({ variant: 'destructive', title: '更新失败', description: e.message })
-    },
-    onSettled: () => {
-      invalidateCredentialProbeCache(queryClient, upstreamScope, id)
-      invalidateCredentialSummariesCache(queryClient)
-      void queryClient.invalidateQueries({ queryKey: ['gateway', 'credential', teamId, id] })
-      void queryClient.invalidateQueries({ queryKey: ['gateway', 'credentials'] })
-    },
+  const activeToggle = useCredentialActiveToggle({
+    credential: cred,
+    routeTeamId: teamId,
+    scope: cred?.scope === 'system' ? 'system' : cred?.scope === 'user' ? 'user' : 'team',
   })
 
   const deleteMutation = useMutation({
     mutationFn: () => gatewayApi.deleteCredential(teamId, id),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['gateway', 'credentials'] })
-      void queryClient.invalidateQueries({ queryKey: ['gateway', 'models'] })
-      invalidateCredentialSummariesCache(queryClient)
+      invalidateGatewayCredentialCaches(queryClient, {
+        teamId,
+        credentialId: id,
+        includeModels: true,
+      })
       setDeleteDialogOpen(false)
       toast({ title: '凭据已删除', description: '关联的注册模型已一并移除' })
-      navigate(credentialsListHref)
+      navigate(credentialsListBackHref)
     },
     onError: (e: Error) => {
       setDeleteDialogOpen(false)
@@ -226,7 +202,7 @@ export default function GatewayCredentialDetailPage(): React.JSX.Element {
       <div className="text-sm text-muted-foreground">
         无效的凭据 ID。
         <Link
-          to={credentialsTeamListHref(teamId)}
+          to={credentialsListBackHref}
           className="ml-2 text-primary underline-offset-4 hover:underline"
         >
           返回列表
@@ -236,7 +212,7 @@ export default function GatewayCredentialDetailPage(): React.JSX.Element {
   }
 
   if (isLoading) {
-    return <div className="text-sm text-muted-foreground">加载中…</div>
+    return <GatewayCredentialsPanelFallback />
   }
 
   if (isError || !cred) {
@@ -246,7 +222,7 @@ export default function GatewayCredentialDetailPage(): React.JSX.Element {
           {error instanceof Error ? error.message : '无法加载凭据'}
         </p>
         <Link
-          to={credentialsTeamListHref(teamId)}
+          to={credentialsListHref(teamId)}
           className="text-primary underline-offset-4 hover:underline"
         >
           返回凭据列表
@@ -258,7 +234,7 @@ export default function GatewayCredentialDetailPage(): React.JSX.Element {
   return (
     <div className="space-y-6">
       <nav className="flex flex-wrap items-center gap-1 text-sm text-muted-foreground">
-        <Link to={credentialsListHref} className="hover:text-foreground">
+        <Link to={credentialsListBackHref} className="hover:text-foreground">
           凭据管理
         </Link>
         <ChevronRight className="h-4 w-4 shrink-0" aria-hidden />
@@ -354,9 +330,9 @@ export default function GatewayCredentialDetailPage(): React.JSX.Element {
               <Switch
                 id="cred-header-active"
                 checked={cred.is_active}
-                disabled={toggleActiveMutation.isPending}
+                disabled={activeToggle.isPending}
                 onCheckedChange={(checked) => {
-                  toggleActiveMutation.mutate(checked)
+                  activeToggle.toggle(checked)
                 }}
                 aria-label={cred.is_active ? '停用凭据' : '启用凭据'}
               />
@@ -365,7 +341,7 @@ export default function GatewayCredentialDetailPage(): React.JSX.Element {
               variant="outline"
               size="sm"
               className="text-destructive hover:text-destructive"
-              disabled={deleteMutation.isPending || toggleActiveMutation.isPending}
+              disabled={deleteMutation.isPending || activeToggle.isPending}
               onClick={() => {
                 setDeleteDialogOpen(true)
               }}

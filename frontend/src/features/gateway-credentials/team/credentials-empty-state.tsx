@@ -6,6 +6,8 @@ import type React from 'react'
 
 import { Link } from 'react-router-dom'
 
+import { personalCredentialsIndexHref } from '@/features/gateway-models/paths'
+import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { Key, Search } from '@/lib/lucide-icons'
 
 export interface CredentialsEmptyStateProps {
@@ -17,6 +19,8 @@ export function CredentialsEmptyState({
   noCollaborationTeams = false,
   hasActiveSearch = false,
 }: CredentialsEmptyStateProps): React.JSX.Element {
+  const teamId = useGatewayTeamId()
+
   if (noCollaborationTeams) {
     return (
       <div className="rounded-lg border border-dashed bg-muted/10 px-6 py-10 text-center">
@@ -26,7 +30,7 @@ export function CredentialsEmptyState({
           团队 Tab 展示您已加入的协作团队共享凭据（只读）；密钥已脱敏，详情与变更需团队管理员。个人
           BYOK 请前往{' '}
           <Link
-            to="/gateway/credentials?tab=personal"
+            to={personalCredentialsIndexHref(teamId)}
             className="text-primary underline-offset-4 hover:underline"
           >
             个人

@@ -2,14 +2,16 @@
  * 平台管理员 · 系统凭据 Tab 管理面。
  */
 
-import { useCallback } from 'react'
+import { useCallback, useMemo } from 'react'
 import type React from 'react'
 
 import { useQuery } from '@tanstack/react-query'
 
 import { credentialsApi } from '@/api/gateway/credentials'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { TabsContent } from '@/components/ui/tabs'
+import { GatewayCredentialsListShell } from '@/features/gateway-credentials/components/gateway-credentials-list-shell'
 import { CredentialDeleteConfirmDialog } from '@/features/gateway-credentials/credential-delete-confirm-dialog'
 import { useCredentialDeleteFlow } from '@/features/gateway-credentials/hooks/use-credential-delete-flow'
 import type { GatewayCredentialMutations } from '@/features/gateway-credentials/hooks/use-gateway-credential-mutations'
@@ -24,11 +26,14 @@ import { useCurrentUser } from '@/stores/user'
 export interface SystemCredentialsAdminWorkspaceProps {
   mutations: GatewayCredentialMutations
   onAdd: (provider?: string) => void
+  highlightCredentialId?: string
+  hint?: string
 }
 
 export function SystemCredentialsAdminWorkspace({
   mutations,
   onAdd,
+  hint,
 }: SystemCredentialsAdminWorkspaceProps): React.JSX.Element {
   const teamId = useGatewayTeamId()
   const viewerUserId = useCurrentUser()?.id ?? null
@@ -45,41 +50,62 @@ export function SystemCredentialsAdminWorkspace({
     queryFn: () => credentialsApi.listCredentials(teamId),
   })
 
-  const systemCredentials = (systemItems ?? []).filter((c) => c.scope === 'system')
+  const systemCredentials = useMemo(
+    () => (systemItems ?? []).filter((c) => c.scope === 'system'),
+    [systemItems]
+  )
 
   const handleAdd = useCallback(() => {
     onAdd()
   }, [onAdd])
 
-  return (
-    <TabsContent value="system" className="mt-4 space-y-3 focus-visible:outline-none">
-      <div className="flex justify-end gap-2">
+  const toolbar = (
+    <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+      <Badge variant="secondary" className="font-normal">
+        {systemCredentials.length} 条系统凭据
+      </Badge>
+      <div className="ml-auto flex flex-wrap items-center gap-2">
         <GatewayRefreshButton
           isFetching={isFetching}
           ariaLabel="刷新系统凭据"
-          onRefresh={() => refetch()}
+          onRefresh={() => {
+            void refetch()
+          }}
         />
         <Button size="sm" onClick={handleAdd}>
           <Plus className="mr-1.5 h-4 w-4" />
           新增
         </Button>
       </div>
+    </div>
+  )
 
-      <ManagedCredentialsTable
-        items={systemCredentials}
+  return (
+    <TabsContent value="system" className="mt-4 focus-visible:outline-none">
+      <GatewayCredentialsListShell
+        hintSlot={hint}
+        toolbar={toolbar}
         isLoading={systemLoading}
-        routeTeamId={teamId}
-        showEmptyAddButton={false}
-        showAffiliationColumn
-        viewerUserId={viewerUserId}
-        canWrite={false}
-        isPlatformAdmin={isPlatformAdmin}
-        listVariant="system"
-        emptyHint="暂无系统凭据"
-        onAdd={onAdd}
-        onDelete={deleteFlow.handleDeleteCredential}
-        updateMutation={mutations.updateMutation}
-      />
+        isEmpty={!systemLoading && systemCredentials.length === 0}
+      >
+        <ManagedCredentialsTable
+          items={systemCredentials}
+          isLoading={systemLoading}
+          routeTeamId={teamId}
+          showEmptyAddButton={false}
+          showAffiliationColumn
+          viewerUserId={viewerUserId}
+          canWrite={false}
+          isPlatformAdmin={isPlatformAdmin}
+          listVariant="system"
+          listTab="system"
+          emptyHint="暂无系统凭据"
+          embedded
+          onAdd={onAdd}
+          onDelete={deleteFlow.handleDeleteCredential}
+          updateMutation={mutations.updateMutation}
+        />
+      </GatewayCredentialsListShell>
 
       <CredentialDeleteConfirmDialog
         credential={deleteFlow.credentialPendingDelete}

@@ -1,17 +1,25 @@
 /**
- * 协作团队 + 凭据分组列表。
+ * 协作团队 + 凭据分组列表（单表 + 分组行）。
  */
 
 import type React from 'react'
 
 import type { GatewayCredentialUpdateBody, ProviderCredential } from '@/api/gateway'
 import type { GatewayTeam } from '@/api/gateway/teams'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { ScrollArea } from '@/components/ui/scroll-area'
+import { CredentialTableGroupRow } from '@/features/gateway-credentials/components/credential-table-group-row'
+import { GatewayCredentialsPanelFallback } from '@/features/gateway-credentials/components/gateway-credentials-panel-fallback'
 import { ManagedCredentialRow } from '@/features/gateway-credentials/managed-credential-row'
-import { CollaborationTeamGroupHeader } from '@/features/gateway-teams/collaboration-team-group-header'
+import { ManagedCredentialsTableHead } from '@/features/gateway-credentials/managed-credentials-table-head'
+import {
+  gatewayTeamDisplayLabel,
+  gatewayTeamRoleSubtitle,
+} from '@/features/gateway-teams/gateway-team-display'
 import { isGatewayTeamWritable } from '@/features/gateway-teams/gateway-team-write-policy'
 import { useGatewayTeamNameMap } from '@/features/gateway-teams/use-gateway-teams'
-import { Plus, Search } from '@/lib/lucide-icons'
+import { Plus, Search, Users } from '@/lib/lucide-icons'
 
 export interface CollaborationTeamsCredentialsGroupedListProps {
   teams: readonly GatewayTeam[]
@@ -23,6 +31,7 @@ export interface CollaborationTeamsCredentialsGroupedListProps {
   isPlatformAdmin: boolean
   viewerUserId?: string | null
   routeTeamId: string
+  showEmptyTeams: boolean
   onAddForTeam: (teamId: string) => void
   onDelete: (c: ProviderCredential) => void
   updateMutation: {
@@ -35,6 +44,46 @@ export interface CollaborationTeamsCredentialsGroupedListProps {
   }
 }
 
+function TeamGroupRow({
+  team,
+  isPlatformAdmin,
+  viewerUserId,
+  credentialCount,
+  onAdd,
+}: Readonly<{
+  team: GatewayTeam
+  isPlatformAdmin: boolean
+  viewerUserId?: string | null
+  credentialCount: number
+  onAdd: () => void
+}>): React.JSX.Element {
+  const label = gatewayTeamDisplayLabel(team, { viewerUserId })
+  const roleSubtitle = gatewayTeamRoleSubtitle(team, isPlatformAdmin)
+
+  return (
+    <CredentialTableGroupRow
+      icon={Users}
+      title={label}
+      badges={
+        <>
+          <Badge variant="outline" className="font-normal">
+            {roleSubtitle}
+          </Badge>
+          <Badge variant="secondary" className="font-normal">
+            {credentialCount > 0 ? `${String(credentialCount)} 条凭据` : '暂无凭据'}
+          </Badge>
+        </>
+      }
+      actions={
+        <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={onAdd}>
+          <Plus className="mr-1 h-3.5 w-3.5" />
+          添加
+        </Button>
+      }
+    />
+  )
+}
+
 export function CollaborationTeamsCredentialsGroupedList({
   teams,
   credentialsByTeamId,
@@ -45,11 +94,13 @@ export function CollaborationTeamsCredentialsGroupedList({
   isPlatformAdmin,
   viewerUserId,
   routeTeamId,
+  showEmptyTeams,
   onAddForTeam,
   onDelete,
   updateMutation,
 }: CollaborationTeamsCredentialsGroupedListProps): React.JSX.Element {
   const teamNameById = useGatewayTeamNameMap()
+
   if (requiresSearch) {
     return (
       <div className="px-4 py-10 text-center">
@@ -63,85 +114,125 @@ export function CollaborationTeamsCredentialsGroupedList({
   }
 
   if (isLoading && teams.length === 0) {
-    return <div className="px-4 py-12 text-center text-sm text-muted-foreground">加载中…</div>
+    return <GatewayCredentialsPanelFallback />
   }
 
-  return (
-    <div className="divide-y">
-      {teams.map((team) => {
-        const teamCredentials = credentialsByTeamId.get(team.id) ?? []
-        const hasCredentialsOnServer = tenantIdsWithCredentials.has(team.id)
-        const showOffPageHint =
-          hasCredentialsOnServer && teamCredentials.length === 0 && currentPage > 1
-        const teamCanWrite = isGatewayTeamWritable(team, isPlatformAdmin)
+  const visibleTeams = teams.filter((team) => {
+    if (showEmptyTeams) return true
+    const rows = credentialsByTeamId.get(team.id) ?? []
+    if (rows.length > 0) return true
+    return tenantIdsWithCredentials.has(team.id)
+  })
 
-        return (
-          <section key={team.id} aria-label={`团队 ${team.name} 凭据`}>
-            <CollaborationTeamGroupHeader
-              team={team}
-              isPlatformAdmin={isPlatformAdmin}
+  return (
+    <ScrollArea className="w-full overscroll-y-contain">
+      <table className="w-full min-w-[640px] text-sm">
+        <ManagedCredentialsTableHead layout="compact" listVariant="team" />
+        <tbody>
+          {visibleTeams.map((team) => {
+            const teamCredentials = credentialsByTeamId.get(team.id) ?? []
+            const hasCredentialsOnServer = tenantIdsWithCredentials.has(team.id)
+            const showOffPageHint =
+              hasCredentialsOnServer && teamCredentials.length === 0 && currentPage > 1
+
+            return (
+              <TeamGroupSection
+                key={team.id}
+                team={team}
+                teamCredentials={teamCredentials}
+                showOffPageHint={showOffPageHint}
+                hasCredentialsOnServer={hasCredentialsOnServer}
+                isPlatformAdmin={isPlatformAdmin}
+                viewerUserId={viewerUserId}
+                routeTeamId={routeTeamId}
+                teamNameById={teamNameById}
+                onAddForTeam={onAddForTeam}
+                onDelete={onDelete}
+                updateMutation={updateMutation}
+              />
+            )
+          })}
+          {visibleTeams.length === 0 ? (
+            <tr>
+              <td colSpan={5} className="px-4 py-8 text-center text-sm text-muted-foreground">
+                没有匹配的团队
+              </td>
+            </tr>
+          ) : null}
+        </tbody>
+      </table>
+    </ScrollArea>
+  )
+}
+
+function TeamGroupSection({
+  team,
+  teamCredentials,
+  showOffPageHint,
+  hasCredentialsOnServer,
+  isPlatformAdmin,
+  viewerUserId,
+  routeTeamId,
+  teamNameById,
+  onAddForTeam,
+  onDelete,
+  updateMutation,
+}: Readonly<{
+  team: GatewayTeam
+  teamCredentials: readonly ProviderCredential[]
+  showOffPageHint: boolean
+  hasCredentialsOnServer: boolean
+  isPlatformAdmin: boolean
+  viewerUserId?: string | null
+  routeTeamId: string
+  teamNameById: Map<string, string>
+  onAddForTeam: (teamId: string) => void
+  onDelete: (c: ProviderCredential) => void
+  updateMutation: CollaborationTeamsCredentialsGroupedListProps['updateMutation']
+}>): React.JSX.Element {
+  const teamCanWrite = isGatewayTeamWritable(team, isPlatformAdmin)
+
+  return (
+    <>
+      <TeamGroupRow
+        team={team}
+        isPlatformAdmin={isPlatformAdmin}
+        viewerUserId={viewerUserId}
+        credentialCount={teamCredentials.length}
+        onAdd={() => {
+          onAddForTeam(team.id)
+        }}
+      />
+      {teamCredentials.length > 0
+        ? teamCredentials.map((credential) => (
+            <ManagedCredentialRow
+              key={`${credential.id}:${team.id}`}
+              credential={credential}
+              routeTeamId={routeTeamId}
+              listVariant="team"
+              layout="compact"
+              showAffiliationColumn={false}
+              teamNameById={teamNameById}
               viewerUserId={viewerUserId}
-              actions={
-                <Button
-                  size="sm"
-                  className="h-7 text-xs"
-                  onClick={() => {
-                    onAddForTeam(team.id)
-                  }}
-                >
-                  <Plus className="mr-1 h-3.5 w-3.5" />
-                  添加凭据
-                </Button>
-              }
+              canWrite={teamCanWrite}
+              isPlatformAdmin={isPlatformAdmin}
+              listTab="shared"
+              onDelete={onDelete}
+              updateMutation={updateMutation}
             />
-            {teamCredentials.length > 0 ? (
-              <table className="w-full min-w-[720px] text-sm">
-                <thead className="border-b bg-muted/10 text-xs uppercase text-muted-foreground">
-                  <tr>
-                    <th className="px-4 py-2 text-left font-medium">名称</th>
-                    <th className="px-4 py-2 text-left font-medium">API Key</th>
-                    <th className="px-4 py-2 text-left font-medium">提供商</th>
-                    <th className="px-4 py-2 text-left font-medium">作用域</th>
-                    <th className="px-4 py-2 text-left font-medium">api_base</th>
-                    <th className="px-4 py-2 text-left font-medium">启用</th>
-                    <th className="px-4 py-2 text-left font-medium">操作</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {teamCredentials.map((credential) => (
-                    <ManagedCredentialRow
-                      key={`${credential.id}:${team.id}`}
-                      credential={credential}
-                      routeTeamId={routeTeamId}
-                      listVariant="team"
-                      showAffiliationColumn={false}
-                      teamNameById={teamNameById}
-                      viewerUserId={viewerUserId}
-                      canWrite={teamCanWrite}
-                      isPlatformAdmin={isPlatformAdmin}
-                      onDelete={onDelete}
-                      updateMutation={updateMutation}
-                    />
-                  ))}
-                </tbody>
-              </table>
-            ) : showOffPageHint ? (
-              <p className="px-4 py-3 text-sm text-muted-foreground">
-                该团队已有凭据，请翻页查看。
-              </p>
-            ) : hasCredentialsOnServer && teamCredentials.length === 0 ? (
-              <p className="px-4 py-3 text-sm text-muted-foreground">
-                该团队已有凭据（见其它页或未匹配当前筛选）。
-              </p>
-            ) : (
-              <p className="px-4 py-3 text-sm text-muted-foreground">暂无凭据</p>
-            )}
-          </section>
-        )
-      })}
-      {teams.length === 0 ? (
-        <div className="px-4 py-8 text-center text-sm text-muted-foreground">没有匹配的团队</div>
+          ))
+        : null}
+      {teamCredentials.length === 0 ? (
+        <tr>
+          <td colSpan={5} className="px-4 py-2 text-sm text-muted-foreground">
+            {showOffPageHint
+              ? '该团队已有凭据，请翻页查看。'
+              : hasCredentialsOnServer
+                ? '该团队已有凭据（见其它页或未匹配当前筛选）。'
+                : '暂无凭据'}
+          </td>
+        </tr>
       ) : null}
-    </div>
+    </>
   )
 }

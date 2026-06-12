@@ -39,6 +39,7 @@ import { CheckCircle2, Loader2 } from '@/lib/lucide-icons'
 
 import { credentialProviderLabel } from './constants'
 import { displayListApiKeyMasked } from './mask-display'
+import { invalidateGatewayCredentialCaches } from './query-keys'
 
 export interface ImportToTeamDialogProps {
   open: boolean
@@ -124,10 +125,10 @@ export function ImportToTeamDialog({
     onSuccess: (data) => {
       setResult(data)
       setStep('result')
-      // Invalidate caches
-      void queryClient.invalidateQueries({ queryKey: ['gateway', 'credentials'] })
-      void queryClient.invalidateQueries({ queryKey: ['gateway', 'my-credentials'] })
-      void queryClient.invalidateQueries({ queryKey: ['gateway', 'my-models'] })
+      invalidateGatewayCredentialCaches(queryClient, {
+        teamId: targetTeamId,
+        includeModels: true,
+      })
       const totalModels = data.succeeded.reduce((acc, s) => acc + s.models_created.length, 0)
       toast({
         title: '导入成功',
