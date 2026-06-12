@@ -1,29 +1,25 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 
 import { useQuery } from '@tanstack/react-query'
-import { Link, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 
 import { gatewayApi } from '@/api/gateway'
-import { ModelStatusBadge } from '@/components/model-status-badge'
+import type { PersonalGatewayModelUpdateBody } from '@/api/gateway/my-models'
+import type { UsagePeriodDays } from '@/features/gateway-models/constants'
+import { GatewayModelDeleteConfirmDialog } from '@/features/gateway-models/detail/gateway-model-delete-confirm-dialog'
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { BudgetUsageCard } from '@/features/gateway-budget/budget-usage-card'
+  ModelDetailLoadingState,
+  ModelDetailNotFoundState,
+} from '@/features/gateway-models/detail/model-detail-states'
+import { ModelInspector } from '@/features/gateway-models/detail/model-inspector'
 import { usePersonalModelMutations } from '@/features/gateway-models/hooks/use-personal-model-mutations'
-import { personalModelEditHref, personalModelsIndexHref } from '@/features/gateway-models/paths'
+import { personalModelsIndexHref } from '@/features/gateway-models/paths'
+import {
+  personalModelInspectorContext,
+  personalModelToInspectorModel,
+} from '@/features/gateway-models/personal/personal-model-inspector-adapter'
+import { indexUsageByRouteName } from '@/features/gateway-models/usage-summary-index'
 import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
-import { Loader2, Pencil, Trash2, Zap } from '@/lib/lucide-icons'
-import { useCurrentUser } from '@/stores/user'
-import { MODEL_PROVIDERS, MODEL_TYPE_LABELS } from '@/types/user-model'
 
 interface PersonalModelDetailPaneProps {
   modelId: string
@@ -34,7 +30,7 @@ export function PersonalModelDetailPane({
 }: PersonalModelDetailPaneProps): React.JSX.Element {
   const teamId = useGatewayTeamId()
   const navigate = useNavigate()
-  const currentUser = useCurrentUser()
+  const [usageDays] = useState<UsagePeriodDays>(7)
   const [deleteOpen, setDeleteOpen] = useState(false)
 
   const { data: model, isLoading } = useQuery({
@@ -43,167 +39,125 @@ export function PersonalModelDetailPane({
     enabled: modelId !== '',
   })
 
-  const { deleteMutation, testMutation } = usePersonalModelMutations({
+  const { data: credentials = [] } = useQuery({
+    queryKey: ['gateway', 'my-credentials'],
+    queryFn: () => gatewayApi.listMyCredentials(),
+  })
+
+  const routeName = model?.name ?? ''
+
+  const { data: usageSummary, isLoading: usageLoading } = useQuery({
+    queryKey: ['gateway', 'my-models', 'usage-summary', routeName, usageDays],
+    queryFn: () =>
+      gatewayApi.myModelsUsageSummary({
+        days: usageDays,
+        route_names: [routeName],
+      }),
+    enabled: routeName !== '',
+  })
+
+  const usageByRouteName = useMemo(
+    () => indexUsageByRouteName(usageSummary?.items),
+    [usageSummary?.items]
+  )
+
+  const inspectorModel = useMemo(
+    () => (model ? personalModelToInspectorModel(model) : null),
+    [model]
+  )
+
+  const personalContext = useMemo(
+    () => (model ? personalModelInspectorContext(model) : undefined),
+    [model]
+  )
+
+  const listHref = personalModelsIndexHref(teamId)
+
+  const { updateMutation, deleteMutation, testMutation } = usePersonalModelMutations({
     onDeleteSuccess: () => {
-      navigate(personalModelsIndexHref(teamId))
+      navigate(listHref)
     },
   })
 
-  const handleTest = useCallback((): void => {
-    if (model) testMutation.mutate(model.id)
-  }, [model, testMutation])
+  const handleTest = useCallback(
+    (id: string): void => {
+      testMutation.mutate(id)
+    },
+    [testMutation]
+  )
 
-  const handleDeleteClick = useCallback((): void => {
+  const handleSavePersonal = useCallback(
+    (id: string, body: PersonalGatewayModelUpdateBody): void => {
+      updateMutation.mutate({ id, body })
+    },
+    [updateMutation]
+  )
+
+  const handleResyncCapabilities = useCallback(
+    (id: string): void => {
+      updateMutation.mutate({ id, body: { resync_capabilities: true } })
+    },
+    [updateMutation]
+  )
+
+  const handleToggleEnabled = useCallback(
+    (id: string, enabled: boolean): void => {
+      updateMutation.mutate({ id, body: { is_active: enabled } })
+    },
+    [updateMutation]
+  )
+
+  const handleDelete = useCallback((_id: string): void => {
     setDeleteOpen(true)
   }, [])
 
   const handleConfirmDelete = useCallback((): void => {
-    if (!model) return
     setDeleteOpen(false)
-    deleteMutation.mutate(model.id)
-  }, [model, deleteMutation])
+    deleteMutation.mutate(modelId)
+  }, [modelId, deleteMutation])
+
+  const isResyncing =
+    updateMutation.isPending && updateMutation.variables.body.resync_capabilities === true
+  const isSaving = updateMutation.isPending && !isResyncing
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center gap-2 py-16 text-sm text-muted-foreground">
-        <Loader2 className="h-4 w-4 animate-spin" />
-        加载模型…
-      </div>
-    )
+    return <ModelDetailLoadingState />
   }
 
-  if (!model) {
-    return (
-      <p className="py-12 text-center text-sm text-muted-foreground">
-        未找到该模型，可能已被删除。
-      </p>
-    )
+  if (!model || !inspectorModel || !personalContext) {
+    return <ModelDetailNotFoundState />
   }
-
-  const providerName = MODEL_PROVIDERS.find((p) => p.id === model.provider)?.name ?? model.provider
 
   return (
-    <div className="space-y-6 rounded-lg border bg-card p-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0 space-y-2">
-          <div className="flex flex-wrap items-center gap-2">
-            <h3 className="text-xl font-semibold">{model.display_name}</h3>
-            <ModelStatusBadge
-              status={model.last_test_status}
-              testedAt={model.last_tested_at}
-              reason={model.last_test_reason}
-              entitlementStatus={model.entitlement_status}
-              entitlementResetAt={model.entitlement_reset_at}
-            />
-            {!model.is_active ? (
-              <Badge variant="outline" className="text-amber-600">
-                已禁用
-              </Badge>
-            ) : null}
-          </div>
-          <p className="font-mono text-sm text-muted-foreground">
-            <span className="font-sans text-muted-foreground/80">注册别名 </span>
-            {model.name}
-          </p>
-        </div>
-        <div className="flex shrink-0 flex-wrap gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleTest}
-            disabled={testMutation.isPending}
-          >
-            {testMutation.isPending ? (
-              <Loader2 className="mr-1 h-4 w-4 animate-spin" />
-            ) : (
-              <Zap className="mr-1 h-4 w-4" />
-            )}
-            测试连接
-          </Button>
-          <Button variant="outline" size="sm" asChild>
-            <Link to={personalModelEditHref(teamId, model.id)}>
-              <Pencil className="mr-1 h-4 w-4" />
-              编辑
-            </Link>
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            className="text-destructive"
-            onClick={handleDeleteClick}
-            disabled={deleteMutation.isPending}
-          >
-            <Trash2 className="mr-1 h-4 w-4" />
-            删除
-          </Button>
-        </div>
-      </div>
+    <>
+      <ModelInspector
+        scope="personal"
+        personalContext={personalContext}
+        model={inspectorModel}
+        credentials={credentials}
+        routes={[]}
+        usageDays={usageDays}
+        usageRow={usageByRouteName.get(model.name)}
+        usageLoading={usageLoading}
+        isTesting={testMutation.isPending}
+        isSaving={isSaving}
+        isResyncing={isResyncing}
+        isDeleting={deleteMutation.isPending}
+        onTest={handleTest}
+        onSavePersonal={handleSavePersonal}
+        onResyncCapabilities={handleResyncCapabilities}
+        onToggleEnabled={handleToggleEnabled}
+        onDelete={handleDelete}
+      />
 
-      <dl className="grid gap-4 sm:grid-cols-2">
-        <div>
-          <dt className="text-xs font-medium text-muted-foreground">提供商</dt>
-          <dd className="mt-0.5 text-sm">{providerName}</dd>
-        </div>
-        <div>
-          <dt className="text-xs font-medium text-muted-foreground">上游模型 ID</dt>
-          <dd className="mt-0.5 font-mono text-sm">{model.model_id}</dd>
-        </div>
-        <div>
-          <dt className="text-xs font-medium text-muted-foreground">能力类型</dt>
-          <dd className="mt-1 flex flex-wrap gap-1">
-            {model.model_types.map((t) => (
-              <Badge key={t} variant="secondary" className="text-xs">
-                {MODEL_TYPE_LABELS[t]}
-              </Badge>
-            ))}
-          </dd>
-        </div>
-        <div>
-          <dt className="text-xs font-medium text-muted-foreground">凭据 ID</dt>
-          <dd className="mt-0.5 font-mono text-xs text-muted-foreground">{model.credential_id}</dd>
-        </div>
-      </dl>
-
-      {model.last_test_status === 'failed' && model.last_test_reason ? (
-        <div className="rounded-md border border-destructive/30 bg-destructive/5 p-4">
-          <p className="text-xs font-medium text-destructive">最近测试失败</p>
-          <p className="mt-2 whitespace-pre-wrap text-sm text-destructive/90 [overflow-wrap:anywhere]">
-            {model.last_test_reason}
-          </p>
-        </div>
-      ) : null}
-
-      {currentUser?.id ? (
-        <BudgetUsageCard
-          teamId={teamId}
-          context={{
-            kind: 'personal',
-            userId: currentUser.id,
-            modelNames: [model.model_id],
-          }}
-        />
-      ) : null}
-
-      <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>删除个人模型</AlertDialogTitle>
-            <AlertDialogDescription>
-              {`确定删除「${model.display_name}」？将同步清理相关授权与预算行。此操作不可撤销。`}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={deleteMutation.isPending}>取消</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              disabled={deleteMutation.isPending}
-              onClick={handleConfirmDelete}
-            >
-              {deleteMutation.isPending ? '删除中…' : '确认删除'}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </div>
+      <GatewayModelDeleteConfirmDialog
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
+        displayLabel={model.display_name}
+        scope="personal"
+        pending={deleteMutation.isPending}
+        onConfirm={handleConfirmDelete}
+      />
+    </>
   )
 }

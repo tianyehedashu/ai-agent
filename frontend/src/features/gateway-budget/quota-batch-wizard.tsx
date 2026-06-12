@@ -38,6 +38,12 @@ import { BudgetModelCombobox } from './budget-model-combobox'
 import { QUOTA_TEMPLATES, applyQuotaTemplate } from './quota-batch-templates'
 import { LAYER_LABELS } from './quota-rule-utils'
 import {
+  applyQuotaWindowPreset,
+  QUOTA_WINDOW_PRESETS,
+  resolveQuotaWindowPreset,
+  type QuotaWindowPresetValue,
+} from './quota-window-presets'
+import {
   patchQuotaBatchFormForLayer,
   patchQuotaBatchFormForSubjectMode,
   type QuotaBatchFormValues,
@@ -73,6 +79,7 @@ export interface QuotaBatchWizardProps {
   metaLoading?: boolean
   modelOptions: BudgetModelOption[]
   modelsLoading?: boolean
+  modelOptionMetaLabel?: (option: BudgetModelOption) => string
   onModelPickerOpenChange?: (open: boolean) => void
   /** 编辑模式：锁定维度字段不可改，标题显示「编辑配额」 */
   editingRuleId?: string | null
@@ -719,14 +726,6 @@ function StepTarget({
 /*  Step 2: 设置限额                                                    */
 /* ------------------------------------------------------------------ */
 
-/** 时间窗口预设选项 */
-const WINDOW_PRESETS = [
-  { value: '0', label: '套餐周期' },
-  { value: '86400', label: '每日（86400s）' },
-  { value: '2592000', label: '每月（2592000s）' },
-  { value: 'custom', label: '自定义秒数' },
-] as const
-
 function StepLimits({
   values,
   onChange,
@@ -734,30 +733,23 @@ function StepLimits({
   mode,
   modelOptions,
   modelsLoading,
+  modelOptionMetaLabel,
   onModelPickerOpenChange,
   editingRuleId,
 }: QuotaBatchWizardProps): React.JSX.Element {
   const isEditing = !!editingRuleId
   const isMember = mode === 'member'
   const isNonPlatform = values.layer !== 'platform' && !isMember
+  const isUpstream = values.layer === 'upstream'
 
   // 判断当前时间窗口值是否匹配预设
   const windowPresetValue = useMemo(() => {
     if (!isNonPlatform) return '0'
-    const v = values.windowSeconds.trim()
-    if (v === '0') return '0'
-    if (v === '86400') return '86400'
-    if (v === '2592000') return '2592000'
-    return 'custom'
+    return resolveQuotaWindowPreset(values.windowSeconds)
   }, [isNonPlatform, values.windowSeconds])
 
-  const handleWindowPresetChange = (preset: string): void => {
-    if (preset === 'custom') {
-      // 保留当前自定义值或清空让用户填写
-      onChange({ ...values, windowSeconds: values.windowSeconds || '' })
-    } else {
-      onChange({ ...values, windowSeconds: preset })
-    }
+  const handleWindowPresetChange = (preset: QuotaWindowPresetValue): void => {
+    onChange({ ...values, windowSeconds: applyQuotaWindowPreset(preset, values.windowSeconds) })
   }
 
   return (
@@ -765,6 +757,11 @@ function StepLimits({
       {/* 模型选择 */}
       <div className="space-y-2">
         <Label>模型范围</Label>
+        {isUpstream ? (
+          <p className="text-xs text-muted-foreground">
+            上游配额按凭据上的 upstream 模型（real_model）计；仅展示步骤 1 所选凭据已注册的模型。
+          </p>
+        ) : null}
         <div className="flex items-center gap-3">
           <label className="flex cursor-pointer items-center gap-2 text-sm">
             <Checkbox
@@ -792,6 +789,7 @@ function StepLimits({
                   disabled={disabled}
                   loading={modelsLoading}
                   placeholder="添加模型…"
+                  getOptionMetaLabel={modelOptionMetaLabel}
                   onPopoverOpenChange={onModelPickerOpenChange}
                 />
               </div>
@@ -816,7 +814,11 @@ function StepLimits({
               disabled={disabled}
             />
             {values.modelNames.length === 0 ? (
-              <p className="text-xs text-amber-600">请至少选择一个模型，或勾选"全模型"。</p>
+              <p className="text-xs text-amber-600">
+                {isUpstream
+                  ? '请至少选择一个 upstream 模型，或勾选「全模型」。若列表为空，请确认步骤 1 已选凭据且已注册模型。'
+                  : '请至少选择一个模型，或勾选「全模型」。'}
+              </p>
             ) : null}
           </div>
         ) : null}
@@ -857,7 +859,7 @@ function StepLimits({
                 <SelectValue placeholder="选择时间窗口" />
               </SelectTrigger>
               <SelectContent>
-                {WINDOW_PRESETS.map((p) => (
+                {QUOTA_WINDOW_PRESETS.map((p) => (
                   <SelectItem key={p.value} value={p.value}>
                     {p.label}
                   </SelectItem>

@@ -12,20 +12,22 @@ import {
   canLinkToCredentialDetail,
   credentialSummaryLabel,
 } from '@/features/gateway-credentials/credential-summary-display'
-import { useGatewayCredentialDirectory } from '@/features/gateway-credentials/use-credential-directory'
-import { parseModelsPageView, parseModelsScopeTab } from '@/features/gateway-models/constants'
+import {
+  invalidateCredentialSummariesCache,
+  useGatewayCredentialDirectory,
+} from '@/features/gateway-credentials/use-credential-directory'
+import { parseModelsScopeTab } from '@/features/gateway-models/constants'
 import { useGatewayModelLabel } from '@/features/gateway-models/hooks/use-gateway-model-label'
 import { usePersonalModelLabel } from '@/features/gateway-models/hooks/use-personal-model-label'
 import {
   credentialDetailHref,
-  credentialsTeamListHref,
+  credentialsListHref,
   personalModelsIndexHref,
   systemModelsFilteredHref,
   teamModelsFilteredHref,
   teamModelsIndexHref,
 } from '@/features/gateway-models/paths'
-import { preloadPersonalModelsWorkspace } from '@/features/gateway-models/personal/personal-model-preload'
-import { preloadTeamModelsWorkspace } from '@/features/gateway-models/team/preloads'
+import { preloadUnifiedModelsWorkspace } from '@/features/gateway-models/unified/unified-models-preload'
 import { GatewayRefreshButton } from '@/features/gateway-shared/gateway-refresh-button'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
@@ -45,12 +47,6 @@ const PersonalModelDetailPane = lazyWithReload(() =>
   }))
 )
 
-const PersonalModelEditPane = lazyWithReload(() =>
-  import('@/features/gateway-models/personal/personal-model-edit-pane').then((m) => ({
-    default: m.PersonalModelEditPane,
-  }))
-)
-
 const paneSuspenseFallback = (
   <div className="flex items-center justify-center gap-2 py-16 text-sm text-muted-foreground">
     <Loader2 className="h-4 w-4 animate-spin" />
@@ -66,11 +62,9 @@ export default function GatewayModelDetailPage(): React.JSX.Element {
   const { canWrite, isPlatformAdmin } = useGatewayPermission()
   const viewerUserId = useCurrentUser()?.id ?? null
   const scopeTab = parseModelsScopeTab(searchParams.get('tab'))
-  const pageView = parseModelsPageView(searchParams.get('view'))
   const credentialId = searchParams.get('credentialId') ?? ''
   const isPersonal = scopeTab === 'personal'
   const isSystem = scopeTab === 'system' && isPlatformAdmin
-  const isEdit = isPersonal && pageView === 'edit'
   const { byId: credentialSummariesById } = useGatewayCredentialDirectory()
   const credentialSummary =
     !isPersonal && credentialId.length > 0 ? credentialSummariesById.get(credentialId) : undefined
@@ -90,12 +84,10 @@ export default function GatewayModelDetailPage(): React.JSX.Element {
     queryKey: isPersonal ? ['gateway', 'my-models', id] : ['gateway', 'models', teamId, id],
   })
   const handleRefresh = useCallback((): void => {
-    void Promise.all([
-      queryClient.invalidateQueries({
-        queryKey: isPersonal ? ['gateway', 'my-models', id] : ['gateway', 'models', teamId, id],
-      }),
-      queryClient.invalidateQueries({ queryKey: ['gateway', 'credential-summaries', teamId] }),
-    ])
+    void queryClient.invalidateQueries({
+      queryKey: isPersonal ? ['gateway', 'my-models', id] : ['gateway', 'models', teamId, id],
+    })
+    invalidateCredentialSummariesCache(queryClient)
   }, [id, isPersonal, queryClient, teamId])
 
   const backHref = isPersonal
@@ -113,7 +105,7 @@ export default function GatewayModelDetailPage(): React.JSX.Element {
         ? '全部系统模型'
         : '全部模型'
 
-  const listPreload = isPersonal ? preloadPersonalModelsWorkspace : preloadTeamModelsWorkspace
+  const listPreload = preloadUnifiedModelsWorkspace
 
   return (
     <div className="space-y-4">
@@ -129,11 +121,11 @@ export default function GatewayModelDetailPage(): React.JSX.Element {
               个人模型
             </Link>
             <ChevronRight className="h-4 w-4 shrink-0" aria-hidden />
-            <span className="font-medium text-foreground">{isEdit ? '编辑' : modelLabel}</span>
+            <span className="font-medium text-foreground">{modelLabel}</span>
           </>
         ) : credentialId.length > 0 ? (
           <>
-            <Link to={credentialsTeamListHref(teamId)} className="hover:text-foreground">
+            <Link to={credentialsListHref(teamId)} className="hover:text-foreground">
               凭据管理
             </Link>
             <ChevronRight className="h-4 w-4 shrink-0" aria-hidden />
@@ -190,8 +182,8 @@ export default function GatewayModelDetailPage(): React.JSX.Element {
                   ? systemModelsFilteredHref(teamId, credentialId)
                   : teamModelsFilteredHref(teamId, credentialId)
               }
-              onMouseEnter={preloadTeamModelsWorkspace}
-              onFocus={preloadTeamModelsWorkspace}
+              onMouseEnter={preloadUnifiedModelsWorkspace}
+              onFocus={preloadUnifiedModelsWorkspace}
             >
               此凭据下全部模型
             </Link>
@@ -200,21 +192,13 @@ export default function GatewayModelDetailPage(): React.JSX.Element {
       </div>
 
       <div>
-        <h2 className="text-2xl font-semibold tracking-tight">
-          {isEdit ? '编辑模型' : '模型详情'}
-        </h2>
-        {!isEdit ? (
-          <p className="mt-1 font-mono text-sm text-muted-foreground">{modelLabel}</p>
-        ) : null}
+        <h2 className="text-2xl font-semibold tracking-tight">模型详情</h2>
+        <p className="mt-1 font-mono text-sm text-muted-foreground">{modelLabel}</p>
       </div>
 
       <Suspense fallback={paneSuspenseFallback}>
         {isPersonal ? (
-          isEdit ? (
-            <PersonalModelEditPane modelId={id} />
-          ) : (
-            <PersonalModelDetailPane modelId={id} />
-          )
+          <PersonalModelDetailPane modelId={id} />
         ) : (
           <TeamModelDetailPane modelId={id} />
         )}
