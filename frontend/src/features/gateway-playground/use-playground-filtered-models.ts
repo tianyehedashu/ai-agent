@@ -14,6 +14,7 @@ import {
   playgroundTeamModelsQueryKey,
   resolvePlaygroundTeamRegistryScope,
 } from '@/features/gateway-models/utils'
+import { useGatewayTeamRecord } from '@/hooks/use-gateway-team-id'
 import { MAX_PAGE_SIZE } from '@/lib/pagination'
 
 import {
@@ -25,6 +26,7 @@ import {
   type PlaygroundCredentialOption,
 } from './playground-credential-options'
 import { buildPlaygroundCandidateModels } from './playground-model-sources'
+import { isPersonalGatewayTeam, resolvePlaygroundProxyTeamId } from './playground-proxy-team'
 import {
   filterPlaygroundManagedTeamModels,
   shouldQueryManagedTeamModelsForPlayground,
@@ -36,13 +38,19 @@ export interface UsePlaygroundFilteredModelsOptions {
   credentialId?: string
   /** Playground 需要路由列表；Guide 示例区仅需模型候选 */
   includeRoutes?: boolean
+  /** 已选虚拟 Key 的 team_id；与后端 Bearer 鉴权团队对齐，避免模型列表与 Key 不一致 */
+  proxyTeamId?: string | null
 }
 
 export interface UsePlaygroundFilteredModelsResult {
   /** Playground 工作区 teamId（personal team，不跟随侧栏） */
   workspaceTeamId: string | null
-  /** 当前凭据/模型/Key 请求实际使用的 teamId */
+  /** 凭据筛选推导的团队（未选 Key 时用于拉模型） */
   contextTeamId: string | null
+  /** 代理实际解析团队（Key 优先） */
+  proxyTeamId: string | null
+  /** proxyTeamId 是否为个人工作区（下拉分组用） */
+  isPersonalProxyTeam: boolean
   credentialId: string
   credentialById: Map<string, PlaygroundCredentialOption>
   credentialsLoading: boolean
@@ -76,6 +84,7 @@ export function usePlaygroundFilteredModels(
 ): UsePlaygroundFilteredModelsResult {
   const credentialId = options.credentialId ?? ''
   const fetchRoutes = options.includeRoutes ?? false
+  const selectedKeyTeamId = options.proxyTeamId ?? null
 
   const queryClient = useQueryClient()
   const [modelPickerOpen, setModelPickerOpen] = useState(false)
@@ -95,7 +104,20 @@ export function usePlaygroundFilteredModels(
     [credentialId, credentialById, workspaceTeamId]
   )
 
+  const proxyTeamId = useMemo(
+    () =>
+      resolvePlaygroundProxyTeamId(
+        selectedKeyTeamId ? { team_id: selectedKeyTeamId } : null,
+        credentialId,
+        credentialById,
+        workspaceTeamId
+      ),
+    [selectedKeyTeamId, credentialId, credentialById, workspaceTeamId]
+  )
+
   const isPersonalCredential = isPersonalPlaygroundCredential(credentialById, credentialId)
+  const proxyTeam = useGatewayTeamRecord(proxyTeamId)
+  const isPersonalProxyTeam = isPersonalGatewayTeam(proxyTeam)
   const teamCredentialFilter = credentialId && !isPersonalCredential ? credentialId : ''
   const teamRegistryScope = resolvePlaygroundTeamRegistryScope(teamCredentialFilter)
   const useManagedTeamModelsQuery = shouldQueryManagedTeamModelsForPlayground(
@@ -103,11 +125,11 @@ export function usePlaygroundFilteredModels(
     isPersonalCredential
   )
   const includeTeamModels =
-    useManagedTeamModelsQuery ||
-    (Boolean(contextTeamId) && (!credentialId || !isPersonalCredential))
-  const includeMyModels = !credentialId || isPersonalCredential
+    useManagedTeamModelsQuery || (Boolean(proxyTeamId) && (!credentialId || !isPersonalCredential))
+  const includeMyModels =
+    (!credentialId || isPersonalCredential) && (!selectedKeyTeamId || isPersonalProxyTeam)
   const includeRoutes =
-    fetchRoutes && Boolean(contextTeamId) && !(credentialId && isPersonalCredential)
+    fetchRoutes && Boolean(proxyTeamId) && !(credentialId && isPersonalCredential)
 
   const teamModelsQuery = useInfiniteQuery({
     queryKey: useManagedTeamModelsQuery
@@ -115,11 +137,11 @@ export function usePlaygroundFilteredModels(
           ...MANAGED_TEAM_MODELS_QUERY_KEY,
           'playground',
           teamCredentialFilter,
-          contextTeamId ?? '',
+          proxyTeamId ?? '',
           'infinite',
         ]
-      : contextTeamId
-        ? [...playgroundTeamModelsQueryKey(contextTeamId, teamCredentialFilter), 'infinite']
+      : proxyTeamId
+        ? [...playgroundTeamModelsQueryKey(proxyTeamId, teamCredentialFilter), 'infinite']
         : ['gateway', 'models', 'requestable', 'none'],
     queryFn: ({ pageParam }) => {
       if (useManagedTeamModelsQuery) {
@@ -129,8 +151,8 @@ export function usePlaygroundFilteredModels(
           page_size: MAX_PAGE_SIZE,
         })
       }
-      if (!contextTeamId) return Promise.reject(new Error('未选择团队'))
-      return gatewayApi.listModels(contextTeamId, {
+      if (!proxyTeamId) return Promise.reject(new Error('未选择团队'))
+      return gatewayApi.listModels(proxyTeamId, {
         registry_scope: teamRegistryScope,
         page: pageParam,
         page_size: MAX_PAGE_SIZE,
@@ -155,10 +177,10 @@ export function usePlaygroundFilteredModels(
   const [routesQuery] = useQueries({
     queries: [
       {
-        queryKey: ['gateway', 'routes', contextTeamId, credentialId],
+        queryKey: ['gateway', 'routes', proxyTeamId, credentialId],
         queryFn: () => {
-          if (!contextTeamId) return Promise.reject(new Error('未选择团队'))
-          return gatewayApi.listRoutes(contextTeamId)
+          if (!proxyTeamId) return Promise.reject(new Error('未选择团队'))
+          return gatewayApi.listRoutes(proxyTeamId)
         },
         enabled: includeRoutes,
         staleTime: GATEWAY_MODELS_STALE_MS,
@@ -191,8 +213,8 @@ export function usePlaygroundFilteredModels(
   const teamModels = useMemo(() => {
     const items = teamData?.pages.flatMap((page) => page.items) ?? []
     if (!useManagedTeamModelsQuery) return items
-    return filterPlaygroundManagedTeamModels(items, contextTeamId)
-  }, [teamData, useManagedTeamModelsQuery, contextTeamId])
+    return filterPlaygroundManagedTeamModels(items, proxyTeamId)
+  }, [teamData, useManagedTeamModelsQuery, proxyTeamId])
   const myModels = useMemo(() => myData?.pages.flatMap((page) => page.items) ?? [], [myData])
 
   const shouldLoadMoreTeam = includeTeamModels && teamHasNextPage && !isFetchingNextTeamPage
@@ -297,6 +319,8 @@ export function usePlaygroundFilteredModels(
   return {
     workspaceTeamId,
     contextTeamId,
+    proxyTeamId,
+    isPersonalProxyTeam,
     credentialId,
     credentialById,
     credentialsLoading,
