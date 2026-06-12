@@ -435,48 +435,17 @@ function useQuotaCenterImpl(): QuotaCenterState {
   const credentialOptions = useMemo(() => {
     const raw = credsQuery.data ?? []
     if (mode === 'member') {
-      // 成员自助：展示「本人创建的团队凭据」+「无明确创建者的团队凭据」（legacy）+「个人 BYOK 凭据」+「可见的系统凭据」
-      const result: {
-        id: string
-        label: string
-        provider: string
-        scope: string | null
-        isLegacy?: boolean
-      }[] = []
-      for (const c of raw) {
-        // 个人凭据（scope='user'）直接显示
-        if (c.scope === 'user') {
-          result.push({
-            id: c.id,
-            label: c.name,
-            provider: c.provider,
-            scope: c.scope,
-          })
-        }
-        // 系统凭据（scope='system'）直接显示（后端已做可见性过滤）
-        else if (c.scope === 'system') {
-          result.push({
-            id: c.id,
-            label: c.name,
-            provider: c.provider,
-            scope: c.scope,
-          })
-        }
-        // 团队凭据：本人创建的或无明确创建者的（legacy，包括 undefined 和 null）
-        else if (selfUserId !== null) {
-          const creatorId = c.created_by_user_id
-          if (creatorId === selfUserId || creatorId === null || creatorId === undefined) {
-            result.push({
-              id: c.id,
-              label: c.name,
-              provider: c.provider,
-              scope: c.scope,
-              isLegacy: creatorId === null || creatorId === undefined,
-            })
-          }
-        }
-      }
-      return result
+      // 成员自助：展示所有可见凭据（后端已按 ACL 过滤）
+      // 个人 BYOK + 团队凭据（含他人创建的）+ 系统凭据
+      return raw.map((c) => ({
+        id: c.id,
+        label: c.name,
+        provider: c.provider,
+        scope: c.scope,
+        isLegacy:
+          c.scope === 'team' &&
+          (c.created_by_user_id === null || c.created_by_user_id === undefined),
+      }))
     }
     return raw.map((c) => ({
       id: c.id,
@@ -485,7 +454,7 @@ function useQuotaCenterImpl(): QuotaCenterState {
       scope: c.scope,
       isLegacy: c.created_by_user_id === null || c.created_by_user_id === undefined,
     }))
-  }, [credsQuery.data, mode, selfUserId])
+  }, [credsQuery.data, mode])
 
   const credentialIds = useMemo(() => credentialOptions.map((c) => c.id), [credentialOptions])
 
