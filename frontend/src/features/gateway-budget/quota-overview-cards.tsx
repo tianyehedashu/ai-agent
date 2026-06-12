@@ -69,9 +69,10 @@ export function QuotaOverviewCards({
     layerCounts[rule.key.layer]++
 
     if (rule.usage) {
-      totalUsd += rule.usage.current_usd
-      totalTokens += rule.usage.current_tokens
-      totalRequests += rule.usage.current_requests
+      totalUsd += typeof rule.usage.current_usd === 'number' ? rule.usage.current_usd : 0
+      totalTokens += typeof rule.usage.current_tokens === 'number' ? rule.usage.current_tokens : 0
+      totalRequests +=
+        typeof rule.usage.current_requests === 'number' ? rule.usage.current_requests : 0
 
       const { ratio } = computeQuotaRuleUsageRatio(rule)
       if (ratio >= 1) dangerCount++
