@@ -435,7 +435,7 @@ function useQuotaCenterImpl(): QuotaCenterState {
   const credentialOptions = useMemo(() => {
     const raw = credsQuery.data ?? []
     if (mode === 'member') {
-      // 成员自助：展示「本人创建的团队凭据」+「无明确创建者的团队凭据」（legacy 凭据）+「个人 BYOK 凭据」
+      // 成员自助：展示「本人创建的团队凭据」+「无明确创建者的团队凭据」（legacy）+「个人 BYOK 凭据」+「可见的系统凭据」
       const result: {
         id: string
         label: string
@@ -446,6 +446,15 @@ function useQuotaCenterImpl(): QuotaCenterState {
       for (const c of raw) {
         // 个人凭据（scope='user'）直接显示
         if (c.scope === 'user') {
+          result.push({
+            id: c.id,
+            label: c.name,
+            provider: c.provider,
+            scope: c.scope,
+          })
+        }
+        // 系统凭据（scope='system'）直接显示（后端已做可见性过滤）
+        else if (c.scope === 'system') {
           result.push({
             id: c.id,
             label: c.name,
