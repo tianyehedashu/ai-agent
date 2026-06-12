@@ -17,7 +17,10 @@ export type CredentialLinkScope = Pick<
 
 export function isLegacySharedTeamCredential(cred: CredentialOwnerFields): boolean {
   return (
-    cred.scope === 'team' && (cred.created_by_user_id === null || cred.created_by_user_id === '')
+    cred.scope === 'team' &&
+    (cred.created_by_user_id === null ||
+      cred.created_by_user_id === undefined ||
+      cred.created_by_user_id === '')
   )
 }
 
@@ -25,11 +28,13 @@ export function actorOwnsTeamCredential(
   cred: CredentialOwnerFields,
   viewerUserId: string | null | undefined
 ): boolean {
+  const creatorId = cred.created_by_user_id ?? null
   return (
     cred.scope === 'team' &&
     viewerUserId !== null &&
     viewerUserId !== undefined &&
-    cred.created_by_user_id === viewerUserId
+    creatorId !== null &&
+    creatorId === viewerUserId
   )
 }
 
