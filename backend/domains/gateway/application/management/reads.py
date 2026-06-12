@@ -272,8 +272,18 @@ class GatewayManagementReadService(GatewayUsageLogReadMixin):
         is_platform_admin: bool = False,
     ) -> list[CredentialReadModel]:
         """团队内全部 team 凭据摘要 + ACL 过滤后的 system（无密钥；模型绑定下拉用）。"""
+        out: list[CredentialReadModel] = []
+        
+        # 团队凭据
         rows = await self._creds.list_for_tenant(team_id)
-        out = [credential_from_orm(c) for c in rows]
+        out.extend(credential_from_orm(c) for c in rows)
+        
+        # 个人凭据（BYOK）
+        if user_id is not None:
+            user_rows = await self._creds.list_for_user(user_id)
+            out.extend(credential_from_orm(c) for c in user_rows)
+        
+        # 系统凭据
         system_rows = await self._system_creds.list_all()
         visible_system = await filter_visible_system_provider_credentials(
             self._session,
@@ -283,6 +293,7 @@ class GatewayManagementReadService(GatewayUsageLogReadMixin):
             is_platform_admin=is_platform_admin,
         )
         out.extend(system_credential_from_orm(c) for c in visible_system)
+        
         return out
 
     async def _visible_credential_ids_for_team(
