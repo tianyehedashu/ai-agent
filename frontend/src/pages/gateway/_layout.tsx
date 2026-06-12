@@ -28,18 +28,14 @@ import {
 } from '@/lib/lucide-icons'
 import { cn } from '@/lib/utils'
 
-type GatewayNavMatch =
-  | 'credentials-default'
-  | 'credentials-system'
-  | 'models-default'
-  | 'models-system'
+type GatewayNavMatch = 'credentials-default' | 'credentials-system'
 
 type NavItem = {
   to: string
   label: string
   icon: ComponentType<{ className?: string }>
   end?: boolean
-  /** 与带 `?tab=system` 的入口区分高亮 */
+  /** 与带 legacy `?tab=system` 的入口区分高亮（凭据） */
   navMatch?: GatewayNavMatch
 }
 
@@ -54,10 +50,6 @@ function isGatewayNavActive(pathname: string, search: string, navMatch: GatewayN
       return /\/credentials(?:\/|$)/.test(pathname) && tab === 'system'
     case 'credentials-default':
       return /\/credentials(?:\/|$)/.test(pathname) && tab !== 'system'
-    case 'models-system':
-      return /\/models(?:\/|$)/.test(pathname) && tab === 'system'
-    case 'models-default':
-      return /\/models(?:\/|$)/.test(pathname) && tab !== 'system'
   }
 }
 
@@ -128,13 +120,13 @@ export default function GatewayLayout(): React.JSX.Element {
         to: gatewayTeamNavHref(teamId, 'credentials'),
         label: '凭据',
         icon: Database,
-        navMatch: 'credentials-default',
+        end: true,
       },
       {
         to: gatewayTeamNavHref(teamId, 'models'),
         label: '模型',
         icon: Network,
-        navMatch: 'models-default',
+        end: true,
       },
       { to: gatewayTeamNavHref(teamId, 'pricing'), label: '定价目录', icon: CircleDollarSign },
       { to: gatewayTeamNavHref(teamId, 'routes'), label: '虚拟路由', icon: Route, end: true },
@@ -149,18 +141,6 @@ export default function GatewayLayout(): React.JSX.Element {
     ]
     if (isPlatformAdmin) {
       base.push(
-        {
-          to: gatewayTeamNavHref(teamId, 'credentials', 'tab=system'),
-          label: '系统凭据',
-          icon: Database,
-          navMatch: 'credentials-system',
-        },
-        {
-          to: gatewayTeamNavHref(teamId, 'models', 'tab=system'),
-          label: '系统模型',
-          icon: Network,
-          navMatch: 'models-system',
-        },
         { to: '/gateway/platform-stats', label: '平台统计', icon: LineChart, end: true },
         { to: '/admin/users', label: '用户管理', icon: UserCog, end: true }
       )

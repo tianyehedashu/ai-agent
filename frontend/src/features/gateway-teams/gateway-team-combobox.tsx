@@ -56,6 +56,8 @@ export interface GatewayTeamComboboxProps {
   /** 列表首项「全部团队」；value 为 GATEWAY_FILTER_ALL */
   allowAll?: boolean
   allLabel?: string
+  /** 选中 allowAll 项时触发器仍显示 placeholder（避免与外层「团队」scope 等重复） */
+  allSelectedShowsPlaceholder?: boolean
   /** 团队数超过该值时显示搜索框 */
   searchThreshold?: number
 }
@@ -73,6 +75,7 @@ export function GatewayTeamCombobox({
   labelForTeam,
   allowAll = false,
   allLabel = '全部团队',
+  allSelectedShowsPlaceholder = false,
   searchThreshold = 8,
 }: Readonly<GatewayTeamComboboxProps>): React.JSX.Element {
   const { isPlatformAdmin } = useGatewayPermission()
@@ -90,7 +93,13 @@ export function GatewayTeamCombobox({
   )
 
   const isAll = allowAll && value === GATEWAY_FILTER_ALL
-  const triggerLabel = isAll ? allLabel : selectedTeam ? resolveLabel(selectedTeam) : placeholder
+  const triggerLabel = isAll
+    ? allSelectedShowsPlaceholder
+      ? placeholder
+      : allLabel
+    : selectedTeam
+      ? resolveLabel(selectedTeam)
+      : placeholder
 
   const filteredTeams = useMemo(() => {
     const q = search.trim().toLowerCase()

@@ -19,6 +19,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { usePlaygroundCredentialOptions } from '@/features/gateway-playground/playground-credential-options'
 import { resolvePlaygroundVirtualKeyTeamIds } from '@/features/gateway-playground/playground-credential-summaries'
 import {
   ensurePlaygroundSelectionModelLoaded,
@@ -182,22 +183,9 @@ export default function GatewayGuidePage(): React.JSX.Element {
     [navState?.vkeyPlain, preferKeyId]
   )
 
-  const playgroundFilteredModels = usePlaygroundFilteredModels({
-    credentialId,
-    includeRoutes: true,
-  })
-  const {
-    credentialById,
-    credentialsLoading,
-    candidateModels: guideModelCandidates,
-    routes: guideRoutes,
-    ensureModelNameLoaded,
-    isRefreshing: playgroundModelsRefreshing,
-    refreshAll: refreshPlaygroundModels,
-  } = playgroundFilteredModels
-
   const workspaceTeamId = useGatewayWorkspaceTeamId()
   const membershipTeamIds = useGatewayMembershipTeamIds()
+  const { byId: credentialById } = usePlaygroundCredentialOptions()
   const vkeyTeamIds = useMemo(
     () =>
       resolvePlaygroundVirtualKeyTeamIds(
@@ -213,6 +201,20 @@ export default function GatewayGuidePage(): React.JSX.Element {
     bootstrap: vkeyBootstrap,
     teamIds: vkeyTeamIds,
   })
+
+  const playgroundFilteredModels = usePlaygroundFilteredModels({
+    credentialId,
+    includeRoutes: true,
+    proxyTeamId: virtualKey.selectedKey?.team_id ?? null,
+  })
+  const {
+    credentialsLoading,
+    candidateModels: guideModelCandidates,
+    routes: guideRoutes,
+    ensureModelNameLoaded,
+    isRefreshing: playgroundModelsRefreshing,
+    refreshAll: refreshPlaygroundModels,
+  } = playgroundFilteredModels
   const { plain: revealedKey, isRevealing } = virtualKey
   const [gatewayV1Base] = useState(resolveGatewayV1BaseUrl)
   const [activeModel, setActiveModel] = useState<string>(PLACEHOLDER_MODEL)

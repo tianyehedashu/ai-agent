@@ -38,6 +38,6 @@ kubectl -n $NS cp /tmp/patch-nacos-sso-callback.sh "$GW_POD:/tmp/patch-nacos-sso
 kubectl -n $NS exec "$GW_POD" -- sh /tmp/patch-nacos-sso-callback.sh
 
 echo "==> 6. Verify binding redirect contains /ai-agent/sso-callback"
-curl -sf "http://gateway.giimallai.com/api/auth/binding/company_sso?tenantId=000000&domain=admin&callbackOrigin=http://gateway.giimallai.com/ai-agent" | grep -o '/ai-agent/sso-callback' && echo " OK" || echo " WARN: callback not fixed yet"
+curl -sf "https://gateway.giimallai.com/api/auth/binding/company_sso?tenantId=000000&domain=admin&callbackOrigin=https://gateway.giimallai.com/ai-agent" | grep -o '/ai-agent/sso-callback' && echo " OK" || echo " WARN: callback not fixed yet"
 
 echo "DONE"

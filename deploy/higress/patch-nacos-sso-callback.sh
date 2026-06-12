@@ -5,7 +5,7 @@ AUTH="username=nacos&password=nacos"
 TMP="/var/lib/istio/data/giikin-auth-fix.yml"
 
 curl -sf "${NACOS}/nacos/v1/cs/configs?dataId=giikin-auth.yml&group=GIIKIN_IAM&tenant=test&${AUTH}" -o "$TMP"
-sed -i 's|^    redirect-uri: http://gateway.giimallai.com/sso-callback|    redirect-uri:|' "$TMP"
+sed -i 's|^    redirect-uri: https\?://gateway.giimallai.com/sso-callback|    redirect-uri:|' "$TMP"
 
 curl -sf -X POST "${NACOS}/nacos/v1/cs/configs" \
   --data-urlencode "dataId=giikin-auth.yml" \

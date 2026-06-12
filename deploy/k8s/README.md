@@ -159,7 +159,7 @@ kubectl -n test exec deploy/backend -- grep -n cookie_fallback /app/domains/iden
 
 # 带 guard_token 但无 Header：新镜像应 401，非 500
 curl -s -o /dev/null -w '%{http_code}\n' -b 'guard_token=invalid' \
-  http://gateway.giimallai.com/ai-agent/api/v1/auth/me
+  https://gateway.giimallai.com/ai-agent/api/v1/auth/me
 # 期望 401
 ```
 
