@@ -1036,14 +1036,14 @@ class TestGatewayManagementApi:
         assert all(m["credential_id"] == cid for m in models)
 
     @pytest.mark.asyncio
-    async def test_member_owned_team_credential_admin_cannot_reveal_but_can_delete_model(
+    async def test_member_owned_team_credential_admin_cannot_reveal_but_can_update_and_delete_model(
         self,
         dev_client: AsyncClient,
         auth_headers: dict[str, str],
         db_session,
         test_user: User,
     ) -> None:
-        """成员创建者私有凭据：admin 不可 reveal；admin 可删关联模型。"""
+        """成员创建者私有凭据：admin 不可 reveal；admin 可启停/删关联模型。"""
         member = User(
             email=f"priv_cred_{uuid.uuid4()}@example.com",
             hashed_password="hashed_password",
@@ -1127,6 +1127,22 @@ class TestGatewayManagementApi:
             },
         )
         assert r_owner_create.status_code == 404, r_owner_create.text
+
+        r_owner_disable = await dev_client.patch(
+            f"/api/v1/gateway/teams/{shared.id}/models/{mid}",
+            headers=owner_headers,
+            json={"enabled": False},
+        )
+        assert r_owner_disable.status_code == 200, r_owner_disable.text
+        assert r_owner_disable.json()["enabled"] is False
+
+        r_owner_enable = await dev_client.patch(
+            f"/api/v1/gateway/teams/{shared.id}/models/{mid}",
+            headers=owner_headers,
+            json={"enabled": True},
+        )
+        assert r_owner_enable.status_code == 200, r_owner_enable.text
+        assert r_owner_enable.json()["enabled"] is True
 
         r_owner_delete = await dev_client.delete(
             f"/api/v1/gateway/teams/{shared.id}/models/{mid}",

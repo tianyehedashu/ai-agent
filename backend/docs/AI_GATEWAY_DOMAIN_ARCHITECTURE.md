@@ -207,12 +207,12 @@ RBAC 与 `libs/db/permission_context.py`：`deps.py` 调用 **`GatewayAccessUseC
 
 **SSOT**：`domain/team_credential_access.py`（凭据读/写/reveal/probe 过滤）、`domain/policies/team_model_access.py`（模型 create/update/delete）。Presentation 层 **`CurrentTeam`（member+）** 仅保证团队成员身份；细粒度授权在 Domain/Application。**平台 admin 无旁路**（对齐 `virtual_key_access.py`）。
 
-| 资源 | 创建 | 团队 Tab 列表 | 改/删/reveal 凭据 | 基于凭据添加/改模型 | 删模型 |
-|------|------|-------------|-------------------|---------------------|--------|
-| 自己创建的 team 凭据 | member+ | 全部字段（含掩码） | 仅创建者 | 仅创建者 | 创建者 + team admin |
-| 他人 team 凭据 | — | 非敏感字段（名/通道/状态/创建者） | 不可（详情 404） | 不可 | team admin 可删关联模型 |
-| system 凭据 | 平台 admin | 平台 admin + ACL | 平台 admin | 平台 admin |
-| legacy（`created_by_user_id IS NULL`） | — | **保留旧行为**：team admin+ | team admin+ | team admin+ |
+| 资源 | 创建 | 团队 Tab 列表 | 改/删/reveal 凭据 | 基于凭据添加模型 | 改/启停模型 | 删模型 |
+|------|------|-------------|-------------------|------------------|------------|--------|
+| 自己创建的 team 凭据 | member+ | 全部字段（含掩码） | 仅创建者 | 仅创建者 | 创建者 | 创建者 + team admin |
+| 他人 team 凭据 | — | 非敏感字段（名/通道/状态/创建者） | 不可（详情 404） | 不可 | team admin/owner | team admin/owner |
+| system 凭据 | 平台 admin | 平台 admin + ACL | 平台 admin | 平台 admin | 平台 admin | 平台 admin |
+| legacy（`created_by_user_id IS NULL`） | — | **保留旧行为**：team admin+ | team admin+ | team admin+ | team admin+ | team admin+ |
 
 - **数据列**：`provider_credentials.created_by_user_id`（团队 scope 创建者；BYOK `scope=user` 不写入）。
 - **读侧（凭据管理列表）**：`list_credentials_for_team` / `GET /managed-team-credentials` 列出 membership 协作团队内**全部** team 凭据；`management_access=metadata` 时无 `api_base`/`extra`/真实掩码；`full` 仅创建者与 legacy admin+。
@@ -222,7 +222,7 @@ RBAC 与 `libs/db/permission_context.py`：`deps.py` 调用 **`GatewayAccessUseC
 - **代理面不变**：`registry_scope=callable` 仍路由到他人注册的模型；变更仅限管理面 UI/API。
 - **前端 UI 对齐（创建者私有 member-friendly）**：成员能力由 `useGatewayPermission().canContribute`（= team member+ 且非平台 viewer）驱动，与团队 admin 的 `canWrite` 区分：
   - 凭据 Tab：`canContribute` 时「新增凭据」可选 `team` scope，目标团队取 `useGatewayContributorCollaborationTeams`（membership 协作团队）；改/删/reveal 仍仅创建者（`canEditGatewayCredential`）。
-  - 模型 Tab：`effectiveCapabilities` 的行级启停/删除/批量勾选由 `canContribute` 控制，归属由 `canManageGatewayModel`/`canDeleteGatewayModel` 裁剪到自有；分组「添加模型」对 member+ 开放，注册表单仅列出本人可绑定凭据（`canBindCredentialForTeamModel`）。
+  - 模型 Tab：Toolbar/BatchBar 的可见性由当前列表是否存在可管理项（`hasManageableModels`）裁剪；行级启停/删除/批量勾选由 `canManageGatewayModel` / `canDeleteGatewayModel` 决定（团队 admin/owner 对他人凭据上的模型与 delete 对齐，可启停+删除；普通 member 仅自有）。分组「添加模型」对 member+ 开放，注册表单仅列出本人可绑定凭据（`canBindCredentialForTeamModel`）。
   - 仅 admin+（`canWrite`）：跨「当前筛选」的 `deleteAllFiltered`（会触及他人模型）、legacy 共享凭据/模型管理。
   - 平台 viewer：`canContribute=false`，全站管理面只读。
 

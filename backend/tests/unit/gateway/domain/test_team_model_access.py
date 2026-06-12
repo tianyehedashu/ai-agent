@@ -62,17 +62,16 @@ def test_admin_can_delete_member_model() -> None:
     )
 
 
-def test_admin_cannot_update_member_model() -> None:
+def test_admin_can_update_member_model() -> None:
     owner = uuid4()
     admin = uuid4()
     cred = _FakeCred(created_by_user_id=owner)
-    with pytest.raises(TeamPermissionDeniedError):
-        assert_can_update_team_model_on_credential(
-            cred,
-            actor_user_id=admin,
-            team_role=TeamRole.ADMIN.value,
-            is_platform_admin=False,
-        )
+    assert_can_update_team_model_on_credential(
+        cred,
+        actor_user_id=admin,
+        team_role=TeamRole.ADMIN.value,
+        is_platform_admin=False,
+    )
 
 
 def test_legacy_admin_can_create_and_delete() -> None:
