@@ -50,6 +50,8 @@ export interface PlaygroundModelFieldProps {
   playgroundMode: PlaygroundMode
   modelsLoading: boolean
   onOpenChange?: (open: boolean) => void
+  /** 个人/工作区分组标题；个人工作区 Key 时用「工作区模型」 */
+  personalModelsLabel?: string
 }
 
 export function PlaygroundModelField({
@@ -70,6 +72,7 @@ export function PlaygroundModelField({
   playgroundMode,
   modelsLoading,
   onOpenChange,
+  personalModelsLabel = '个人模型',
 }: Readonly<PlaygroundModelFieldProps>): React.JSX.Element {
   const handleSelectChange = (value: string): void => {
     if (value === CUSTOM_MODEL_SENTINEL) {
@@ -154,7 +157,7 @@ export function PlaygroundModelField({
             ) : null}
             {personalCandidates.length > 0 ? (
               <SelectGroup>
-                <SelectLabel>个人模型</SelectLabel>
+                <SelectLabel>{personalModelsLabel}</SelectLabel>
                 {personalCandidates.map((item) => (
                   <ModelOption
                     key={`personal-${item.name}`}

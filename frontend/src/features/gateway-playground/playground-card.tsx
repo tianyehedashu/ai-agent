@@ -52,11 +52,15 @@ import {
   filterPlaygroundRouteCandidates,
   buildModelCandidateIndex,
   PLAYGROUND_MODE_LABELS,
-  type ModelCandidate,
   type PlaygroundMode,
 } from './playground-mode-filter'
 import { PlaygroundModelField, type RouteCandidate } from './playground-model-field'
 import { PlaygroundOutputPanel } from './playground-output-panel'
+import {
+  filterPlaygroundCandidatesForVirtualKey,
+  filterPlaygroundNamesForVirtualKey,
+  splitPlaygroundModelCandidatesForDisplay,
+} from './playground-proxy-team'
 import { PlaygroundStatusBadge } from './playground-status-badge'
 import { usePlaygroundCall } from './use-playground-call'
 import { usePlaygroundImageCall } from './use-playground-image'
@@ -103,6 +107,7 @@ export function PlaygroundCard({
     credentialsEmpty,
     teamModelsLoaded,
     myModelsLoaded,
+    isPersonalProxyTeam,
     onModelPickerOpenChange,
     ensureModelNameLoaded,
   },
@@ -185,34 +190,44 @@ export function PlaygroundCard({
     setApiKey,
   })
 
-  const modeFilteredModels = useMemo(
-    () => filterModelsByMode(candidateModels, playgroundMode),
-    [candidateModels, playgroundMode]
+  const vkeyScopedModels = useMemo(
+    () => filterPlaygroundCandidatesForVirtualKey(candidateModels, selectedKey?.allowed_models),
+    [candidateModels, selectedKey?.allowed_models]
   )
 
-  const modelsByName = useMemo(() => buildModelCandidateIndex(candidateModels), [candidateModels])
+  const modeFilteredModels = useMemo(
+    () => filterModelsByMode(vkeyScopedModels, playgroundMode),
+    [vkeyScopedModels, playgroundMode]
+  )
+
+  const modelsByName = useMemo(() => buildModelCandidateIndex(vkeyScopedModels), [vkeyScopedModels])
 
   const routeCandidates = useMemo<RouteCandidate[]>(
     () =>
-      filterPlaygroundRouteCandidates(
-        routes,
-        credentialId,
-        candidateModels,
-        playgroundMode,
-        modelsByName
+      filterPlaygroundNamesForVirtualKey(
+        filterPlaygroundRouteCandidates(
+          routes,
+          credentialId,
+          vkeyScopedModels,
+          playgroundMode,
+          modelsByName
+        ),
+        selectedKey?.allowed_models
       ),
-    [routes, credentialId, candidateModels, playgroundMode, modelsByName]
+    [
+      routes,
+      credentialId,
+      vkeyScopedModels,
+      playgroundMode,
+      modelsByName,
+      selectedKey?.allowed_models,
+    ]
   )
 
-  const { teamCandidates, personalCandidates } = useMemo(() => {
-    const team: ModelCandidate[] = []
-    const personal: ModelCandidate[] = []
-    for (const m of modeFilteredModels) {
-      if (m.scope === 'team') team.push(m)
-      else personal.push(m)
-    }
-    return { teamCandidates: team, personalCandidates: personal }
-  }, [modeFilteredModels])
+  const { teamCandidates, personalCandidates } = useMemo(
+    () => splitPlaygroundModelCandidatesForDisplay(modeFilteredModels, isPersonalProxyTeam),
+    [modeFilteredModels, isPersonalProxyTeam]
+  )
 
   const selectedCandidate = useMemo(
     () => modeFilteredModels.find((m) => m.name === model),
@@ -592,6 +607,7 @@ export function PlaygroundCard({
                 playgroundMode={playgroundMode}
                 modelsLoading={modelsLoading}
                 onOpenChange={onModelPickerOpenChange}
+                personalModelsLabel={isPersonalProxyTeam ? '工作区模型' : '个人模型'}
               />
             </div>
           </div>
