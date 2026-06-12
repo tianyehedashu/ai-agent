@@ -123,6 +123,14 @@ async def _gateway_principal_from_vkey_plain(
     team_role = await access.team_role_for_virtual_key_creator(tenant_id, created_by)
     permission_ctx = await _build_permission_context_for_vkey(db, created_by)
 
+    # 加载跨团队授权 grants（顺序 await，同一 session）
+    from domains.gateway.infrastructure.repositories.virtual_key_team_grant_repository import (
+        VirtualKeyTeamGrantRepository,
+    )
+
+    grant_repo = VirtualKeyTeamGrantRepository(db)
+    granted_team_ids = await grant_repo.list_active_tenant_ids(record.id)
+
     try:
         caps = allowed_capabilities_from_storage(record.allowed_capabilities)
     except ValueError:
@@ -147,6 +155,7 @@ async def _gateway_principal_from_vkey_plain(
         store_full_messages=record.store_full_messages,
         guardrail_enabled=record.guardrail_enabled,
         is_system=record.is_system,
+        granted_team_ids=granted_team_ids,
     )
 
     composer = PermissionContextComposer(db)
