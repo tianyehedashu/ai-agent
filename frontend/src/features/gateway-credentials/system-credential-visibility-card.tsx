@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
+import { invalidateGatewayCredentialCaches } from '@/features/gateway-credentials/query-keys'
 import { SystemGrantsPanel } from '@/features/gateway-models/team/system-grants-panel'
 import {
   resolveGatewayTeamLabel,
@@ -44,8 +45,10 @@ export function SystemCredentialVisibilityCard({
     mutationFn: (visibility: SystemVisibility) =>
       gatewayApi.patchCredentialVisibility(cred.id, visibility),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['gateway', 'credential', teamId, cred.id] })
-      void queryClient.invalidateQueries({ queryKey: ['gateway', 'credentials'] })
+      invalidateGatewayCredentialCaches(queryClient, {
+        teamId,
+        credentialId: cred.id,
+      })
       toast({ title: '凭据可见性已更新' })
     },
     onError: (e: Error) => {

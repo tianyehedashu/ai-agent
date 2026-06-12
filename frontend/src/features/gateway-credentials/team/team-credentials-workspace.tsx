@@ -5,9 +5,11 @@
 import { useCallback, useDeferredValue, useMemo, useState } from 'react'
 import type React from 'react'
 
+import { Link } from 'react-router-dom'
+
 import { PaginationControls } from '@/components/pagination-controls'
-import { Card, CardContent } from '@/components/ui/card'
 import { TabsContent } from '@/components/ui/tabs'
+import { GatewayCredentialsListShell } from '@/features/gateway-credentials/components/gateway-credentials-list-shell'
 import { CredentialDeleteConfirmDialog } from '@/features/gateway-credentials/credential-delete-confirm-dialog'
 import { useCredentialDeleteFlow } from '@/features/gateway-credentials/hooks/use-credential-delete-flow'
 import type { GatewayCredentialMutations } from '@/features/gateway-credentials/hooks/use-gateway-credential-mutations'
@@ -31,11 +33,16 @@ import { useCurrentUser } from '@/stores/user'
 export interface TeamCredentialsWorkspaceProps {
   mutations: GatewayCredentialMutations
   onAdd: (provider?: string, teamId?: string) => void
+  highlightCredentialId?: string
+  hint?: string
+  systemBrowseHref?: string
 }
 
 export function TeamCredentialsWorkspace({
   mutations,
   onAdd,
+  hint,
+  systemBrowseHref,
 }: TeamCredentialsWorkspaceProps): React.JSX.Element {
   const routeTeamId = useGatewayTeamId()
   const memberCollaborationTeams = useGatewayMemberCollaborationTeams()
@@ -45,6 +52,7 @@ export function TeamCredentialsWorkspace({
   const [teamSearch, setTeamSearch] = useState('')
   const deferredTeamSearch = useDeferredValue(teamSearch)
   const [page, setPage] = useState(1)
+  const [showEmptyTeams, setShowEmptyTeams] = useState(false)
 
   const hasCollaborationTeams = memberCollaborationTeams.length > 0
   const teamSearchTrimmed = teamSearch.trim()
@@ -142,9 +150,29 @@ export function TeamCredentialsWorkspace({
 
   return (
     <TabsContent value="shared" className="mt-4 focus-visible:outline-none">
-      <Card>
-        {hasCollaborationTeams ? (
-          <div className="border-b p-3">
+      <GatewayCredentialsListShell
+        hintSlot={
+          hint ? (
+            <>
+              {hint}
+              {systemBrowseHref ? (
+                <>
+                  {' '}
+                  系统预置凭据见{' '}
+                  <Link
+                    to={systemBrowseHref}
+                    className="text-primary underline-offset-4 hover:underline"
+                  >
+                    系统
+                  </Link>{' '}
+                  Tab。
+                </>
+              ) : null}
+            </>
+          ) : null
+        }
+        toolbar={
+          hasCollaborationTeams ? (
             <CredentialsWorkspaceToolbar
               teamSearch={teamSearch}
               onTeamSearchChange={handleTeamSearchChange}
@@ -152,40 +180,43 @@ export function TeamCredentialsWorkspace({
               canAdd={hasCollaborationTeams}
               isRefreshing={isFetching}
               onRefresh={handleRefresh}
+              showEmptyTeams={showEmptyTeams}
+              onShowEmptyTeamsChange={setShowEmptyTeams}
               onAdd={() => {
                 onAdd(undefined, defaultAddTeamId)
               }}
             />
-          </div>
-        ) : null}
-        <CardContent className="p-0">
-          {showEmptyPanel ? (
-            <div className="p-4">
-              <CredentialsEmptyState noCollaborationTeams />
-            </div>
+          ) : undefined
+        }
+        isLoading={showLoading && hasCollaborationTeams}
+        isEmpty={showEmptyPanel || showSearchEmpty}
+        emptySlot={
+          showEmptyPanel ? (
+            <CredentialsEmptyState noCollaborationTeams />
           ) : showSearchEmpty ? (
-            <div className="p-4">
-              <CredentialsEmptyState hasActiveSearch />
-            </div>
-          ) : (
-            <CollaborationTeamsCredentialsGroupedList
-              teams={displayTeams}
-              credentialsByTeamId={credentialsByTeamId}
-              tenantIdsWithCredentials={tenantIdsWithCredentials}
-              requiresSearch={requiresSearch}
-              isLoading={showLoading}
-              currentPage={page}
-              isPlatformAdmin={isPlatformAdmin}
-              viewerUserId={viewerUserId}
-              routeTeamId={routeTeamId}
-              onAddForTeam={handleAddForTeam}
-              onDelete={deleteFlow.handleDeleteCredential}
-              updateMutation={mutations.updateMutation}
-            />
-          )}
-        </CardContent>
-        {tableFooter ? <div className="border-t px-3 py-2">{tableFooter}</div> : null}
-      </Card>
+            <CredentialsEmptyState hasActiveSearch />
+          ) : undefined
+        }
+        paginationSlot={tableFooter ?? undefined}
+      >
+        {hasCollaborationTeams && !showEmptyPanel && !showSearchEmpty ? (
+          <CollaborationTeamsCredentialsGroupedList
+            teams={displayTeams}
+            credentialsByTeamId={credentialsByTeamId}
+            tenantIdsWithCredentials={tenantIdsWithCredentials}
+            requiresSearch={requiresSearch}
+            isLoading={showLoading}
+            currentPage={page}
+            isPlatformAdmin={isPlatformAdmin}
+            viewerUserId={viewerUserId}
+            routeTeamId={routeTeamId}
+            showEmptyTeams={showEmptyTeams}
+            onAddForTeam={handleAddForTeam}
+            onDelete={deleteFlow.handleDeleteCredential}
+            updateMutation={mutations.updateMutation}
+          />
+        ) : null}
+      </GatewayCredentialsListShell>
 
       <CredentialDeleteConfirmDialog
         credential={deleteFlow.credentialPendingDelete}

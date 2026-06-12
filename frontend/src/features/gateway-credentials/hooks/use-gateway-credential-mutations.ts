@@ -72,8 +72,7 @@ export function useGatewayCredentialMutations(
   const createUserMutation = useMutation({
     mutationFn: credentialsApi.createMyCredential,
     onSuccess: (cred) => {
-      void queryClient.invalidateQueries({ queryKey: ['gateway', 'my-credentials'] })
-      invalidateGatewayCredentialCaches(queryClient)
+      invalidateGatewayCredentialCaches(queryClient, { teamId: routeTeamId })
       options?.onUserCreateSuccess?.(cred)
     },
     onError: (e: Error) => {

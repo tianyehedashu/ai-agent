@@ -7,6 +7,8 @@ import type React from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Switch } from '@/components/ui/switch'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { GatewayRefreshButton } from '@/features/gateway-shared/gateway-refresh-button'
 import { Plus, Search } from '@/lib/lucide-icons'
@@ -27,6 +29,8 @@ export interface CredentialsWorkspaceToolbarProps {
   onAdd: () => void
   isRefreshing?: boolean
   onRefresh?: () => void
+  showEmptyTeams?: boolean
+  onShowEmptyTeamsChange?: (value: boolean) => void
 }
 
 function formatSummaryBadge(summary: CredentialsWorkspaceSummary): string {
@@ -44,6 +48,8 @@ export function CredentialsWorkspaceToolbar({
   onAdd,
   isRefreshing = false,
   onRefresh,
+  showEmptyTeams = false,
+  onShowEmptyTeamsChange,
 }: CredentialsWorkspaceToolbarProps): React.JSX.Element {
   return (
     <div className="flex flex-wrap items-center gap-2 sm:gap-3">
@@ -73,6 +79,27 @@ export function CredentialsWorkspaceToolbar({
             ariaLabel="刷新团队凭据"
             onRefresh={onRefresh}
           />
+        ) : null}
+
+        {onShowEmptyTeamsChange ? (
+          <TooltipProvider delayDuration={200}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="flex items-center gap-2">
+                  <Switch
+                    id="show-empty-teams"
+                    checked={showEmptyTeams}
+                    onCheckedChange={onShowEmptyTeamsChange}
+                    aria-label="显示无凭据的团队"
+                  />
+                  <Label htmlFor="show-empty-teams" className="cursor-pointer text-xs font-normal">
+                    空团队
+                  </Label>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent>显示尚未配置凭据的协作团队</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         ) : null}
 
         {canAdd ? (

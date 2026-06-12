@@ -1,11 +1,8 @@
 /**
  * 个人凭据（/my-credentials）列表与编辑，用于 AI Gateway 凭据页「个人」Tab。
- *
- * 新增动作由外层 [`pages/gateway/credentials.tsx`](../../pages/gateway/credentials.tsx)
- * 的 `CreateCredentialDialog` 统一承担，本组件仅承载列表渲染与编辑弹窗。
  */
 
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Suspense, useCallback, useMemo, useRef, useState } from 'react'
 import type React from 'react'
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -13,8 +10,10 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   gatewayApi,
   type GatewayCredentialUpdateBody,
+  type PersonalGatewayModel,
   type ProviderCredential,
 } from '@/api/gateway'
+import type { GatewayBudget } from '@/api/gateway/budgets'
 import type { GatewayTeam } from '@/api/gateway/teams'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -26,48 +25,46 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Label } from '@/components/ui/label'
-import { Switch } from '@/components/ui/switch'
 import { PersonalCredentialBudgetInline } from '@/features/gateway-budget/personal-credential-budget-inline'
 import { useGatewayBudgets } from '@/features/gateway-budget/use-gateway-budgets'
+import { GatewayCredentialsEmptyState } from '@/features/gateway-credentials/components/gateway-credentials-empty-state'
+import { GatewayCredentialsListShell } from '@/features/gateway-credentials/components/gateway-credentials-list-shell'
+import { PersonalCredentialsList } from '@/features/gateway-credentials/personal/personal-credentials-list'
 import { useInfinitePersonalModelPages } from '@/features/gateway-models/hooks/use-infinite-gateway-model-pages'
 import { combineFetching } from '@/features/gateway-shared/combine-fetching'
 import { GatewayRefreshButton } from '@/features/gateway-shared/gateway-refresh-button'
 import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { useToast } from '@/hooks/use-toast'
 import { lazyWithReload } from '@/lib/lazy-with-reload'
-import { Key, Loader2, Pencil, Plus, Trash2, Upload } from '@/lib/lucide-icons'
+import { Loader2, Plus, Upload } from '@/lib/lucide-icons'
 import { useCurrentUser } from '@/stores/user'
 
-import { USER_GATEWAY_CREDENTIAL_PROVIDER_IDS, credentialProviderLabel } from './constants'
+import { USER_GATEWAY_CREDENTIAL_PROVIDER_IDS } from './constants'
 import { CredentialDeleteConfirmDialog } from './credential-delete-confirm-dialog'
 import { CredentialEditFields } from './credential-edit-fields'
 import { invalidateCredentialProbeCache } from './credential-probe-cache'
 import { useProviderProfilesCatalog } from './hooks/use-provider-profiles-catalog'
-import { displayListApiKeyMasked } from './mask-display'
-import { invalidateCredentialSummariesCache } from './use-credential-directory'
+import { invalidateGatewayCredentialCaches } from './query-keys'
 import { useCredentialEditForm } from './use-credential-edit-form'
-
-const AddModelsDialog = lazyWithReload(() =>
-  import('./add-models-dialog').then((m) => ({ default: m.AddModelsDialog }))
-)
 
 const ImportToTeamDialog = lazyWithReload(() =>
   import('./import-to-team-dialog').then((m) => ({ default: m.ImportToTeamDialog }))
 )
 
 export interface PersonalCredentialsPanelProps {
-  /**
-   * 上层接管「添加凭据」入口：可选预填 provider。
-   * 若未注入，则 panel 不展示「添加账号」按钮。
-   */
   onAddCredential?: (provider?: string) => void
-  /** 可写入的协作团队列表，用于导入到团队对话框的目标团队选择。 */
+  onAddModels?: (credential: ProviderCredential) => void
+  editCredential?: ProviderCredential | null
+  onEditCredentialChange?: (credential: ProviderCredential | null) => void
+  highlightCredentialId?: string
   writableTeams?: GatewayTeam[]
 }
 
 export function PersonalCredentialsPanel({
   onAddCredential,
+  onAddModels,
+  editCredential = null,
+  onEditCredentialChange,
   writableTeams = [],
 }: PersonalCredentialsPanelProps = {}): React.ReactElement {
   useProviderProfilesCatalog()
@@ -76,12 +73,9 @@ export function PersonalCredentialsPanel({
   const currentUser = useCurrentUser()
   const hasAuthSession = currentUser !== null
   const teamId = useGatewayTeamId()
-  const [editCred, setEditCred] = useState<ProviderCredential | null>(null)
-  const [addModelsCred, setAddModelsCred] = useState<ProviderCredential | null>(null)
   const [credentialPendingDelete, setCredentialPendingDelete] = useState<ProviderCredential | null>(
     null
   )
-  const [showFullMaskedInList, setShowFullMaskedInList] = useState(false)
   const [importDialogState, setImportDialogState] = useState<{
     open: boolean
     preselectedIds: string[]
@@ -107,45 +101,44 @@ export function PersonalCredentialsPanel({
     prefetchMode: 'idle',
   })
 
-  useEffect(() => {
-    if (!hasAuthSession) {
-      setShowFullMaskedInList(false)
-    }
-  }, [hasAuthSession])
+  const providerCount = useMemo(() => {
+    return new Set(credentials.map((c) => c.provider)).size
+  }, [credentials])
 
-  const byProvider = useMemo(() => {
-    const m = new Map<string, ProviderCredential[]>()
-    for (const c of credentials) {
-      const list = m.get(c.provider) ?? []
-      list.push(c)
-      m.set(c.provider, list)
-    }
-    for (const [, list] of m) {
-      list.sort((a, b) => a.name.localeCompare(b.name))
-    }
-    return m
+  const sortedCredentials = useMemo(() => {
+    const providerOrder = new Map(
+      USER_GATEWAY_CREDENTIAL_PROVIDER_IDS.map((id, index) => [id, index])
+    )
+    return [...credentials].sort((a, b) => {
+      const providerDiff =
+        (providerOrder.get(a.provider) ?? Number.MAX_SAFE_INTEGER) -
+        (providerOrder.get(b.provider) ?? Number.MAX_SAFE_INTEGER)
+      if (providerDiff !== 0) return providerDiff
+      return a.name.localeCompare(b.name)
+    })
   }, [credentials])
 
   const invalidate = useCallback((): void => {
-    void queryClient.invalidateQueries({ queryKey: ['gateway', 'my-credentials'] })
-    void queryClient.invalidateQueries({ queryKey: ['gateway', 'my-models'] })
-    void queryClient.invalidateQueries({ queryKey: ['gateway', 'credentials'] })
-    invalidateCredentialSummariesCache(queryClient)
-  }, [queryClient])
+    invalidateGatewayCredentialCaches(queryClient, {
+      teamId,
+      includeModels: true,
+      includeBudgets: true,
+    })
+  }, [queryClient, teamId])
 
   const handleRefresh = useCallback((): void => {
-    void Promise.all([
-      refetchCredentials(),
-      refetchBudgets(),
-      queryClient.invalidateQueries({ queryKey: ['gateway', 'my-models'] }),
-    ])
-  }, [queryClient, refetchBudgets, refetchCredentials])
+    void Promise.all([refetchCredentials(), refetchBudgets()])
+    invalidateGatewayCredentialCaches(queryClient, { teamId, includeModels: true })
+  }, [queryClient, refetchBudgets, refetchCredentials, teamId])
 
   const isRefreshing = combineFetching(isFetching, budgetsFetching)
 
-  const openEdit = useCallback((c: ProviderCredential): void => {
-    setEditCred(c)
-  }, [])
+  const openEdit = useCallback(
+    (c: ProviderCredential): void => {
+      onEditCredentialChange?.(c)
+    },
+    [onEditCredentialChange]
+  )
 
   const deleteMutation = useMutation({
     mutationFn: gatewayApi.deleteMyCredential,
@@ -153,11 +146,8 @@ export function PersonalCredentialsPanel({
       invalidateCredentialProbeCache(queryClient, 'user', credentialId)
       invalidate()
       setCredentialPendingDelete(null)
-      if (editCred?.id === credentialId) {
-        setEditCred(null)
-      }
-      if (addModelsCred?.id === credentialId) {
-        setAddModelsCred(null)
+      if (editCredential?.id === credentialId) {
+        onEditCredentialChange?.(null)
       }
       toast({ title: '凭据已删除', description: '关联的个人注册模型已一并移除' })
     },
@@ -199,247 +189,102 @@ export function PersonalCredentialsPanel({
   })
   const { isPending: testIsPending, mutate: testMutate } = testMutation
 
-  const outerClass = 'space-y-4'
-
-  const providerSections = useMemo(
-    () => (
-      <>
-        {USER_GATEWAY_CREDENTIAL_PROVIDER_IDS.map((provider) => {
-          const rows = byProvider.get(provider) ?? []
-          return (
-            <section key={provider} className="rounded-lg border">
-              <div className="flex flex-wrap items-center justify-between gap-2 bg-muted/30 px-4 py-2.5">
-                <div className="flex items-center gap-2">
-                  <Key className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm font-medium">{credentialProviderLabel(provider)}</span>
-                  <Badge variant={rows.length > 0 ? 'secondary' : 'outline'}>
-                    {rows.length > 0 ? rows.length : '—'}
-                  </Badge>
-                </div>
-                <div className="flex items-center gap-1">
-                  {rows.length > 0 ? (
-                    <>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        disabled={testIsPending}
-                        onClick={() => {
-                          const active = rows.find((row) => row.is_active) ?? rows[0]
-                          testMutate(active.id)
-                        }}
-                      >
-                        {testIsPending ? '验证中…' : '验证'}
-                      </Button>
-                      {writableTeams.length > 0 ? (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => {
-                            setImportDialogState({
-                              open: true,
-                              preselectedIds: rows.map((r) => r.id),
-                            })
-                          }}
-                        >
-                          <Upload className="mr-1 h-3.5 w-3.5" />
-                          导入到团队
-                        </Button>
-                      ) : null}
-                    </>
-                  ) : null}
-                  {onAddCredential ? (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => {
-                        onAddCredential(provider)
-                      }}
-                    >
-                      <Plus className="mr-1 h-3.5 w-3.5" />
-                      添加
-                    </Button>
-                  ) : null}
-                </div>
-              </div>
-              {rows.length > 0 ? (
-                <div className="divide-y">
-                  {rows.map((c) => (
-                    <div key={c.id}>
-                      <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 text-sm">
-                        <div className="min-w-0 flex-1">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className="font-medium">{c.name}</span>
-                            {!c.is_active ? (
-                              <Badge variant="outline" className="text-[11px]">
-                                已停用
-                              </Badge>
-                            ) : null}
-                          </div>
-                          <div className="mt-0.5 font-mono text-[11px] text-muted-foreground">
-                            {displayListApiKeyMasked(showFullMaskedInList, true, c.api_key_masked)}
-                          </div>
-                          {c.api_base ? (
-                            <span className="mt-0.5 block truncate text-[11px] text-muted-foreground">
-                              {c.api_base}
-                            </span>
-                          ) : null}
-                        </div>
-                        <div className="flex gap-1">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-8 px-2 text-xs"
-                            onClick={() => {
-                              setAddModelsCred(c)
-                            }}
-                          >
-                            <Plus className="mr-1 h-3.5 w-3.5" />
-                            模型
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => {
-                              openEdit(c)
-                            }}
-                            aria-label="编辑"
-                          >
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="text-destructive hover:text-destructive"
-                            disabled={deleteMutation.isPending}
-                            onClick={() => {
-                              setCredentialPendingDelete(c)
-                            }}
-                            aria-label="删除凭据"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </div>
-                      {currentUser?.id ? (
-                        <div className="border-t bg-muted/10 px-4 py-2">
-                          <p className="mb-1 text-[11px] text-muted-foreground">平台预算</p>
-                          <PersonalCredentialBudgetInline
-                            credentialId={c.id}
-                            userId={currentUser.id}
-                            budgets={personalBudgets}
-                            myModels={myModels}
-                          />
-                        </div>
-                      ) : null}
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="px-4 py-8 text-center text-sm text-muted-foreground">暂无凭据</div>
-              )}
-            </section>
-          )
-        })}
-      </>
-    ),
-    [
-      showFullMaskedInList,
-      byProvider,
-      testIsPending,
-      testMutate,
-      openEdit,
-      onAddCredential,
-      setAddModelsCred,
-      deleteMutation.isPending,
-      currentUser?.id,
-      personalBudgets,
-      myModels,
-      writableTeams.length,
-    ]
+  const toolbar = (
+    <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+      <Badge variant="secondary" className="font-normal">
+        {credentials.length} 个凭据 · {providerCount} 个提供商
+      </Badge>
+      <div className="ml-auto flex flex-wrap items-center gap-2">
+        <GatewayRefreshButton
+          isFetching={isRefreshing}
+          ariaLabel="刷新个人凭据"
+          onRefresh={handleRefresh}
+        />
+        {writableTeams.length > 0 && credentials.length > 0 ? (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setImportDialogState({ open: true, preselectedIds: [] })
+            }}
+          >
+            <Upload className="mr-1.5 h-4 w-4" />
+            导入到团队
+          </Button>
+        ) : null}
+        {credentials.length > 0 ? (
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={testIsPending}
+            onClick={() => {
+              const active = credentials.find((row) => row.is_active) ?? credentials[0]
+              testMutate(active.id)
+            }}
+          >
+            {testIsPending ? '验证中…' : '验证'}
+          </Button>
+        ) : null}
+        {onAddCredential ? (
+          <Button
+            size="sm"
+            onClick={() => {
+              onAddCredential()
+            }}
+          >
+            <Plus className="mr-1.5 h-4 w-4" />
+            新增
+          </Button>
+        ) : null}
+      </div>
+    </div>
   )
 
   if (!hasAuthSession) {
     return (
-      <div className="flex flex-col items-center justify-center gap-3 rounded-lg border py-12">
-        <Key className="h-8 w-8 text-muted-foreground/60" />
-        <p className="text-sm text-muted-foreground">请先登录以管理个人凭据</p>
-      </div>
+      <GatewayCredentialsEmptyState title="请先登录" description="登录后可管理个人 BYOK 凭据。" />
     )
   }
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center p-12">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-      </div>
-    )
-  }
+  const userId = currentUser.id
 
   return (
-    <div className={outerClass}>
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <Label htmlFor="show-full-masked-list" className="cursor-pointer text-xs font-normal">
-            显示掩码
-          </Label>
-          <Switch
-            id="show-full-masked-list"
-            checked={showFullMaskedInList}
-            onCheckedChange={setShowFullMaskedInList}
-            aria-label="在列表中显示完整 API Key 掩码"
-          />
-        </div>
-        <div className="flex items-center gap-2">
-          <GatewayRefreshButton
-            isFetching={isRefreshing}
-            ariaLabel="刷新个人凭据"
-            onRefresh={handleRefresh}
-          />
-          {writableTeams.length > 0 && credentials.length > 0 ? (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                setImportDialogState({ open: true, preselectedIds: [] })
-              }}
-            >
-              <Upload className="mr-1.5 h-4 w-4" />
-              批量导入到团队
-            </Button>
-          ) : null}
-          {onAddCredential ? (
-            <Button
-              size="sm"
-              onClick={() => {
-                onAddCredential()
-              }}
-            >
-              <Plus className="mr-1.5 h-4 w-4" />
-              添加账号
-            </Button>
-          ) : null}
-        </div>
-      </div>
-
-      {providerSections}
+    <>
+      <GatewayCredentialsListShell
+        hintSlot="个人 BYOK 凭据，仅本人可见；注册个人模型前需先配置。"
+        toolbar={toolbar}
+        isLoading={isLoading}
+      >
+        <PersonalCredentialsList
+          credentials={sortedCredentials}
+          routeTeamId={teamId}
+          deletePending={deleteMutation.isPending}
+          onEdit={openEdit}
+          onAddModels={onAddModels}
+          onDelete={setCredentialPendingDelete}
+        />
+      </GatewayCredentialsListShell>
 
       <Dialog
-        open={editCred !== null}
+        open={editCredential !== null}
         onOpenChange={(o) => {
-          if (!o) setEditCred(null)
+          if (!o) onEditCredentialChange?.(null)
         }}
       >
-        {editCred ? (
+        {editCredential ? (
           <PersonalCredentialEditDialog
-            key={editCred.id}
-            cred={editCred}
+            key={editCredential.id}
+            cred={editCredential}
+            userId={userId}
+            personalBudgets={personalBudgets}
+            myModels={myModels}
             onClose={() => {
-              setEditCred(null)
+              onEditCredentialChange?.(null)
             }}
             onSaved={() => {
-              invalidateCredentialProbeCache(queryClient, 'user', editCred.id)
+              invalidateCredentialProbeCache(queryClient, 'user', editCredential.id)
               invalidate()
-              setEditCred(null)
+              onEditCredentialChange?.(null)
             }}
           />
         ) : null}
@@ -452,34 +297,6 @@ export function PersonalCredentialsPanel({
         onOpenChange={handleDeleteDialogOpenChange}
         onConfirm={handleDeleteConfirm}
       />
-
-      {addModelsCred ? (
-        <Suspense
-          fallback={
-            <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              加载添加模型…
-            </div>
-          }
-        >
-          <AddModelsDialog
-            open
-            onOpenChange={(next) => {
-              if (!next) setAddModelsCred(null)
-            }}
-            scope="user"
-            credentialId={addModelsCred.id}
-            provider={addModelsCred.provider}
-            credentialName={addModelsCred.name}
-            isActive={addModelsCred.is_active}
-            onEditPersonalCredential={() => {
-              const target = addModelsCred
-              setAddModelsCred(null)
-              openEdit(target)
-            }}
-          />
-        </Suspense>
-      ) : null}
 
       <Suspense
         fallback={
@@ -499,16 +316,22 @@ export function PersonalCredentialsPanel({
           writableTeams={writableTeams}
         />
       </Suspense>
-    </div>
+    </>
   )
 }
 
-function PersonalCredentialEditDialog({
+export function PersonalCredentialEditDialog({
   cred,
+  userId,
+  personalBudgets,
+  myModels,
   onClose,
   onSaved,
 }: Readonly<{
   cred: ProviderCredential
+  userId: string
+  personalBudgets: readonly GatewayBudget[]
+  myModels: readonly PersonalGatewayModel[]
   onClose: () => void
   onSaved: () => void
 }>): React.ReactElement {
@@ -520,7 +343,7 @@ function PersonalCredentialEditDialog({
   const updateMutation = useMutation({
     mutationFn: (body: GatewayCredentialUpdateBody) => gatewayApi.updateMyCredential(cred.id, body),
     onSuccess: () => {
-      toast({ title: '已保存' })
+      toast({ title: '凭据已更新' })
       onSaved()
     },
     onError: (e: Error) => {
@@ -549,6 +372,17 @@ function PersonalCredentialEditDialog({
           showActiveSwitch
           revealFn={revealFn}
         />
+        {userId ? (
+          <div className="rounded-md border bg-muted/20 p-3">
+            <p className="mb-2 text-xs text-muted-foreground">平台预算</p>
+            <PersonalCredentialBudgetInline
+              credentialId={cred.id}
+              userId={userId}
+              budgets={[...personalBudgets]}
+              myModels={[...myModels]}
+            />
+          </div>
+        ) : null}
       </div>
       <DialogFooter>
         <Button variant="outline" onClick={onClose}>

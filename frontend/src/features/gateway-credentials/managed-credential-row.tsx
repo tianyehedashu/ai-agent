@@ -8,8 +8,8 @@ import { Link } from 'react-router-dom'
 
 import type { GatewayCredentialUpdateBody, ProviderCredential } from '@/api/gateway'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
+import { CredentialAffiliationCell } from '@/features/gateway-credentials/components/credential-affiliation-cell'
 import { isConfigManagedSystemCredential } from '@/features/gateway-credentials/config-managed-credential'
 import { displayApiBaseForCredential } from '@/features/gateway-credentials/credential-api-bases-utils'
 import {
@@ -18,32 +18,34 @@ import {
   credentialDetailTeamId,
 } from '@/features/gateway-credentials/credential-permissions'
 import { RestrictedCredentialGrantHint } from '@/features/gateway-credentials/credential-restricted-grant-hint'
+import { CredentialRowActions } from '@/features/gateway-credentials/credential-row-actions'
 import {
   CredentialScopeBadge,
   CredentialTeamBadge,
   CredentialVisibilityBadge,
 } from '@/features/gateway-credentials/credential-scope-display'
+import { useCredentialActiveToggle } from '@/features/gateway-credentials/hooks/use-credential-active-toggle'
+import type { ManagedCredentialsTableLayout } from '@/features/gateway-credentials/managed-credentials-table-head'
 import {
   defaultApiBaseForProvider,
   providerLabel,
 } from '@/features/gateway-credentials/provider-schemas'
-import {
-  credentialDetailAddModelsHref,
-  credentialDetailHref,
-} from '@/features/gateway-models/paths'
-import { Trash2 } from '@/lib/lucide-icons'
+import type { CredentialsListTab } from '@/features/gateway-models/paths'
+import { credentialDetailHref } from '@/features/gateway-models/paths'
 
 export interface ManagedCredentialRowProps {
   credential: ProviderCredential
   routeTeamId: string
-  listVariant: 'team' | 'system'
+  listVariant: 'team' | 'system' | 'personal'
+  layout?: ManagedCredentialsTableLayout
   showAffiliationColumn: boolean
   teamNameById: Map<string, string>
   viewerUserId: string | null | undefined
   canWrite: boolean
   isPlatformAdmin: boolean
+  listTab?: CredentialsListTab
   onDelete: (c: ProviderCredential) => void
-  updateMutation: {
+  updateMutation?: {
     isPending: boolean
     mutate: (args: {
       id: string
@@ -51,34 +53,164 @@ export interface ManagedCredentialRowProps {
       credentialTeamId: string
     }) => void
   }
+  onEdit?: (credential: ProviderCredential) => void
+  onAddModels?: (credential: ProviderCredential) => void
+  personalDeletePending?: boolean
 }
 
 export function ManagedCredentialRow({
   credential: c,
   routeTeamId,
   listVariant,
+  layout = 'full',
   showAffiliationColumn,
   teamNameById,
   viewerUserId,
   canWrite,
   isPlatformAdmin,
+  listTab,
   onDelete,
   updateMutation,
+  onEdit,
+  onAddModels,
+  personalDeletePending = false,
 }: ManagedCredentialRowProps): React.JSX.Element {
-  const editable = canEditGatewayCredential(c, viewerUserId, canWrite, isPlatformAdmin)
-  const linkable = canLinkToCredentialDetail(c, viewerUserId, canWrite, isPlatformAdmin)
+  const isPersonal = listVariant === 'personal'
+  const editable = isPersonal
+    ? true
+    : canEditGatewayCredential(c, viewerUserId, canWrite, isPlatformAdmin)
+  const linkable = isPersonal
+    ? false
+    : canLinkToCredentialDetail(c, viewerUserId, canWrite, isPlatformAdmin)
   const detailTeamId = credentialDetailTeamId(c, routeTeamId)
   const configManaged = isConfigManagedSystemCredential(c)
-  const updateTeamId = c.tenant_id ?? routeTeamId
   const showAffiliation = showAffiliationColumn || listVariant === 'system'
+  const linkState = listTab ? { credentialsTab: listTab } : undefined
+  const activeToggle = useCredentialActiveToggle({
+    credential: c,
+    routeTeamId,
+    scope: isPersonal ? 'user' : c.scope === 'system' ? 'system' : 'team',
+  })
+  const deletePending = isPersonal ? personalDeletePending : (updateMutation?.isPending ?? false)
+
+  const activeCell =
+    editable && layout === 'compact' ? (
+      <Switch
+        checked={c.is_active}
+        disabled={activeToggle.isPending || deletePending}
+        onCheckedChange={(checked) => {
+          activeToggle.toggle(checked)
+        }}
+        aria-label={c.is_active ? '停用凭据' : '启用凭据'}
+      />
+    ) : editable && updateMutation ? (
+      <Switch
+        checked={c.is_active}
+        disabled={updateMutation.isPending}
+        onCheckedChange={(checked) => {
+          updateMutation.mutate({
+            id: c.id,
+            body: { is_active: checked },
+            credentialTeamId: c.tenant_id ?? routeTeamId,
+          })
+        }}
+        aria-label={c.is_active ? '停用凭据' : '启用凭据'}
+      />
+    ) : (
+      <Badge variant={c.is_active ? 'secondary' : 'outline'} className="text-[10px] font-normal">
+        {c.is_active ? '启用' : '停用'}
+      </Badge>
+    )
+
+  if (layout === 'compact') {
+    return (
+      <tr className="border-b last:border-0 hover:bg-muted/20" data-credential-id={c.id}>
+        <td className="px-4 py-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {linkable ? (
+              <Link
+                to={credentialDetailHref(detailTeamId, c.id, { tab: listTab })}
+                state={linkState}
+                className="font-medium text-primary underline-offset-4 hover:underline"
+              >
+                {c.name}
+              </Link>
+            ) : onEdit ? (
+              <button
+                type="button"
+                className="font-medium text-primary underline-offset-4 hover:underline"
+                onClick={() => {
+                  onEdit(c)
+                }}
+              >
+                {c.name}
+              </button>
+            ) : (
+              <span className="font-medium">{c.name}</span>
+            )}
+            {!isPersonal && c.management_access === 'metadata' ? (
+              <Badge variant="outline" className="text-[10px] font-normal">
+                只读
+              </Badge>
+            ) : null}
+            {configManaged ? (
+              <Badge variant="secondary" className="text-[10px] font-normal">
+                配置同步
+              </Badge>
+            ) : null}
+            {isPersonal && !c.is_active ? (
+              <Badge variant="outline" className="text-[10px] font-normal">
+                已停用
+              </Badge>
+            ) : null}
+          </div>
+        </td>
+        <td className="px-4 py-2 font-mono text-xs text-muted-foreground">{c.api_key_masked}</td>
+        <td className="px-4 py-2 text-xs">
+          <div className="flex flex-col">
+            <span className="font-medium">{providerLabel(c.provider)}</span>
+            <span className="font-mono text-[10px] text-muted-foreground" title={c.provider}>
+              {c.provider}
+            </span>
+          </div>
+        </td>
+        {showAffiliation ? (
+          <td className="px-4 py-2">
+            <CredentialAffiliationCell
+              scope={c.scope}
+              tenantId={c.tenant_id}
+              visibility={c.visibility}
+              teamNameById={teamNameById}
+              compact
+            />
+          </td>
+        ) : null}
+        <td className="px-4 py-2">{activeCell}</td>
+        <td className="px-4 py-2">
+          <CredentialRowActions
+            credential={c}
+            detailTeamId={detailTeamId}
+            listTab={listTab}
+            linkable={linkable}
+            editable={editable}
+            deletePending={deletePending}
+            onEdit={onEdit}
+            onAddModels={onAddModels}
+            onDelete={onDelete}
+          />
+        </td>
+      </tr>
+    )
+  }
 
   return (
-    <tr className="border-b last:border-0 hover:bg-muted/20">
+    <tr className="border-b last:border-0 hover:bg-muted/20" data-credential-id={c.id}>
       <td className="px-4 py-2">
         <div className="flex flex-wrap items-center gap-2">
           {linkable ? (
             <Link
-              to={credentialDetailHref(detailTeamId, c.id)}
+              to={credentialDetailHref(detailTeamId, c.id, { tab: listTab })}
+              state={linkState}
               className="font-medium text-primary underline-offset-4 hover:underline"
             >
               {c.name}
@@ -129,53 +261,19 @@ export function ManagedCredentialRow({
       <td className="px-4 py-2 text-xs">
         <CredentialApiBaseCell credential={c} />
       </td>
+      <td className="px-4 py-2">{activeCell}</td>
       <td className="px-4 py-2">
-        {editable ? (
-          <Switch
-            checked={c.is_active}
-            disabled={updateMutation.isPending}
-            onCheckedChange={(checked) => {
-              updateMutation.mutate({
-                id: c.id,
-                body: { is_active: checked },
-                credentialTeamId: updateTeamId,
-              })
-            }}
-            aria-label={c.is_active ? '停用凭据' : '启用凭据'}
-          />
-        ) : (
-          <span className="text-xs text-muted-foreground">{c.is_active ? '启用' : '禁用'}</span>
-        )}
-      </td>
-      <td className="px-4 py-2">
-        {editable || linkable ? (
-          <div className="flex items-center gap-0.5">
-            {linkable ? (
-              <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" asChild>
-                <Link to={credentialDetailHref(detailTeamId, c.id)}>详情</Link>
-              </Button>
-            ) : null}
-            {editable ? (
-              <>
-                <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" asChild>
-                  <Link to={credentialDetailAddModelsHref(detailTeamId, c.id)}>添加模型</Link>
-                </Button>
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  className="h-7 w-7 text-destructive hover:text-destructive"
-                  disabled={updateMutation.isPending}
-                  onClick={() => {
-                    onDelete(c)
-                  }}
-                  aria-label="删除凭据"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </Button>
-              </>
-            ) : null}
-          </div>
-        ) : null}
+        <CredentialRowActions
+          credential={c}
+          detailTeamId={detailTeamId}
+          listTab={listTab}
+          linkable={linkable}
+          editable={editable}
+          deletePending={deletePending}
+          onEdit={onEdit}
+          onAddModels={onAddModels}
+          onDelete={onDelete}
+        />
       </td>
     </tr>
   )
