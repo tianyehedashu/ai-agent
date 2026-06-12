@@ -10,6 +10,7 @@ import { useDeferredValue, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 
 import { teamsApi } from '@/api/gateway/teams'
+import { gatewayTeamMembersQueryKey } from '@/features/gateway-teams/use-gateway-team-members'
 import {
   GATEWAY_FILTER_ALL,
   type GatewayFilterOption,
@@ -65,7 +66,7 @@ export function useTeamMemberFilterSearch({
 
   // 已选用户标签解析：用全量接口查找（仅触发一次，长 staleTime）
   const selectedQuery = useQuery({
-    queryKey: ['gateway', 'members', teamId],
+    queryKey: gatewayTeamMembersQueryKey(teamId),
     queryFn: () => teamsApi.listMembers(teamId),
     enabled: enabled && selectedUserId !== GATEWAY_FILTER_ALL,
     staleTime: 300_000,
