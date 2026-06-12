@@ -430,7 +430,9 @@ export default function GatewayCredentialDetailPage(): React.JSX.Element {
             userId={currentUser.id}
             isAdmin={isAdmin}
             canSelfManage={
-              !isAdmin && cred.scope === 'team' && cred.created_by_user_id === currentUser.id
+              !isAdmin &&
+              cred.scope === 'team' &&
+              (cred.created_by_user_id ?? null) === currentUser.id
             }
           />
         ) : null}
