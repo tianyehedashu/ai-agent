@@ -46,11 +46,31 @@ export const CAPABILITY_LABELS: Record<GatewayCapability, string> = {
   rerank: '重排序',
 }
 
+/** 列表列内紧凑展示（完整文案见 Tooltip / 详情） */
+const CAPABILITY_LIST_LABELS: Partial<Record<GatewayCapability, string>> = {
+  chat: '聊天',
+  embedding: '向量',
+  image: '图片',
+  video_generation: '视频',
+  moderation: '审核',
+  audio_transcription: '语音转写',
+  audio_speech: '语音合成',
+  rerank: '重排',
+}
+
 export function capabilityLabel(capability: string): string {
   if (capability in CAPABILITY_LABELS) {
     return CAPABILITY_LABELS[capability as GatewayCapability]
   }
   return capability
+}
+
+/** 表格列用短标签，避免「聊天 / 文本生成」占满仍被截断 */
+export function capabilityListLabel(capability: string): string {
+  if (capability in CAPABILITY_LIST_LABELS) {
+    return CAPABILITY_LIST_LABELS[capability as GatewayCapability] as string
+  }
+  return capabilityLabel(capability)
 }
 
 export { MODEL_TYPE_LABELS, ModelType }

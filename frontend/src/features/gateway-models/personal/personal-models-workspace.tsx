@@ -34,10 +34,13 @@ import {
   ModelBatchDeleteConfirmDialog,
   ModelBatchDeleteFailedDialog,
 } from '@/features/gateway-models/model-batch-delete-dialogs'
+import { formatSingleGatewayModelDeleteDescription } from '@/features/gateway-models/model-delete-copy'
 import {
   personalModelDetailHref,
   personalModelsRegisterHref,
+  personalCredentialsIndexHref,
 } from '@/features/gateway-models/paths'
+import { indexUsageByRouteName } from '@/features/gateway-models/usage-summary-index'
 import {
   filterSelectedIdsInView,
   filterTestableConnectivityModels,
@@ -234,13 +237,10 @@ export function PersonalModelsWorkspace({
     placeholderData: keepPreviousData,
   })
 
-  const usageByRouteName = useMemo(() => {
-    const m = new Map<string, NonNullable<typeof usageSummary>['items'][number]>()
-    for (const row of usageSummary?.items ?? []) {
-      m.set(row.route_name, row)
-    }
-    return m
-  }, [usageSummary])
+  const usageByRouteName = useMemo(
+    () => indexUsageByRouteName(usageSummary?.items),
+    [usageSummary?.items]
+  )
 
   const listItems = useMemo(() => items.map(fromPersonalModel), [items])
 
@@ -551,7 +551,7 @@ export function PersonalModelsWorkspace({
         <p className="text-sm text-muted-foreground">
           尚无个人凭据，请先到{' '}
           <Link
-            to="/gateway/credentials?tab=personal"
+            to={personalCredentialsIndexHref(teamId)}
             className="text-primary underline-offset-4 hover:underline"
           >
             凭据管理
@@ -567,7 +567,7 @@ export function PersonalModelsWorkspace({
             <li>
               在{' '}
               <Link
-                to="/gateway/credentials?tab=personal"
+                to={personalCredentialsIndexHref(teamId)}
                 className="text-primary underline-offset-4 hover:underline"
               >
                 凭据管理
@@ -828,7 +828,10 @@ export function PersonalModelsWorkspace({
         title="删除个人模型"
         description={
           pendingRowDeleteModel
-            ? `确定删除模型「${pendingRowDeleteModel.display_name}」？将同步更新虚拟 Key / 路由中的模型白名单，并清理相关授权与预算行。此操作不可撤销。`
+            ? formatSingleGatewayModelDeleteDescription(
+                pendingRowDeleteModel.display_name,
+                'personal'
+              )
             : '确定删除该模型？'
         }
         confirmLabel="删除"

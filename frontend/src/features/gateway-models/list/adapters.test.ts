@@ -72,6 +72,7 @@ describe('fromPersonalModel', () => {
       id: 'pm-1',
       scope: 'personal',
       title: 'Display',
+      displayName: 'Display',
       routeName: 'route/name',
       upstreamModelId: 'upstream-id',
       subtitle: 'Anthropic · upstream-id',
@@ -121,6 +122,22 @@ describe('fromGatewayModel', () => {
       registryKind: 'team',
     })
     expect(item.routeName).toBeUndefined()
+    expect(item.displayName).toBe('team/alias')
+  })
+
+  it('maps tags.display_name to displayName', () => {
+    const item = fromGatewayModel(
+      gatewayModel({
+        id: 'gm-dn',
+        tags: { display_name: '通义 Max' },
+      })
+    )
+    expect(item.displayName).toBe('通义 Max')
+  })
+
+  it('falls back displayName to registration name', () => {
+    const item = fromGatewayModel(gatewayModel({ id: 'gm-alias', name: 'glm-5.1' }))
+    expect(item.displayName).toBe('glm-5.1')
   })
 
   it('accepts system scope override', () => {
@@ -139,6 +156,16 @@ describe('fromGatewayModel', () => {
     expect(item.scope).toBe('system')
     expect(item.registryKind).toBe('system')
     expect(item.entitlementStatus).toBe('active')
+  })
+
+  it('maps credential_name from gateway model', () => {
+    const item = fromGatewayModel(
+      gatewayModel({
+        id: 'gm-cred',
+        credential_name: '  OpenAI 生产  ',
+      })
+    )
+    expect(item.credentialName).toBe('OpenAI 生产')
   })
 
   it('sets routeVirtualModel when provided', () => {

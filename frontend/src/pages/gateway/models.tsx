@@ -1,33 +1,16 @@
 ﻿/**
- * AI Gateway · 模型（个人 / 团队 / 系统）
+ * AI Gateway · 模型（统一列表）
  */
 
-import { Suspense, startTransition, useCallback, useEffect } from 'react'
+import { Suspense, useEffect } from 'react'
 
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 
 import { Button } from '@/components/ui/button'
-import { Tabs, TabsContent, TabsList } from '@/components/ui/tabs'
-import {
-  type GatewayScopeTab,
-  isGatewayScopeTabValue,
-  parseModelsPageView,
-} from '@/features/gateway-models/constants'
-import { GatewayScopeTabTriggers } from '@/features/gateway-models/gateway-scope-tabs'
-import {
-  credentialsSystemBrowseIndexHref,
-  personalModelsIndexHref,
-  systemModelsBrowseIndexHref,
-  systemModelsFilteredHref,
-  teamModelsFilteredHref,
-} from '@/features/gateway-models/paths'
-import { preloadPersonalModelsWorkspace } from '@/features/gateway-models/personal/personal-model-preload'
-import {
-  preloadTeamModelsGroupedWorkspace,
-  preloadTeamModelsWorkspace,
-} from '@/features/gateway-models/team/preloads'
+import { parseModelsPageView } from '@/features/gateway-models/constants'
+import { personalModelsIndexHref } from '@/features/gateway-models/paths'
+import { preloadUnifiedModelsWorkspace } from '@/features/gateway-models/unified/unified-models-preload'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
-import { useGatewayScopeTab } from '@/hooks/use-gateway-scope-tab'
 import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { lazyWithReload } from '@/lib/lazy-with-reload'
 import { ChevronLeft, Loader2 } from '@/lib/lucide-icons'
@@ -38,21 +21,15 @@ const PersonalModelsWorkspace = lazyWithReload(() =>
   }))
 )
 
-const TeamModelsGroupedWorkspace = lazyWithReload(() =>
-  import('@/features/gateway-models/team/team-models-grouped-workspace').then((m) => ({
-    default: m.TeamModelsGroupedWorkspace,
-  }))
-)
-
 const TeamModelsWorkspace = lazyWithReload(() =>
   import('@/features/gateway-models/team/team-models-workspace').then((m) => ({
     default: m.TeamModelsWorkspace,
   }))
 )
 
-const SystemModelsBrowseWorkspace = lazyWithReload(() =>
-  import('@/features/gateway-models/system/system-models-browse-workspace').then((m) => ({
-    default: m.SystemModelsBrowseWorkspace,
+const UnifiedModelsWorkspace = lazyWithReload(() =>
+  import('@/features/gateway-models/unified/unified-models-workspace').then((m) => ({
+    default: m.UnifiedModelsWorkspace,
   }))
 )
 
@@ -68,42 +45,18 @@ function ModelsPanelFallback(): React.JSX.Element {
 export default function GatewayModelsPage(): React.JSX.Element {
   const teamId = useGatewayTeamId()
   const { canWrite, canContribute, isPlatformAdmin } = useGatewayPermission()
-  const mutateParamsOnTabChange = useCallback(
-    (next: GatewayScopeTab, params: URLSearchParams) => {
-      params.delete('view')
-      if (next === 'personal') {
-        params.delete('credentialId')
-        params.delete('modelId')
-      }
-      if (next === 'system' && !isPlatformAdmin) {
-        params.delete('credentialId')
-        params.delete('modelId')
-      }
-    },
-    [isPlatformAdmin]
-  )
-  const { scopeTab, setScopeTab, searchParams, setSearchParams } = useGatewayScopeTab({
-    allowSystemTab: true,
-    mutateParamsOnTabChange,
-  })
+  const [searchParams, setSearchParams] = useSearchParams()
   const pageView = parseModelsPageView(searchParams.get('view'))
-  const credentialId = searchParams.get('credentialId') ?? ''
-  // 成员可在自己的凭据下注册团队模型；注册表单仅列出本人可绑定的凭据。
-  const canRegisterTeamModel = canWrite || canContribute
-  const isTeamRegister = scopeTab === 'shared' && pageView === 'register' && canRegisterTeamModel
-  const isSystemRegister = scopeTab === 'system' && pageView === 'register' && isPlatformAdmin
-  const isPersonalRegister = scopeTab === 'personal' && pageView === 'register'
+  const registerScope = searchParams.get('scope')
 
-  const handleScopeTabsChange = useCallback(
-    (v: string): void => {
-      if (isGatewayScopeTabValue(v, { allowSystem: true })) {
-        startTransition(() => {
-          setScopeTab(v)
-        })
-      }
-    },
-    [setScopeTab]
-  )
+  const canRegisterTeamModel = canWrite || canContribute
+  const isRegisterView = pageView === 'register'
+  const isPersonalRegister = isRegisterView && registerScope === 'personal'
+  const isTeamRegister =
+    isRegisterView &&
+    (registerScope === 'team' || registerScope === 'shared') &&
+    canRegisterTeamModel
+  const isSystemRegister = isRegisterView && registerScope === 'system' && isPlatformAdmin
 
   useEffect(() => {
     let needsUpdate = false
@@ -111,208 +64,139 @@ export default function GatewayModelsPage(): React.JSX.Element {
 
     if (searchParams.get('wizard') === '1') {
       next.delete('wizard')
-      next.set('tab', 'shared')
       next.set('view', 'register')
+      next.set('scope', 'team')
       needsUpdate = true
     }
 
-    if (pageView === 'register' && scopeTab === 'shared' && !canRegisterTeamModel) {
-      next.delete('view')
+    if (searchParams.get('tab')) {
+      const legacyTab = searchParams.get('tab')
+      next.delete('tab')
+      if (legacyTab === 'personal') {
+        next.set('scope', 'personal')
+      } else if (legacyTab === 'system') {
+        next.set('scope', 'system')
+      } else if (legacyTab === 'shared') {
+        next.set('scope', 'team')
+      }
       needsUpdate = true
     }
 
-    if (pageView === 'register' && scopeTab === 'system' && !isPlatformAdmin) {
+    if (pageView === 'register' && registerScope === 'team' && !canRegisterTeamModel) {
       next.delete('view')
+      next.delete('scope')
+      needsUpdate = true
+    }
+
+    if (pageView === 'register' && registerScope === 'system' && !isPlatformAdmin) {
+      next.delete('view')
+      next.delete('scope')
       needsUpdate = true
     }
 
     if (needsUpdate) {
       setSearchParams(next, { replace: true })
     }
-  }, [searchParams, setSearchParams, pageView, scopeTab, canRegisterTeamModel, isPlatformAdmin])
+  }, [
+    searchParams,
+    setSearchParams,
+    pageView,
+    registerScope,
+    canRegisterTeamModel,
+    isPlatformAdmin,
+  ])
 
-  const teamListBackHref =
-    scopeTab === 'system'
-      ? systemModelsFilteredHref(teamId, credentialId || undefined)
-      : teamModelsFilteredHref(teamId, credentialId || undefined)
-  const personalListBackHref = personalModelsIndexHref(teamId)
+  const listBackHref = personalModelsIndexHref(teamId)
+
+  if (isPersonalRegister) {
+    return (
+      <div className="space-y-4">
+        <div>
+          <h2 className="text-2xl font-semibold tracking-tight">添加个人模型</h2>
+        </div>
+        <Button variant="ghost" size="sm" className="h-8" asChild>
+          <Link
+            to={listBackHref}
+            onMouseEnter={preloadUnifiedModelsWorkspace}
+            onFocus={preloadUnifiedModelsWorkspace}
+          >
+            <ChevronLeft className="mr-1 h-4 w-4" />
+            返回模型列表
+          </Link>
+        </Button>
+        <Suspense fallback={<ModelsPanelFallback />}>
+          <PersonalModelsWorkspace pageView="register" />
+        </Suspense>
+      </div>
+    )
+  }
+
+  if (isSystemRegister) {
+    return (
+      <div className="space-y-4">
+        <div>
+          <h2 className="text-2xl font-semibold tracking-tight">注册系统模型</h2>
+        </div>
+        <Button variant="ghost" size="sm" className="h-8" asChild>
+          <Link
+            to={listBackHref}
+            onMouseEnter={preloadUnifiedModelsWorkspace}
+            onFocus={preloadUnifiedModelsWorkspace}
+          >
+            <ChevronLeft className="mr-1 h-4 w-4" />
+            返回模型列表
+          </Link>
+        </Button>
+        <Suspense fallback={<ModelsPanelFallback />}>
+          <TeamModelsWorkspace pageView="register" hideRegisterAction listMode="system" />
+        </Suspense>
+      </div>
+    )
+  }
+
+  if (isTeamRegister) {
+    return (
+      <div className="space-y-4">
+        <div>
+          <h2 className="text-2xl font-semibold tracking-tight">添加团队模型</h2>
+        </div>
+        <Button variant="ghost" size="sm" className="h-8" asChild>
+          <Link
+            to={listBackHref}
+            onMouseEnter={preloadUnifiedModelsWorkspace}
+            onFocus={preloadUnifiedModelsWorkspace}
+          >
+            <ChevronLeft className="mr-1 h-4 w-4" />
+            返回模型列表
+          </Link>
+        </Button>
+        <Suspense fallback={<ModelsPanelFallback />}>
+          <TeamModelsWorkspace pageView="register" hideRegisterAction />
+        </Suspense>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-4">
       <div>
         <h2 className="text-2xl font-semibold tracking-tight">模型</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          {scopeTab === 'system' ? (
-            isPlatformAdmin ? (
-              <>
-                系统级模型挂载在{' '}
-                <Link
-                  to={credentialsSystemBrowseIndexHref(teamId)}
-                  className="text-primary underline-offset-4 hover:underline"
-                >
-                  系统凭据
-                </Link>
-                上；对外暴露名在{' '}
-                <Link
-                  to="/gateway/routes"
-                  className="text-primary underline-offset-4 hover:underline"
-                >
-                  虚拟路由
-                </Link>{' '}
-                编排。
-              </>
-            ) : (
-              <>
-                系统预置、当前工作区可请求的模型（只读）。通过{' '}
-                <Link
-                  to="/gateway/keys"
-                  className="text-primary underline-offset-4 hover:underline"
-                >
-                  虚拟 Key
-                </Link>{' '}
-                或{' '}
-                <Link
-                  to="/gateway/guide"
-                  className="text-primary underline-offset-4 hover:underline"
-                >
-                  调用指南
-                </Link>{' '}
-                调用；团队自注册别名见「团队」Tab。
-              </>
-            )
-          ) : scopeTab === 'shared' ? (
-            <>
-              展示您可管理的全部协作团队及其自注册模型别名；系统预置模型见{' '}
-              <Link
-                to={systemModelsBrowseIndexHref(teamId)}
-                className="text-primary underline-offset-4 hover:underline"
-              >
-                系统
-              </Link>{' '}
-              Tab 或{' '}
-              <Link to="/gateway/guide" className="text-primary underline-offset-4 hover:underline">
-                调用指南
-              </Link>
-              。对外暴露名在{' '}
-              <Link
-                to="/gateway/routes"
-                className="text-primary underline-offset-4 hover:underline"
-              >
-                虚拟路由
-              </Link>{' '}
-              编排。点击列表项进入详情；注册新模型请使用「添加模型」。
-            </>
-          ) : (
-            <>
-              个人模型进入 LiteLLM Router；对外暴露名可在{' '}
-              <Link
-                to="/gateway/routes"
-                className="text-primary underline-offset-4 hover:underline"
-              >
-                虚拟路由
-              </Link>{' '}
-              编排，经{' '}
-              <Link to="/gateway/keys" className="text-primary underline-offset-4 hover:underline">
-                虚拟 Key
-              </Link>{' '}
-              / OpenAI 兼容 API 调用。点击列表进入详情；需先配置{' '}
-              <Link
-                to="/gateway/credentials?tab=personal"
-                className="text-primary underline-offset-4 hover:underline"
-              >
-                个人凭据
-              </Link>
-              。
-            </>
-          )}
+          同一列表查看个人、协作团队与系统模型；「归属」列标明所属范围。对外暴露名可在{' '}
+          <Link to="/gateway/routes" className="text-primary underline-offset-4 hover:underline">
+            虚拟路由
+          </Link>{' '}
+          编排，经{' '}
+          <Link to="/gateway/keys" className="text-primary underline-offset-4 hover:underline">
+            虚拟 Key
+          </Link>{' '}
+          / OpenAI 兼容 API 调用。
         </p>
       </div>
 
-      <Tabs value={scopeTab} onValueChange={handleScopeTabsChange}>
-        <TabsList>
-          <GatewayScopeTabTriggers showSystemTab />
-        </TabsList>
-
-        {scopeTab === 'personal' ? (
-          isPersonalRegister ? (
-            <TabsContent value="personal" className="mt-4 space-y-4 focus-visible:outline-none">
-              <Button variant="ghost" size="sm" className="h-8" asChild>
-                <Link
-                  to={personalListBackHref}
-                  onMouseEnter={preloadPersonalModelsWorkspace}
-                  onFocus={preloadPersonalModelsWorkspace}
-                >
-                  <ChevronLeft className="mr-1 h-4 w-4" />
-                  返回模型列表
-                </Link>
-              </Button>
-              <Suspense fallback={<ModelsPanelFallback />}>
-                <PersonalModelsWorkspace pageView="register" />
-              </Suspense>
-            </TabsContent>
-          ) : (
-            <TabsContent value="personal" className="mt-4 focus-visible:outline-none">
-              <Suspense fallback={<ModelsPanelFallback />}>
-                <PersonalModelsWorkspace />
-              </Suspense>
-            </TabsContent>
-          )
-        ) : scopeTab === 'system' ? (
-          isPlatformAdmin ? (
-            isSystemRegister ? (
-              <TabsContent value="system" className="mt-4 space-y-4 focus-visible:outline-none">
-                <Button variant="ghost" size="sm" className="h-8" asChild>
-                  <Link
-                    to={teamListBackHref}
-                    onMouseEnter={preloadTeamModelsWorkspace}
-                    onFocus={preloadTeamModelsWorkspace}
-                  >
-                    <ChevronLeft className="mr-1 h-4 w-4" />
-                    返回模型列表
-                  </Link>
-                </Button>
-                <Suspense fallback={<ModelsPanelFallback />}>
-                  <TeamModelsWorkspace pageView="register" hideRegisterAction listMode="system" />
-                </Suspense>
-              </TabsContent>
-            ) : (
-              <TabsContent value="system" className="mt-4 focus-visible:outline-none">
-                <Suspense fallback={<ModelsPanelFallback />}>
-                  <TeamModelsWorkspace listMode="system" />
-                </Suspense>
-              </TabsContent>
-            )
-          ) : (
-            <TabsContent value="system" className="mt-4 focus-visible:outline-none">
-              <Suspense fallback={<ModelsPanelFallback />}>
-                <SystemModelsBrowseWorkspace />
-              </Suspense>
-            </TabsContent>
-          )
-        ) : isTeamRegister ? (
-          <TabsContent value="shared" className="mt-4 space-y-4 focus-visible:outline-none">
-            <Button variant="ghost" size="sm" className="h-8" asChild>
-              <Link
-                to={teamListBackHref}
-                onMouseEnter={preloadTeamModelsGroupedWorkspace}
-                onFocus={preloadTeamModelsGroupedWorkspace}
-              >
-                <ChevronLeft className="mr-1 h-4 w-4" />
-                返回模型列表
-              </Link>
-            </Button>
-            <Suspense fallback={<ModelsPanelFallback />}>
-              <TeamModelsWorkspace pageView="register" hideRegisterAction />
-            </Suspense>
-          </TabsContent>
-        ) : (
-          <TabsContent value="shared" className="mt-4 focus-visible:outline-none">
-            <Suspense fallback={<ModelsPanelFallback />}>
-              <TeamModelsGroupedWorkspace />
-            </Suspense>
-          </TabsContent>
-        )}
-      </Tabs>
+      <Suspense fallback={<ModelsPanelFallback />}>
+        <UnifiedModelsWorkspace />
+      </Suspense>
     </div>
   )
 }

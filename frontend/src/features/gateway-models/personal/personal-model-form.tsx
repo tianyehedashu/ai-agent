@@ -24,6 +24,8 @@ import {
   capabilityEditorValuesFromPersonalModel,
   type ModelCapabilityEditorValues,
 } from '@/features/gateway-models/model-capability-editor'
+import { personalCredentialsIndexHref } from '@/features/gateway-models/paths'
+import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { ChevronDown, Info, Loader2, RefreshCw } from '@/lib/lucide-icons'
 import { cn } from '@/lib/utils'
 import type { ModelType } from '@/types/user-model'
@@ -102,6 +104,7 @@ export function PersonalModelForm({
   onResyncCapabilities,
   isResyncing = false,
 }: PersonalModelFormProps): React.JSX.Element {
+  const teamId = useGatewayTeamId()
   const lockCredential = lockCredentialId !== undefined && lockCredentialId !== ''
   const activeCredentials = useMemo(() => credentials.filter((c) => c.is_active), [credentials])
   const credentialOptions = useMemo(() => {
@@ -330,7 +333,7 @@ export function PersonalModelForm({
         <p className="mt-2 text-sm text-muted-foreground">
           尚无已启用的个人凭据，请先到{' '}
           <Link
-            to="/gateway/credentials?tab=personal"
+            to={personalCredentialsIndexHref(teamId)}
             className="text-primary underline-offset-4 hover:underline"
           >
             凭据管理
@@ -399,7 +402,7 @@ export function PersonalModelForm({
             <p className="font-medium">凭据已禁用</p>
             <p className="mt-1 text-muted-foreground">请先启用凭据后再探测上游或添加模型。</p>
             <Button type="button" variant="link" className="mt-2 h-auto p-0" asChild>
-              <Link to="/gateway/credentials?tab=personal">前往凭据管理</Link>
+              <Link to={personalCredentialsIndexHref(teamId)}>前往凭据管理</Link>
             </Button>
           </div>
         ) : null}

@@ -4,7 +4,9 @@ import type { GatewayModel } from '@/api/gateway'
 
 import {
   canDeleteGatewayModel,
+  canDeletePersonalGatewayModel,
   canManageGatewayModel,
+  canManagePersonalGatewayModel,
   canResyncGatewayModelCapabilities,
   isConfigManagedSystemModel,
   isModelBatchSelectable,
@@ -87,6 +89,17 @@ describe('canManageGatewayModel', () => {
         false
       )
     ).toBe(false)
+  })
+
+  it('allows team admin to manage others team models', () => {
+    expect(
+      canManageGatewayModel(
+        model({ registry_kind: 'team', credential_created_by_user_id: ownerId }),
+        viewerId,
+        true,
+        false
+      )
+    ).toBe(true)
   })
 
   it('allows model creator to manage their own team models', () => {
@@ -219,5 +232,18 @@ describe('isConfigManagedSystemModel', () => {
     expect(
       isConfigManagedSystemModel(model({ registry_kind: 'system', tags: { managed_by: 'config' } }))
     ).toBe(true)
+  })
+})
+
+describe('canManagePersonalGatewayModel', () => {
+  it('allows owner with auth session', () => {
+    expect(canManagePersonalGatewayModel('user-1', 'user-1', true)).toBe(true)
+    expect(canDeletePersonalGatewayModel('user-1', 'user-1', true)).toBe(true)
+  })
+
+  it('denies other viewers and anonymous', () => {
+    expect(canManagePersonalGatewayModel('user-1', 'user-2', true)).toBe(false)
+    expect(canManagePersonalGatewayModel('user-1', 'user-2', true)).toBe(false)
+    expect(canManagePersonalGatewayModel('user-1', null, false)).toBe(false)
   })
 })
