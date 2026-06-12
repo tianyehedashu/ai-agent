@@ -258,7 +258,7 @@ export function buildSsoLoginUrl(returnPath: string): string {
 }
 
 /** 生产默认同域 IAM 登出（清除 guard_token + Redis 会话） */
-const DEFAULT_SSO_LOGOUT_URL = 'http://gateway.giimallai.com/api/auth/logout'
+const DEFAULT_SSO_LOGOUT_URL = 'https://gateway.giimallai.com/api/auth/logout'
 
 /**
  * 读取 SSO 返回路径：优先 sessionStorage，降级到 cookie。

@@ -38,7 +38,7 @@ ENV VITE_APP_ROOT=${VITE_APP_ROOT}
 ARG VITE_AUTH_MODE=sso
 ENV VITE_AUTH_MODE=${VITE_AUTH_MODE}
 
-ARG VITE_SSO_LOGIN_URL=http://gateway.giimallai.com/api/auth/binding/company_sso?tenantId=000000&domain=admin
+ARG VITE_SSO_LOGIN_URL=https://gateway.giimallai.com/api/auth/binding/company_sso?tenantId=000000&domain=admin
 ENV VITE_SSO_LOGIN_URL=${VITE_SSO_LOGIN_URL}
 
 COPY . .

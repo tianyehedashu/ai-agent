@@ -1,6 +1,6 @@
 # AI Agent × Giikin SSO 集成指南
 
-> **生产入口**：`http://gateway.giimallai.com/ai-agent/`  
+> **生产入口**：`https://gateway.giimallai.com/ai-agent/`  
 > **原则**：身份在 **HiGress 网关** 完成（`giikin-auth-bridge`），ai-agent **只读 Header**，**不**直连 IAM Redis。
 
 ---
@@ -151,7 +151,7 @@ sequenceDiagram
     Note over B,AD: ═══ 阶段 2: Binding 获取 SSO 授权地址 ═══
 
     FE->>FE: sessionStorage + Cookie 写 returnPath<br/>markSsoAttempt() 标记冷却期
-    FE->>AD: fetch GET /api/auth/binding/company_sso<br/>?callbackOrigin=http://gateway.../ai-agent<br/>&domain=admin&tenantId=000000
+    FE->>AD: fetch GET /api/auth/binding/company_sso<br/>?callbackOrigin=https://gateway.../ai-agent<br/>&domain=admin&tenantId=000000
     AD-->>FE: { code:200, data: "https://manage.giikin.com/guard/sso/public/dingtalk/auth?..." }
     FE->>B: window.location.href = authorizeUrl
 
@@ -324,7 +324,7 @@ sequenceDiagram
 1. `auth/me` → **401**（无 Cookie，或 Wasm 未注入 Header）
 2. **`[ai-agent] AuthProvider`** 判定非冷却期 → **`auth.ts`** `initiateSsoLogin(path)`
 3. `sessionStorage` 写入 `ai_agent_sso_return_path`；`markSsoAttempt()` 开启 **120s 冷却期**
-4. **`fetch`**（非整页导航）`GET /api/auth/binding/company_sso?callbackOrigin=http://gateway.../ai-agent&domain=...`
+4. **`fetch`**（非整页导航）`GET /api/auth/binding/company_sso?callbackOrigin=https://gateway.../ai-agent&domain=...`
 5. 响应 JSON `{ code:200, data: authorizeUrl }` → `location.href = authorizeUrl`（manage.giikin.com）
 6. 用户在公司 IdP 授权后，IAM 302 到 **`{callbackOrigin}/sso-callback?ticket=...`**，即 `/ai-agent/sso-callback?ticket=...`
 
@@ -546,7 +546,7 @@ matchRules:
 |------|------|
 | `VITE_APP_ROOT` | `/ai-agent` |
 | `VITE_AUTH_MODE` | `sso` / `local` / `hybrid`（生产建议 `hybrid`） |
-| `VITE_SSO_LOGIN_URL` | `http://gateway.giimallai.com/api/auth/binding/company_sso?tenantId=000000&domain=admin` |
+| `VITE_SSO_LOGIN_URL` | `https://gateway.giimallai.com/api/auth/binding/company_sso?tenantId=000000&domain=admin` |
 
 ### 3.5 giikin-iam（Nacos）
 
@@ -564,14 +564,14 @@ matchRules:
 
 ```bash
 # 1. 健康检查（无需登录）
-curl -s http://gateway.giimallai.com/ai-agent/api/v1/system/health
+curl -s https://gateway.giimallai.com/ai-agent/api/v1/system/health
 
 # 2. 未登录
-curl -s -o /dev/null -w '%{http_code}\n' http://gateway.giimallai.com/ai-agent/api/v1/auth/me
+curl -s -o /dev/null -w '%{http_code}\n' https://gateway.giimallai.com/ai-agent/api/v1/auth/me
 # 期望 401
 
 # 3. 已登录（浏览器 Cookie 或 -b guard_token=...）
-curl -s -b 'guard_token=YOUR_TOKEN' http://gateway.giimallai.com/ai-agent/api/v1/auth/me
+curl -s -b 'guard_token=YOUR_TOKEN' https://gateway.giimallai.com/ai-agent/api/v1/auth/me
 # 期望 200 + 用户信息
 
 # 4. 确认 Header 注入（在 backend Pod 内看 access log 或临时 debug）
