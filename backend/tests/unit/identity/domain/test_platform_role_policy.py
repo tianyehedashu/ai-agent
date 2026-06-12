@@ -9,6 +9,7 @@ import pytest
 from domains.identity.domain.policies.platform_role_policy import (
     assert_bootstrap_grant_admin,
     assert_bootstrap_revoke_admin,
+    assert_emergency_grant_admin,
     assert_can_change_platform_role,
     is_assignable_platform_role,
 )
@@ -140,3 +141,10 @@ class TestBootstrapPlatformRolePolicy:
                 target_current_role=Role.ADMIN.value,
                 admin_count=1,
             )
+
+    def test_emergency_grant_when_admin_exists(self) -> None:
+        assert_emergency_grant_admin(target_current_role=Role.USER.value)
+
+    def test_emergency_grant_rejects_already_admin(self) -> None:
+        with pytest.raises(ValidationError, match="already"):
+            assert_emergency_grant_admin(target_current_role=Role.ADMIN.value)

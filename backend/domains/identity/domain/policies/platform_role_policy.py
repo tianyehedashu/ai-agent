@@ -102,3 +102,11 @@ def assert_bootstrap_revoke_admin(
         )
     if target_current_role != Role.ADMIN.value:
         raise ValidationError("User is not a platform administrator")
+
+
+def assert_emergency_grant_admin(*, target_current_role: str) -> None:
+    """应急 CLI（--force）：已有 admin 时仍可提升指定用户，禁止匿名与重复提权。"""
+    if target_current_role == ANONYMOUS_ROLE:
+        raise ValidationError("Cannot assign platform role to anonymous users")
+    if target_current_role == Role.ADMIN.value:
+        raise ValidationError("User is already a platform administrator")
