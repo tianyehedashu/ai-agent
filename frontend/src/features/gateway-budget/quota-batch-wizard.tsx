@@ -277,7 +277,13 @@ const SelectableList = memo(function SelectableList({
   disabled = false,
   showSelectAll = true,
 }: {
-  items: { id: string; label: string; isLegacy?: boolean }[]
+  items: {
+    id: string
+    label: string
+    isLegacy?: boolean
+    provider?: string
+    scope?: string | null
+  }[]
   selectedIds: string[]
   onSelectionChange: (ids: string[]) => void
   searchPlaceholder: string
@@ -351,41 +357,58 @@ const SelectableList = memo(function SelectableList({
         ) : filtered.length === 0 ? (
           <p className="py-3 text-sm text-muted-foreground">{emptyHint}</p>
         ) : (
-          filtered.map((item) => (
-            <label
-              key={item.id}
-              className="flex cursor-pointer items-center gap-2 rounded px-1 py-0.5 text-sm hover:bg-muted/40"
-            >
-              <Checkbox
-                checked={selectedIds.includes(item.id)}
-                disabled={disabled || loading}
-                onCheckedChange={(checked) => {
-                  const next = checked
-                    ? [...selectedIds, item.id]
-                    : selectedIds.filter((id) => id !== item.id)
-                  onSelectionChange(next)
-                }}
-              />
-              <span className="truncate">{item.label}</span>
-              {itemLegacyMap.get(item.id) ? (
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Badge
-                        variant="outline"
-                        className="ml-auto shrink-0 cursor-help text-[10px] text-blue-600"
-                      >
-                        共享
-                      </Badge>
-                    </TooltipTrigger>
-                    <TooltipContent side="top" className="max-w-[220px] text-xs">
-                      团队共享凭据（由管理员或系统创建），您可为其设置自助限额，仅约束您本人的消费。
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              ) : null}
-            </label>
-          ))
+          filtered.map((item) => {
+            const originalItem = items.find((i) => i.id === item.id)
+            const provider = originalItem?.provider
+            const scope = originalItem?.scope
+            return (
+              <label
+                key={item.id}
+                className="flex cursor-pointer items-center gap-2 rounded px-1 py-1 text-sm hover:bg-muted/40"
+              >
+                <Checkbox
+                  checked={selectedIds.includes(item.id)}
+                  disabled={disabled || loading}
+                  onCheckedChange={(checked) => {
+                    const next = checked
+                      ? [...selectedIds, item.id]
+                      : selectedIds.filter((id) => id !== item.id)
+                    onSelectionChange(next)
+                  }}
+                />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="truncate font-medium">{item.label}</span>
+                    {scope && (
+                      <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                        {scope === 'user' ? '个人' : scope === 'team' ? '团队' : '系统'}
+                      </span>
+                    )}
+                  </div>
+                  {provider && (
+                    <div className="truncate text-[10px] text-muted-foreground">{provider}</div>
+                  )}
+                </div>
+                {itemLegacyMap.get(item.id) ? (
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Badge
+                          variant="outline"
+                          className="ml-auto shrink-0 cursor-help text-[10px] text-blue-600"
+                        >
+                          共享
+                        </Badge>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="max-w-[220px] text-xs">
+                        团队共享凭据（由管理员或系统创建），您可为其设置自助限额，仅约束您本人的消费。
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                ) : null}
+              </label>
+            )
+          })
         )}
       </div>
     </div>

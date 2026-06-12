@@ -435,8 +435,7 @@ function useQuotaCenterImpl(): QuotaCenterState {
   const credentialOptions = useMemo(() => {
     const raw = credsQuery.data ?? []
     if (mode === 'member') {
-      // 成员自助：展示「本人创建的团队凭据」+「无明确创建者的团队凭据」（legacy 凭据，
-      // 由管理员或系统创建，成员同样在使用）。个人 BYOK 凭据在凭据页就地设限。
+      // 成员自助：展示「本人创建的团队凭据」+「无明确创建者的团队凭据」（legacy 凭据）+「个人 BYOK 凭据」
       const result: {
         id: string
         label: string
@@ -445,7 +444,17 @@ function useQuotaCenterImpl(): QuotaCenterState {
         isLegacy?: boolean
       }[] = []
       for (const c of raw) {
-        if (
+        // 个人凭据（scope='user'）直接显示
+        if (c.scope === 'user') {
+          result.push({
+            id: c.id,
+            label: c.name,
+            provider: c.provider,
+            scope: c.scope,
+          })
+        }
+        // 团队凭据：本人创建的或无明确创建者的（legacy）
+        else if (
           selfUserId !== null &&
           (c.created_by_user_id === selfUserId || c.created_by_user_id === null)
         ) {
