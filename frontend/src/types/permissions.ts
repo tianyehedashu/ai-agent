@@ -45,8 +45,11 @@ export function formatTeamMemberDisplay(member: {
   if (name && email) {
     return { primary: name, secondary: `${email} · ${role}` }
   }
-  if (email) {
+  if (email?.includes('@')) {
     return { primary: email, secondary: role }
+  }
+  if (email && !email.includes('@')) {
+    return { primary: email, secondary: `${role} · 用户ID: ${member.user_id.slice(0, 8)}` }
   }
   if (name) {
     return { primary: name, secondary: role }
