@@ -18,7 +18,7 @@ export type BatchBarMode = 'onSelection' | 'whenHasItems'
 
 export type DeleteAllFilteredFetcher = 'personal' | 'managed-teams' | 'single-team'
 
-export type GatewayModelListLayout = 'stacked' | 'compact'
+export type GatewayModelListLayout = 'stacked' | 'compact' | 'columns'
 
 export type ConnectivityDisplay = 'always' | 'attention-only'
 
@@ -60,8 +60,10 @@ export interface GatewayModelListCapabilities {
 export interface GatewayModelListItem {
   id: string
   scope: GatewayModelListScope
-  /** personal: display_name；其它: name */
+  /** personal: display_name；team/system: 注册别名 name */
   title: string
+  /** tags.display_name 或 personal display_name；可与 title / 调用名不同 */
+  displayName?: string | null
   /** personal 第二行 mono（PersonalGatewayModel.name） */
   routeName?: string
   /** 通道 · 上游 ID */
@@ -80,6 +82,9 @@ export interface GatewayModelListItem {
   entitlementStatus?: EntitlementStatus
   entitlementResetAt?: string | null
   teamId?: string | null
+  credentialId?: string | null
+  /** 绑定凭据展示名（团队/系统来自 API enrich；个人由列表 hook 补全） */
+  credentialName?: string | null
   registryKind?: 'team' | 'system'
   /** 若该模型是多凭据路由的别名，对应 Route 的 virtual_model */
   routeVirtualModel?: string | null
@@ -111,6 +116,8 @@ export interface GatewayModelListRowProps extends GatewayModelListRowPermissions
   capabilities: GatewayModelListCapabilities
   selected?: boolean
   highlighted?: boolean
+  showAffiliationColumn?: boolean
+  teamNameById?: Map<string, string>
   usageDays?: UsagePeriodDays
   usageRow?: GatewayModelRouteUsageItem
   usageLoading?: boolean
@@ -122,6 +129,11 @@ export interface GatewayModelListRowProps extends GatewayModelListRowPermissions
   isDeleting?: boolean
   onDelete?: (id: string) => void
   trailingActions?: ReactNode
+  /** columns 布局：由父级传入可调列宽 grid */
+  columnsGrid?: {
+    gridTemplateColumns: string
+    tableMinWidth: number
+  }
 }
 
 export interface GatewayModelListToolbarProps {

@@ -2,6 +2,7 @@ import type { GatewayModel } from '@/api/gateway/models'
 import type { PersonalGatewayModel } from '@/api/gateway/my-models'
 
 import { channelLabel } from '../utils'
+import { gatewayModelDisplayName, personalModelDisplayName } from './gateway-model-display-name'
 
 import type { GatewayModelListItem, GatewayModelListScope } from './types'
 
@@ -15,6 +16,7 @@ export function fromPersonalModel(model: PersonalGatewayModel): GatewayModelList
     id: model.id,
     scope: 'personal',
     title: model.display_name,
+    displayName: personalModelDisplayName(model),
     routeName: model.name,
     subtitle: buildSubtitle(model.provider, model.model_id),
     upstreamModelId: model.model_id,
@@ -29,6 +31,8 @@ export function fromPersonalModel(model: PersonalGatewayModel): GatewayModelList
     entitlementStatus: model.entitlement_status,
     entitlementResetAt: model.entitlement_reset_at,
     teamId: null,
+    credentialId: model.credential_id,
+    credentialName: null,
     source: model,
   }
 }
@@ -43,6 +47,7 @@ export function fromGatewayModel(
     id: model.id,
     scope,
     title: model.name,
+    displayName: gatewayModelDisplayName(model),
     subtitle: buildSubtitle(model.provider, model.real_model),
     upstreamModelId: model.real_model,
     provider: model.provider,
@@ -56,6 +61,8 @@ export function fromGatewayModel(
     entitlementStatus: model.entitlement_status,
     entitlementResetAt: model.entitlement_reset_at,
     teamId: model.tenant_id ?? model.team_id,
+    credentialId: model.credential_id,
+    credentialName: model.credential_name?.trim() ?? null,
     registryKind: model.registry_kind,
     routeVirtualModel,
     source: model,

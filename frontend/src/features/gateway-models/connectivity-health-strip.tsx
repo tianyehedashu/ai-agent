@@ -110,7 +110,7 @@ export const ConnectivityHealthStrip = memo(function ConnectivityHealthStrip({
     [counts]
   )
 
-  if (counts.total === 0) return <></>
+  if (counts.total === 0 && healthFilter === 'all') return <></>
 
   return (
     <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">

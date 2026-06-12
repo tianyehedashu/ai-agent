@@ -9,10 +9,6 @@ export function preloadTeamModelsWorkspace(): void {
   void import('./team-models-workspace')
 }
 
-export function preloadTeamModelsGroupedWorkspace(): void {
-  void import('./team-models-grouped-workspace')
-}
-
 /** 列表 ↔ 详情 ↔ 注册 常见跳转组合预加载 */
 export function preloadModelNavigation(): void {
   preloadTeamModelsWorkspace()

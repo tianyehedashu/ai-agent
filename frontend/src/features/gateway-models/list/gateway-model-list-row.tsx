@@ -9,10 +9,21 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn, formatRelativeTime } from '@/lib/utils'
 
+import { CopyableText } from '../components/copyable-text'
+import { ModelAffiliationCell } from '../components/model-affiliation-cell'
 import { modelTypeLabel } from '../constants'
+import {
+  clientInvokeModelName,
+  listCapabilityLabel,
+  listCapabilityFullLabel,
+  listCredentialName,
+  listDisplayName,
+  upstreamChannelLabel,
+} from './model-list-columns'
 import { ModelCapabilityBadges } from '../team/model-capability-badges'
 import { SystemModelAdminMeta } from '../team/system-model-admin-meta'
 import { classifyFailureReason, formatUsageLine } from '../utils'
+import { ListCellText } from './list-cell-text'
 
 import type { GatewayModelListRowProps } from './types'
 
@@ -43,6 +54,8 @@ export const GatewayModelListRow = memo(function GatewayModelListRow({
   capabilities,
   selected = false,
   highlighted = false,
+  showAffiliationColumn = false,
+  teamNameById,
   usageDays = 7,
   usageRow,
   usageLoading = false,
@@ -57,6 +70,7 @@ export const GatewayModelListRow = memo(function GatewayModelListRow({
   isDeleting = false,
   onDelete,
   trailingActions,
+  columnsGrid,
 }: GatewayModelListRowProps): React.JSX.Element {
   const isPersonal = item.scope === 'personal'
   const layout = capabilities.layout ?? 'compact'
@@ -77,6 +91,7 @@ export const GatewayModelListRow = memo(function GatewayModelListRow({
     item.lastTestedAt && item.lastTestStatus !== null ? formatRelativeTime(item.lastTestedAt) : null
 
   const isCompact = layout === 'compact'
+  const isColumns = layout === 'columns'
   const showConnectivityBadge =
     connectivityDisplay === 'always' || item.lastTestStatus !== 'success'
 
@@ -214,7 +229,9 @@ export const GatewayModelListRow = memo(function GatewayModelListRow({
 
   const hasTrailing = trailingActions !== null && trailingActions !== undefined
   const navigable =
-    capabilities.rowNavigation !== false && (href !== undefined || onSelect !== undefined)
+    !isColumns &&
+    capabilities.rowNavigation !== false &&
+    (href !== undefined || onSelect !== undefined)
   const mainRowClassName = cn(rowClassName, 'min-w-0 overflow-hidden', hasTrailing && 'block')
 
   const mainRow =
@@ -241,11 +258,11 @@ export const GatewayModelListRow = memo(function GatewayModelListRow({
       <div className={mainRowClassName}>{rowContent}</div>
     )
 
-  const trailingCell = hasTrailing ? (
+  const batchSelectCell = batchSelectEnabled ? (
     <div
       className={cn(
-        'sticky right-0 z-[1] flex shrink-0 items-center gap-2 border-l border-border/60 bg-card px-2.5 py-2 shadow-[-10px_0_12px_-10px_hsl(var(--background)/0.9)]',
-        'group-hover:bg-muted/30 sm:px-3'
+        'flex shrink-0 items-center justify-center px-2',
+        isColumns ? 'py-2.5' : !isCompact && 'items-start pt-3'
       )}
       onClick={(e) => {
         e.preventDefault()
@@ -256,19 +273,206 @@ export const GatewayModelListRow = memo(function GatewayModelListRow({
       }}
       role="presentation"
     >
-      {!isPersonal ? statusBadge : null}
+      {batchSelectable ? (
+        <Checkbox
+          checked={batchSelected}
+          aria-label={`选择模型 ${item.title}`}
+          onCheckedChange={(checked) => {
+            onBatchSelectChange?.(item.id, checked === true)
+          }}
+        />
+      ) : (
+        <TooltipProvider delayDuration={300}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span tabIndex={0}>
+                <Checkbox checked={false} disabled aria-label={`不可选择 ${item.title}`} />
+              </span>
+            </TooltipTrigger>
+            <TooltipContent className="max-w-xs text-xs">
+              {configManaged ? CONFIG_MANAGED_BATCH_HINT : '无删除权限'}
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      )}
+    </div>
+  ) : null
+
+  const trailingCell = hasTrailing ? (
+    <div
+      className={cn(
+        'flex shrink-0 items-center justify-end gap-1 px-2.5 py-2',
+        isColumns
+          ? 'min-w-0 border-0 bg-transparent px-3 py-2.5'
+          : 'border-l border-border/50 bg-card/80',
+        !isColumns &&
+          'sticky right-0 z-[1] shadow-[-10px_0_12px_-10px_hsl(var(--background)/0.9)] group-hover:bg-muted/30 sm:px-3'
+      )}
+      onClick={(e) => {
+        e.preventDefault()
+        e.stopPropagation()
+      }}
+      onKeyDown={(e) => {
+        e.stopPropagation()
+      }}
+      role="presentation"
+    >
+      {isColumns ? null : !isPersonal ? statusBadge : null}
       {trailingActions}
     </div>
-  ) : !isPersonal && statusBadge ? (
+  ) : !isColumns && !isPersonal && statusBadge ? (
     <div className="flex shrink-0 items-center px-3 py-2">{statusBadge}</div>
   ) : null
 
+  const affiliationCell =
+    showAffiliationColumn && teamNameById ? (
+      <div
+        className={cn(
+          'min-w-0 px-3 py-2.5',
+          !isColumns && 'flex shrink-0 items-center',
+          !isCompact && !isColumns && 'items-start pt-3'
+        )}
+      >
+        <ModelAffiliationCell
+          scope={item.scope}
+          teamId={item.teamId}
+          teamNameById={teamNameById}
+          plain={isColumns}
+        />
+      </div>
+    ) : null
+
+  if (isColumns) {
+    const invokeName = clientInvokeModelName(item)
+    const displayName = listDisplayName(item)
+    const channel = upstreamChannelLabel(item)
+    const capabilityText = listCapabilityLabel(item)
+    const capabilityFullText = listCapabilityFullLabel(item)
+    const credentialName = listCredentialName(item)
+
+    return (
+      <li
+        data-connectivity-model-id={item.id}
+        className={cn(
+          'group/row border-b border-border/40 transition-colors last:border-b-0 hover:bg-muted/30',
+          highlighted && 'bg-primary/5',
+          selected && 'bg-primary/10'
+        )}
+      >
+        <div
+          className="grid w-full min-w-0 items-center"
+          style={
+            columnsGrid
+              ? {
+                  gridTemplateColumns: columnsGrid.gridTemplateColumns,
+                  minWidth: columnsGrid.tableMinWidth,
+                }
+              : undefined
+          }
+        >
+          {batchSelectCell}
+          {affiliationCell}
+          <div className="min-w-0 px-3 py-2.5">
+            <div className="flex min-w-0 items-center gap-1.5">
+              {item.routeVirtualModel ? (
+                <span className="shrink-0 rounded border border-border/60 bg-muted/50 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                  别名
+                </span>
+              ) : null}
+              <CopyableText
+                value={invokeName}
+                emphasis
+                ariaLabel={`复制调用名 ${invokeName}`}
+                className="min-w-0 flex-1"
+              />
+            </div>
+          </div>
+          <div className="min-w-0 px-3 py-2.5">
+            {displayName ? (
+              <CopyableText
+                value={displayName}
+                mono={false}
+                ariaLabel={`复制显示名 ${displayName}`}
+              />
+            ) : (
+              <span className="px-1 text-sm text-muted-foreground/70">—</span>
+            )}
+          </div>
+          <div className="min-w-0 px-3 py-2.5">
+            <ListCellText value={channel} />
+          </div>
+          <div className="min-w-0 px-3 py-2.5">
+            <CopyableText
+              value={item.upstreamModelId}
+              ariaLabel={`复制上游模型 ${item.upstreamModelId}`}
+            />
+          </div>
+          <div className="min-w-0 px-3 py-2.5">
+            <ListCellText value={capabilityText} tooltip={capabilityFullText} />
+          </div>
+          <div className="min-w-0 px-3 py-2.5">
+            {credentialName ? (
+              <ListCellText value={credentialName} />
+            ) : (
+              <span className="text-sm text-muted-foreground/70">—</span>
+            )}
+          </div>
+          <div className="px-3 py-2.5">
+            <div className="flex min-w-0 flex-col gap-1">
+              <ModelStatusBadge
+                status={item.lastTestStatus}
+                testedAt={item.lastTestedAt}
+                reason={item.lastTestReason}
+                compact
+                withProvider={false}
+              />
+              {failShort ? (
+                <ListCellText value={failShort} className="text-[10px] text-destructive" />
+              ) : null}
+              {!item.enabled ? (
+                <span className="text-[10px] font-medium text-amber-600 dark:text-amber-400">
+                  已禁用
+                </span>
+              ) : null}
+            </div>
+          </div>
+          {trailingCell}
+        </div>
+      </li>
+    )
+  }
+
   const rowGridClassName = cn(
     'grid w-full min-w-0 items-stretch',
-    batchSelectEnabled && hasTrailing && 'grid-cols-[auto_minmax(0,1fr)_auto]',
-    batchSelectEnabled && !hasTrailing && 'grid-cols-[auto_minmax(0,1fr)]',
-    !batchSelectEnabled && hasTrailing && 'grid-cols-[minmax(0,1fr)_auto]',
-    !batchSelectEnabled && !hasTrailing && 'grid-cols-[minmax(0,1fr)]'
+    batchSelectEnabled &&
+      showAffiliationColumn &&
+      hasTrailing &&
+      'grid-cols-[auto_96px_minmax(0,1fr)_auto]',
+    batchSelectEnabled &&
+      showAffiliationColumn &&
+      !hasTrailing &&
+      'grid-cols-[auto_96px_minmax(0,1fr)]',
+    batchSelectEnabled &&
+      !showAffiliationColumn &&
+      hasTrailing &&
+      'grid-cols-[auto_minmax(0,1fr)_auto]',
+    batchSelectEnabled &&
+      !showAffiliationColumn &&
+      !hasTrailing &&
+      'grid-cols-[auto_minmax(0,1fr)]',
+    !batchSelectEnabled &&
+      showAffiliationColumn &&
+      hasTrailing &&
+      'grid-cols-[96px_minmax(0,1fr)_auto]',
+    !batchSelectEnabled &&
+      showAffiliationColumn &&
+      !hasTrailing &&
+      'grid-cols-[96px_minmax(0,1fr)]',
+    !batchSelectEnabled &&
+      !showAffiliationColumn &&
+      hasTrailing &&
+      'grid-cols-[minmax(0,1fr)_auto]',
+    !batchSelectEnabled && !showAffiliationColumn && !hasTrailing && 'grid-cols-[minmax(0,1fr)]'
   )
 
   return (
@@ -280,45 +484,8 @@ export const GatewayModelListRow = memo(function GatewayModelListRow({
       )}
     >
       <div className={rowGridClassName}>
-        {batchSelectEnabled ? (
-          <div
-            className={cn(
-              'flex shrink-0 items-center justify-center px-2',
-              !isCompact && 'items-start pt-3'
-            )}
-            onClick={(e) => {
-              e.preventDefault()
-              e.stopPropagation()
-            }}
-            onKeyDown={(e) => {
-              e.stopPropagation()
-            }}
-            role="presentation"
-          >
-            {batchSelectable ? (
-              <Checkbox
-                checked={batchSelected}
-                aria-label={`选择模型 ${item.title}`}
-                onCheckedChange={(checked) => {
-                  onBatchSelectChange?.(item.id, checked === true)
-                }}
-              />
-            ) : (
-              <TooltipProvider delayDuration={300}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span tabIndex={0}>
-                      <Checkbox checked={false} disabled aria-label={`不可选择 ${item.title}`} />
-                    </span>
-                  </TooltipTrigger>
-                  <TooltipContent className="max-w-xs text-xs">
-                    {configManaged ? CONFIG_MANAGED_BATCH_HINT : '无删除权限'}
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            )}
-          </div>
-        ) : null}
+        {batchSelectCell}
+        {affiliationCell}
         {mainRow}
         {trailingCell}
       </div>

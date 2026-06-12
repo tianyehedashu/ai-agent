@@ -16,6 +16,7 @@ import {
   canDeleteGatewayModel,
   canManageGatewayModel,
 } from '@/features/gateway-models/gateway-model-permissions'
+import { formatSingleGatewayModelDeleteDescription } from '@/features/gateway-models/model-delete-copy'
 import { teamModelsRegisterHref } from '@/features/gateway-models/paths'
 import { CollaborationTeamGroupHeader } from '@/features/gateway-teams/collaboration-team-group-header'
 import { isGatewayTeamWritable } from '@/features/gateway-teams/gateway-team-write-policy'
@@ -249,7 +250,7 @@ export function GatewayModelGroupedList({
         title="删除团队模型"
         description={
           pendingDelete
-            ? `确定删除模型「${pendingDelete.item.title}」？将同步更新虚拟 Key / 路由中的模型白名单，并清理相关授权与预算行。此操作不可撤销。`
+            ? formatSingleGatewayModelDeleteDescription(pendingDelete.item.title, 'team')
             : '确定删除该模型？'
         }
         confirmLabel="确认删除"

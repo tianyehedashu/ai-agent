@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 
 import { gatewayApi } from '@/api/gateway'
 import { parseModelsScopeTab } from '@/features/gateway-models/constants'
+import { gatewayModelLabel } from '@/features/gateway-models/list/gateway-model-display-name'
 import { resolveTeamModelsRegistryScope } from '@/features/gateway-models/utils'
 import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 
@@ -19,7 +20,7 @@ export function useGatewayModelLabel(modelId: string, credentialId = ''): string
       gatewayApi.getModel(teamId, modelId, {
         registry_scope: registryScope,
       }),
-    select: (model) => model.name,
+    select: (model) => gatewayModelLabel(model),
     enabled: modelId.length > 0,
     staleTime: 30_000,
     retry: false,

@@ -4,35 +4,38 @@ import { parseModelsScopeTab, parseScopeTab } from './constants'
 import {
   credentialDetailAddModelsHref,
   credentialDetailHref,
-  credentialsSystemBrowseIndexHref,
-  credentialsTeamListHref,
+  credentialsListHref,
+  modelsIndexHref,
+  personalCredentialsIndexHref,
   personalModelDetailHref,
-  personalModelEditHref,
   personalModelsIndexHref,
   personalModelsRegisterHref,
   teamModelDetailHref,
   teamModelsFilteredHref,
   teamModelsIndexHref,
-  systemModelsBrowseIndexHref,
   teamModelsRegisterHref,
 } from './paths'
 
 const TEAM = 'team-abc'
 
 describe('gateway model paths', () => {
+  it('modelsIndexHref without params', () => {
+    expect(modelsIndexHref(TEAM)).toBe('/gateway/teams/team-abc/models')
+  })
+
   it('teamModelsFilteredHref without credential', () => {
-    expect(teamModelsFilteredHref(TEAM)).toBe('/gateway/teams/team-abc/models?tab=shared')
+    expect(teamModelsFilteredHref(TEAM)).toBe('/gateway/teams/team-abc/models')
   })
 
   it('teamModelsFilteredHref with credential', () => {
     expect(teamModelsFilteredHref(TEAM, 'cred-1')).toBe(
-      '/gateway/teams/team-abc/models?tab=shared&credentialId=cred-1'
+      '/gateway/teams/team-abc/models?credentialId=cred-1&scope=team'
     )
   })
 
   it('teamModelsRegisterHref locks credential', () => {
     expect(teamModelsRegisterHref(TEAM, 'cred-1')).toBe(
-      '/gateway/teams/team-abc/models?tab=shared&credentialId=cred-1&view=register'
+      '/gateway/teams/team-abc/models?credentialId=cred-1&scope=team&view=register'
     )
   })
 
@@ -60,24 +63,39 @@ describe('gateway model paths', () => {
     )
   })
 
+  it('credentialsListHref', () => {
+    expect(credentialsListHref(TEAM)).toBe('/gateway/teams/team-abc/credentials')
+  })
+
+  it('personalCredentialsIndexHref with credentialId', () => {
+    expect(personalCredentialsIndexHref(TEAM, { credentialId: 'cred-1' })).toBe(
+      '/gateway/teams/team-abc/credentials?credentialId=cred-1'
+    )
+  })
+
+  it('credentialsListHref with view=create', () => {
+    expect(credentialsListHref(TEAM, { view: 'create' })).toBe(
+      '/gateway/teams/team-abc/credentials?view=create'
+    )
+  })
+
   it('teamModelsIndexHref matches filtered without credential', () => {
     expect(teamModelsIndexHref(TEAM)).toBe(teamModelsFilteredHref(TEAM))
-    expect(credentialsTeamListHref(TEAM)).toBe('/gateway/teams/team-abc/credentials?tab=shared')
   })
 
   it('personalModelsIndexHref', () => {
-    expect(personalModelsIndexHref(TEAM)).toBe('/gateway/teams/team-abc/models?tab=personal')
+    expect(personalModelsIndexHref(TEAM)).toBe('/gateway/teams/team-abc/models')
   })
 
   it('personalModelsRegisterHref', () => {
     expect(personalModelsRegisterHref(TEAM)).toBe(
-      '/gateway/teams/team-abc/models?tab=personal&view=register'
+      '/gateway/teams/team-abc/models?scope=personal&view=register'
     )
   })
 
   it('personalModelsRegisterHref with credentialId', () => {
     expect(personalModelsRegisterHref(TEAM, 'cred-1')).toBe(
-      '/gateway/teams/team-abc/models?tab=personal&view=register&credentialId=cred-1'
+      '/gateway/teams/team-abc/models?credentialId=cred-1&scope=personal&view=register'
     )
   })
 
@@ -87,20 +105,14 @@ describe('gateway model paths', () => {
     )
   })
 
-  it('personalModelEditHref', () => {
-    expect(personalModelEditHref(TEAM, 'pm-1')).toBe(
-      '/gateway/teams/team-abc/models/pm-1?tab=personal&view=edit'
+  it('personalModelDetailHref serves as edit deep link', () => {
+    expect(personalModelDetailHref(TEAM, 'pm-1')).toBe(
+      '/gateway/teams/team-abc/models/pm-1?tab=personal'
     )
   })
 
-  it('systemModelsBrowseIndexHref', () => {
-    expect(systemModelsBrowseIndexHref(TEAM)).toBe('/gateway/teams/team-abc/models?tab=system')
-  })
-
-  it('credentialsSystemBrowseIndexHref', () => {
-    expect(credentialsSystemBrowseIndexHref(TEAM)).toBe(
-      '/gateway/teams/team-abc/credentials?tab=system'
-    )
+  it('modelsIndexHref for unified browse', () => {
+    expect(modelsIndexHref(TEAM)).toBe('/gateway/teams/team-abc/models')
   })
 })
 

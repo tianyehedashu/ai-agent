@@ -4,13 +4,14 @@
 
 ## 入口
 
-| 入口             | preset                             | Workspace                             |
-| ---------------- | ---------------------------------- | ------------------------------------- |
-| Personal         | `PERSONAL_LIST_CAPABILITIES`       | `PersonalModelsWorkspace`             |
-| Team Grouped     | `TEAM_GROUPED_CAPABILITIES`        | `TeamModelsGroupedWorkspace`          |
-| System Admin     | `SYSTEM_ADMIN_CAPABILITIES`        | `TeamModelsWorkspace listMode=system` |
-| System Browse    | `SYSTEM_BROWSE_CAPABILITIES`       | `SystemModelsBrowseWorkspace`         |
-| Credential Embed | `EMBEDDED_CREDENTIAL_CAPABILITIES` | `CredentialModelsCard`                |
+| 入口             | preset                             | Workspace                               |
+| ---------------- | ---------------------------------- | --------------------------------------- |
+| Unified List     | `SHARED_FULL` + unified caps       | `UnifiedModelsWorkspace`                |
+| Personal         | `PERSONAL_LIST_CAPABILITIES`       | `PersonalModelsWorkspace`（注册）       |
+| Team Grouped     | `TEAM_GROUPED_CAPABILITIES`        | ~~`TeamModelsGroupedWorkspace`~~ 已移除 |
+| System Admin     | `SYSTEM_ADMIN_CAPABILITIES`        | `TeamModelsWorkspace listMode=system`   |
+| System Browse    | `SYSTEM_BROWSE_CAPABILITIES`       | `SystemModelsBrowseWorkspace`           |
+| Credential Embed | `EMBEDDED_CREDENTIAL_CAPABILITIES` | `CredentialModelsCard`                  |
 
 ## 能力矩阵
 
@@ -45,17 +46,19 @@
 
 ## 权限 gate
 
-| 维度                              | 预期                                                                                         |
-| --------------------------------- | -------------------------------------------------------------------------------------------- |
-| 未登录                            | Personal 拒入                                                                                |
-| 非 PlatformAdmin                  | System Admin → 降级 `SYSTEM_BROWSE_CAPABILITIES`                                             |
-| `canContribute=true`（member+）   | 保留 BatchBar / 行 Switch / 行删除 / 添加模型；行级归属由 `canManage`/`canDelete` 裁剪到自有 |
-| `canWrite=false`（仅 member）     | **关闭** 跨筛选「删除当前筛选下全部」（会触及他人模型，仅 admin+）                           |
-| `canContribute=false`（只读访客） | 隐藏 BatchBar、行 Switch、行删除、添加模型                                                   |
-| 行级 `canManage=false`            | 禁用 Switch；不显示删除；批量 Checkbox disabled + Tooltip                                    |
-| 行级 `configManaged=true`         | 不可批量选；不可单删；Tooltip 说明                                                           |
-| System Browse                     | preset `readonly`；所有写操作不渲染                                                          |
-| Embedded                          | 无 Toolbar/BatchBar/分组；行可点进详情                                                       |
+| 维度                              | 预期                                                                                   |
+| --------------------------------- | -------------------------------------------------------------------------------------- |
+| 未登录                            | Personal 拒入                                                                          |
+| 非 PlatformAdmin                  | System Admin → 降级 `SYSTEM_BROWSE_CAPABILITIES`                                       |
+| `canContribute=true`（member+）   | 保留添加模型；行 Switch/删除/批量勾选由行级 `canManage`/`canDelete` 裁剪（通常仅自有） |
+| `canWrite=true`（team admin+）    | 对他人凭据上的模型：`canManage` 与 `canDelete` 对齐，可启停+删除；可见批量操作 Toolbar |
+| `canWrite=false`（仅 member）     | **关闭** 跨筛选「删除当前筛选下全部」（会触及他人模型，仅 admin+）                     |
+| `canContribute=false`（只读访客） | 隐藏 BatchBar、行 Switch、行删除、添加模型                                             |
+| 行级 `canManage=false`            | 隐藏 Switch；批量 Checkbox disabled + Tooltip（删除按钮亦隐藏，除非 `canDelete=true`） |
+| 行级 `canDelete=false`            | 隐藏删除；配置托管系统模型可 `canManage` 启停但不可删                                  |
+| 行级 `configManaged=true`         | 不可批量选；不可单删；Tooltip 说明                                                     |
+| System Browse                     | preset `readonly`；所有写操作不渲染                                                    |
+| Embedded                          | 无 Toolbar/BatchBar/分组；行可点进详情                                                 |
 
 > **创建者私有（member-friendly）**：团队成员（member+）可在「自己创建的凭据」下注册/启停/删除模型，
 > 故 `effectiveCapabilities` 行级与勾选能力由 `canContribute` 而非 `canWrite` 控制；
@@ -81,9 +84,10 @@
 ## 手测脚本（摘要）
 
 1. 五个入口各打开列表，确认 preset 能力开关与上表一致。
-2. 分别以 Owner / Member(创建者) / Member(他人凭据只读) / PlatformAdmin / 匿名 五类角色验证权限 gate。
+2. 分别以 Owner / Member(创建者) / Member(他人凭据只读) / TeamAdmin(他人模型可启停删) / PlatformAdmin / 匿名 验证权限 gate。
    - Member(创建者)：能看到「添加模型」、对自有模型行内启停/删除、批量勾选删除自有；看不到「删除筛选下全部」。
    - Member(他人凭据)：他人模型只读，无行内操作。
+   - Team owner/admin：对他人凭据上的模型可启停与删除（与后端 `can_update_team_model_on_credential` 对齐）；不可在他人凭据上新建模型。
 3. 批量：勾选 → 测试/同步/删除；Toolbar 菜单 → 删除筛选下全部（仅 admin+）。
 4. 探活：全量/未测/失败删除；Banner scrollToFirst。
 5. 深链：`?credentialId=`、`?modelId=` 高亮与筛选。

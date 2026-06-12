@@ -30,7 +30,9 @@ import {
   UpstreamCallShapeSelect,
   ThinkingParamSelect,
 } from '@/features/gateway-models/model-capability-editor'
+import { credentialsListHref } from '@/features/gateway-models/paths'
 import { buildPresetTags, parsePositiveInt } from '@/features/gateway-models/utils'
+import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { ChevronDown, Info } from '@/lib/lucide-icons'
 import { cn } from '@/lib/utils'
 
@@ -97,6 +99,7 @@ export function RegisterModelForm({
   initialProvider,
   cancelLabel = '返回模型清单',
 }: RegisterModelFormProps): React.JSX.Element {
+  const teamId = useGatewayTeamId()
   const lockCredential = lockCredentialId !== undefined && lockCredentialId !== ''
   const [advancedOpen, setAdvancedOpen] = useState(false)
   const [values, setValues] = useState<ModelFormValues>(() =>
@@ -254,7 +257,7 @@ export function RegisterModelForm({
                   {credentials.length === 0 ? (
                     <p className="mt-2 text-sm text-muted-foreground">
                       请先到{' '}
-                      <Link to="/gateway/credentials?tab=shared" className="text-primary underline">
+                      <Link to={credentialsListHref(teamId)} className="text-primary underline">
                         凭据管理
                       </Link>{' '}
                       添加并启用团队凭据。

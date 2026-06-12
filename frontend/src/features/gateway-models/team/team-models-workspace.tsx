@@ -52,13 +52,14 @@ import {
   ModelBatchDeleteConfirmDialog,
   ModelBatchDeleteFailedDialog,
 } from '@/features/gateway-models/model-batch-delete-dialogs'
+import { formatSingleGatewayModelDeleteDescription } from '@/features/gateway-models/model-delete-copy'
 import {
-  credentialsSystemBrowseIndexHref,
   credentialDetailAddModelsHref,
   credentialDetailHref,
-  credentialsTeamListHref,
+  credentialsListHref,
   teamModelDetailHref,
 } from '@/features/gateway-models/paths'
+import { indexUsageByRouteName } from '@/features/gateway-models/usage-summary-index'
 import { useGatewayModelCredentialFilterOptions } from '@/features/gateway-models/use-managed-team-credential-filter-options'
 import {
   gatewayModelsListQueryKey,
@@ -391,13 +392,10 @@ export function TeamModelsWorkspace({
     [setSearchParams]
   )
 
-  const usageByRouteName = useMemo(() => {
-    const m = new Map<string, NonNullable<typeof usageSummary>['items'][number]>()
-    for (const row of usageSummary?.items ?? []) {
-      m.set(row.route_name, row)
-    }
-    return m
-  }, [usageSummary])
+  const usageByRouteName = useMemo(
+    () => indexUsageByRouteName(usageSummary?.items),
+    [usageSummary?.items]
+  )
 
   const providerChoices = useMemo(() => {
     const s = new Set<string>(MODEL_PROVIDERS.map((p) => p.id))
@@ -831,14 +829,7 @@ export function TeamModelsWorkspace({
           <ol className="mt-3 list-decimal space-y-2 pl-5 text-sm text-muted-foreground">
             <li>
               在{' '}
-              <Link
-                to={
-                  listMode === 'system'
-                    ? credentialsSystemBrowseIndexHref(teamId)
-                    : credentialsTeamListHref(teamId)
-                }
-                className="text-primary underline"
-              >
+              <Link to={credentialsListHref(teamId)} className="text-primary underline">
                 {listMode === 'system' ? '系统凭据' : '凭据管理'}
               </Link>{' '}
               添加并启用{listMode === 'system' ? '系统' : '团队'}凭据
@@ -1123,7 +1114,7 @@ export function TeamModelsWorkspace({
         title={listMode === 'system' ? '删除系统模型' : '删除团队模型'}
         description={
           pendingRowDeleteModel
-            ? `确定删除模型「${pendingRowDeleteModel.name}」？将同步更新虚拟 Key / 路由中的模型白名单，并清理相关授权与预算行。此操作不可撤销。`
+            ? formatSingleGatewayModelDeleteDescription(pendingRowDeleteModel.name, 'team')
             : '确定删除该模型？'
         }
         confirmLabel="确认删除"

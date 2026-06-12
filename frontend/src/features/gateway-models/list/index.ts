@@ -2,6 +2,11 @@ export { buildManagedTeamRouteUsageKey, buildRouteUsageKey } from './usage-keys'
 export { fromGatewayModel, fromPersonalModel } from './adapters'
 export { effectiveCapabilities } from './capabilities'
 export { GatewayModelFlatList, type GatewayModelFlatListProps } from './gateway-model-flat-list'
+export {
+  GatewayModelAffiliatedFlatList,
+  type GatewayModelAffiliatedFlatListProps,
+} from './gateway-model-affiliated-flat-list'
+export { GatewayModelListHead } from './gateway-model-list-head'
 export { GatewayModelGroupedList } from './gateway-model-grouped-list'
 export { GatewayModelBatchBar } from './gateway-model-batch-bar'
 export { GatewayModelListRow } from './gateway-model-list-row'
