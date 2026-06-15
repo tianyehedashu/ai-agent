@@ -23,22 +23,38 @@ DEFAULT_CLIENT_TEMPERATURE = 0.7
 TEMPERATURE_MIN = 0.0
 TEMPERATURE_MAX = 2.0
 
-# Moonshot Kimi Code（``moonshot.coding_plan``）：上游仅接受 temperature=1
-_FIXED_TEMPERATURE_1_MODEL_IDS: frozenset[str] = frozenset(
-    {
-        "kimi-for-coding",
-        "kimi-for-coding-chat",
-    }
-)
+# 注册模型 tags 中 denormalize 的凭据 profile（与 ``gateway_credential_profile_id`` 同 id 空间）
+UPSTREAM_PROFILE_ID_TAG = "upstream_profile_id"
 
 
-def requires_fixed_temperature_1(*, real_model: str = "") -> bool:
-    """上游硬性要求 ``temperature=1`` 的模型（与思考模式 / tags 显式 client 无关）。"""
-    rm = (real_model or "").strip().lower()
-    if not rm:
-        return False
-    model_part = rm.split("/")[-1]
-    return model_part in _FIXED_TEMPERATURE_1_MODEL_IDS
+def temperature_policy_from_upstream_profile(
+    *,
+    credential_profile_id: str | None,
+    provider: str,
+) -> str | None:
+    """按 ``UpstreamProfile.fixed_outbound_temperature`` 解析出站温度策略。"""
+    from domains.gateway.domain.upstream_profile_registry import get_upstream_profile
+
+    profile = get_upstream_profile(credential_profile_id, provider=provider)
+    fixed = profile.fixed_outbound_temperature
+    if fixed is None:
+        return None
+    if fixed == 1.0:
+        return TEMPERATURE_POLICY_FIXED_1
+    if fixed == 0.0:
+        return TEMPERATURE_POLICY_PROBE_0
+    return None
+
+
+def _effective_upstream_profile_id(
+    tags: dict[str, Any],
+    *,
+    credential_profile_id: str | None,
+) -> str | None:
+    if credential_profile_id and credential_profile_id.strip():
+        return credential_profile_id.strip()
+    raw = tags.get(UPSTREAM_PROFILE_ID_TAG)
+    return raw.strip() if isinstance(raw, str) and raw.strip() else None
 
 
 def infer_temperature_policy(
@@ -47,10 +63,17 @@ def infer_temperature_policy(
     supports_reasoning: bool = False,
     explicit: str | None = None,
     real_model: str = "",
+    credential_profile_id: str | None = None,
+    provider: str = "",
 ) -> str:
-    """推断温度策略；``explicit`` 为 tags 显式配置时优先（Coding 模型硬约束除外）。"""
-    if requires_fixed_temperature_1(real_model=real_model):
-        return TEMPERATURE_POLICY_FIXED_1
+    """推断温度策略；Profile 硬约束优先于 tags 显式 ``client``。"""
+    _ = real_model  # 保留入参供调用方扩展；当前以 profile 为 SSOT
+    profile_policy = temperature_policy_from_upstream_profile(
+        credential_profile_id=credential_profile_id,
+        provider=provider,
+    )
+    if profile_policy is not None:
+        return profile_policy
 
     if explicit is not None:
         normalized = explicit.strip()
@@ -67,6 +90,8 @@ def resolve_temperature_policy_from_tags(
     *,
     thinking_param: str,
     real_model: str = "",
+    credential_profile_id: str | None = None,
+    provider: str = "",
 ) -> str:
     """从 tags 解析 ``temperature_policy``。"""
     explicit = tags.get("temperature_policy")
@@ -74,12 +99,17 @@ def resolve_temperature_policy_from_tags(
     supports_reasoning = bool(tags.get("supports_reasoning", False))
     if bool(tags.get("supports_reasoning_content", False)):
         supports_reasoning = True
-    rm = str(tags.get("real_model") or real_model or "")
+    prov = str(tags.get("provider") or provider or "")
+    profile_id = _effective_upstream_profile_id(
+        tags, credential_profile_id=credential_profile_id
+    )
     return infer_temperature_policy(
         thinking_param=thinking_param,
         supports_reasoning=supports_reasoning,
         explicit=explicit_str,
-        real_model=rm,
+        real_model=real_model,
+        credential_profile_id=profile_id,
+        provider=prov,
     )
 
 
@@ -104,6 +134,7 @@ def enrich_temperature_tags(
         merged,
         thinking_param=thinking_param,
         real_model=str(merged.get("real_model") or ""),
+        provider=str(merged.get("provider") or ""),
     )
     merged["temperature_policy"] = policy
     if policy == TEMPERATURE_POLICY_CLIENT:
@@ -119,9 +150,10 @@ __all__ = [
     "TEMPERATURE_POLICY_FIXED_1",
     "TEMPERATURE_POLICY_PROBE_0",
     "TEMPERATURE_POLICY_VALUES",
+    "UPSTREAM_PROFILE_ID_TAG",
     "enrich_temperature_tags",
     "infer_temperature_policy",
-    "requires_fixed_temperature_1",
     "resolve_temperature_default_from_tags",
     "resolve_temperature_policy_from_tags",
+    "temperature_policy_from_upstream_profile",
 ]

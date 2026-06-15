@@ -89,6 +89,8 @@ class UpstreamProfile:
     probe_supported: bool = True
     probe_unsupported_reason: str | None = None
     coding_agent_ua: str | None = None
+    fixed_outbound_temperature: float | None = None
+    """出站 LiteLLM 须锁定的 temperature；``None`` 表示不强制。"""
 
     def normalize_api_base(self, api_base: str | None, *, protocol: UpstreamProtocol) -> str | None:
         """用户覆盖或 profile 默认 base，经 normalize_rules 规范化。"""

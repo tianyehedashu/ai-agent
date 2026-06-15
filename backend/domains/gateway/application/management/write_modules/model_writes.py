@@ -107,12 +107,20 @@ class _PreparedGatewayModelWrite:
     enriched_tags: dict[str, Any]
 
 
+def _upstream_profile_id_from_credential(cred: object | None) -> str | None:
+    if cred is None:
+        return None
+    raw = getattr(cred, "profile_id", None)
+    return raw.strip() if isinstance(raw, str) and raw.strip() else None
+
+
 def _prepare_gateway_model_write_fields(
     *,
     provider: str,
     real_model: str,
     tags: dict[str, Any] | None,
     credential_provider: str,
+    upstream_profile_id: str | None = None,
 ) -> _PreparedGatewayModelWrite:
     raw_rm = str(real_model).strip()
     if not raw_rm:
@@ -129,6 +137,7 @@ def _prepare_gateway_model_write_fields(
         tags,
         provider=provider,
         real_model=raw_rm,
+        upstream_profile_id=upstream_profile_id,
         skip_hints=is_config_managed_system_gateway_model(tags=tags),
     )
     return _PreparedGatewayModelWrite(
@@ -270,7 +279,12 @@ class ModelWritesMixin:
             mtags["display_name"] = display_name
             if tags:
                 mtags.update({k: v for k, v in tags.items() if v is not None})
-            mtags = build_gateway_model_tags(mtags, provider=provider, real_model=real_model)
+            mtags = build_gateway_model_tags(
+                mtags,
+                provider=provider,
+                real_model=real_model,
+                upstream_profile_id=_upstream_profile_id_from_credential(cred_row),
+            )
             row = await self._models.create(
                 tenant_id=tenant_id,
                 name=alias,
@@ -343,6 +357,7 @@ class ModelWritesMixin:
             or model_types_raw is not None
             or "real_model" in update_fields
             or "tags" in update_fields
+            or "credential_id" in update_fields
         )
         if needs_tags_pipeline:
             merged_tags = dict(existing.tags or {})
@@ -361,10 +376,15 @@ class ModelWritesMixin:
             if resync_capabilities:
                 merged_tags = strip_litellm_capability_tags(merged_tags)
             real_for_tags = str(update_fields.get("real_model") or existing.real_model).strip()
+            effective_cred_id = update_fields.get("credential_id") or existing.credential_id
+            cred_for_tags = None
+            if effective_cred_id is not None:
+                cred_for_tags = await self._creds.get(effective_cred_id)
             update_fields["tags"] = build_gateway_model_tags(
                 merged_tags,
                 provider=existing.provider,
                 real_model=real_for_tags,
+                upstream_profile_id=_upstream_profile_id_from_credential(cred_for_tags),
                 skip_hints=config_managed,
                 hint_mode="resync" if resync_capabilities else "fill_missing",
             )
@@ -467,6 +487,7 @@ class ModelWritesMixin:
             real_model=real_model,
             tags=tags,
             credential_provider=cred.provider,
+            upstream_profile_id=_upstream_profile_id_from_credential(cred),
         )
         row = await self._models.create(
             tenant_id=tenant_id,
@@ -513,6 +534,7 @@ class ModelWritesMixin:
             real_model=real_model,
             tags=tags,
             credential_provider=cred.provider,
+            upstream_profile_id=_upstream_profile_id_from_credential(cred),
         )
         row = await self._models.create_system(
             name=name,
@@ -887,6 +909,7 @@ class ModelWritesMixin:
             or "tags" in update_fields
             or model_types_raw is not None
             or "capability" in update_fields
+            or "credential_id" in update_fields
         )
         if needs_tags_pipeline:
             merged_tags = dict(existing.tags or {})
@@ -901,10 +924,22 @@ class ModelWritesMixin:
             if resync_capabilities:
                 merged_tags = strip_litellm_capability_tags(merged_tags)
             real_for_tags = str(update_fields.get("real_model") or existing.real_model).strip()
+            effective_cred_id = update_fields.get("credential_id") or existing.credential_id
+            cred_for_tags: object | None = None
+            if effective_cred_id is not None:
+                if owner_tenant_id is None:
+                    cred_for_tags = await self._system_creds.get(effective_cred_id)
+                else:
+                    cred_for_tags = await self._creds.get_bindable_for_team_gateway_model(
+                        effective_cred_id,
+                        tenant_id=tenant_id,
+                        is_platform_admin=is_platform_admin,
+                    )
             update_fields["tags"] = build_gateway_model_tags(
                 merged_tags,
                 provider=existing.provider,
                 real_model=real_for_tags,
+                upstream_profile_id=_upstream_profile_id_from_credential(cred_for_tags),
                 skip_hints=config_managed,
                 hint_mode="resync" if resync_capabilities else "fill_missing",
             )

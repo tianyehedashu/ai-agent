@@ -51,3 +51,14 @@ def test_resync_mode_sets_vision_in_pipeline() -> None:
         hint_mode="resync",
     )
     assert tags.get("supports_vision") is True
+
+
+def test_upstream_profile_id_denormalized_into_tags() -> None:
+    tags = build_gateway_model_tags(
+        {},
+        provider="moonshot",
+        real_model="my-code-model",
+        upstream_profile_id="moonshot.coding_plan",
+    )
+    assert tags["upstream_profile_id"] == "moonshot.coding_plan"
+    assert tags["temperature_policy"] == "fixed_1"

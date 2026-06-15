@@ -170,3 +170,8 @@ def test_list_profiles_for_provider_includes_multi_plan_vendors() -> None:
     assert "moonshot.default" in moon
     assert "moonshot.cn" in moon
     assert "moonshot.coding_plan" in moon
+
+
+def test_moonshot_coding_plan_declares_fixed_outbound_temperature() -> None:
+    profile = get_upstream_profile("moonshot.coding_plan", provider="moonshot")
+    assert profile.fixed_outbound_temperature == 1.0
