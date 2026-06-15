@@ -400,5 +400,44 @@ class GatewayModelRepository:
         await self._session.flush()
         return True
 
+    async def count_enabled_grouped_by_tenant(
+        self,
+        tenant_ids: list[uuid.UUID],
+    ) -> dict[uuid.UUID, int]:
+        """批量统计各 team 的 enabled 模型数量。"""
+        if not tenant_ids:
+            return {}
+        stmt = (
+            select(GatewayModel.tenant_id, func.count(GatewayModel.id))
+            .where(
+                GatewayModel.tenant_id.in_(tenant_ids),
+                GatewayModel.enabled.is_(True),
+            )
+            .group_by(GatewayModel.tenant_id)
+        )
+        result = await self._session.execute(stmt)
+        return {row[0]: int(row[1]) for row in result.all()}
+
+    async def list_enabled_names_grouped_by_tenant(
+        self,
+        tenant_ids: list[uuid.UUID],
+    ) -> dict[uuid.UUID, list[str]]:
+        """批量拉取各 team 的 enabled 模型名（升序）。"""
+        if not tenant_ids:
+            return {}
+        stmt = (
+            select(GatewayModel.tenant_id, GatewayModel.name)
+            .where(
+                GatewayModel.tenant_id.in_(tenant_ids),
+                GatewayModel.enabled.is_(True),
+            )
+            .order_by(GatewayModel.tenant_id, GatewayModel.name)
+        )
+        result = await self._session.execute(stmt)
+        grouped: dict[uuid.UUID, list[str]] = {tid: [] for tid in tenant_ids}
+        for tenant_id, name in result.all():
+            grouped.setdefault(tenant_id, []).append(name)
+        return grouped
+
 
 __all__ = ["GatewayModelRepository", "GatewayRouteRepository"]

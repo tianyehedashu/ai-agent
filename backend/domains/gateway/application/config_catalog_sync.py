@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from pathlib import Path
 from typing import Any
 import uuid
@@ -93,8 +94,17 @@ async def _ensure_system_credential(
     encryption_key: str,
 ) -> uuid.UUID | None:
     """每个 provider 一条 system 默认凭据；无 API Key 时返回 None。"""
+    from bootstrap.config import settings
+    from domains.gateway.domain.provider_api_base import get_default_api_base
+
     repo = SystemProviderCredentialRepository(session)
     plain_key, api_base = _provider_api_key_and_base(provider)
+    if not plain_key and (
+        settings.app_env != "production" or os.environ.get("PYTEST_VERSION")
+    ):
+        # 非生产 / pytest：占位凭据仍注册 seed 模型，便于集成测 Router 解析（上游由 mock 承接）
+        plain_key = f"sk-gateway-catalog-placeholder-{provider.strip().lower()}"
+        api_base = api_base or get_default_api_base(provider)
     if not plain_key:
         return None
 

@@ -171,7 +171,7 @@ async def _build_bridge_proxy_context(
 async def _commit_bridge_setup(session: AsyncSession) -> None:
     """Persist bridge team/vkey setup before proxy code may release read transactions."""
     if session.in_transaction():
-        await session.commit()
+        await session.flush()
 
 
 class GatewayBridge:

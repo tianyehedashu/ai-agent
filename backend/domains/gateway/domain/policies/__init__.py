@@ -43,11 +43,11 @@ from domains.gateway.domain.policies.usage_log_visibility import (
 from domains.gateway.domain.virtual_key_access import actor_owns_non_system_vkey
 
 __all__ = [
+    "MIN_DEPLOYMENT_WEIGHT",
     "AdminBudgetFetchPlan",
     "BudgetListFilters",
     "BudgetTeamContext",
     "GatewayModelRegistryTarget",
-    "MIN_DEPLOYMENT_WEIGHT",
     "SystemModelVisibilitySnapshot",
     "UsageLogAccessSnapshot",
     "actor_owns_non_system_vkey",

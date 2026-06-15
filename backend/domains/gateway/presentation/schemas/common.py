@@ -65,6 +65,10 @@ class VirtualKeyResponse(BaseModel):
     last_used_at: datetime | None = None
     usage_count: int = 0
     created_at: datetime
+    granted_team_ids: list[uuid.UUID] = Field(
+        default_factory=list,
+        description="已授权 team id 列表（含主属；至少 1 项）",
+    )
 
 
 class VirtualKeyCreateResponse(VirtualKeyResponse):

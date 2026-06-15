@@ -389,6 +389,8 @@ class Settings(BaseSettings):
     gateway_enable_anthropic_native_passthrough: bool = True
     # 默认是否在日志中存完整 prompt/response（vkey 可覆盖）
     gateway_default_store_full_messages: bool = False
+    # 跨团队 vkey：``<slug>/<model>`` 前缀未命中 grants 时拒绝（默认 False=落主属）
+    gateway_vkey_strict_team_prefix: bool = False
     # 上游 LLM 调用总超时（秒）。大模型推理可能较慢（如 extended thinking 100s+），
     # 默认 300s 覆盖绝大部分场景；视频/图像生成因耗时更长建议通过环境变量单独调大。
     # 设为 0 关闭超时（仅调试时使用）。

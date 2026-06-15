@@ -1,5 +1,7 @@
 # 跨团队聚合虚拟 Key（multi-tenant vkey）实施方案
 
+> **实现状态（2026-06）**：已合并至主分支开发线（`gateway_virtual_key_team_grants`、管理 API、前缀派发、前端 grants 抽屉、生命周期 revoke）。权威架构文档：[backend/docs/AI_GATEWAY_DOMAIN_ARCHITECTURE.md §4.4.1](../../backend/docs/AI_GATEWAY_DOMAIN_ARCHITECTURE.md)。
+
 ## Context
 
 **业务痛点**：用户加入多个 team，不同 team 有不同模型；当前一把 `sk-gw-*` 硬绑定单一 team，跨 team 调用必须切换 vkey，第三方 SDK（IDE/CLI/SaaS）几乎无法做到。

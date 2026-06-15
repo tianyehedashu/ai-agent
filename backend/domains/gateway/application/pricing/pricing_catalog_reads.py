@@ -30,7 +30,6 @@ from domains.gateway.application.pricing.pricing_read_mappers import (
 )
 from domains.gateway.application.pricing.pricing_service import (
     PricingService,
-    RateUnavailableError,
     ResolvedPricing,
     resolved_inheritance_strategy,
 )

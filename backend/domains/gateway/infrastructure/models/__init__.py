@@ -17,6 +17,7 @@ from .provider_credential import ProviderCredential
 from .provider_plan import ProviderPlan, ProviderPlanQuota
 from .request_log import GatewayRequestLog
 from .virtual_key import GatewayVirtualKey
+from .virtual_key_team_grant import GatewayVirtualKeyTeamGrant
 
 __all__ = [
     "DownstreamModelPricing",
@@ -30,6 +31,7 @@ __all__ = [
     "GatewayRequestLog",
     "GatewayRoute",
     "GatewayVirtualKey",
+    "GatewayVirtualKeyTeamGrant",
     "ProviderCredential",
     "ProviderPlan",
     "ProviderPlanQuota",

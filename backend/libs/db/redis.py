@@ -12,6 +12,7 @@ from bootstrap.config import settings
 # 全局 Redis 客户端（decode_responses=True 时 value 为 str）
 # 注：redis.asyncio.client.Redis 在部分版本不支持泛型，使用 Any
 _redis_client: Any | None = None
+_redis_loop_id: int | None = None
 
 
 def _redis_connect_kwargs() -> dict[str, object]:
@@ -41,11 +42,12 @@ async def init_redis() -> None:
 
 async def close_redis() -> None:
     """关闭 Redis 连接"""
-    global _redis_client
+    global _redis_client, _redis_loop_id
 
     if _redis_client:
-        await _redis_client.close()
+        await _redis_client.aclose()
         _redis_client = None
+        _redis_loop_id = None
 
 
 def get_redis() -> Any:
@@ -55,15 +57,38 @@ def get_redis() -> Any:
     return _redis_client
 
 
-async def get_redis_client() -> Any:
-    """获取 Redis 客户端 (异步方式，自动初始化)"""
-    global _redis_client
+async def _reset_redis_client_if_loop_changed() -> None:
+    """pytest-asyncio 每用例换 event loop 时，丢弃旧 loop 绑定的连接。"""
+    global _redis_client, _redis_loop_id
 
     if _redis_client is None:
+        return
+    import asyncio
+
+    loop_id = id(asyncio.get_running_loop())
+    if _redis_loop_id == loop_id:
+        return
+    try:
+        await _redis_client.aclose()
+    except Exception:
+        pass
+    _redis_client = None
+    _redis_loop_id = None
+
+
+async def get_redis_client() -> Any:
+    """获取 Redis 客户端 (异步方式，自动初始化)"""
+    global _redis_client, _redis_loop_id
+
+    await _reset_redis_client_if_loop_changed()
+    if _redis_client is None:
+        import asyncio
+
         _redis_client = redis.from_url(
             settings.redis_url,
             **_redis_connect_kwargs(),
         )
+        _redis_loop_id = id(asyncio.get_running_loop())
 
     return _redis_client
 

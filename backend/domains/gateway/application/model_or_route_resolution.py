@@ -199,12 +199,13 @@ async def _resolve_model_or_route_uncached(
     name: str,
     *,
     user_id: uuid.UUID | None = None,
+    enable_personal_fallback: bool = True,
 ) -> ResolvedModelName | None:
     cleaned = name.strip() if name else ""
     if not cleaned:
         return None
 
-    if user_id is not None:
+    if user_id is not None and enable_personal_fallback:
         personal_record = await _resolve_personal_team_model(
             session, team_id, cleaned, user_id=user_id
         )
@@ -238,6 +239,7 @@ async def resolve_model_or_route(
     name: str,
     *,
     user_id: uuid.UUID | None = None,
+    enable_personal_fallback: bool = True,
 ) -> ResolvedModelName | None:
     """``GatewayModel.name`` 优先，未命中则按 ``GatewayRoute.virtual_model`` 解析主选模型。
 
@@ -260,7 +262,10 @@ async def resolve_model_or_route(
         if cached is not CACHE_MISS:
             return cached  # type: ignore[return-value]
 
-    resolved = await _resolve_model_or_route_uncached(session, team_id, cleaned, user_id=user_id)
+    resolved = await _resolve_model_or_route_uncached(
+        session, team_id, cleaned, user_id=user_id,
+        enable_personal_fallback=enable_personal_fallback,
+    )
     if settings.gateway_resolve_model_cache_enabled:
         put_resolve_cache_entry(team_id, cleaned, user_id=user_id, resolved=resolved)
     return resolved

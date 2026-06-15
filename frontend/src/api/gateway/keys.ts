@@ -36,6 +36,8 @@ export interface VirtualKey {
   last_used_at: string | null
   usage_count: number
   created_at: string
+  /** 已授权 team id（含主属；至少 1 项） */
+  granted_team_ids?: string[]
 }
 
 /** 创建虚拟 Key 时随响应额外返回明文（仅本次） */

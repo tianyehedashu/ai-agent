@@ -28,6 +28,7 @@ class VirtualKeyReadModel:
     usage_count: int
     created_at: datetime
     encrypted_key: str
+    granted_team_ids: tuple[UUID, ...] = ()
 
 
 __all__ = ["VirtualKeyReadModel"]

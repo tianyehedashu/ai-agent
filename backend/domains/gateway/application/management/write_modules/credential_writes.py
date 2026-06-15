@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
-from dataclasses import dataclass, field
 import uuid
 
 from bootstrap.config import settings
@@ -139,7 +139,7 @@ class CredentialWritesMixin:
             global_guardrail_enabled=settings.gateway_default_guardrail_enabled,
             requested_guardrail_enabled=guardrail_enabled,
         )
-        return await self._vkeys.create(
+        record = await self._vkeys.create(
             tenant_id=tenant_id,
             created_by_user_id=created_by_user_id,
             name=name,
@@ -155,6 +155,18 @@ class CredentialWritesMixin:
             guardrail_enabled=guardrail_enabled,
             expires_at=expires_at,
         )
+        if created_by_user_id is not None and not record.is_system:
+            from domains.gateway.application.management.virtual_key_team_grant_writes import (
+                ensure_self_grant_for_vkey,
+            )
+
+            await ensure_self_grant_for_vkey(
+                self._session,
+                vkey_id=record.id,
+                tenant_id=tenant_id,
+                granted_by_user_id=created_by_user_id,
+            )
+        return record
 
     async def revoke_virtual_key(
         self,

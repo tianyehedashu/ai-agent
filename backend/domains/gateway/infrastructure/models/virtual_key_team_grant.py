@@ -8,17 +8,13 @@ GatewayVirtualKeyTeamGrant Model - 虚拟 Key 跨团队授权
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
 import uuid
 
-from sqlalchemy import Boolean, DateTime, Index, String, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, Index, String, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from libs.orm.base import BaseModel
-
-if TYPE_CHECKING:
-    pass
 
 
 class GatewayVirtualKeyTeamGrant(BaseModel):
@@ -80,22 +76,23 @@ class GatewayVirtualKeyTeamGrant(BaseModel):
     )
 
     __table_args__ = (
-        UniqueConstraint(
+        Index(
+            "uq_vkey_team_grants_active",
             "vkey_id",
             "tenant_id",
-            name="uq_vkey_team_grants_active",
-            postgresql_where="is_active = TRUE",
+            unique=True,
+            postgresql_where=text("is_active = TRUE"),
         ),
         Index(
             "ix_vkey_team_grants_vkey_active",
             "vkey_id",
-            postgresql_where="is_active = TRUE",
+            postgresql_where=text("is_active = TRUE"),
         ),
         Index(
             "ix_vkey_team_grants_user_tenant_active",
             "granted_by_user_id",
             "tenant_id",
-            postgresql_where="is_active = TRUE",
+            postgresql_where=text("is_active = TRUE"),
         ),
     )
 

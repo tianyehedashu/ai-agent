@@ -17,6 +17,7 @@ import { alertsApi } from './alerts'
 import { budgetsApi } from './budgets'
 import { credentialsApi } from './credentials'
 import { entitlementsApi } from './entitlements'
+import { grantsApi } from './grants'
 import { keysApi } from './keys'
 import { logsApi } from './logs'
 import { modelsApi } from './models'
@@ -42,6 +43,8 @@ export type {
   TeamMember,
   TeamMemberLookup,
 } from './teams'
+
+export type { VirtualKeyTeamGrant, GrantableTeam, VirtualKeyGrantBatchRequest } from './grants'
 
 export type {
   VirtualKey,
@@ -199,6 +202,7 @@ export type { ProviderProfileItem, ProviderProfilesListResponse } from './provid
 export {
   teamsApi,
   keysApi,
+  grantsApi,
   credentialsApi,
   providerProfilesApi,
   modelsApi,
@@ -224,6 +228,7 @@ export {
 export const gatewayApi = {
   ...teamsApi,
   ...keysApi,
+  ...grantsApi,
   ...credentialsApi,
   ...providerProfilesApi,
   ...modelsApi,

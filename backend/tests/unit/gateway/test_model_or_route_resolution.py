@@ -300,3 +300,45 @@ async def test_resolve_personal_when_shared_has_inactive_credential(db_session, 
     assert resolved is not None
     assert resolved.record.id == personal_model.id
     assert resolved.record.tenant_id == personal.id
+
+
+@pytest.mark.asyncio
+async def test_resolve_skips_personal_fallback_when_disabled(db_session, test_user) -> None:
+    """multi-grant vkey 场景关闭 personal fallback 时，共享 team 同名模型不回落 personal。"""
+    teams = TeamService(db_session)
+    personal = await teams.ensure_personal_team(test_user.id)
+    shared = await teams.create_team(
+        name=f"shared-no-fb-{uuid.uuid4().hex[:6]}",
+        owner_user_id=test_user.id,
+    )
+    shared_cred = await _seed_cred(db_session, shared.id, f"shared-{uuid.uuid4().hex[:6]}")
+    personal_cred = await _seed_cred(db_session, personal.id, f"personal-{uuid.uuid4().hex[:6]}")
+    alias = f"no-fb-{uuid.uuid4().hex[:6]}"
+    shared_model = await GatewayModelRepository(db_session).create(
+        tenant_id=shared.id,
+        name=alias,
+        capability="chat",
+        real_model="gpt-4o-mini",
+        credential_id=shared_cred.id,
+        provider="openai",
+    )
+    await GatewayModelRepository(db_session).create(
+        tenant_id=personal.id,
+        name=alias,
+        capability="chat",
+        real_model="gpt-4o-mini",
+        credential_id=personal_cred.id,
+        provider="openai",
+    )
+    await db_session.flush()
+
+    resolved = await resolve_model_or_route(
+        db_session,
+        shared.id,
+        alias,
+        user_id=test_user.id,
+        enable_personal_fallback=False,
+    )
+    assert resolved is not None
+    assert resolved.record.id == shared_model.id
+    assert resolved.record.tenant_id == shared.id

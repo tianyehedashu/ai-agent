@@ -7,6 +7,7 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 
 import { gatewayApi } from '@/api/gateway'
+import { grantsApi } from '@/api/gateway/grants'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -54,8 +55,19 @@ export function VirtualKeyRevealDialog({
     retry: false,
   })
 
+  const grantsQuery = useQuery({
+    queryKey: ['gateway', 'vkey-grants', teamId, target?.id] as const,
+    queryFn: () => {
+      if (!target) throw new Error('missing key id')
+      return grantsApi.listGrants(teamId, target.id)
+    },
+    enabled: target !== null,
+  })
+
   const plainKey = revealQuery.data?.plain_key ?? null
   const revealFailed = revealQuery.isError && target !== null
+  const crossGrants = (grantsQuery.data ?? []).filter((g) => !g.is_self)
+  const [hintOpen, setHintOpen] = useState(false)
 
   return (
     <Dialog
@@ -131,6 +143,45 @@ export function VirtualKeyRevealDialog({
               <p className="text-sm text-muted-foreground">
                 请将此 Key 保存在安全的地方。关闭对话框后，仍可在列表中再次查看。
               </p>
+              {crossGrants.length > 0 ? (
+                <div className="rounded-md border">
+                  <button
+                    type="button"
+                    className="flex w-full items-center justify-between px-3 py-2 text-left text-sm font-medium hover:bg-muted/30"
+                    onClick={() => {
+                      setHintOpen((v) => !v)
+                    }}
+                  >
+                    跨 team 调用示例
+                    <span className="text-xs text-muted-foreground">
+                      {hintOpen ? '收起' : '展开'}
+                    </span>
+                  </button>
+                  {hintOpen ? (
+                    <div className="space-y-2 border-t px-3 py-2 text-xs text-muted-foreground">
+                      <p>无前缀时调用主属工作区模型；跨 team 请带 slug 前缀：</p>
+                      <ul className="list-inside list-disc space-y-1">
+                        {crossGrants.map((g) => (
+                          <li key={g.id}>
+                            <code className="rounded bg-muted px-1">
+                              {g.granted_team_slug ?? g.tenant_id.slice(0, 8)}/your-model
+                            </code>
+                            {g.granted_team_name ? ` · ${g.granted_team_name}` : null}
+                          </li>
+                        ))}
+                      </ul>
+                      {plainKey ? (
+                        <pre className="mt-2 overflow-x-auto rounded bg-muted p-2 font-mono text-[11px]">
+                          {`curl ${window.location.origin}/api/v1/openai/v1/chat/completions \\
+  -H "Authorization: Bearer ${plainKey}" \\
+  -H "Content-Type: application/json" \\
+  -d '{"model":"${crossGrants[0]?.granted_team_slug ?? 'team-slug'}/gpt-4o","messages":[{"role":"user","content":"hi"}]}'`}
+                        </pre>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
             </>
           ) : revealFailed ? (
             <p className="text-sm text-destructive">

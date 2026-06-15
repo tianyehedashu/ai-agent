@@ -124,12 +124,7 @@ async def _gateway_principal_from_vkey_plain(
     permission_ctx = await _build_permission_context_for_vkey(db, created_by)
 
     # 加载跨团队授权 grants（顺序 await，同一 session）
-    from domains.gateway.infrastructure.repositories.virtual_key_team_grant_repository import (
-        VirtualKeyTeamGrantRepository,
-    )
-
-    grant_repo = VirtualKeyTeamGrantRepository(db)
-    granted_team_ids = await grant_repo.list_active_tenant_ids(record.id)
+    granted_team_ids = await access.list_active_grant_tenant_ids(record.id)
 
     try:
         caps = allowed_capabilities_from_storage(record.allowed_capabilities)
@@ -238,7 +233,11 @@ async def bearer_vkey_or_apikey_auth(
 
     if is_vkey_format(plain):
         gp = await _gateway_principal_from_vkey_plain(plain, db)
-        assert_vkey_team_header_compatible(gp.team_id, x_team_id)
+        assert_vkey_team_header_compatible(
+            gp.team_id,
+            x_team_id,
+            granted_team_ids=gp.vkey.granted_team_ids,
+        )
         user_display_snapshot = await resolve_user_display_snapshot(db, gp.user_id)
         return VkeyOrApikeyPrincipal(
             via="vkey",

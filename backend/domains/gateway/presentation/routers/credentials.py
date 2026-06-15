@@ -22,19 +22,19 @@ from domains.gateway.presentation.schemas.common import (
     CredentialUpdate,
     ManagedCredentialCreate,
 )
+from domains.gateway.presentation.schemas.credential_import import (
+    ImportCredentialsWithModelsRequest,
+    ImportCredentialsWithModelsResponse,
+    ImportedCredentialItemResponse,
+    ImportedModelSummary,
+    ModelImportFailureItem,
+)
 from domains.gateway.presentation.schemas.credential_upstream_catalog import (
     BatchImportFailureItem,
     CredentialProbeResponse,
     TeamGatewayModelBatchImportCreatedItem,
     TeamGatewayModelBatchImportRequest,
     TeamGatewayModelBatchImportResponse,
-)
-from domains.gateway.presentation.schemas.credential_import import (
-    ImportedCredentialItemResponse,
-    ImportedModelSummary,
-    ImportCredentialsWithModelsRequest,
-    ImportCredentialsWithModelsResponse,
-    ModelImportFailureItem,
 )
 from libs.crypto import encrypt_value
 from libs.exceptions import AuthenticationError, ValidationError

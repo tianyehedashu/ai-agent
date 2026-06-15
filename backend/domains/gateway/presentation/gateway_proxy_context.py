@@ -4,9 +4,57 @@ from __future__ import annotations
 
 import uuid
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from bootstrap.config import settings
 from domains.gateway.application.proxy_context import ProxyContext
+from domains.gateway.application.vkey_team_resolution import (
+    assert_vkey_model_not_ambiguous,
+    dispatch_vkey_model,
+)
 from domains.gateway.domain.types import GatewayCapability, GatewayInboundVia
 from domains.gateway.presentation.deps import VkeyOrApikeyPrincipal
+
+
+async def apply_vkey_team_dispatch(
+    ctx: ProxyContext,
+    proxy_body: dict[str, object],
+    session: AsyncSession,
+) -> None:
+    """对 vkey 入站调用应用跨团队派发（重写 model 与 ctx.team_id）。
+
+    副作用（仅在 vkey + body 含 model 字段时生效）：
+    - proxy_body["model"] 改为派发后的模型名
+    - ctx.team_id 改为派发后的 effective_team_id
+    - ctx.budget_model 同步更新
+    - ctx.client_raw_model / ctx.dispatched_via_prefix 标记
+    """
+    if ctx.vkey is None:
+        return
+    raw_model = proxy_body.get("model")
+    if not isinstance(raw_model, str) or not raw_model:
+        return
+
+    dispatch = await dispatch_vkey_model(
+        session,
+        vkey=ctx.vkey,
+        raw_model=raw_model,
+        strict=settings.gateway_vkey_strict_team_prefix,
+    )
+
+    await assert_vkey_model_not_ambiguous(
+        session,
+        vkey=ctx.vkey,
+        dispatch=dispatch,
+        strict=settings.gateway_vkey_strict_team_prefix,
+    )
+
+    ctx.client_raw_model = raw_model
+    ctx.dispatched_via_prefix = dispatch.matched_slug is not None
+    if dispatch.matched_slug is not None:
+        ctx.team_id = dispatch.effective_team_id
+        ctx.budget_model = dispatch.real_model_name
+        proxy_body["model"] = dispatch.real_model_name
 
 
 def proxy_context_from_gateway_principal(
@@ -47,4 +95,4 @@ def proxy_context_from_gateway_principal(
     )
 
 
-__all__ = ["proxy_context_from_gateway_principal"]
+__all__ = ["apply_vkey_team_dispatch", "proxy_context_from_gateway_principal"]

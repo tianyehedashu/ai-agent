@@ -143,6 +143,19 @@ tests/
 3. **考虑使用 pytest-asyncio 的自动模式**
    - ✅ 已在 `pyproject.toml` 中配置 `asyncio_mode = "auto"`
 
+### 6. 集成测试基础设施（2026-06 更新）
+
+与跨团队 vkey 及大批量 integration 并行跑测相关的调整：
+
+| 项 | 行为 |
+|----|------|
+| `_ensure_test_engine_async` | 在**当前 event loop** 内建库/建表，避免 `asyncio.run()` 与 session 级 loop 不一致 |
+| `override_get_db` | 依赖注入结束后调用 `_finalize_dependency_session`，防止请求结束后悬挂事务 |
+| `_reset_redis_client_between_tests` | autouse：每个用例前按 loop 重建 Redis 客户端（见 `libs/db/redis.py`） |
+| `db_session` | 仍用 SAVEPOINT 隔离；**不再**在 fixture 入口全局 `nest_asyncio.apply()`（仅 Docker 清理钩子保留） |
+
+Windows + Python 3.13 下 asyncpg 仍可能出现 `Future attached to a different loop`；单测/小批量通过，全量 `tests/integration/api/` 并行时偶发 flaky，需后续专项收敛。
+
 ## 五、总结
 
 ### ✅ 当前位置符合最佳实践
