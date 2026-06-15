@@ -49,10 +49,26 @@ def test_build_openai_model_list_item_includes_gateway_metadata() -> None:
     assert isinstance(gateway, dict)
     assert gateway["display_name"] == "Qwen Max"
     assert gateway["real_model"] == "dashscope/qwen-max"
+    assert "registry_name" not in gateway
     assert gateway["connectivity_status"] is None
     assert gateway["connectivity_tested_at"] is None
     assert gateway["entitlement_status"] == "none"
     assert gateway["callable"] is True
+    assert "team_slug" not in gateway
+
+
+def test_build_openai_model_list_item_list_id_and_team_slug_override() -> None:
+    item = build_openai_model_list_item(
+        _row(name="gpt-4o"),
+        entitlement_status="none",
+        list_id="shared-team/gpt-4o",
+        team_slug="shared-team",
+    )
+    assert item["id"] == "shared-team/gpt-4o"
+    gateway = item["gateway"]
+    assert isinstance(gateway, dict)
+    assert gateway["registry_name"] == "gpt-4o"
+    assert gateway["team_slug"] == "shared-team"
 
 
 def test_build_openai_model_list_item_failed_connectivity_not_callable() -> None:

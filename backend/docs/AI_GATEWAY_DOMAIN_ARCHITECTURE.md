@@ -305,7 +305,7 @@ RBAC 与 `libs/db/permission_context.py`：`deps.py` 调用 **`GatewayAccessUseC
 
 **审计**：日志 `tenant_id` 为实际命中 team；metadata 另写 `gateway_vkey_owner_team_id` 供跨 team 流量分析。EntitlementPlan 仍按 **vkey 维度**（不做 per-grant 套餐）。
 
-**已知限制（P2）**：`GET /v1/models` 暂未合并 granted team 的模型列表；多 team 同名模型需客户端显式 `{slug}/{model}` 或观察 `gateway_vkey_ambiguous_model_invocations_total` 后开启 strict。
+**列表 id 规则（multi-grant vkey）**：``GET /v1/models`` 合并各 grant team 的 callable 列表；主属 team 条目 id 为裸注册名，grant team 为 ``{slug}/{name}``（slug 为 ``Team.slug``，与 dispatch 对称）。同 id 去重；grant team 的 system 行若主属已裸名列出则跳过 prefixed 重复。homonym slug（不同 owner 相同 slug）不参与前缀派发 lookup；列表侧仍按 tenant_id 直接取 slug。stale grant（team 行缺失）跳过。列表项 ``gateway.registry_name`` / ``gateway.team_slug`` 仅 multi-grant 路径注入。
 
 ### 4.5 模型注册：主调用面（`capability`）与特性（`tags` / `model_types`）
 
@@ -320,7 +320,7 @@ RBAC 与 `libs/db/permission_context.py`：`deps.py` 调用 **`GatewayAccessUseC
 
 | 端点 | 消费方 | 列表范围 | 扩展字段 | 过滤策略 |
 |------|--------|----------|----------|----------|
-| ``GET /api/v1/openai/v1/models`` | SDK / 代理客户端（vkey 或 sk-* grant） | 团队 enabled 模型 ∩ vkey/grant ``allowed_models`` | OpenAI 标准字段 + 顶层 ``capability`` / ``model_types`` + 嵌套 ``gateway``（``connectivity_*``、``entitlement_status``、``callable``） | **透明列举**：``last_test_status=failed`` 仍返回，``gateway.callable=false`` |
+| ``GET /api/v1/openai/v1/models`` | SDK / 代理客户端（vkey 或 sk-* grant） | 单 team：主属 callable；multi-grant vkey：各 grant team callable 合并（id：主属裸名 / grant ``{slug}/{name}``）∩ ``allowed_models`` | OpenAI 标准字段 + 顶层 ``capability`` / ``model_types`` + 嵌套 ``gateway``（``registry_name``、``team_slug``、``connectivity_*``、``entitlement_status``、``callable``） | **透明列举**：``last_test_status=failed`` 仍返回，``gateway.callable=false`` |
 | ``GET /api/v1/gateway/teams/{team_id}/models`` | 管理 UI（JWT + 团队路径） | 含 disabled；可按 provider / credential / ``?type=`` 筛选 | ``GatewayModelResponse``（``last_test_*``、``model_types``、``selector_capabilities``） | 管理面全量展示 |
 | ``GET /api/v1/gateway/my-models`` | 个人模型管理 UI | 同上 | 同上 | 同上 |
 | ``GET /api/v1/gateway/models/available`` | 对话/产品选择器 | 系统目录 + personal 行；已登录时可传 ``?gateway_team_id=``（与 ``POST /chat`` 请求体同名字段）合并该团队租户注册行 | ``model_types``、``entitlement_status`` 等 | **保守选择**：隐藏 ``last_test_status=failed`` |
@@ -329,7 +329,7 @@ RBAC 与 `libs/db/permission_context.py`：`deps.py` 调用 **`GatewayAccessUseC
 
 ``gateway.callable`` 派生规则（与前端 ``ModelStatusBadge`` 一致）：连通性 ``failed`` → 不可调用；``entitlement_status`` 为 ``exhausted`` / ``expired`` → 不可调用；``resetting`` / ``active`` / ``none`` / 未测 → 可调用。``entitlement_status`` 含 ``resetting``（配额已耗尽且距窗口重置 ≤ 5 分钟）。上游 ``ProviderPlan`` 耗尽仍在 pre-call 拦截，列表阶段不做批量快照。
 
-组装逻辑：Presentation 解析 ``resolve_entitlement_scope``（``application/entitlement_model_status.py``）后调用 ``proxy_model_list_reads.build_proxy_models_list``；共享 ``compute_model_callable``、``EntitlementGuard.status_for_models`` 与选择器 ``annotate_items_entitlement_status``。Guard 工厂 ``build_entitlement_guard_for_session`` 在 ``entitlement_guard.py``。
+组装逻辑：Presentation 经 ``application/vkey_proxy_model_list.list_openai_proxy_models``（multi-grant vkey 合并各 team callable；否则单 team fast path）解析 ``resolve_entitlement_scope`` 后调用 ``proxy_model_list_reads.build_proxy_models_list``；共享 ``compute_model_callable``、``EntitlementGuard.status_for_models`` 与选择器 ``annotate_items_entitlement_status``。Guard 工厂 ``build_entitlement_guard_for_session`` 在 ``entitlement_guard.py``。
 
 #### 4.5.2 模型调用策略（Invocation Policy）
 
