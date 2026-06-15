@@ -9,8 +9,19 @@ from domains.gateway.application.entitlement_model_status import resolve_entitle
 from domains.gateway.application.gateway_model_listing import GatewayRegistryModelRow
 from domains.gateway.application.management import GatewayManagementReadService
 from domains.gateway.application.proxy_model_list_reads import build_proxy_models_list
-from domains.gateway.application.vkey_team_resolution import get_slug_by_tenant_id_map
+from domains.gateway.application.vkey_team_resolution import fetch_grant_team_slug_rows
 from domains.gateway.domain.policies.model_selection import registry_kind_for_merged_row
+from domains.gateway.domain.vkey_grant_slug_policy import (
+    build_slug_by_tenant_id,
+    find_ambiguous_grant_slugs,
+    grant_tenant_prefix_dispatchable,
+)
+from domains.gateway.domain.vkey_proxy_list_policy import (
+    ordered_grant_tenant_ids,
+    should_include_multi_grant_entry,
+    should_skip_grant_system_model_row,
+    should_skip_grant_system_route_row,
+)
 from domains.gateway.domain.vkey_team_prefix_policy import resolve_vkey_proxy_list_id
 from domains.gateway.infrastructure.models.gateway_route import GatewayRoute
 from domains.gateway.infrastructure.models.system_gateway import SystemGatewayRoute
@@ -20,21 +31,10 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
     from domains.gateway.domain.types import VirtualKeyPrincipal
-    from domains.gateway.presentation.deps import VkeyOrApikeyPrincipal
 
 logger = get_logger(__name__)
 
 RouteRow = GatewayRoute | SystemGatewayRoute
-
-
-def _resolve_allowed_set(principal: VkeyOrApikeyPrincipal) -> set[str] | None:
-    allowed: set[str] | None = None
-    if principal.vkey and principal.vkey.allowed_models:
-        allowed = set(principal.vkey.allowed_models)
-    if principal.api_key_grant and principal.api_key_grant.allowed_models:
-        grant_allowed = set(principal.api_key_grant.allowed_models)
-        allowed = grant_allowed if allowed is None else allowed & grant_allowed
-    return allowed
 
 
 def _filter_models(
@@ -52,25 +52,8 @@ def _filter_routes(routes: list[RouteRow], allowed: set[str] | None) -> list[Rou
     return [r for r in routes if r.virtual_model in allowed]
 
 
-def _ordered_grant_tenant_ids(vkey: VirtualKeyPrincipal) -> tuple[uuid.UUID, ...]:
-    """主属 team 优先，便于 system 裸名先进入 dedupe 集合。"""
-    others = tuple(tid for tid in vkey.granted_team_ids if tid != vkey.team_id)
-    return (vkey.team_id, *others)
-
-
-def _should_skip_grant_system_row(
-    *,
-    tenant_id: uuid.UUID,
-    bound_team_id: uuid.UUID,
-    row: GatewayRegistryModelRow,
-    bound_system_registry_names: set[str],
-) -> bool:
-    """grant team 的 system 行若主属已以裸名列出，则跳过 prefixed 重复。"""
-    if tenant_id == bound_team_id:
-        return False
-    if registry_kind_for_merged_row(row) != "system":
-        return False
-    return row.name in bound_system_registry_names
+def _is_system_route(route: RouteRow) -> bool:
+    return getattr(route, "tenant_id", None) is None
 
 
 async def _list_callable_for_team(
@@ -124,7 +107,9 @@ async def list_proxy_models_for_multi_grant_vkey(
 ) -> list[dict[str, object]]:
     """multi-grant vkey：合并各 grant team callable 列表，id 与 dispatch 对称。"""
     reads = GatewayManagementReadService(session)
-    slug_by_tenant = await get_slug_by_tenant_id_map(session, vkey.granted_team_ids)
+    slug_rows = await fetch_grant_team_slug_rows(session, vkey.granted_team_ids)
+    slug_by_tenant = build_slug_by_tenant_id(slug_rows)
+    ambiguous_slugs = find_ambiguous_grant_slugs(slug_rows)
 
     visible_models: list[GatewayRegistryModelRow] = []
     model_list_ids: list[str] = []
@@ -139,7 +124,7 @@ async def list_proxy_models_for_multi_grant_vkey(
     seen_list_ids: set[str] = set()
     bound_system_registry_names: set[str] = set()
 
-    for tenant_id in _ordered_grant_tenant_ids(vkey):
+    for tenant_id in ordered_grant_tenant_ids(vkey.team_id, vkey.granted_team_ids):
         if tenant_id not in slug_by_tenant:
             logger.warning(
                 "skip stale vkey grant tenant_id=%s vkey_id=%s (team row missing)",
@@ -149,17 +134,24 @@ async def list_proxy_models_for_multi_grant_vkey(
             continue
 
         team_slug = slug_by_tenant[tenant_id]
+        prefix_dispatchable = grant_tenant_prefix_dispatchable(
+            tenant_id=tenant_id,
+            bound_team_id=vkey.team_id,
+            slug=team_slug,
+            ambiguous_slugs=ambiguous_slugs,
+        )
         all_models, routes = await _list_callable_for_team(
             reads, tenant_id, user_id=user_id
         )
         all_models_pool.extend(all_models)
 
         for row in _filter_models(all_models, allowed):
-            if _should_skip_grant_system_row(
+            if should_skip_grant_system_model_row(
                 tenant_id=tenant_id,
                 bound_team_id=vkey.team_id,
-                row=row,
-                bound_system_registry_names=bound_system_registry_names,
+                registry_name=row.name,
+                is_system_registry=registry_kind_for_merged_row(row) == "system",
+                bound_system_registry_names=frozenset(bound_system_registry_names),
             ):
                 continue
 
@@ -169,7 +161,13 @@ async def list_proxy_models_for_multi_grant_vkey(
                 model_name=row.name,
                 slug_by_tenant=slug_by_tenant,
             )
-            if list_id in seen_list_ids:
+            if not should_include_multi_grant_entry(
+                tenant_id=tenant_id,
+                bound_team_id=vkey.team_id,
+                list_id=list_id,
+                seen_list_ids=frozenset(seen_list_ids),
+                prefix_dispatchable=prefix_dispatchable,
+            ):
                 continue
             seen_list_ids.add(list_id)
 
@@ -184,10 +182,12 @@ async def list_proxy_models_for_multi_grant_vkey(
 
         tenant_routes = _filter_routes(routes, allowed)
         for route in tenant_routes:
-            if (
-                tenant_id != vkey.team_id
-                and route.virtual_model in bound_system_registry_names
-                and isinstance(route, SystemGatewayRoute)
+            if should_skip_grant_system_route_row(
+                tenant_id=tenant_id,
+                bound_team_id=vkey.team_id,
+                virtual_model=route.virtual_model,
+                is_system_registry_route=_is_system_route(route),
+                bound_system_registry_names=frozenset(bound_system_registry_names),
             ):
                 continue
 
@@ -197,7 +197,13 @@ async def list_proxy_models_for_multi_grant_vkey(
                 model_name=route.virtual_model,
                 slug_by_tenant=slug_by_tenant,
             )
-            if list_id in seen_list_ids:
+            if not should_include_multi_grant_entry(
+                tenant_id=tenant_id,
+                bound_team_id=vkey.team_id,
+                list_id=list_id,
+                seen_list_ids=frozenset(seen_list_ids),
+                prefix_dispatchable=prefix_dispatchable,
+            ):
                 continue
             seen_list_ids.add(list_id)
 
@@ -226,24 +232,28 @@ async def list_proxy_models_for_multi_grant_vkey(
 
 async def list_openai_proxy_models(
     session: AsyncSession,
-    principal: VkeyOrApikeyPrincipal,
+    *,
+    team_id: uuid.UUID,
+    user_id: uuid.UUID | None,
+    vkey: VirtualKeyPrincipal | None,
+    api_key_grant_id: uuid.UUID | None,
+    allowed: set[str] | None,
 ) -> list[dict[str, object]]:
-    """GET /v1/models 统一入口。"""
+    """GET /v1/models 统一入口（application 层，不依赖 presentation）。"""
     entitlement_scope, entitlement_scope_id = resolve_entitlement_scope(
-        vkey_id=principal.vkey.vkey_id if principal.vkey else None,
-        apikey_grant_id=principal.api_key_grant.grant_id if principal.api_key_grant else None,
+        vkey_id=vkey.vkey_id if vkey else None,
+        apikey_grant_id=api_key_grant_id,
     )
-    allowed = _resolve_allowed_set(principal)
 
     if (
-        principal.vkey is not None
-        and not principal.vkey.is_system
-        and len(principal.vkey.granted_team_ids) > 1
+        vkey is not None
+        and not vkey.is_system
+        and len(vkey.granted_team_ids) > 1
     ):
         return await list_proxy_models_for_multi_grant_vkey(
             session,
-            vkey=principal.vkey,
-            user_id=principal.user_id,
+            vkey=vkey,
+            user_id=user_id,
             allowed=allowed,
             entitlement_scope=entitlement_scope,
             entitlement_scope_id=entitlement_scope_id,
@@ -251,8 +261,8 @@ async def list_openai_proxy_models(
 
     return await list_proxy_models_for_team(
         session,
-        team_id=principal.team_id,
-        user_id=principal.user_id,
+        team_id=team_id,
+        user_id=user_id,
         allowed=allowed,
         entitlement_scope=entitlement_scope,
         entitlement_scope_id=entitlement_scope_id,
@@ -260,8 +270,6 @@ async def list_openai_proxy_models(
 
 
 __all__ = [
-    "_ordered_grant_tenant_ids",
-    "_should_skip_grant_system_row",
     "list_openai_proxy_models",
     "list_proxy_models_for_multi_grant_vkey",
     "list_proxy_models_for_team",

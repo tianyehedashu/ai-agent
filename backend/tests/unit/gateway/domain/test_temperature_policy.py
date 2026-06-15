@@ -8,6 +8,7 @@ from domains.gateway.domain.temperature_policy import (
     UPSTREAM_PROFILE_ID_TAG,
     enrich_temperature_tags,
     infer_temperature_policy,
+    resolve_probe_chat_temperature,
     temperature_policy_from_upstream_profile,
 )
 from domains.gateway.domain.thinking_param import THINKING_PARAM_BUILTIN, THINKING_PARAM_NONE
@@ -102,3 +103,21 @@ def test_coding_plan_locked_tags_apply_temperature_1() -> None:
 def test_enrich_writes_policy() -> None:
     tags = enrich_temperature_tags({}, thinking_param=THINKING_PARAM_BUILTIN)
     assert tags["temperature_policy"] == TEMPERATURE_POLICY_FIXED_1
+
+
+def test_resolve_probe_chat_temperature_for_coding_plan() -> None:
+    assert (
+        resolve_probe_chat_temperature(
+            credential_profile_id="moonshot.coding_plan",
+            provider="moonshot",
+        )
+        == 1.0
+    )
+    assert (
+        resolve_probe_chat_temperature(
+            credential_profile_id="moonshot.default",
+            provider="moonshot",
+        )
+        == 0.0
+    )
+

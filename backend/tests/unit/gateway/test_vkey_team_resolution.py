@@ -112,6 +112,25 @@ async def test_dispatch_empty_model(db_session, test_user) -> None:
 
 
 @pytest.mark.asyncio
+async def test_dispatch_homonym_slug_prefix_falls_to_bound(db_session, test_user) -> None:
+    """homonym slug 不在 dispatch slug_map 中，带前缀请求落主属 team。"""
+    from tests.integration.gateway.vkey_grant_helpers import ensure_homonym_slug_grant_teams
+
+    primary, grant_a, grant_b, dup_slug = await ensure_homonym_slug_grant_teams(
+        db_session, test_user
+    )
+    vkey = _vkey(
+        team_id=primary.id,
+        granted=(primary.id, grant_a.id, grant_b.id),
+    )
+    raw = f"{dup_slug}/some-model"
+    out = await dispatch_vkey_model(db_session, vkey=vkey, raw_model=raw)
+    assert out.effective_team_id == primary.id
+    assert out.real_model_name == raw
+    assert out.matched_slug is None
+
+
+@pytest.mark.asyncio
 async def test_assert_ambiguous_non_strict_records_metric_only(
     db_session, test_user,
 ) -> None:

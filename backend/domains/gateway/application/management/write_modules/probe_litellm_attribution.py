@@ -6,7 +6,7 @@ from typing import Any
 import uuid
 
 from domains.gateway.application.management.write_modules.probe_target import ProbeTarget
-from domains.gateway.domain.upstream_profile_registry import get_upstream_profile
+from domains.gateway.domain.coding_agent_ua import apply_coding_agent_ua_litellm_params
 
 GATEWAY_PROBE_CLIENT_TYPE = "model_connectivity_probe"
 
@@ -78,12 +78,11 @@ def merge_probe_litellm_kwargs(
         merged["litellm_params"] = {**existing, "model_info": model_info}
     else:
         merged["litellm_params"] = {"model_info": model_info}
-    profile = get_upstream_profile(credential_profile_id, provider=target.provider)
-    if profile.coding_agent_ua:
-        headers = dict(merged.get("extra_headers") or {})
-        headers["User-Agent"] = profile.coding_agent_ua
-        merged["extra_headers"] = headers
-    return merged
+    return apply_coding_agent_ua_litellm_params(
+        merged,
+        credential_profile_id=credential_profile_id,
+        provider=target.provider,
+    )
 
 
 __all__ = [

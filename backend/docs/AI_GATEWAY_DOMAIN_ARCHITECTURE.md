@@ -305,7 +305,7 @@ RBAC 与 `libs/db/permission_context.py`：`deps.py` 调用 **`GatewayAccessUseC
 
 **审计**：日志 `tenant_id` 为实际命中 team；metadata 另写 `gateway_vkey_owner_team_id` 供跨 team 流量分析。EntitlementPlan 仍按 **vkey 维度**（不做 per-grant 套餐）。
 
-**列表 id 规则（multi-grant vkey）**：``GET /v1/models`` 合并各 grant team 的 callable 列表；主属 team 条目 id 为裸注册名，grant team 为 ``{slug}/{name}``（slug 为 ``Team.slug``，与 dispatch 对称）。同 id 去重；grant team 的 system 行若主属已裸名列出则跳过 prefixed 重复。homonym slug（不同 owner 相同 slug）不参与前缀派发 lookup；列表侧仍按 tenant_id 直接取 slug。stale grant（team 行缺失）跳过。列表项 ``gateway.registry_name`` / ``gateway.team_slug`` 仅 multi-grant 路径注入。
+**列表 id 规则（multi-grant vkey）**：``GET /v1/models`` 合并各 grant team 的 callable 列表；主属 team 条目 id 为裸注册名，grant team 为 ``{slug}/{name}``（slug 为 ``Team.slug``，与 dispatch 对称）。同 id 去重；grant team 的 system 行若主属已裸名列出则跳过 prefixed 重复。**homonym slug**（grants 集合内多个 tenant 共用同一 slug）：不参与 prefix 派发 lookup，**列表侧亦跳过对应 grant team 条目**（与 ``domain/vkey_grant_slug_policy.grant_tenant_prefix_dispatchable`` 一致，避免 silent dedupe）。stale grant（team 行缺失）跳过。列表项 ``gateway.registry_name`` / ``gateway.team_slug`` 仅 multi-grant 路径注入。
 
 ### 4.5 模型注册：主调用面（`capability`）与特性（`tags` / `model_types`）
 
@@ -329,7 +329,7 @@ RBAC 与 `libs/db/permission_context.py`：`deps.py` 调用 **`GatewayAccessUseC
 
 ``gateway.callable`` 派生规则（与前端 ``ModelStatusBadge`` 一致）：连通性 ``failed`` → 不可调用；``entitlement_status`` 为 ``exhausted`` / ``expired`` → 不可调用；``resetting`` / ``active`` / ``none`` / 未测 → 可调用。``entitlement_status`` 含 ``resetting``（配额已耗尽且距窗口重置 ≤ 5 分钟）。上游 ``ProviderPlan`` 耗尽仍在 pre-call 拦截，列表阶段不做批量快照。
 
-组装逻辑：Presentation 经 ``application/vkey_proxy_model_list.list_openai_proxy_models``（multi-grant vkey 合并各 team callable；否则单 team fast path）解析 ``resolve_entitlement_scope`` 后调用 ``proxy_model_list_reads.build_proxy_models_list``；共享 ``compute_model_callable``、``EntitlementGuard.status_for_models`` 与选择器 ``annotate_items_entitlement_status``。Guard 工厂 ``build_entitlement_guard_for_session`` 在 ``entitlement_guard.py``。
+组装逻辑：Presentation 解析 ``allowed_models`` 后调用 ``application/vkey_proxy_model_list.list_openai_proxy_models``（multi-grant vkey 合并各 team callable；否则单 team fast path）；slug 映射与派发共用 ``domain/vkey_grant_slug_policy``（grants 内 homonym slug 不参与 prefix 派发，列表侧亦跳过对应 grant team 条目）。再经 ``resolve_entitlement_scope`` 调用 ``proxy_model_list_reads.build_proxy_models_list``；共享 ``compute_model_callable``、``EntitlementGuard.status_for_models`` 与选择器 ``annotate_items_entitlement_status``。Guard 工厂 ``build_entitlement_guard_for_session`` 在 ``entitlement_guard.py``。
 
 #### 4.5.2 模型调用策略（Invocation Policy）
 

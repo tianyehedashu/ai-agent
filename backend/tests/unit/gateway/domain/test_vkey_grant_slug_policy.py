@@ -1,4 +1,4 @@
-"""grant team slug 映射纯函数单元测试。"""
+"""vkey_grant_slug_policy 域纯规则单测。"""
 
 from __future__ import annotations
 
@@ -10,12 +10,6 @@ from domains.gateway.domain.vkey_grant_slug_policy import (
     find_ambiguous_grant_slugs,
     grant_tenant_prefix_dispatchable,
 )
-
-
-def test_build_slug_by_tenant_id_preserves_all_tenants() -> None:
-    a, b = uuid.uuid4(), uuid.uuid4()
-    rows = [(a, "team-a"), (b, "team-b")]
-    assert build_slug_by_tenant_id(rows) == {a: "team-a", b: "team-b"}
 
 
 def test_build_unique_slug_to_tenant_id_excludes_homonym_slugs() -> None:
@@ -48,3 +42,9 @@ def test_grant_tenant_prefix_dispatchable_homonym_grant_skipped() -> None:
         slug="same-slug",
         ambiguous_slugs=ambiguous,
     )
+
+
+def test_build_slug_by_tenant_id_preserves_all_tenants() -> None:
+    a, b = uuid.uuid4(), uuid.uuid4()
+    rows = [(a, "team-a"), (b, "team-b")]
+    assert build_slug_by_tenant_id(rows) == {a: "team-a", b: "team-b"}

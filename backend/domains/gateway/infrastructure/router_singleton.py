@@ -16,6 +16,7 @@ import asyncio
 from typing import TYPE_CHECKING, Any
 
 from bootstrap.config import settings
+from domains.gateway.domain.coding_agent_ua import apply_coding_agent_ua_litellm_params
 from domains.gateway.domain.litellm_credential_extra_keys import (
     credential_extra_keys_for_litellm,
     litellm_api_key_param_name,
@@ -203,7 +204,11 @@ def _build_litellm_params(
             val = pricing.get(key)
             if val is not None:
                 params[key] = val
-    return params
+    return apply_coding_agent_ua_litellm_params(
+        params,
+        credential_profile_id=profile_id,
+        provider=provider,
+    )
 
 
 # Router deployment 专用，不应透传给 ``anthropic_messages`` 直连调用。

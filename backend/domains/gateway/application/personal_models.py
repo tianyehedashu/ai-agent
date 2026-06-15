@@ -58,7 +58,11 @@ def personal_model_alias(display_name: str, model_type: str, *, suffix: int = 0)
     return "-".join(p for p in parts if p)[:200]
 
 
-def gateway_model_to_personal_list_item(row: GatewayModel) -> dict[str, Any]:
+def gateway_model_to_personal_list_item(
+    row: GatewayModel,
+    *,
+    credential_profile_id: str | None = None,
+) -> dict[str, Any]:
     """将 personal team 的 GatewayModel 行转为选择器/管理 API 列表项。"""
     tags = row.tags or {}
     display_name = str(tags.get("display_name") or row.name)
@@ -80,7 +84,10 @@ def gateway_model_to_personal_list_item(row: GatewayModel) -> dict[str, Any]:
         "capability": row.capability,
         "name": row.name,
         "selector_capabilities": selector_capabilities_from_tags(
-            tags, provider=row.provider, real_model=row.real_model
+            tags,
+            provider=row.provider,
+            real_model=row.real_model,
+            credential_profile_id=credential_profile_id,
         ),
         "last_test_status": row.last_test_status,
         "last_tested_at": row.last_tested_at.isoformat() if row.last_tested_at else None,

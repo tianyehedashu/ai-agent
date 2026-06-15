@@ -68,3 +68,30 @@ def test_build_litellm_params_anthropic_native_uses_anthropic_root_and_prefix(
     assert params["api_base"] == "https://ark.cn-beijing.volces.com/api/coding"
     assert params["api_key"] == "sk-test"
     assert "custom_llm_provider" not in params
+
+
+def test_build_litellm_params_moonshot_coding_plan_injects_user_agent(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "domains.gateway.infrastructure.router_singleton.decrypt_value",
+        lambda _enc, _key: "sk-test",
+    )
+    monkeypatch.setattr(
+        "domains.gateway.infrastructure.router_singleton._get_encryption_key",
+        lambda: "key",
+    )
+    cred = MagicMock()
+    cred.id = "cred-1"
+    cred.api_key_encrypted = "enc"
+    cred.api_base = "https://api.kimi.com/coding/v1"
+    cred.profile_id = "moonshot.coding_plan"
+    cred.extra = {}
+
+    params = _build_litellm_params(
+        real_model="kimi-for-coding",
+        provider="moonshot",
+        credential=cred,
+        rpm_limit=None,
+        tpm_limit=None,
+        tags=None,
+    )
+    assert params["extra_headers"]["User-Agent"] == "claude-code/1.0"

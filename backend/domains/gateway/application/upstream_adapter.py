@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from domains.gateway.domain.coding_agent_ua import apply_coding_agent_ua_litellm_params
 from domains.gateway.domain.model_capability import tags_to_capability_snapshot
 from domains.gateway.domain.policies.invocation_policy import apply_invocation_kwargs
 from domains.gateway.domain.policies.volcengine_message_sanitize import (
@@ -16,7 +17,6 @@ from domains.gateway.domain.upstream_policy import (
     max_output_tokens_limit,
     preprocess_messages_for_reasoner,
 )
-from domains.gateway.domain.upstream_profile_registry import get_upstream_profile
 
 if TYPE_CHECKING:
     from domains.gateway.application.model_or_route_resolution import ResolvedModelName
@@ -76,15 +76,12 @@ class UpstreamAdapter:
         provider: str,
         credential_profile_id: str | None,
     ) -> dict[str, Any]:
-        """若 profile 声明 ``coding_agent_ua``，注入到 ``extra_headers["user-agent"]``。"""
-        profile = get_upstream_profile(credential_profile_id, provider=provider)
-        ua = profile.coding_agent_ua
-        if not ua:
-            return kwargs
-        headers = dict(kwargs.get("extra_headers") or {})
-        headers["User-Agent"] = ua
-        kwargs["extra_headers"] = headers
-        return kwargs
+        """若 profile 声明 ``coding_agent_ua``，注入到 ``extra_headers["User-Agent"]``。"""
+        return apply_coding_agent_ua_litellm_params(
+            kwargs,
+            credential_profile_id=credential_profile_id,
+            provider=provider,
+        )
 
 
 __all__ = ["UpstreamAdapter"]

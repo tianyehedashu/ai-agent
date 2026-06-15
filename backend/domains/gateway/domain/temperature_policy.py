@@ -123,6 +123,23 @@ def resolve_temperature_default_from_tags(tags: dict[str, Any]) -> float:
     return DEFAULT_CLIENT_TEMPERATURE
 
 
+def resolve_probe_chat_temperature(
+    *,
+    credential_profile_id: str | None,
+    provider: str,
+) -> float:
+    """连通性探活 ``chat`` 出站温度：Coding Plan 等 ``fixed_outbound_temperature`` 须与上游一致。"""
+    policy = temperature_policy_from_upstream_profile(
+        credential_profile_id=credential_profile_id,
+        provider=provider,
+    )
+    if policy == TEMPERATURE_POLICY_FIXED_1:
+        return 1.0
+    if policy == TEMPERATURE_POLICY_PROBE_0:
+        return 0.0
+    return 0.0
+
+
 def enrich_temperature_tags(
     tags: dict[str, Any],
     *,
@@ -153,6 +170,7 @@ __all__ = [
     "UPSTREAM_PROFILE_ID_TAG",
     "enrich_temperature_tags",
     "infer_temperature_policy",
+    "resolve_probe_chat_temperature",
     "resolve_temperature_default_from_tags",
     "resolve_temperature_policy_from_tags",
     "temperature_policy_from_upstream_profile",

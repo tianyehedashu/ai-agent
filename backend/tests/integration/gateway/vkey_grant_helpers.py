@@ -104,6 +104,42 @@ async def ensure_two_teams(
     return primary, shared
 
 
+async def ensure_homonym_slug_grant_teams(
+    db_session: AsyncSession,
+    test_user: User,
+) -> tuple[Any, Any, Any, str]:
+    """primary + 两个 grant team（不同 owner、相同 slug），test_user 为二者成员。
+
+    Returns:
+        (primary, grant_a, grant_b, homonym_slug)
+    """
+    from domains.identity.infrastructure.models.user import User
+
+    homonym_slug = f"dup-{uuid.uuid4().hex[:8]}"
+    teams = TeamService(db_session)
+    primary = await teams.ensure_personal_team(test_user.id)
+    grant_a = await teams.create_team(
+        name=f"grant-a-{uuid.uuid4().hex[:4]}",
+        owner_user_id=test_user.id,
+        slug=homonym_slug,
+    )
+    other = User(
+        email=f"other-{uuid.uuid4().hex[:8]}@example.com",
+        hashed_password="hashed_password",
+        name="Other Owner",
+    )
+    db_session.add(other)
+    await db_session.flush()
+    grant_b = await TeamService(db_session).create_team(
+        name=f"grant-b-{uuid.uuid4().hex[:4]}",
+        owner_user_id=other.id,
+        slug=homonym_slug,
+    )
+    await teams.add_member(grant_b.id, test_user.id, "member")
+    await db_session.commit()
+    return primary, grant_a, grant_b, homonym_slug
+
+
 def patch_router_acompletion(monkeypatch: pytest.MonkeyPatch, fake_response: Any) -> None:
     """Patch LiteLLM Router.acompletion（bound method 需接收 self）。"""
 

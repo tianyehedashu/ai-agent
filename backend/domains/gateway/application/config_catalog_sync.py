@@ -250,9 +250,15 @@ def selector_capabilities_from_tags(
     *,
     provider: str = "",
     real_model: str = "",
+    credential_profile_id: str | None = None,
 ) -> dict[str, Any]:
     """扁平特性字典，与选择器 ``capabilities`` 字段对齐。"""
-    return _selector_capabilities_payload(tags, provider=provider, real_model=real_model)
+    return _selector_capabilities_payload(
+        tags,
+        provider=provider,
+        real_model=real_model,
+        credential_profile_id=credential_profile_id,
+    )
 
 
 def _selector_capabilities_payload(
@@ -260,9 +266,15 @@ def _selector_capabilities_payload(
     *,
     provider: str = "",
     real_model: str = "",
+    credential_profile_id: str | None = None,
 ) -> dict[str, Any]:
     """供前端展示与校验的扁平能力（与 ``ModelCapabilitySnapshot`` 对齐）。"""
-    snap = tags_to_capability_snapshot(tags, provider=provider, real_model=real_model)
+    snap = tags_to_capability_snapshot(
+        tags,
+        provider=provider,
+        real_model=real_model,
+        credential_profile_id=credential_profile_id,
+    )
     return {
         "supports_vision": snap.supports_vision,
         "supports_tools": snap.supports_tools,

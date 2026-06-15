@@ -45,4 +45,37 @@ async def build_credential_name_map_for_models(
     return names
 
 
-__all__ = ["build_credential_name_map_for_models"]
+async def build_credential_profile_map_for_models(
+    session: AsyncSession,
+    models: list[GatewayModel | SystemGatewayModel],
+) -> dict[uuid.UUID, str]:
+    """为已加载的合并模型列表批量解析凭据 ``profile_id``（读侧能力推导）。"""
+    team_cred_ids: list[uuid.UUID] = []
+    system_cred_ids: list[uuid.UUID] = []
+    for model in models:
+        kind = registry_kind_for_merged_row(model)
+        if kind == "team":
+            team_cred_ids.append(model.credential_id)
+        else:
+            system_cred_ids.append(model.credential_id)
+
+    profiles: dict[uuid.UUID, str] = {}
+    if team_cred_ids:
+        creds = await ProviderCredentialRepository(session).list_by_ids(team_cred_ids)
+        for cred in creds:
+            raw = getattr(cred, "profile_id", None)
+            if isinstance(raw, str) and raw.strip():
+                profiles[cred.id] = raw.strip()
+    if system_cred_ids:
+        creds = await SystemProviderCredentialRepository(session).list_by_ids(system_cred_ids)
+        for cred in creds:
+            raw = getattr(cred, "profile_id", None)
+            if isinstance(raw, str) and raw.strip():
+                profiles[cred.id] = raw.strip()
+    return profiles
+
+
+__all__ = [
+    "build_credential_name_map_for_models",
+    "build_credential_profile_map_for_models",
+]

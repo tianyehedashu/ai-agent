@@ -21,7 +21,6 @@ from domains.gateway.domain.types import EntitlementListStatus, ModelConnectivit
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
-    from domains.gateway.infrastructure.models.gateway_model import GatewayModel
     from domains.gateway.infrastructure.models.gateway_route import GatewayRoute
     from domains.gateway.infrastructure.models.system_gateway import SystemGatewayRoute
 
@@ -39,6 +38,7 @@ def build_openai_model_list_item(
     list_id: str | None = None,
     team_slug: str | None = None,
     include_extended_gateway_metadata: bool = False,
+    credential_profile_id: str | None = None,
 ) -> dict[str, object]:
     """单条 OpenAI Model 对象 + ``model_types`` + ``gateway`` 命名空间。"""
     tags = row.tags or {}
@@ -56,7 +56,10 @@ def build_openai_model_list_item(
             entitlement_status=entitlement_status,
         ),
         "selector_capabilities": selector_capabilities_from_tags(
-            tags, provider=row.provider, real_model=row.real_model
+            tags,
+            provider=row.provider,
+            real_model=row.real_model,
+            credential_profile_id=credential_profile_id,
         ),
     }
     if include_extended_gateway_metadata or team_slug is not None or effective_list_id != row.name:
@@ -109,6 +112,7 @@ def _build_route_model_list_item(
     list_id: str | None = None,
     team_slug: str | None = None,
     include_extended_gateway_metadata: bool = False,
+    credential_profiles: dict[uuid.UUID, str] | None = None,
 ) -> dict[str, object] | None:
     """从 GatewayRoute 构建 OpenAI 格式的模型列表项。
 
@@ -141,6 +145,9 @@ def _build_route_model_list_item(
 
     registry_name = route.virtual_model
     effective_list_id = list_id if list_id is not None else route.virtual_model
+    profile_id = (
+        credential_profiles.get(base.credential_id) if credential_profiles is not None else None
+    )
     gateway_meta: dict[str, object] = {
         "display_name": route.virtual_model,
         "real_model": base.real_model,
@@ -153,7 +160,10 @@ def _build_route_model_list_item(
             entitlement_status=entitlement,
         ),
         "selector_capabilities": selector_capabilities_from_tags(
-            tags, provider=base.provider, real_model=base.real_model
+            tags,
+            provider=base.provider,
+            real_model=base.real_model,
+            credential_profile_id=profile_id,
         ),
     }
     if (
@@ -232,6 +242,12 @@ async def build_proxy_models_list(
 
     lookup_pool = route_lookup_models if route_lookup_models is not None else models
     models_by_name = {m.name: m for m in lookup_pool}
+    from domains.gateway.application.model_credential_enrichment import (
+        build_credential_profile_map_for_models,
+    )
+
+    profile_source = [*models, *lookup_pool]
+    credential_profiles = await build_credential_profile_map_for_models(session, profile_source)
     result: list[dict[str, object]] = []
 
     for index, row in enumerate(models):
@@ -248,6 +264,7 @@ async def build_proxy_models_list(
                 list_id=list_id,
                 team_slug=team_slug,
                 include_extended_gateway_metadata=include_extended_gateway_metadata,
+                credential_profile_id=credential_profiles.get(row.credential_id),
             )
         )
 
@@ -270,6 +287,7 @@ async def build_proxy_models_list(
                 list_id=list_id,
                 team_slug=team_slug,
                 include_extended_gateway_metadata=include_extended_gateway_metadata,
+                credential_profiles=credential_profiles,
             )
             if item is not None:
                 result.append(item)

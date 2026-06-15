@@ -2,13 +2,18 @@
 
 from __future__ import annotations
 
-from collections import defaultdict
 from typing import TYPE_CHECKING
 import uuid
 
 from sqlalchemy import select
 
 from domains.gateway.domain.errors import VkeyAmbiguousModelError
+from domains.gateway.domain.vkey_grant_slug_policy import (
+    GrantTeamSlugRow,
+    build_slug_by_tenant_id,
+    build_unique_slug_to_tenant_id,
+    find_ambiguous_grant_slugs,
+)
 from domains.gateway.domain.vkey_team_prefix_policy import (
     VkeyModelDispatch,
     resolve_vkey_model_prefix,
@@ -24,8 +29,6 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
-GrantTeamSlugRow = tuple[uuid.UUID, str]
-
 
 async def fetch_grant_team_slug_rows(
     session: AsyncSession,
@@ -37,25 +40,6 @@ async def fetch_grant_team_slug_rows(
     stmt = select(Team.id, Team.slug).where(Team.id.in_(granted_team_ids))
     result = await session.execute(stmt)
     return [(row.id, row.slug) for row in result.all()]
-
-
-def build_slug_by_tenant_id(rows: list[GrantTeamSlugRow]) -> dict[uuid.UUID, str]:
-    """tenant_id → slug（列表侧直接使用，无 slug 反查碰撞）。"""
-    return {tenant_id: slug for tenant_id, slug in rows}
-
-
-def build_unique_slug_to_tenant_id(rows: list[GrantTeamSlugRow]) -> dict[str, uuid.UUID]:
-    """slug → tenant_id；仅保留 grants 集合内 slug 唯一者（派发前缀 lookup）。"""
-    grouped: dict[str, list[uuid.UUID]] = defaultdict(list)
-    for tenant_id, slug in rows:
-        grouped[slug].append(tenant_id)
-    ambiguous = {slug for slug, ids in grouped.items() if len(ids) > 1}
-    if ambiguous:
-        logger.warning(
-            "ambiguous team slugs among vkey grants (excluded from prefix dispatch): %s",
-            sorted(ambiguous),
-        )
-    return {slug: ids[0] for slug, ids in grouped.items() if len(ids) == 1}
 
 
 async def get_slug_by_tenant_id_map(
@@ -73,7 +57,14 @@ async def get_slug_to_tenant_id_map(
 ) -> dict[str, uuid.UUID]:
     """派发侧：slug → tenant_id（homonym slug 排除，避免静默错派）。"""
     rows = await fetch_grant_team_slug_rows(session, granted_team_ids)
-    return build_unique_slug_to_tenant_id(rows)
+    slug_map = build_unique_slug_to_tenant_id(rows)
+    ambiguous = find_ambiguous_grant_slugs(rows)
+    if ambiguous:
+        logger.warning(
+            "ambiguous team slugs among vkey grants (excluded from prefix dispatch): %s",
+            sorted(ambiguous),
+        )
+    return slug_map
 
 
 async def dispatch_vkey_model(
@@ -170,6 +161,7 @@ __all__ = [
     "count_grant_teams_with_model",
     "dispatch_vkey_model",
     "fetch_grant_team_slug_rows",
+    "find_ambiguous_grant_slugs",
     "get_slug_by_tenant_id_map",
     "get_slug_to_tenant_id_map",
 ]

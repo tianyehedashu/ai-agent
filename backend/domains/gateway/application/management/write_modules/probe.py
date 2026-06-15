@@ -46,6 +46,7 @@ from domains.gateway.domain.policies.volcengine_video import (
     should_use_volcengine_direct_video,
 )
 from domains.gateway.domain.provider_env_catalog import image_probe_size
+from domains.gateway.domain.temperature_policy import resolve_probe_chat_temperature
 from domains.gateway.infrastructure.router_singleton import ensure_gateway_callbacks
 from domains.gateway.infrastructure.upstream.dashscope_embedding_client import (
     perform_dashscope_embedding,
@@ -188,13 +189,17 @@ class ProbeWritesMixin:
 
         try:
             if capability == "chat":
+                probe_temperature = resolve_probe_chat_temperature(
+                    credential_profile_id=getattr(credential, "profile_id", None),
+                    provider=target.provider,
+                )
                 response = await acompletion(
                     **_litellm_kw(
                         {
                             "model": litellm_model,
                             "messages": [{"role": "user", "content": "Hi"}],
                             "max_tokens": 10,
-                            "temperature": 0,
+                            "temperature": probe_temperature,
                             "api_key": api_key,
                             "api_base": api_base,
                         }

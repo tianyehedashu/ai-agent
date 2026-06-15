@@ -11,6 +11,7 @@ from domains.gateway.infrastructure.router_singleton import reload_router
 from libs.api.paths import openai_compat_base
 from tests.integration.gateway.vkey_grant_helpers import (
     create_vkey_with_plain,
+    ensure_homonym_slug_grant_teams,
     ensure_two_teams,
     setup_team_model,
     setup_team_route,
@@ -221,3 +222,50 @@ class TestVkeyGrantsModelsList:
         ids = _model_ids(r.json())
         assert f"{shared_slug}/{virtual_model}" in ids
         assert virtual_model not in ids
+
+    @pytest.mark.asyncio
+    async def test_homonym_slug_omits_grant_team_models_from_list(
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict[str, str],
+        db_session,
+        test_user,
+    ) -> None:
+        """grants 内 homonym slug 的 team：列表与 dispatch 均不可用 prefix，grant 模型不出现在列表。"""
+        primary, grant_a, grant_b, dup_slug = await ensure_homonym_slug_grant_teams(
+            db_session, test_user
+        )
+        bound_model = f"bound-{uuid.uuid4().hex[:6]}"
+        grant_a_model = f"grant-a-{uuid.uuid4().hex[:6]}"
+        grant_b_model = f"grant-b-{uuid.uuid4().hex[:6]}"
+        await setup_team_model(
+            dev_client, primary.id, auth_headers, model_name=bound_model
+        )
+        await setup_team_model(
+            dev_client, grant_a.id, auth_headers, model_name=grant_a_model
+        )
+        await setup_team_model(
+            dev_client, grant_b.id, auth_headers, model_name=grant_b_model
+        )
+        vkey_id, plain_key = await create_vkey_with_plain(
+            dev_client, primary.id, auth_headers
+        )
+        r_grant = await dev_client.post(
+            f"/api/v1/gateway/teams/{primary.id}/keys/{vkey_id}/grants",
+            headers=auth_headers,
+            json={"tenant_ids": [str(grant_a.id), str(grant_b.id)]},
+        )
+        assert r_grant.status_code == 201, r_grant.text
+        await reload_router(db_session)
+
+        r = await dev_client.get(
+            _OPENAI_MODELS,
+            headers={"Authorization": f"Bearer {plain_key}"},
+        )
+        assert r.status_code == 200, r.text
+        ids = _model_ids(r.json())
+        assert bound_model in ids
+        assert f"{dup_slug}/{grant_a_model}" not in ids
+        assert f"{dup_slug}/{grant_b_model}" not in ids
+        assert grant_a_model not in ids
+        assert grant_b_model not in ids

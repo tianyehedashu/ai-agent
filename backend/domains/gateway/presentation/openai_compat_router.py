@@ -24,9 +24,10 @@ from fastapi.responses import Response, StreamingResponse
 import orjson
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from domains.gateway.application.vkey_proxy_model_list import list_openai_proxy_models
+from domains.gateway.application.proxy_allowed_models import resolve_proxy_allowed_model_names
 from domains.gateway.application.proxy_timing import timing_response_headers
 from domains.gateway.application.proxy_use_case import ProxyUseCase
+from domains.gateway.application.vkey_proxy_model_list import list_openai_proxy_models
 from domains.gateway.domain.types import GatewayCapability
 from domains.gateway.presentation.deps import (
     VkeyOrApikeyPrincipal,
@@ -302,7 +303,22 @@ async def list_models(
     principal: Annotated[VkeyOrApikeyPrincipal, Depends(bearer_vkey_or_apikey_auth)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> dict[str, object]:
-    data = await list_openai_proxy_models(db, principal)
+    allowed = resolve_proxy_allowed_model_names(
+        vkey_allowed=principal.vkey.allowed_models if principal.vkey else None,
+        grant_allowed=(
+            principal.api_key_grant.allowed_models if principal.api_key_grant else None
+        ),
+    )
+    data = await list_openai_proxy_models(
+        db,
+        team_id=principal.team_id,
+        user_id=principal.user_id,
+        vkey=principal.vkey,
+        api_key_grant_id=(
+            principal.api_key_grant.grant_id if principal.api_key_grant else None
+        ),
+        allowed=allowed,
+    )
     return {"object": "list", "data": data}
 
 
