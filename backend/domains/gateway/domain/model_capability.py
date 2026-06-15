@@ -64,6 +64,7 @@ def tags_to_capability_snapshot(
     *,
     provider: str = "",
     real_model: str = "",
+    credential_profile_id: str | None = None,
 ) -> ModelCapabilitySnapshot:
     """从 ``GatewayModel.tags`` 构建能力快照。"""
     supports_image_gen = bool(tags.get("supports_image_gen", False))
@@ -81,6 +82,8 @@ def tags_to_capability_snapshot(
         tags,
         thinking_param=thinking_param,
         real_model=real_model,
+        credential_profile_id=credential_profile_id,
+        provider=provider,
     )
     temperature_default = resolve_temperature_default_from_tags(tags)
     return ModelCapabilitySnapshot(

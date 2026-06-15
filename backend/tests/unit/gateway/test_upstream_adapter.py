@@ -89,16 +89,39 @@ def test_reasoning_model_locks_temperature() -> None:
 def test_kimi_for_coding_locks_temperature_when_thinking_disabled() -> None:
     out = UpstreamAdapter().adapt(
         {"temperature": 0.2, "max_tokens": 100},
-        client_model="kimi-for-coding-chat",
+        client_model="my-kimi-code",
         resolved=ResolvedModelName(
             record=_FakeRecord(
                 provider="moonshot",
-                real_model="kimi-for-coding",
+                real_model="my-custom-code-model",
+                tags={
+                    "thinking_param": "none",
+                    "thinking_param_locked": True,
+                    "upstream_profile_id": "moonshot.coding_plan",
+                },
+            ),
+            route=None,
+            via_route=None,
+        ),
+        credential_profile_id="moonshot.coding_plan",
+    )
+    assert out["temperature"] == 1.0
+
+
+def test_coding_plan_profile_locks_temperature_without_tag() -> None:
+    out = UpstreamAdapter().adapt(
+        {"temperature": 0.2, "max_tokens": 100},
+        client_model="alias-only",
+        resolved=ResolvedModelName(
+            record=_FakeRecord(
+                provider="moonshot",
+                real_model="totally-new-model-id",
                 tags={"thinking_param": "none", "thinking_param_locked": True},
             ),
             route=None,
             via_route=None,
         ),
+        credential_profile_id="moonshot.coding_plan",
     )
     assert out["temperature"] == 1.0
 

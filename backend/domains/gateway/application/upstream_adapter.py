@@ -41,6 +41,7 @@ class UpstreamAdapter:
             tags,
             provider=record.provider,
             real_model=record.real_model,
+            credential_profile_id=credential_profile_id,
         )
         adapted = apply_invocation_kwargs(snap, kwargs)
         limit = max_output_tokens_limit(tags, record.provider)

@@ -10,6 +10,7 @@ from domains.gateway.application.catalog.litellm_capability_hint import (
 )
 from domains.gateway.application.ports import LitellmCapabilityHintPort
 from domains.gateway.domain.litellm_capability_mapping import HintMergeMode
+from domains.gateway.domain.temperature_policy import UPSTREAM_PROFILE_ID_TAG
 from domains.gateway.domain.thinking_param import (
     THINKING_PARAM_NONE,
     effective_supports_reasoning,
@@ -22,6 +23,7 @@ def build_gateway_model_tags(
     *,
     provider: str,
     real_model: str,
+    upstream_profile_id: str | None = None,
     hint_port: LitellmCapabilityHintPort | None = None,
     on_hint_thinking_param: Callable[[str], None] | None = None,
     hint_mode: HintMergeMode = "fill_missing",
@@ -39,6 +41,8 @@ def build_gateway_model_tags(
     hint_tp = tags.pop("_litellm_hint_thinking_param", None)
     if hint_tp and on_hint_thinking_param is not None:
         on_hint_thinking_param(str(hint_tp))
+    if upstream_profile_id and upstream_profile_id.strip():
+        tags[UPSTREAM_PROFILE_ID_TAG] = upstream_profile_id.strip()
     tags = enrich_gateway_model_tags(tags, provider=provider, real_model=real_model)
     thinking_param = str(tags.get("thinking_param") or THINKING_PARAM_NONE)
     tags["supports_reasoning"] = effective_supports_reasoning(tags, thinking_param)
