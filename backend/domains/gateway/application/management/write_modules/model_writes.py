@@ -4,8 +4,11 @@ from __future__ import annotations
 
 from contextlib import suppress
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 import uuid
+
+if TYPE_CHECKING:
+    from domains.gateway.application.management.model_copy_types import ModelCopyCredentialPlan
 
 from domains.gateway.application.catalog.gateway_model_tags_pipeline import build_gateway_model_tags
 from domains.gateway.application.litellm_real_model_prefix import litellm_prefix_violation_message
@@ -1269,7 +1272,6 @@ class ModelWritesMixin:
         """Copy a subset of gateway_models rows to another team."""
         from domains.gateway.application.management.model_copy_types import (
             CopyModelsToTeamResult,
-            ModelCopyCredentialPlan,
             ModelCopyFailure,
             ModelCopySuccess,
         )

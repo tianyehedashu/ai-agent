@@ -122,3 +122,26 @@ def test_destination_provider_mismatch() -> None:
 def test_model_copy_failure_reason_maps_permission() -> None:
     assert model_copy_failure_reason(CredentialNotFoundError("x")) == "credential not found"
     assert model_copy_failure_reason(TeamPermissionDeniedError("x")) != "credential not found"
+
+
+def test_copy_request_rejects_duplicate_source_credential_plans() -> None:
+    from pydantic import ValidationError as PydanticValidationError
+
+    from domains.gateway.presentation.schemas.model_copy import CopyModelsToTeamRequest
+
+    cred_id = uuid.uuid4()
+    with pytest.raises(PydanticValidationError):
+        CopyModelsToTeamRequest(
+            model_ids=[uuid.uuid4()],
+            destination_team_id=uuid.uuid4(),
+            credential_plans=[
+                {
+                    "source_credential_id": cred_id,
+                    "mode": "copy_credential",
+                },
+                {
+                    "source_credential_id": cred_id,
+                    "mode": "copy_credential",
+                },
+            ],
+        )
