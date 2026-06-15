@@ -2,6 +2,7 @@
 Redis Connection Management
 """
 
+import contextlib
 import json
 from typing import Any
 
@@ -68,10 +69,8 @@ async def _reset_redis_client_if_loop_changed() -> None:
     loop_id = id(asyncio.get_running_loop())
     if _redis_loop_id == loop_id:
         return
-    try:
+    with contextlib.suppress(Exception):
         await _redis_client.aclose()
-    except Exception:
-        pass
     _redis_client = None
     _redis_loop_id = None
 
