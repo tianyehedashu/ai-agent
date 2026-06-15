@@ -12,6 +12,13 @@
 - [pricing.py（价格配置）](file://backend/domains/gateway/presentation/routers/pricing.py)
 - [logs.py（使用统计与日志）](file://backend/domains/gateway/presentation/routers/logs.py)
 - [proxy_context.py（代理上下文与预算/能力）](file://backend/domains/gateway/application/proxy_context.py)
+- [teams_router.py（团队成员搜索API）](file://backend/domains/tenancy/presentation/teams_router.py)
+- [team_repository.py（团队成员搜索实现）](file://backend/domains/tenancy/infrastructure/repositories/team_repository.py)
+- [team_service.py（团队成员搜索服务）](file://backend/domains/tenancy/application/team_service.py)
+- [use-team-member-filter-search.ts（前端团队成员搜索钩子）](file://frontend/src/features/gateway-usage/use-team-member-filter-search.ts)
+- [use-gateway-team-members.ts（团队成员查询键标准化）](file://frontend/src/features/gateway-teams/use-gateway-team-members.ts)
+- [teams.ts（前端团队API封装）](file://frontend/src/api/gateway/teams.ts)
+- [logs.tsx（前端日志页面集成）](file://frontend/src/pages/gateway/logs.tsx)
 - [20260508_add_gateway_tables.py（预算表结构）](file://backend/alembic/versions/20260508_add_gateway_tables.py)
 - [20260224_add_user_models_table.py（用户模型表结构）](file://backend/alembic/versions/20260224_add_user_models_table.py)
 - [20260515_migrate_user_models_data.py（用户模型数据迁移）](file://backend/alembic/versions/20260515_migrate_user_models_data.py)
@@ -24,14 +31,16 @@
 - [inspect_gateway_logs.py（网关日志检查脚本）](file://backend/scripts/inspect_gateway_logs.py)
 - [utils.ts（批量操作与性能优化工具）](file://frontend/src/features/gateway-models/utils.ts)
 - [use-connectivity-batch-test.ts（批量连通性测试钩子）](file://frontend/src/features/gateway-models/hooks/use-connectivity-batch-test.ts)
+- [credential-probe-cache.ts（凭据探测缓存）](file://frontend/src/features/gateway-credentials/credential-probe-cache.ts)
+- [combine-fetching.ts（查询状态合并）](file://frontend/src/features/gateway-shared/combine-fetching.ts)
 </cite>
 
 ## 更新摘要
 **所做更改**
-- 新增批量操作优化章节，详细说明前端批量测试和后端批量处理机制
-- 更新性能考虑章节，重点介绍并发控制和数据库往返优化
-- 新增批量操作最佳实践和限流策略说明
-- 补充跨团队批量操作的实现细节
+- 更新团队成员搜索功能章节，重点反映use-team-member-filter-search钩子的React Query缓存优化
+- 新增查询键结构标准化的前端实现细节
+- 补充缓存策略和性能优化的具体技术实现
+- 强调React Query缓存键的标准化和去重机制
 
 ## 目录
 1. [简介](#简介)
@@ -39,17 +48,18 @@
 3. [核心组件](#核心组件)
 4. [架构总览](#架构总览)
 5. [详细组件分析](#详细组件分析)
-6. [批量操作优化](#批量操作优化)
-7. [依赖关系分析](#依赖关系分析)
-8. [性能考虑](#性能考虑)
-9. [故障排查指南](#故障排查指南)
-10. [结论](#结论)
-11. [附录](#附录)
+6. [团队成员搜索功能](#团队成员搜索功能)
+7. [批量操作优化](#批量操作优化)
+8. [依赖关系分析](#依赖关系分析)
+9. [性能考虑](#性能考虑)
+10. [故障排查指南](#故障排查指南)
+11. [结论](#结论)
+12. [附录](#附录)
 
 ## 简介
 本文件为AI Agent项目的"网关API"全面REST API文档，覆盖LLM模型管理、凭据管理、预算控制、配额规则、价格配置、使用统计等核心功能。文档解释网关代理的请求路由、响应适配与错误处理机制，并提供凭据验证、模型测试、连接性检查等实用API的使用示例。同时说明鉴权要求、限流策略与性能优化建议。
 
-**最新更新**：本次更新重点反映了网关性能优化的批量操作优化，通过减少数据库往返次数来提高响应时间，包括前端并发控制和后端批量处理机制。
+**最新更新**：本次更新重点反映了团队成员搜索功能的重大性能优化，通过在use-team-member-filter-search钩子中实现React Query缓存优化和查询键结构标准化，显著提升了大团队场景下的搜索体验和缓存效率。
 
 ## 项目结构
 后端通过FastAPI聚合多个子路由，统一前缀为/api/v1/gateway，按资源域拆分子路由模块，包括：
@@ -60,6 +70,7 @@
 - 配额规则：统一的限额来源与叠加策略
 - 价格配置：上游/下游价格与快照
 - 使用统计与日志：请求日志、用量统计与成本归集
+- **团队成员搜索**：支持邮箱和姓名的分页搜索功能，现已实现React Query缓存优化
 
 ```mermaid
 graph TB
@@ -73,6 +84,7 @@ MODELS["模型子路由<br/>routers/models.py"]
 QUOTA["配额规则子路由<br/>routers/quota_rules.py"]
 PRICING["价格子路由<br/>routers/pricing.py"]
 LOGS["日志子路由<br/>routers/logs.py"]
+TEAMS["团队成员搜索<br/>tenancy/presentation/teams_router.py"]
 end
 MAIN --> GWMGMT
 GWMGMT --> ROUTES
@@ -82,6 +94,7 @@ GWMGMT --> MODELS
 GWMGMT --> QUOTA
 GWMGMT --> PRICING
 GWMGMT --> LOGS
+GWMGMT --> TEAMS
 ```
 
 **图表来源**
@@ -98,6 +111,7 @@ GWMGMT --> LOGS
 - 价格体系：上游价与下游价分离，支持批量镜像与快照展示。
 - 使用统计：请求日志、用量聚合与成本归集，支持多维维度查询。
 - **模型管理增强**：支持个人模型多模型类型（text、image等）与改进的重复创建检测机制。
+- **团队成员搜索优化**：通过React Query缓存优化和查询键结构标准化，实现高性能的分页搜索功能。
 - **批量操作优化**：前端并发控制和后端批量处理，显著减少数据库往返次数。
 
 **章节来源**
@@ -355,6 +369,124 @@ Cost --> Export["对外统计/报表"]
 - [logs.py:1-200](file://backend/domains/gateway/presentation/routers/logs.py#L1-L200)
 - [GATEWAY_PRICING_AND_LITELLM_COST.html:915-926](file://backend/docs/gateway/GATEWAY_PRICING_AND_LITELLM_COST.html#L915-L926)
 
+## 团队成员搜索功能
+
+### React Query缓存优化与查询键标准化
+
+**更新** 本次重大更新反映了团队成员搜索功能的React Query缓存优化实现，通过标准化查询键结构和智能缓存策略，显著提升了大团队场景下的性能表现。
+
+#### 缓存优化实现细节
+
+- **查询键标准化**：使用`['gateway', 'member-filter', teamId, deferredSearch]`作为标准化查询键，确保相同参数产生相同的缓存键
+- **智能缓存策略**：30秒staleTime平衡实时性与性能，避免频繁的API调用
+- **去重机制**：通过标准化查询键实现React Query的自动去重，避免重复请求
+- **延迟搜索优化**：结合useDeferredValue实现搜索词的延迟处理，减少不必要的API调用
+
+#### 前端集成与过滤钩子
+
+- **useTeamMemberFilterSearch Hook**
+  - 功能：团队成员筛选下拉框的智能搜索
+  - 特性：下拉打开时按搜索词请求后端分页接口，避免全量加载
+  - 参数：teamId、selectedUserId、enabled
+  - 返回：options、onSearchQueryChange、onPickerOpenChange、remoteSearching、resolvingSelection
+  - 性能：使用useDeferredValue延迟搜索，30秒缓存时间
+
+- **查询键结构标准化**
+  - 团队成员查询键：`gatewayTeamMembersQueryKey(teamId)`返回`['gateway', 'team-members', teamId]`
+  - 搜索查询键：`['gateway', 'member-filter', teamId, deferredSearch]`
+  - 统一的查询键命名约定确保缓存的一致性和可预测性
+
+```mermaid
+sequenceDiagram
+participant User as "用户"
+participant Hook as "useTeamMemberFilterSearch"
+participant ReactQuery as "React Query缓存"
+participant API as "团队成员API"
+User->>Hook : "输入搜索词"
+Hook->>Hook : "useDeferredValue延迟处理"
+Hook->>ReactQuery : "检查缓存键['gateway','member-filter',teamId,search]"
+ReactQuery-->>Hook : "命中缓存？"
+alt 缓存命中
+ReactQuery-->>Hook : "返回缓存数据"
+else 缓存未命中
+Hook->>API : "调用teamsApi.listMembersPage()"
+API-->>Hook : "分页搜索结果"
+Hook->>ReactQuery : "写入缓存30秒staleTime"
+end
+Hook-->>User : "返回搜索选项"
+```
+
+**图表来源**
+- [use-team-member-filter-search.ts:55-65](file://frontend/src/features/gateway-usage/use-team-member-filter-search.ts#L55-L65)
+- [use-gateway-team-members.ts:11-15](file://frontend/src/features/gateway-teams/use-gateway-team-members.ts#L11-L15)
+
+#### API端点规范
+团队成员搜索功能提供了高效的服务端分页搜索能力，避免全量加载超大团队成员列表：
+
+- **列出团队成员（分页搜索）**
+  - 方法：GET /api/v1/gateway/teams/{team_id}/members
+  - 查询参数：
+    - page: 分页页码（≥1）
+    - page_size: 每页条数（1-200，默认20）
+    - search: 搜索关键词（1-100字符，邮箱或姓名模糊匹配）
+  - 响应：分页列表响应，包含total、items等字段
+  - 权限：当前团队成员
+
+- **列出可邀请用户候选**
+  - 方法：GET /api/v1/gateway/teams/{team_id}/members/candidates
+  - 查询参数：
+    - page: 分页页码（≥1）
+    - page_size: 每页条数（1-200，默认20）
+    - search: 搜索关键词（1-100字符）
+  - 响应：分页列表响应，排除已在团队内的成员
+  - 权限：团队管理员
+
+- **按邮箱查找用户（团队邀请前）**
+  - 方法：GET /api/v1/gateway/teams/{team_id}/members/lookup
+  - 查询参数：
+    - email: 用户邮箱（3-320字符）
+  - 响应：用户基本信息（id、email、name）
+  - 权限：团队管理员
+
+```mermaid
+sequenceDiagram
+participant User as "用户"
+participant Teams as "团队路由"
+participant Service as "团队服务层"
+participant Repo as "团队仓储层"
+User->>Teams : "GET /teams/{team_id}/members?page=1&page_size=20&search=张三"
+Teams->>Service : "list_team_members_page(team_id, page, page_size, search)"
+Service->>Repo : "count_by_team_with_search(team_id, search)"
+Repo-->>Service : "total_count"
+Service->>Repo : "list_by_team_page(team_id, offset, limit, search)"
+Repo-->>Service : "members_list"
+Service-->>Teams : "分页结果"
+Teams-->>User : "TeamMemberListResponse"
+```
+
+**图表来源**
+- [teams_router.py:196-222](file://backend/domains/tenancy/presentation/teams_router.py#L196-L222)
+- [team_repository.py:157-187](file://backend/domains/tenancy/infrastructure/repositories/team_repository.py#L157-L187)
+
+### 集成应用场景
+团队成员搜索功能在多个网关页面中得到集成：
+
+- **网关日志页面**：在查看网关活动和日志时，支持按用户筛选
+- **权限控制**：仅在非个人团队且聚合维度不是user时显示成员筛选
+- **性能优化**：对于workspace模式下的大量成员场景，使用服务端搜索避免前端内存压力
+- **缓存优化**：通过React Query缓存减少重复请求，提升用户体验
+
+**章节来源**
+- [use-team-member-filter-search.ts:1-97](file://frontend/src/features/gateway-usage/use-team-member-filter-search.ts#L1-L97)
+- [use-gateway-team-members.ts:1-23](file://frontend/src/features/gateway-teams/use-gateway-team-members.ts#L1-L23)
+- [teams_router.py:196-222](file://backend/domains/tenancy/presentation/teams_router.py#L196-L222)
+- [teams_router.py:225-249](file://backend/domains/tenancy/presentation/teams_router.py#L225-L249)
+- [teams_router.py:252-258](file://backend/domains/tenancy/presentation/teams_router.py#L252-L258)
+- [team_repository.py:157-187](file://backend/domains/tenancy/infrastructure/repositories/team_repository.py#L157-L187)
+- [team_service.py:227](file://backend/domains/tenancy/application/team_service.py#L227)
+- [teams.ts:45-81](file://frontend/src/api/gateway/teams.ts#L45-L81)
+- [logs.tsx:179-191](file://frontend/src/pages/gateway/logs.tsx#L179-L191)
+
 ## 批量操作优化
 
 ### 前端并发控制机制
@@ -428,9 +560,12 @@ Merge --> Output["返回批量操作结果"]
   - 预算表结构包含限额、用量、重置时间等字段
   - **用户模型表结构支持多模型类型存储**
   - 用户模型数据迁移确保向后兼容性
+  - **团队成员搜索功能依赖用户表的邮箱和姓名字段**
 - 前端集成
   - 前端聚合导出各资源API，便于调用与类型安全
   - **批量操作工具函数提供统一的批量处理接口**
+  - **团队成员搜索钩子集成到网关使用统计页面**
+  - **React Query缓存优化确保查询键的一致性和去重效果**
 
 ```mermaid
 graph LR
@@ -442,8 +577,11 @@ GWR --> M["models.py"]
 GWR --> Q["quota_rules.py"]
 GWR --> P["pricing.py"]
 GWR --> L["logs.py"]
+GWR --> T["teams_router.py<br/>团队成员搜索"]
 FEI["frontend/index.ts<br/>资源聚合导出"] --> FEAPI["前端API封装"]
 FEI --> BATCH["批量操作工具<br/>utils.ts"]
+FEI --> MEMBERFILTER["团队成员搜索钩子<br/>use-team-member-filter-search.ts"]
+FEI --> QUERYKEY["查询键标准化<br/>use-gateway-team-members.ts"]
 ```
 
 **图表来源**
@@ -451,12 +589,16 @@ FEI --> BATCH["批量操作工具<br/>utils.ts"]
 - [__init__.py（网关presentation路由聚合）:1-5](file://backend/domains/gateway/presentation/routers/__init__.py#L1-L5)
 - [index.ts:16-31](file://frontend/src/api/gateway/index.ts#L16-L31)
 - [utils.ts:453-493](file://frontend/src/features/gateway-models/utils.ts#L453-L493)
+- [use-team-member-filter-search.ts:1-97](file://frontend/src/features/gateway-usage/use-team-member-filter-search.ts#L1-L97)
+- [use-gateway-team-members.ts:11-15](file://frontend/src/features/gateway-teams/use-gateway-team-members.ts#L11-L15)
 
 **章节来源**
 - [main.py:475-480](file://backend/bootstrap/main.py#L475-L480)
 - [__init__.py（网关presentation路由聚合）:1-5](file://backend/domains/gateway/presentation/routers/__init__.py#L1-L5)
 - [index.ts:16-31](file://frontend/src/api/gateway/index.ts#L16-L31)
 - [utils.ts:453-493](file://frontend/src/features/gateway-models/utils.ts#L453-L493)
+- [use-team-member-filter-search.ts:1-97](file://frontend/src/features/gateway-usage/use-team-member-filter-search.ts#L1-L97)
+- [use-gateway-team-members.ts:11-15](file://frontend/src/features/gateway-teams/use-gateway-team-members.ts#L11-L15)
 
 ## 性能考虑
 - **索引优化**：针对热点查询字段建立索引，减少慢查询
@@ -467,8 +609,12 @@ FEI --> BATCH["批量操作工具<br/>utils.ts"]
 - **模型类型优化**：多模型类型存储减少重复模型条目，提高查询效率
 - **并发控制**：视频生成等高延迟操作使用独立的并发控制策略
 - **进度反馈**：批量操作提供实时进度反馈，改善用户体验
+- **团队成员搜索优化**：使用分页搜索避免全量加载，30秒缓存时间平衡实时性与性能
+- **前端延迟处理**：useDeferredValue延迟搜索请求，减少频繁的API调用
+- **React Query缓存优化**：通过标准化查询键实现自动去重，避免重复请求
+- **查询键结构标准化**：统一的查询键命名约定确保缓存的一致性和可预测性
 
-**更新**：本次性能优化重点在于批量操作的并发控制和分块处理，通过减少数据库往返次数显著提高响应时间。
+**更新**：本次性能优化重点在于团队成员搜索功能的React Query缓存优化，通过标准化查询键结构和智能缓存策略，显著提升了大团队场景下的用户体验和系统性能。
 
 ## 故障排查指南
 - **网关代理测试**
@@ -485,6 +631,14 @@ FEI --> BATCH["批量操作工具<br/>utils.ts"]
   - 检查并发控制设置是否合理
   - 验证分块处理是否正确执行
   - 确认跨团队批量操作的权限验证
+- **团队成员搜索故障排查**
+  - 检查搜索关键词长度限制（1-100字符）
+  - 验证分页参数范围（1-200）
+  - 确认用户邮箱格式和姓名字段完整性
+  - 排查前端钩子的enabled条件和pickerOpen状态
+  - **验证React Query缓存键是否标准化**
+  - **检查查询键结构是否符合['gateway','member-filter',teamId,search]格式**
+  - **确认staleTime设置为30秒且缓存是否正确生效**
 
 ```mermaid
 sequenceDiagram
@@ -492,12 +646,18 @@ participant Operator as "运维人员"
 participant Script as "test_gateway_proxy.py"
 participant Logs as "inspect_gateway_logs.py"
 participant Batch as "批量操作工具"
+participant MemberSearch as "团队成员搜索"
+participant ReactQuery as "React Query缓存"
 Operator->>Script : "执行代理测试"
 Script-->>Operator : "测试结果/错误"
 Operator->>Logs : "查看最近日志"
 Logs-->>Operator : "请求明细/耗时"
 Operator->>Batch : "检查批量操作状态"
 Batch-->>Operator : "并发控制/分块处理信息"
+Operator->>MemberSearch : "验证成员搜索功能"
+MemberSearch->>ReactQuery : "检查缓存键标准化"
+ReactQuery-->>MemberSearch : "缓存命中/去重效果"
+MemberSearch-->>Operator : "分页搜索/缓存状态"
 ```
 
 **图表来源**
@@ -515,9 +675,13 @@ Batch-->>Operator : "并发控制/分块处理信息"
 - 模型管理功能已增强，支持个人模型多模型类型（text、image等）
 - 团队模型重复创建的错误处理逻辑得到改进
 - duplicate detection和冲突检测机制更加完善
+- **团队成员搜索功能**：新增服务端分页搜索API，支持邮箱和姓名模糊匹配，避免全量加载超大团队成员列表
+- **前端过滤钩子集成**：useTeamMemberFilterSearch钩子实现智能搜索和分页加载，提升大团队场景下的用户体验
+- **React Query缓存优化**：通过标准化查询键结构和智能缓存策略，显著提升团队成员搜索功能的性能和缓存效率
+- **查询键结构标准化**：统一的查询键命名约定确保缓存的一致性和可预测性
 - **批量操作优化**：通过前端并发控制和分块处理显著减少数据库往返次数，提高响应时间
 
-建议在生产环境中结合索引优化、缓存与异步处理提升性能，并利用测试脚本与日志工具进行持续监控与排障。批量操作的并发控制和分块处理机制为大规模模型管理提供了高效解决方案。
+建议在生产环境中结合索引优化、缓存与异步处理提升性能，并利用测试脚本与日志工具进行持续监控与排障。团队成员搜索功能的分页机制、React Query缓存优化和查询键标准化为大规模团队协作提供了高效解决方案。批量操作的并发控制和分块处理机制为大规模模型管理提供了高效解决方案。
 
 ## 附录
 - **鉴权与限流**
@@ -527,12 +691,25 @@ Batch-->>Operator : "并发控制/分块处理信息"
   - 凭据验证：POST /teams/{teamId}/credentials/{id}/probe
   - 模型测试：POST /teams/{teamId}/models/{name}/test
   - 连接性检查：GET /health（服务根级健康检查）
+  - **团队成员搜索**：GET /teams/{team_id}/members?page=1&page_size=20&search=张三
 - **模型管理新特性**
   - 个人模型多类型支持：text、image等类型可同时存在
   - 改进的重复创建检测：避免团队模型重复创建
   - 增强的冲突检测：确保模型配置一致性
+- **团队成员搜索新特性**
+  - **分页搜索**：支持1-200条每页的分页查询
+  - **模糊匹配**：支持邮箱和姓名的模糊搜索
+  - **智能缓存**：30秒缓存时间平衡实时性与性能
+  - **前端集成**：useTeamMemberFilterSearch钩子自动处理搜索状态
+  - **React Query优化**：标准化查询键实现自动去重和缓存优化
+  - **查询键标准化**：统一的查询键命名约定确保缓存一致性
 - **批量操作最佳实践**
   - 视频生成模型使用较低并发度
   - 批量删除操作建议不超过200个模型
   - 跨团队批量操作需确保用户具备相应权限
   - 监控批量操作的错误率和成功率
+- **缓存策略参考**
+  - **团队成员搜索缓存**：30秒staleTime，避免频繁API调用
+  - **团队成员查询键**：`['gateway', 'team-members', teamId]`标准化命名
+  - **搜索查询键**：`['gateway', 'member-filter', teamId, search]`统一格式
+  - **凭据探测缓存**：5分钟staleTime，确保探测结果新鲜度
