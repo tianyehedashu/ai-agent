@@ -327,7 +327,7 @@ function useQuotaCenterImpl(): QuotaCenterState {
       'upstream-models',
       upstreamCredentialIds.slice().sort().join('|'),
     ],
-    queryFn: () => fetchAllManagedTeamModelPages({ registry_scope: 'callable' }),
+    queryFn: () => fetchAllManagedTeamModelPages(),
     enabled: batchOpen && batchValues.layer === 'upstream' && upstreamCredentialIds.length > 0,
     staleTime: GATEWAY_MODELS_STALE_MS,
   })
