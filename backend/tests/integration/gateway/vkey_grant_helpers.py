@@ -55,6 +55,26 @@ async def setup_team_model(
     assert r_model.status_code == 201, r_model.text
 
 
+async def setup_team_route(
+    dev_client: AsyncClient,
+    team_id: uuid.UUID,
+    headers: dict[str, str],
+    *,
+    virtual_model: str,
+    primary_model: str,
+) -> None:
+    r_route = await dev_client.post(
+        f"/api/v1/gateway/teams/{team_id}/routes",
+        headers=headers,
+        json={
+            "virtual_model": virtual_model,
+            "primary_models": [primary_model],
+            "strategy": "simple-shuffle",
+        },
+    )
+    assert r_route.status_code == 201, r_route.text
+
+
 async def create_vkey_with_plain(
     dev_client: AsyncClient,
     team_id: uuid.UUID,
