@@ -21,6 +21,7 @@ from domains.gateway.domain.types import EntitlementListStatus, ModelConnectivit
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
+    from domains.gateway.infrastructure.models.gateway_model import GatewayModel
     from domains.gateway.infrastructure.models.gateway_route import GatewayRoute
     from domains.gateway.infrastructure.models.system_gateway import SystemGatewayRoute
 
