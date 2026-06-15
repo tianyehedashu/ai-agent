@@ -59,3 +59,39 @@ async def test_provider_plan_runs_when_budget_allows(monkeypatch) -> None:
     await logger.async_pre_call_hook(None, None, data, "completion")
 
     provider_guard.check_and_reserve.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_provider_plan_uses_gateway_real_model_for_matching(monkeypatch) -> None:
+    """Router deployment 注入 gateway_real_model 时，应用其匹配 ProviderPlan（非 LiteLLM model id）。"""
+    cred_id = uuid.uuid4()
+    captured: dict[str, object] = {}
+
+    async def _capture(**kwargs: object) -> tuple[None, list[object], list[object]]:
+        captured.update(kwargs)
+        return None, [], []
+
+    provider_guard = ppg.get_provider_plan_guard()
+    provider_guard.check_and_reserve = AsyncMock(side_effect=_capture)  # type: ignore[method-assign]
+
+    monkeypatch.setattr(
+        budget_mod, "maybe_reserve_user_credential_budget", AsyncMock(return_value=None)
+    )
+
+    logger = ppg.build_provider_plan_pre_call_logger()
+    data: dict[str, Any] = {
+        "metadata": {},
+        "litellm_params": {
+            "model": "anthropic/claude-sonnet-4",
+            "model_info": {
+                "gateway_credential_id": str(cred_id),
+                "gateway_real_model": "claude-sonnet-4",
+                "gateway_credential_scope": "user",
+            },
+        },
+    }
+
+    await logger.async_pre_call_hook(None, None, data, "completion")
+
+    assert captured["credential_id"] == cred_id
+    assert captured["real_model"] == "claude-sonnet-4"

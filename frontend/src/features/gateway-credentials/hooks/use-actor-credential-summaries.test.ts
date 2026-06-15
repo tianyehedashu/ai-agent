@@ -4,6 +4,7 @@ import type { PlaygroundCredentialSummary } from '@/api/gateway'
 
 import {
   collectQuotaBatchTargetTeamIds,
+  filterMemberSelfServiceCredentialSummaries,
   filterPlatformQuotaCredentialSummaries,
   filterUpstreamQuotaCredentialSummaries,
   resolveActorCredentialContextTeamId,
@@ -30,7 +31,7 @@ describe('resolveActorCredentialContextTeamId', () => {
 })
 
 describe('filterUpstreamQuotaCredentialSummaries', () => {
-  it('excludes personal BYOK and non-admin team creds', () => {
+  it('excludes non-admin team creds but keeps personal BYOK', () => {
     const adminTeams = new Set(['team-a'])
     const creds = [
       summary({ id: 'personal', name: 'p', scope: 'user', context_team_id: 'team-a' }),
@@ -38,7 +39,28 @@ describe('filterUpstreamQuotaCredentialSummaries', () => {
       summary({ id: 'team-b-cred', name: 'b', context_team_id: 'team-b' }),
     ]
     const filtered = filterUpstreamQuotaCredentialSummaries(creds, adminTeams, false)
-    expect(filtered.map((c) => c.id)).toEqual(['team-a-cred'])
+    expect(filtered.map((c) => c.id)).toEqual(['personal', 'team-a-cred'])
+  })
+})
+
+describe('filterMemberSelfServiceCredentialSummaries', () => {
+  it('platform layer keeps team creds in route team only', () => {
+    const creds = [
+      summary({ id: 'personal', name: 'p', scope: 'user', context_team_id: 'team-a' }),
+      summary({ id: 'team-a', name: 'a', context_team_id: 'team-a' }),
+      summary({ id: 'team-b', name: 'b', context_team_id: 'team-b' }),
+    ]
+    const filtered = filterMemberSelfServiceCredentialSummaries(creds, 'team-a', 'platform')
+    expect(filtered.map((c) => c.id)).toEqual(['team-a'])
+  })
+
+  it('upstream layer keeps personal BYOK only', () => {
+    const creds = [
+      summary({ id: 'personal', name: 'p', scope: 'user', context_team_id: 'team-a' }),
+      summary({ id: 'team-a', name: 'a', context_team_id: 'team-a' }),
+    ]
+    const filtered = filterMemberSelfServiceCredentialSummaries(creds, 'team-a', 'upstream')
+    expect(filtered.map((c) => c.id)).toEqual(['personal'])
   })
 })
 

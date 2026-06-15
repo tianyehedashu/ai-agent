@@ -96,10 +96,16 @@ export function useQuotaBatchSubmit({
           toast({ title: '无法识别当前用户', variant: 'destructive' })
           return
         }
-        if (values.layer === 'platform' && values.credentialIds.length === 0) {
+        if (
+          (values.layer === 'platform' || values.layer === 'upstream') &&
+          values.credentialIds.length === 0
+        ) {
           toast({
             title: '请选择凭据',
-            description: '自助配额须选择至少一个凭据。',
+            description:
+              values.layer === 'upstream'
+                ? '厂商额度须选择本人的 BYOK 凭据。'
+                : '自助配额须选择至少一个凭据。',
             variant: 'destructive',
           })
           return

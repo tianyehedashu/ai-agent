@@ -1,4 +1,5 @@
 import type { GatewayModel } from '@/api/gateway/models'
+import type { PersonalGatewayModel } from '@/api/gateway/my-models'
 import type { GatewayRoute } from '@/api/gateway/routes'
 
 export interface BudgetModelOption {
@@ -72,7 +73,8 @@ export function buildBudgetModelOptions(input: {
 
 /** 上游配额：按所选凭据过滤，选项值为 upstream real_model（非 Gateway 别名）。 */
 export function buildUpstreamQuotaModelOptions(input: {
-  models: readonly GatewayModel[]
+  models?: readonly GatewayModel[]
+  personalModels?: readonly PersonalGatewayModel[]
   credentialIds: readonly string[]
   existingModelNames: readonly (string | null | undefined)[]
 }): BudgetModelOption[] {
@@ -80,7 +82,7 @@ export function buildUpstreamQuotaModelOptions(input: {
   const seenReal = new Set<string>()
   const options: BudgetModelOption[] = []
 
-  for (const model of input.models) {
+  for (const model of input.models ?? []) {
     if (!credSet.has(model.credential_id)) continue
     const realModel = model.real_model.trim()
     if (!realModel || seenReal.has(realModel)) continue
@@ -92,6 +94,20 @@ export function buildUpstreamQuotaModelOptions(input: {
       capability: model.capability,
       registryKind: model.registry_kind,
       enabled: model.enabled,
+    })
+  }
+
+  for (const model of input.personalModels ?? []) {
+    if (!credSet.has(model.credential_id)) continue
+    const realModel = model.model_id.trim()
+    if (!realModel || seenReal.has(realModel)) continue
+    seenReal.add(realModel)
+    options.push({
+      name: realModel,
+      group: 'registry',
+      provider: model.provider,
+      capability: model.capability,
+      enabled: model.is_active,
     })
   }
 

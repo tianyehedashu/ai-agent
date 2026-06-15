@@ -112,12 +112,13 @@ class QuotaRuleWritesMixin:
         if cmd.layer == "upstream":
             if actor_user_id is None:
                 raise ValidationError("upstream 配额写入需要 actor_user_id")
-            return await self._upsert_upstream_quota_rule(
+            plan, _display_team_id = await self._upsert_upstream_quota_rule(
                 cmd,
                 tenant_id=tenant_id,
                 actor_user_id=actor_user_id,
                 is_platform_admin=is_platform_admin,
             )
+            return plan
 
         if cmd.layer == "downstream":
             return await self._upsert_downstream_quota_rule(
@@ -192,10 +193,11 @@ class QuotaRuleWritesMixin:
                 except (ValidationError, AIAgentError) as exc:
                     logger.warning("quota rule batch upsert failed index=%s: %s", index, exc)
                     failed.append(QuotaRuleBatchFailure(index=index, error=str(exc)))
-            elif member_self_service:
+            elif member_self_service and cmd.layer != "upstream":
                 failed.append(
                     QuotaRuleBatchFailure(
-                        index=index, error="成员自助配额仅支持平台层（platform）"
+                        index=index,
+                        error="成员自助配额仅支持平台 与本人凭据的 upstream 层",
                     )
                 )
             else:
@@ -220,12 +222,21 @@ class QuotaRuleWritesMixin:
             try:
                 if actor_user_id is None:
                     raise ValidationError("upstream/downstream 配额写入需要 actor_user_id")
-                result = await self.upsert_quota_rule(
-                    cmd,
-                    tenant_id=tenant_id,
-                    is_platform_admin=is_platform_admin,
-                    actor_user_id=actor_user_id,
-                )
+                display_team_id = tenant_id
+                if cmd.layer == "upstream":
+                    result, display_team_id = await self._upsert_upstream_quota_rule(
+                        cmd,
+                        tenant_id=tenant_id,
+                        actor_user_id=actor_user_id,
+                        is_platform_admin=is_platform_admin,
+                    )
+                else:
+                    result = await self.upsert_quota_rule(
+                        cmd,
+                        tenant_id=tenant_id,
+                        is_platform_admin=is_platform_admin,
+                        actor_user_id=actor_user_id,
+                    )
                 any_changed = True
                 if cmd.layer == "upstream":
                     upstream_changed = True
@@ -235,12 +246,6 @@ class QuotaRuleWritesMixin:
 
                     if plan is not None:
                         model = provider_plan_from_orm(plan, quotas)
-
-                        display_team_id = tenant_id
-                        if cmd.credential_id is not None:
-                            cred_row = await self._creds.get(cmd.credential_id)
-                            if cred_row is not None and cred_row.tenant_id is not None:
-                                display_team_id = cred_row.tenant_id
 
                         flat = flatten_provider_plan(model, team_id=display_team_id)
 
@@ -454,11 +459,11 @@ class QuotaRuleWritesMixin:
         tenant_id: uuid.UUID,
         actor_user_id: uuid.UUID,
         is_platform_admin: bool,
-    ) -> ProviderPlan:
+    ) -> tuple[ProviderPlan, uuid.UUID]:
         if cmd.credential_id is None:
             raise ValidationError("upstream 配额需要 credential_id")
 
-        await self._assert_upstream_credential_writable(
+        display_team_id = await self._assert_upstream_credential_writable(
             cmd.credential_id,
             actor_user_id=actor_user_id,
             is_platform_admin=is_platform_admin,
@@ -517,7 +522,7 @@ class QuotaRuleWritesMixin:
 
         await self._provider_plans.replace_quotas(plan.id, merged)
 
-        return plan
+        return plan, display_team_id
 
     async def _upsert_downstream_quota_rule(
         self,

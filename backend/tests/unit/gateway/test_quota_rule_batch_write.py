@@ -36,7 +36,9 @@ async def test_admin_batch_accepts_upstream_with_actor_user_id() -> None:
     mock_plan.is_active = True
     mock_plan.quotas = []
 
-    svc.upsert_quota_rule = AsyncMock(return_value=mock_plan)  # type: ignore[method-assign]
+    svc._upsert_upstream_quota_rule = AsyncMock(  # type: ignore[method-assign]
+        return_value=(mock_plan, tenant_id)
+    )
     svc._provider_plans.get_with_quotas = AsyncMock(  # type: ignore[method-assign]
         return_value=(
             MagicMock(
@@ -81,7 +83,7 @@ async def test_admin_batch_accepts_upstream_with_actor_user_id() -> None:
 
     assert result.failed == []
     assert len(result.succeeded) == 1
-    svc.upsert_quota_rule.assert_awaited_once()
+    svc._upsert_upstream_quota_rule.assert_awaited_once()
     svc._invalidate_quota_rule_list_cache.assert_awaited_once_with(
         tenant_id=tenant_id,
         actor_user_id=actor_user_id,
@@ -90,15 +92,78 @@ async def test_admin_batch_accepts_upstream_with_actor_user_id() -> None:
 
 
 @pytest.mark.asyncio
-async def test_member_self_batch_rejects_upstream() -> None:
+async def test_member_self_batch_accepts_personal_upstream() -> None:
+    """成员自助：本人 BYOK 可写 upstream 厂商额度。"""
     svc = _writes()
+    tenant_id = uuid.uuid4()
+    actor_user_id = uuid.uuid4()
+    cred_id = uuid.uuid4()
+    plan_id = uuid.uuid4()
+
+    mock_plan = MagicMock()
+    mock_plan.id = plan_id
+
+    personal_team_id = uuid.uuid4()
+    svc._upsert_upstream_quota_rule = AsyncMock(  # type: ignore[method-assign]
+        return_value=(mock_plan, personal_team_id)
+    )
+    svc._provider_plans.get_with_quotas = AsyncMock(  # type: ignore[method-assign]
+        return_value=(
+            MagicMock(
+                id=plan_id,
+                credential_id=cred_id,
+                real_model="gpt-4o",
+                label="auto",
+                is_active=True,
+            ),
+            [
+                MagicMock(
+                    id=uuid.uuid4(),
+                    label="default",
+                    window_seconds=0,
+                    reset_strategy="rolling",
+                    limit_usd=Decimal("10"),
+                    limit_tokens=None,
+                    limit_requests=None,
+                    unit_price_usd_per_token=None,
+                    unit_price_usd_per_request=None,
+                )
+            ],
+        )
+    )
     svc._invalidate_quota_rule_list_cache = AsyncMock()  # type: ignore[method-assign]
 
     result = await svc.batch_upsert_quota_rules(
         [
             QuotaRuleUpsertCommand(
                 layer="upstream",
-                credential_id=uuid.uuid4(),
+                credential_id=cred_id,
+                model_name="gpt-4o",
+                limit_usd=Decimal("10"),
+            )
+        ],
+        tenant_id=tenant_id,
+        is_platform_admin=False,
+        actor_user_id=actor_user_id,
+        member_self_service=True,
+    )
+
+    assert result.failed == []
+    assert len(result.succeeded) == 1
+    svc._upsert_upstream_quota_rule.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_member_self_batch_rejects_downstream() -> None:
+    svc = _writes()
+    svc._invalidate_quota_rule_list_cache = AsyncMock()  # type: ignore[method-assign]
+
+    result = await svc.batch_upsert_quota_rules(
+        [
+            QuotaRuleUpsertCommand(
+                layer="downstream",
+                access_kind="vkey",
+                access_id=uuid.uuid4(),
                 limit_usd=Decimal("10"),
             )
         ],
@@ -137,14 +202,21 @@ async def test_upstream_cache_invalidates_all_membership_teams() -> None:
     )
 
     invalidated: list[uuid.UUID] = []
+    provider_plan_cache_invalidated = False
 
     async def _record_invalidate(team_id: uuid.UUID) -> None:
         invalidated.append(team_id)
 
+    async def _record_provider_plan_invalidate() -> None:
+        nonlocal provider_plan_cache_invalidated
+        provider_plan_cache_invalidated = True
+
     import domains.gateway.application.gateway_cache_invalidation as cache_mod
 
     original = cache_mod.invalidate_gateway_quota_rule_cache_for_team
+    original_pp = cache_mod.invalidate_gateway_provider_plan_config_cache
     cache_mod.invalidate_gateway_quota_rule_cache_for_team = _record_invalidate
+    cache_mod.invalidate_gateway_provider_plan_config_cache = _record_provider_plan_invalidate
     try:
         await svc._invalidate_quota_rule_list_cache(
             tenant_id=tenant_id,
@@ -153,5 +225,7 @@ async def test_upstream_cache_invalidates_all_membership_teams() -> None:
         )
     finally:
         cache_mod.invalidate_gateway_quota_rule_cache_for_team = original
+        cache_mod.invalidate_gateway_provider_plan_config_cache = original_pp
 
+    assert provider_plan_cache_invalidated
     assert set(invalidated) == {tenant_id, other_team_id}

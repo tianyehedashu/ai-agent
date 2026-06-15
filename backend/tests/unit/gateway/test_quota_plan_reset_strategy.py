@@ -14,6 +14,7 @@ from domains.gateway.domain.quota_plan import (
     compute_minute_index,
     compute_reset_at,
     compute_window_start_minute,
+    normalize_reset_strategy,
 )
 from domains.gateway.infrastructure.callbacks.custom_logger import (
     _is_upstream_quota_exhaustion,
@@ -22,6 +23,10 @@ from domains.gateway.infrastructure.callbacks.custom_logger import (
 
 @pytest.mark.unit
 class TestQuotaPlanResetStrategy:
+    def test_normalize_reset_strategy_falls_back_to_rolling(self) -> None:
+        assert normalize_reset_strategy("calendar_daily_utc") == "calendar_daily_utc"
+        assert normalize_reset_strategy("unknown") == "rolling"
+
     def test_calendar_daily_utc_uses_current_utc_day_boundary(self) -> None:
         now = datetime(2026, 5, 18, 11, 20, tzinfo=UTC)
 

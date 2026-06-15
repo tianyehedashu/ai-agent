@@ -2,12 +2,18 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 import uuid
 
 from bootstrap.config import settings
+from domains.gateway.application.management.credential_copy_types import (
+    CredentialImportFailure,
+    ImportCredentialsWithModelsResult,
+    ImportedCredentialItem,
+    ImportedModelSummary,
+    ModelImportFailure,
+)
 from domains.gateway.application.management.credential_read_mappers import (
     ensure_credential_read_model,
 )
@@ -21,6 +27,7 @@ from domains.gateway.domain.errors import (
     VirtualKeyNotFoundError,
 )
 from domains.gateway.domain.guardrail_policy import assert_vkey_guardrail_create_allowed
+from domains.gateway.domain.policies.credential_copy_policy import CredentialCopyScope
 from domains.gateway.domain.types import (
     VirtualKeyBatchRevokeReason,
     is_config_managed_system_credential,
@@ -30,52 +37,6 @@ from libs.exceptions import ValidationError
 from utils.logging import get_logger
 
 logger = get_logger(__name__)
-
-
-@dataclass
-class ImportedModelSummary:
-    """Summary of a single model created during import."""
-
-    source_model_id: str | None
-    name: str
-    real_model: str
-
-
-@dataclass
-class ModelImportFailure:
-    """Failure record for a single model that could not be imported."""
-
-    model_name: str
-    reason: str
-
-
-@dataclass
-class CredentialImportFailure:
-    """Failure record for a single credential that could not be imported."""
-
-    credential_id: str
-    reason: str
-
-
-@dataclass
-class ImportedCredentialItem:
-    """Single credential successfully imported with its associated models."""
-
-    source_credential_id: uuid.UUID
-    new_credential_id: uuid.UUID
-    new_credential_name: str
-    new_credential_read: CredentialReadModel
-    provider: str
-    models_created: list[ImportedModelSummary]
-    models_failed: list[ModelImportFailure]
-
-
-@dataclass
-class ImportCredentialsWithModelsResult:
-    """Aggregate result of batch credential+model import."""
-
-    succeeded: list[ImportedCredentialItem] = field(default_factory=list)
-    failed: list[CredentialImportFailure] = field(default_factory=list)
 
 
 def _credential_update_api_fields(
@@ -467,14 +428,55 @@ class CredentialWritesMixin:
         tenant_id: uuid.UUID,
         actor_user_id: uuid.UUID,
         is_platform_admin: bool,
+        destination_team_role: str,
     ) -> ImportCredentialsWithModelsResult:
-        """Copy user-scope credentials and their associated personal models to a target team.
+        """Copy user-scope credentials and their associated personal models to a target team."""
+        return await self.copy_credentials_with_models(
+            credential_ids=credential_ids,
+            source=CredentialCopyScope(kind="personal"),
+            destination=CredentialCopyScope(kind="team", team_id=tenant_id),
+            actor_user_id=actor_user_id,
+            is_platform_admin=is_platform_admin,
+            source_team_role=None,
+            destination_team_role=destination_team_role,
+        )
 
-        Each credential is processed independently — a single failure does not block others.
-        Returns structured results with succeeded items (including newly created model details)
-        and failed items.
-        """
+    async def copy_credentials_with_models(
+        self,
+        *,
+        credential_ids: list[uuid.UUID],
+        source: CredentialCopyScope,
+        destination: CredentialCopyScope,
+        actor_user_id: uuid.UUID,
+        is_platform_admin: bool,
+        source_team_role: str | None,
+        destination_team_role: str | None,
+    ) -> ImportCredentialsWithModelsResult:
+        """Copy credentials and associated models between personal / team scopes."""
+        from domains.gateway.domain.policies.credential_copy_policy import (
+            assert_copy_endpoints_valid,
+            assert_credential_copy_destination_allowed,
+            credential_copy_failure_reason,
+        )
+
+        assert_copy_endpoints_valid(source=source, destination=destination)
+        assert_credential_copy_destination_allowed(
+            destination=destination,
+            destination_team_role=destination_team_role,
+            is_platform_admin=is_platform_admin,
+        )
+
         personal_team_id = await self._ensure_personal_tenant_id(actor_user_id)
+        source_models_tenant_id = (
+            personal_team_id if source.kind == "personal" else source.team_id
+        )
+        assert source_models_tenant_id is not None
+
+        permission_denied_tenant_id = (
+            destination.team_id
+            if destination.kind == "team" and destination.team_id is not None
+            else personal_team_id
+        )
 
         succeeded: list[ImportedCredentialItem] = []
         failed: list[CredentialImportFailure] = []
@@ -482,22 +484,26 @@ class CredentialWritesMixin:
 
         for cred_id in credential_ids:
             try:
-                item = await self._import_one_credential_with_models(
+                item = await self._copy_one_credential_with_models(
                     cred_id=cred_id,
-                    tenant_id=tenant_id,
+                    source=source,
+                    destination=destination,
                     actor_user_id=actor_user_id,
                     is_platform_admin=is_platform_admin,
+                    source_team_role=source_team_role,
+                    source_models_tenant_id=source_models_tenant_id,
                     personal_team_id=personal_team_id,
+                    permission_denied_tenant_id=permission_denied_tenant_id,
                 )
                 succeeded.append(item)
                 any_created = True
             except Exception as exc:
-                reason = str(exc) or type(exc).__name__
+                reason = credential_copy_failure_reason(exc)
                 failed.append(CredentialImportFailure(credential_id=str(cred_id), reason=reason))
                 logger.warning(
-                    "import_credentials_with_models: cred=%s failed: %s",
+                    "copy_credentials_with_models: cred=%s failed: %s",
                     cred_id,
-                    reason,
+                    str(exc) or type(exc).__name__,
                 )
 
         if any_created:
@@ -505,65 +511,80 @@ class CredentialWritesMixin:
 
         return ImportCredentialsWithModelsResult(succeeded=succeeded, failed=failed)
 
-    async def _import_one_credential_with_models(
+    async def _copy_one_credential_with_models(
         self,
         *,
         cred_id: uuid.UUID,
-        tenant_id: uuid.UUID,
+        source: CredentialCopyScope,
+        destination: CredentialCopyScope,
         actor_user_id: uuid.UUID,
         is_platform_admin: bool,
+        source_team_role: str | None,
+        source_models_tenant_id: uuid.UUID,
         personal_team_id: uuid.UUID,
+        permission_denied_tenant_id: uuid.UUID,
     ) -> ImportedCredentialItem:
+        from domains.gateway.domain.policies.credential_copy_policy import (
+            assert_credential_copy_source_allowed,
+            credential_copy_failure_reason,
+        )
+
         src = await self._creds.get(cred_id)
         if src is None:
             raise CredentialNotFoundError(str(cred_id))
 
-        from domains.gateway.domain.policies.credential_scope import (
-            assert_user_credential_importable,
-        )
-
-        assert_user_credential_importable(
+        assert_credential_copy_source_allowed(
             src,
+            source=source,
             actor_user_id=actor_user_id,
             is_platform_admin=is_platform_admin,
-            tenant_id=tenant_id,
+            source_team_role=source_team_role,
+            permission_denied_tenant_id=permission_denied_tenant_id,
         )
 
-        # Handle credential name conflict in target team
-        target_name = src.name
-        existing = await self._creds.find_tenant_by_provider_and_name(
-            tenant_id, src.provider, target_name
+        target_name = await self._unique_copy_credential_name(
+            src,
+            destination=destination,
+            actor_user_id=actor_user_id,
         )
-        if existing is not None:
-            suffix = uuid.uuid4().hex[:4]
-            target_name = f"{src.name}-imported-{suffix}"
 
-        new_cred = await self._creds.copy_to_team(
-            cred_id, tenant_id, created_by_user_id=actor_user_id, name_override=target_name
+        new_cred = await self._copy_credential_to_destination(
+            cred_id,
+            destination=destination,
+            actor_user_id=actor_user_id,
+            name_override=target_name,
         )
         if new_cred is None:
             raise CredentialNotFoundError(str(cred_id))
 
-        # Copy associated personal models via shared self._models repo
-        personal_models = await self._models.list_tenant_owned(
-            personal_team_id, credential_id=cred_id, only_enabled=False
+        source_models = await self._models.list_tenant_owned(
+            source_models_tenant_id, credential_id=cred_id, only_enabled=False
         )
 
         models_created: list[ImportedModelSummary] = []
         models_failed: list[ModelImportFailure] = []
 
-        for pm in personal_models:
+        dest_models_tenant_id = (
+            personal_team_id
+            if destination.kind == "personal"
+            else destination.team_id
+        )
+        assert dest_models_tenant_id is not None
+
+        for pm in source_models:
             try:
                 from domains.gateway.application.management.write_modules.model_writes import (
                     generate_unique_model_name,
                 )
 
                 unique_name = await generate_unique_model_name(
-                    lambda n, _tid=tenant_id: self._models.name_exists_for_tenant(_tid, n),
+                    lambda n, _tid=dest_models_tenant_id: self._models.name_exists_for_tenant(
+                        _tid, n
+                    ),
                     pm.name,
                 )
                 await self._models.create(
-                    tenant_id=tenant_id,
+                    tenant_id=dest_models_tenant_id,
                     name=unique_name,
                     capability=pm.capability,
                     real_model=pm.real_model,
@@ -587,11 +608,11 @@ class CredentialWritesMixin:
             except Exception as exc:
                 models_failed.append(
                     ModelImportFailure(
-                        model_name=pm.name, reason=str(exc) or type(exc).__name__
+                        model_name=pm.name, reason=credential_copy_failure_reason(exc)
                     )
                 )
                 logger.warning(
-                    "import_credentials_with_models: model=%s failed: %s",
+                    "copy_credentials_with_models: model=%s failed: %s",
                     pm.name,
                     str(exc),
                 )
@@ -604,6 +625,52 @@ class CredentialWritesMixin:
             provider=new_cred.provider,
             models_created=models_created,
             models_failed=models_failed,
+        )
+
+    async def _unique_copy_credential_name(
+        self,
+        src: object,
+        *,
+        destination: CredentialCopyScope,
+        actor_user_id: uuid.UUID,
+    ) -> str:
+        provider = getattr(src, "provider", "")
+        name = getattr(src, "name", "")
+        existing = None
+        if destination.kind == "personal":
+            existing = await self._creds.find_user_by_provider_and_name(
+                actor_user_id, provider, name
+            )
+        elif destination.team_id is not None:
+            existing = await self._creds.find_tenant_by_provider_and_name(
+                destination.team_id, provider, name
+            )
+        if existing is not None:
+            suffix = uuid.uuid4().hex[:4]
+            return f"{name}-imported-{suffix}"
+        return name
+
+    async def _copy_credential_to_destination(
+        self,
+        cred_id: uuid.UUID,
+        *,
+        destination: CredentialCopyScope,
+        actor_user_id: uuid.UUID,
+        name_override: str,
+    ):
+        if destination.kind == "personal":
+            return await self._creds.copy_to_user(
+                cred_id,
+                actor_user_id,
+                created_by_user_id=actor_user_id,
+                name_override=name_override,
+            )
+        assert destination.team_id is not None
+        return await self._creds.copy_to_team(
+            cred_id,
+            destination.team_id,
+            created_by_user_id=actor_user_id,
+            name_override=name_override,
         )
 
     @staticmethod

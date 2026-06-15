@@ -219,6 +219,7 @@ RBAC 与 `libs/db/permission_context.py`：`deps.py` 调用 **`GatewayAccessUseC
 - **读侧（凭据详情/reveal）**：`GET /credentials/{id}`、`reveal`、写操作仍经 `filter_team_credentials_visible_to_actor`（他人私有 404，防枚举）。
 - **读侧（模型上下文）**：团队/跨团队模型列表与详情、``GET /managed-team-model-credential-filters`` 可展示绑定凭据的 **`credential_name`**、**`credential_created_by_user_id`**、通道等**非敏感**字段；**不**含 `api_key` / `reveal` / 完整 `api_base`（仍仅创建者或 team admin+ legacy）。
 - **写侧**：`POST /teams/{id}/credentials` 对 member+ 开放；`PATCH/DELETE/{id}`、`probe`、`batch-import-models` 经 owner 或 legacy admin 断言。
+- **凭据复制（`POST /credentials/copy-with-models`）**：在 personal / team 间复制凭据及关联 `gateway_models`（不复制 routes/vkeys/budgets）。源侧权限对齐 **reveal**（`assert_team_credential_readable_by_actor` / `assert_user_credential_importable`）；团队凭据**平台 admin 无旁路**。目标侧需 membership（team 目标 member+）；`import-with-models` 保留为 personal→team 兼容别名。
 - **代理面不变**：`registry_scope=callable` 仍路由到他人注册的模型；变更仅限管理面 UI/API。
 - **前端 UI 对齐（创建者私有 member-friendly）**：成员能力由 `useGatewayPermission().canContribute`（= team member+ 且非平台 viewer）驱动，与团队 admin 的 `canWrite` 区分：
   - 凭据 Tab：`canContribute` 时「新增凭据」可选 `team` scope，目标团队取 `useGatewayContributorCollaborationTeams`（membership 协作团队）；改/删/reveal 仍仅创建者（`canEditGatewayCredential`）。

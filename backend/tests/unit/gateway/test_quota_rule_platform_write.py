@@ -221,15 +221,14 @@ async def test_self_service_rejects_non_user_kind() -> None:
 
 
 @pytest.mark.asyncio
-async def test_self_service_batch_rejects_non_platform_layer() -> None:
-    """成员自助批量：非 platform 层命令记为失败而非执行。"""
+async def test_self_service_batch_rejects_downstream_layer() -> None:
+    """成员自助批量：downstream 层命令记为失败而非执行。"""
     svc = _writes()
     user_id = uuid.uuid4()
     cmd = QuotaRuleUpsertCommand(
-        layer="upstream",
-        credential_id=uuid.uuid4(),
-        model_name="gpt-4",
-        period="monthly",
+        layer="downstream",
+        access_kind="vkey",
+        access_id=uuid.uuid4(),
         limit_usd=Decimal("10"),
     )
 

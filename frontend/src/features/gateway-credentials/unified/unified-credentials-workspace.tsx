@@ -28,7 +28,6 @@ import { useInfinitePersonalModelPages } from '@/features/gateway-models/hooks/u
 import {
   useGatewayContributorCollaborationTeams,
   useGatewayTeamNameMap,
-  useGatewayWritableTeams,
 } from '@/features/gateway-teams/use-gateway-teams'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
@@ -38,9 +37,9 @@ import { Loader2, Plus } from '@/lib/lucide-icons'
 import { buildFilterKey, usePaginationPageForFilters } from '@/lib/pagination'
 import { useCurrentUser } from '@/stores/user'
 
-const ImportToTeamDialog = lazyWithReload(() =>
-  import('@/features/gateway-credentials/import-to-team-dialog').then((m) => ({
-    default: m.ImportToTeamDialog,
+const CopyCredentialsDialog = lazyWithReload(() =>
+  import('@/features/gateway-credentials/copy-credentials-dialog').then((m) => ({
+    default: m.CopyCredentialsDialog,
   }))
 )
 
@@ -64,8 +63,7 @@ export function UnifiedCredentialsWorkspace({
   const routeTeamId = useGatewayTeamId()
   const currentUser = useCurrentUser()
   const viewerUserId = currentUser?.id ?? null
-  const { isPlatformAdmin } = useGatewayPermission()
-  const writableTeams = useGatewayWritableTeams()
+  const { isPlatformAdmin, canContribute } = useGatewayPermission()
   const contributorTeams = useGatewayContributorCollaborationTeams()
   const teamNameById = useGatewayTeamNameMap()
 
@@ -76,7 +74,7 @@ export function UnifiedCredentialsWorkspace({
   const [personalPendingDelete, setPersonalPendingDelete] = useState<ProviderCredential | null>(
     null
   )
-  const [importDialogState, setImportDialogState] = useState<{
+  const [copyDialogState, setCopyDialogState] = useState<{
     open: boolean
     preselectedIds: string[]
   }>({ open: false, preselectedIds: [] })
@@ -89,6 +87,7 @@ export function UnifiedCredentialsWorkspace({
     counts,
     filteredTotal,
     personalCredentials,
+    copyableTeamCredentials,
     pagination,
   } = useUnifiedCredentialsList({ search, scopeFilter, page })
   const hasActiveFilters = scopeFilter !== 'all' || search.trim().length > 0
@@ -172,6 +171,10 @@ export function UnifiedCredentialsWorkspace({
     }
   }, [personalDeleteMutation])
 
+  const hasCopyableSource = counts.personal > 0 || copyableTeamCredentials.length > 0
+  const hasCopyDestination = contributorTeams.length > 0 || copyableTeamCredentials.length > 0
+  const showCopy = canContribute && hasCopyableSource && hasCopyDestination
+
   const toolbar = (
     <UnifiedCredentialsToolbar
       search={search}
@@ -185,9 +188,9 @@ export function UnifiedCredentialsWorkspace({
       onRefresh={() => {
         void refetch()
       }}
-      showImport={writableTeams.length > 0 && counts.personal > 0}
-      onImport={() => {
-        setImportDialogState({ open: true, preselectedIds: [] })
+      showCopy={showCopy}
+      onCopy={() => {
+        setCopyDialogState({ open: true, preselectedIds: [] })
       }}
       showVerify={counts.personal > 0}
       verifyPending={testMutation.isPending}
@@ -317,18 +320,21 @@ export function UnifiedCredentialsWorkspace({
         fallback={
           <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            加载导入…
+            加载复制…
           </div>
         }
       >
-        <ImportToTeamDialog
-          open={importDialogState.open}
+        <CopyCredentialsDialog
+          open={copyDialogState.open}
           onOpenChange={(next) => {
-            setImportDialogState((prev) => ({ ...prev, open: next }))
+            setCopyDialogState((prev) => ({ ...prev, open: next }))
           }}
-          preselectedCredentialIds={importDialogState.preselectedIds}
-          credentials={[...personalCredentialsForActions]}
-          writableTeams={writableTeams}
+          preselectedCredentialIds={copyDialogState.preselectedIds}
+          personalCredentials={[...personalCredentialsForActions]}
+          teamCredentials={copyableTeamCredentials}
+          teamCredentialsLoading={isLoading}
+          contributorTeams={contributorTeams}
+          teamNameById={teamNameById}
         />
       </Suspense>
     </>

@@ -696,48 +696,6 @@ const ModelInspectorPanel = memo(function ModelInspectorPanel({
             )}
           </section>
 
-          {canManage && onDelete ? (
-            <section className="space-y-2 rounded-lg border border-destructive/20 bg-destructive/5 p-4">
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-destructive">
-                危险操作
-              </h3>
-              <p className="text-xs text-muted-foreground">
-                删除后将从注册表移除，并同步清理虚拟 Key / 路由中的模型白名单引用，不可撤销。
-              </p>
-              {configManaged || !canDelete ? (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span tabIndex={0}>
-                      <Button size="sm" variant="destructive" disabled>
-                        <Trash2 className="mr-1 h-3.5 w-3.5" />
-                        删除模型
-                      </Button>
-                    </span>
-                  </TooltipTrigger>
-                  <TooltipContent className="max-w-xs text-xs">
-                    配置同步托管的系统模型不可删除；请通过 gateway-catalog 或配置管理
-                  </TooltipContent>
-                </Tooltip>
-              ) : (
-                <Button
-                  size="sm"
-                  variant="destructive"
-                  disabled={isDeleting || isSaving}
-                  onClick={() => {
-                    onDelete(model.id)
-                  }}
-                >
-                  {isDeleting ? (
-                    <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <Trash2 className="mr-1 h-3.5 w-3.5" />
-                  )}
-                  删除模型
-                </Button>
-              )}
-            </section>
-          ) : null}
-
           {!isPersonal ? (
             <section className="space-y-2">
               <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">

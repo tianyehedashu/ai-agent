@@ -6,10 +6,13 @@ import { useSearchParams } from 'react-router-dom'
 import {
   gatewayApi,
   fetchAllManagedTeamModelPages,
+  fetchAllPersonalGatewayModels,
   type QuotaRule,
   type QuotaRuleLayer,
   type QuotaRuleUpsertBody,
 } from '@/api/gateway'
+import type { GatewayModel } from '@/api/gateway/models'
+import type { PersonalGatewayModel } from '@/api/gateway/my-models'
 import {
   collectQuotaBatchTargetTeamIds,
   filterMemberSelfServiceCredentialSummaries,
@@ -289,7 +292,7 @@ function useQuotaCenterImpl(): QuotaCenterState {
   const pickerCredentials = useMemo(() => {
     const raw = actorCredentials.list
     if (mode === 'member') {
-      return filterMemberSelfServiceCredentialSummaries(raw, teamId)
+      return filterMemberSelfServiceCredentialSummaries(raw, teamId, batchValues.layer)
     }
     if (batchValues.layer === 'upstream') {
       return filterUpstreamQuotaCredentialSummaries(raw, adminTeamIds, isPlatformAdmin)
@@ -320,7 +323,9 @@ function useQuotaCenterImpl(): QuotaCenterState {
     [batchValues.layer, resolvedBatchValues.credentialIds]
   )
 
-  const upstreamModelsQuery = useQuery({
+  const memberUpstreamMode = mode === 'member' && batchValues.layer === 'upstream'
+
+  const upstreamTeamModelsQuery = useQuery({
     queryKey: [
       'gateway',
       'quota-batch',
@@ -328,31 +333,66 @@ function useQuotaCenterImpl(): QuotaCenterState {
       upstreamCredentialIds.slice().sort().join('|'),
     ],
     queryFn: () => fetchAllManagedTeamModelPages(),
-    enabled: batchOpen && batchValues.layer === 'upstream' && upstreamCredentialIds.length > 0,
+    enabled:
+      batchOpen &&
+      batchValues.layer === 'upstream' &&
+      !memberUpstreamMode &&
+      upstreamCredentialIds.length > 0,
     staleTime: GATEWAY_MODELS_STALE_MS,
   })
 
-  const upstreamModelsForSelection = useMemo(() => {
+  const upstreamPersonalModelsQuery = useQuery({
+    queryKey: [
+      'gateway',
+      'quota-batch',
+      'upstream-personal-models',
+      upstreamCredentialIds.slice().sort().join('|'),
+    ],
+    queryFn: () => fetchAllPersonalGatewayModels(),
+    enabled:
+      batchOpen &&
+      batchValues.layer === 'upstream' &&
+      memberUpstreamMode &&
+      upstreamCredentialIds.length > 0,
+    staleTime: GATEWAY_MODELS_STALE_MS,
+  })
+
+  const upstreamTeamModelsForSelection = useMemo((): GatewayModel[] => {
+    if (memberUpstreamMode) return []
     const credSet = new Set(upstreamCredentialIds)
-    return (upstreamModelsQuery.data ?? []).filter((model) => credSet.has(model.credential_id))
-  }, [upstreamCredentialIds, upstreamModelsQuery.data])
+    return (upstreamTeamModelsQuery.data ?? []).filter((model) => credSet.has(model.credential_id))
+  }, [memberUpstreamMode, upstreamCredentialIds, upstreamTeamModelsQuery.data])
+
+  const upstreamPersonalModelsForSelection = useMemo((): PersonalGatewayModel[] => {
+    if (!memberUpstreamMode) return []
+    const credSet = new Set(upstreamCredentialIds)
+    return (upstreamPersonalModelsQuery.data ?? []).filter((model) =>
+      credSet.has(model.credential_id)
+    )
+  }, [memberUpstreamMode, upstreamCredentialIds, upstreamPersonalModelsQuery.data])
 
   const upstreamModelAliasByReal = useMemo(() => {
     const map = new Map<string, string>()
-    for (const model of upstreamModelsForSelection) {
+    for (const model of upstreamTeamModelsForSelection) {
       const realModel = model.real_model.trim()
       if (!realModel || map.has(realModel)) continue
       map.set(realModel, model.name)
     }
+    for (const model of upstreamPersonalModelsForSelection) {
+      const realModel = model.model_id.trim()
+      if (!realModel || map.has(realModel)) continue
+      map.set(realModel, model.name)
+    }
     return map
-  }, [upstreamModelsForSelection])
+  }, [upstreamPersonalModelsForSelection, upstreamTeamModelsForSelection])
 
   const batchModelOptions = useMemo(() => {
     if (batchValues.layer !== 'upstream') {
       return modelOptions
     }
     return buildUpstreamQuotaModelOptions({
-      models: upstreamModelsForSelection,
+      models: upstreamTeamModelsForSelection,
+      personalModels: upstreamPersonalModelsForSelection,
       credentialIds: upstreamCredentialIds,
       existingModelNames,
     })
@@ -361,7 +401,8 @@ function useQuotaCenterImpl(): QuotaCenterState {
     existingModelNames,
     modelOptions,
     upstreamCredentialIds,
-    upstreamModelsForSelection,
+    upstreamPersonalModelsForSelection,
+    upstreamTeamModelsForSelection,
   ])
 
   const batchModelOptionMetaLabel = useMemo(():
@@ -397,11 +438,12 @@ function useQuotaCenterImpl(): QuotaCenterState {
   const batchPreviewCount = useMemo(() => {
     let v = resolvedBatchValues
     if (mode === 'member') {
+      const layer = resolvedBatchValues.layer === 'upstream' ? 'upstream' : 'platform'
       v = {
         ...resolvedBatchValues,
-        layer: 'platform',
-        subjectMode: 'users',
-        userIds: selfUserId !== null ? [selfUserId] : [],
+        layer,
+        subjectMode: layer === 'platform' ? 'users' : resolvedBatchValues.subjectMode,
+        userIds: layer === 'platform' && selfUserId !== null ? [selfUserId] : [],
         keyIds: [],
       }
     }
@@ -429,25 +471,27 @@ function useQuotaCenterImpl(): QuotaCenterState {
       formValues = resolvedBatchValues
       // 不强制覆盖为成员自助锁定
     } else if (mode === 'member') {
-      // 成员自助：强制锁定为本人 + platform，凭据必选。
       if (selfUserId === null) {
         toast({ title: '无法识别当前用户', variant: 'destructive' })
         return
       }
+      const layer = resolvedBatchValues.layer === 'upstream' ? 'upstream' : 'platform'
       if (resolvedBatchValues.credentialIds.length === 0) {
         toast({
           title: '请选择凭据',
           description:
-            '自助配额须选择至少一个凭据。如列表为空，请先在凭据页添加团队凭据，或联系管理员。',
+            layer === 'upstream'
+              ? '请选择本人的 BYOK 凭据。'
+              : '自助配额须选择至少一个凭据。如列表为空，请先在凭据页添加团队凭据，或联系管理员。',
           variant: 'destructive',
         })
         return
       }
       formValues = {
         ...resolvedBatchValues,
-        layer: 'platform',
-        subjectMode: 'users',
-        userIds: [selfUserId],
+        layer,
+        subjectMode: layer === 'platform' ? 'users' : resolvedBatchValues.subjectMode,
+        userIds: layer === 'platform' ? [selfUserId] : [],
         keyIds: [],
       }
     } else if (editingRuleId) {
@@ -683,7 +727,9 @@ function useQuotaCenterImpl(): QuotaCenterState {
     modelsLoading: modelPages.isLoading || routesQuery.isLoading,
     batchModelsLoading:
       batchValues.layer === 'upstream'
-        ? upstreamModelsQuery.isLoading
+        ? memberUpstreamMode
+          ? upstreamPersonalModelsQuery.isLoading
+          : upstreamTeamModelsQuery.isLoading
         : modelPages.isLoading || routesQuery.isLoading,
     batchModelOptionMetaLabel,
     onModelPickerOpenChange: modelPages.onPickerOpenChange,

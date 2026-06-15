@@ -202,3 +202,68 @@ class TestGatewayQuotaRulesApi:
             row["key"]["credential_id"] == credential_id and row["key"]["quota_label"] == "daily"
             for row in rows
         ), rows
+
+    @pytest.mark.asyncio
+    async def test_self_batch_personal_byok_upstream_appears_in_list(
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict[str, str],
+        db_session,
+        test_user: User,
+    ) -> None:
+        """成员自助：本人 BYOK upstream 写入后应在个人工作区配额列表可见。"""
+        team = await TeamService(db_session).ensure_personal_team(test_user.id)
+        await db_session.commit()
+
+        r_cred = await dev_client.post(
+            "/api/v1/gateway/my-credentials",
+            headers=auth_headers,
+            json={
+                "provider": "openai",
+                "name": f"quota-byok-{uuid.uuid4().hex[:8]}",
+                "api_key": "sk-quota-byok-upstream-test-key-123",
+            },
+        )
+        assert r_cred.status_code == 201, r_cred.text
+        credential_id = r_cred.json()["id"]
+        real_model = "gpt-4o-mini"
+
+        r_batch = await dev_client.put(
+            f"/api/v1/gateway/teams/{team.id}/quota-rules/self-batch",
+            headers=auth_headers,
+            json={
+                "rules": [
+                    {
+                        "layer": "upstream",
+                        "credential_id": credential_id,
+                        "model_name": real_model,
+                        "window_seconds": 0,
+                        "quota_label": "default",
+                        "limit_usd": "5.00",
+                    }
+                ]
+            },
+        )
+        assert r_batch.status_code == 200, r_batch.text
+        batch_body = r_batch.json()
+        assert batch_body["failed"] == [], batch_body
+        assert len(batch_body["succeeded"]) == 1, batch_body
+        assert batch_body["succeeded"][0]["key"]["team_id"] == str(team.id)
+
+        r_list = await dev_client.get(
+            f"/api/v1/gateway/teams/{team.id}/quota-rules",
+            headers=auth_headers,
+            params={
+                "layer": "upstream",
+                "credential_id": credential_id,
+                "include_usage": "true",
+            },
+        )
+        assert r_list.status_code == 200, r_list.text
+        rows = r_list.json()
+        assert any(
+            row["key"]["layer"] == "upstream"
+            and row["key"]["credential_id"] == credential_id
+            and float(row["limits"]["limit_usd"]) == 5.0
+            for row in rows
+        ), rows

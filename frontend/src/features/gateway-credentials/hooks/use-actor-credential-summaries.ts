@@ -9,7 +9,7 @@ import { useMemo } from 'react'
 
 import { useQuery } from '@tanstack/react-query'
 
-import type { PlaygroundCredentialSummary } from '@/api/gateway'
+import type { PlaygroundCredentialSummary, QuotaRuleLayer } from '@/api/gateway'
 import { PLAYGROUND_CREDENTIAL_SUMMARIES_QUERY_KEY } from '@/features/gateway-playground/playground-credential-options'
 import { fetchPlaygroundCredentialSummaries } from '@/features/gateway-playground/playground-credential-summaries'
 import { useGatewayMembershipTeamIdsKey } from '@/hooks/use-gateway-team-id'
@@ -89,11 +89,15 @@ export function filterPlatformQuotaCredentialSummaries(
   })
 }
 
-/** 成员自助 platform 配额：仅当前 URL 团队内可见的团队凭据。 */
+/** 成员自助配额凭据：platform = 当前团队凭据；upstream = 本人 BYOK。 */
 export function filterMemberSelfServiceCredentialSummaries(
   creds: readonly PlaygroundCredentialSummary[],
-  teamId: string
+  teamId: string,
+  layer: QuotaRuleLayer = 'platform'
 ): PlaygroundCredentialSummary[] {
+  if (layer === 'upstream') {
+    return creds.filter((cred) => cred.scope === 'user' && cred.is_active)
+  }
   return creds.filter((cred) => cred.scope === 'team' && cred.context_team_id === teamId)
 }
 
@@ -115,7 +119,14 @@ export function collectQuotaBatchTargetTeamIds(
   return [...teamIds]
 }
 
-/** 上游配额写入可选：排除个人 BYOK；团队凭据须 actor 对 context 团队有 admin。 */
+/** 上游配额（厂商凭据额度）：团队/系统凭据（须 admin）或本人 BYOK。 */
+export function isUpstreamQuotaCredentialSummary(
+  cred: Pick<PlaygroundCredentialSummary, 'scope'>
+): boolean {
+  return cred.scope === 'user' || cred.scope === 'team' || cred.scope === 'system'
+}
+
+/** 上游配额写入可选：含本人 BYOK；团队凭据须 actor 对 context 团队有 admin。 */
 export function filterUpstreamQuotaCredentialSummaries(
   creds: readonly PlaygroundCredentialSummary[],
   adminTeamIds: ReadonlySet<string>,
@@ -123,7 +134,7 @@ export function filterUpstreamQuotaCredentialSummaries(
 ): PlaygroundCredentialSummary[] {
   return creds.filter((cred) => {
     if (!cred.is_active) return false
-    if (cred.scope === 'user') return false
+    if (cred.scope === 'user') return true
     if (cred.scope === 'system') return isPlatformAdmin
     const teamId = cred.context_team_id
     return Boolean(teamId && adminTeamIds.has(teamId))

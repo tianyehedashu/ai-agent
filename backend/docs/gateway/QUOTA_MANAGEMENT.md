@@ -14,7 +14,7 @@ Gateway 把"额度/限制"分为三个互不替代的层，分别回答不同的
 | **下游权益** downstream | "**某客户/虚拟 Key**买了多少权益套餐" | `entitlement_plans` + `entitlement_quotas` | Redis 滚动窗口桶 |
 
 - **平台配额**是面向**内部消费护栏**的（团队/成员/Key 维度），本文重点。
-- **上游配额**只有"凭据 + real_model"维度，**无 user 维度**，不能替代"按成员限团队共享凭据"。
+- **上游配额**只有"凭据 + real_model"维度，**无 user 维度**，不能替代"按成员限团队共享凭据"。**本人 BYOK**（`scope=user`）可设 upstream 厂商额度，展示归属 personal team。
 - 三层互补：一次调用可能同时受三层约束，任一层耗尽即拒绝。
 
 ## 2. 平台配额维度
@@ -127,7 +127,7 @@ sequenceDiagram
 
 | 能力 | 机制 |
 |------|------|
-| **写** | `PUT /quota-rules/batch` 依赖 `RequiredTeamAdmin`；仅团队/平台管理员可写，普通成员**不能**给自己加/改限额 |
+| **写** | `PUT /quota-rules/batch` 依赖 `RequiredTeamAdmin`（团队/平台管理员）；`PUT /quota-rules/self-batch` 允许成员写本人 platform 与本人 BYOK upstream |
 | **读（管理员）** | `list_budgets_for_team_admin` 拉全团队成员 budget（含带 `credential_id` 的 platform 行） |
 | **读（普通成员）** | 仅 tenant + **本人** user + 可见 vkey 的 budget，经 `quota_rule_visible_to_member` 过滤 |
 | **成员隔离** | `target_kind=user` 行仅 `user_id == actor_user_id` 可见；**凭据可见不扩大 user 行可见范围**——看不到他人的"成员+凭据"限额（防 `credential_id` 过滤枚举） |
@@ -159,6 +159,9 @@ sequenceDiagram
 | 配置缓存 | `gw:budget_cfg:entry:{ver}:{kind}:{tid}:{period}:{model}:{cred}` | 按 coord 细粒度缓存配置行（L1 内存 + Redis），命中 TTL 60s |
 | 配置负缓存（墓碑） | 同上键，值 = `\x00empty` | 查无此行时写墓碑，避免无预算主体每请求查库；TTL 30s |
 | 配置版本号 | `gw:budget_cfg:ver` | 写路径 `INCR` → O(1) 失效全部 plan 缓存（含墓碑） |
+| 上游 ProviderPlan 配置缓存 | `gw:provider_plan_cfg:entry:{ver}:{credential_id}:{model\|_}` | 按 `(credential_id, real_model)` 缓存活跃套餐 + quotas 快照（L1 + Redis），TTL 60s |
+| 上游 ProviderPlan 负缓存（墓碑） | 同上键，值 = `\x00empty` | 无活跃 plan 时写墓碑，避免每请求查 `provider_plans`；TTL 30s |
+| 上游 ProviderPlan 配置版本号 | `gw:provider_plan_cfg:ver` | upstream 规则 / ProviderPlan 写路径 `INCR` → O(1) 失效全部上游配置缓存 |
 | 用量计数桶 | `gateway:budget:{kind}:{sid}:{period}:{suffix}[:t:{tenantseg}][:c:{credseg}][:m:{modelseg}]` | 实时预扣/结算计数；`tenantseg`/`credseg`/`modelseg` 为 sha256 前 16 位。`tenantseg` 仅 `kind=user` 的成员总量/模型护栏行带（按团队隔离），`credseg` 仅 Phase2 成员+凭据行带 |
 | 成员凭据存在性索引 | `gw:budget_uc:{user_id}` | SET of `credential_id`，Phase2 快路径；TTL 35 天 |
 | Phase2 结算幂等 | `gateway:budget:uc_settled:{request_id}` | `SET NX`，防流式/多回调重复累加；TTL 1 天 |
@@ -180,6 +183,7 @@ sequenceDiagram
 
 - **DB**：Phase1/Phase2 主查走 `ix_gateway_budgets_target_lookup`，`OR` 批量拉取（`get_many_by_plan`），单请求 ≤1 次查库且仅在缓存未命中时。
 - **配置缓存**：命中 L1（进程内）即零 IO；跨副本经 Redis + 版本号。
+- **上游 ProviderPlan 配置缓存**：`ProviderPlanGuard.check_and_reserve` 经 `provider_plan_config_cache` 读活跃套餐；命中后不再查 `provider_plans` / `provider_plan_quotas`；写 upstream 规则或 entitlement 写 ProviderPlan 时 `invalidate_gateway_provider_plan_config_cache`（`upstream_changed` 写路径统一触发）。
 - **负缓存（墓碑）**：查无预算的坐标写墓碑（L1 + Redis，TTL 30s），无平台配额的租户/成员后续请求**不再每请求查库**；写规则 `INCR` 版本号即令旧墓碑不可达，正确性不受影响。
 - **Phase2 无规则零开销**：`gw:budget_uc` 存在性索引先判定，绝大多数无 cred 规则的用户在 1 次 `SISMEMBER` 后即返回，**不查库、不进配置缓存**。
 - **个人工作区豁免**：preflight 命中即 O(1) 返回，不进入 Phase1 plan。

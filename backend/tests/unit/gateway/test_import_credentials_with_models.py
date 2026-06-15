@@ -8,7 +8,7 @@ import pytest
 
 from bootstrap.config import settings
 from domains.gateway.application.management.writes import GatewayManagementWriteService
-from domains.gateway.application.management.write_modules.credential_writes import (
+from domains.gateway.application.management.credential_copy_types import (
     ImportCredentialsWithModelsResult,
 )
 from domains.gateway.infrastructure.repositories.credential_repository import (
@@ -73,6 +73,7 @@ async def test_import_credential_with_models_success(db_session, test_user: User
         tenant_id=target_team.id,
         actor_user_id=test_user.id,
         is_platform_admin=False,
+        destination_team_role="owner",
     )
 
     assert isinstance(result, ImportCredentialsWithModelsResult)
@@ -131,6 +132,7 @@ async def test_import_credential_name_conflict_auto_rename(
         tenant_id=target_team.id,
         actor_user_id=test_user.id,
         is_platform_admin=False,
+        destination_team_role="owner",
     )
 
     assert len(result.succeeded) == 1
@@ -182,6 +184,7 @@ async def test_import_model_name_conflict_auto_rename(
         tenant_id=target_team.id,
         actor_user_id=test_user.id,
         is_platform_admin=False,
+        destination_team_role="owner",
     )
 
     assert len(result.succeeded) == 1
@@ -218,6 +221,7 @@ async def test_import_non_user_scope_credential_fails(
         tenant_id=target_team.id,
         actor_user_id=test_user.id,
         is_platform_admin=False,
+        destination_team_role="owner",
     )
 
     assert len(result.succeeded) == 0
@@ -244,6 +248,7 @@ async def test_import_credential_without_models(db_session, test_user: User) -> 
         tenant_id=target_team.id,
         actor_user_id=test_user.id,
         is_platform_admin=False,
+        destination_team_role="owner",
     )
 
     assert len(result.succeeded) == 1
@@ -270,6 +275,7 @@ async def test_import_partial_failure(db_session, test_user: User) -> None:
         tenant_id=target_team.id,
         actor_user_id=test_user.id,
         is_platform_admin=False,
+        destination_team_role="owner",
     )
 
     assert len(result.succeeded) == 1
@@ -308,7 +314,244 @@ async def test_import_permission_denied_for_non_owner(
         tenant_id=target_team.id,
         actor_user_id=other_user.id,  # NOT the owner of the credential
         is_platform_admin=False,
+        destination_team_role="owner",
     )
 
     assert len(result.succeeded) == 0
     assert len(result.failed) == 1
+    assert result.failed[0].reason == "credential not found"
+
+
+@pytest.mark.asyncio
+async def test_copy_team_credential_to_personal_with_models(
+    db_session, test_user: User
+) -> None:
+    """团队凭据 + 模型复制到个人 BYOK。"""
+    personal_team = await TeamService(db_session).ensure_personal_team(test_user.id)
+    source_team = await TeamService(db_session).create_team(
+        name="copy-source-team",
+        slug=f"copy-src-{uuid.uuid4().hex[:8]}",
+        owner_user_id=test_user.id,
+    )
+    await db_session.commit()
+
+    encryption_key = derive_encryption_key(settings.secret_key.get_secret_value())
+    team_cred = await ProviderCredentialRepository(db_session).create_for_tenant(
+        tenant_id=source_team.id,
+        provider="openai",
+        name="team-copy-src",
+        api_key_encrypted=encrypt_value("sk-team-copy", encryption_key),
+        created_by_user_id=test_user.id,
+    )
+    await GatewayModelRepository(db_session).create(
+        tenant_id=source_team.id,
+        name="team-model-1",
+        capability="chat",
+        real_model="openai/gpt-4o",
+        credential_id=team_cred.id,
+        provider="openai",
+    )
+    await db_session.commit()
+
+    from domains.gateway.domain.policies.credential_copy_policy import CredentialCopyScope
+
+    writes = GatewayManagementWriteService(db_session)
+    result = await writes.copy_credentials_with_models(
+        credential_ids=[team_cred.id],
+        source=CredentialCopyScope(kind="team", team_id=source_team.id),
+        destination=CredentialCopyScope(kind="personal"),
+        actor_user_id=test_user.id,
+        is_platform_admin=False,
+        source_team_role="owner",
+        destination_team_role=None,
+    )
+
+    assert len(result.succeeded) == 1
+    user_creds = await ProviderCredentialRepository(db_session).list_for_user(test_user.id)
+    assert any(c.name == "team-copy-src" for c in user_creds)
+    personal_models = await GatewayModelRepository(db_session).list_tenant_owned(
+        personal_team.id
+    )
+    assert any(m.name == "team-model-1" for m in personal_models)
+
+
+@pytest.mark.asyncio
+async def test_copy_team_credential_to_other_team(db_session, test_user: User) -> None:
+    """团队 A → 团队 B 复制凭据。"""
+    source_team = await TeamService(db_session).create_team(
+        name="copy-a",
+        slug=f"copy-a-{uuid.uuid4().hex[:8]}",
+        owner_user_id=test_user.id,
+    )
+    target_team = await TeamService(db_session).create_team(
+        name="copy-b",
+        slug=f"copy-b-{uuid.uuid4().hex[:8]}",
+        owner_user_id=test_user.id,
+    )
+    await db_session.commit()
+
+    encryption_key = derive_encryption_key(settings.secret_key.get_secret_value())
+    team_cred = await ProviderCredentialRepository(db_session).create_for_tenant(
+        tenant_id=source_team.id,
+        provider="openai",
+        name="cross-team-cred",
+        api_key_encrypted=encrypt_value("sk-cross", encryption_key),
+        created_by_user_id=test_user.id,
+    )
+    await db_session.commit()
+
+    from domains.gateway.domain.policies.credential_copy_policy import CredentialCopyScope
+
+    writes = GatewayManagementWriteService(db_session)
+    result = await writes.copy_credentials_with_models(
+        credential_ids=[team_cred.id],
+        source=CredentialCopyScope(kind="team", team_id=source_team.id),
+        destination=CredentialCopyScope(kind="team", team_id=target_team.id),
+        actor_user_id=test_user.id,
+        is_platform_admin=False,
+        source_team_role="owner",
+        destination_team_role="owner",
+    )
+
+    assert len(result.succeeded) == 1
+    target_creds = await ProviderCredentialRepository(db_session).list_for_tenant(target_team.id)
+    assert len(target_creds) == 1
+    assert target_creds[0].name == "cross-team-cred"
+
+
+@pytest.mark.asyncio
+async def test_copy_other_member_team_credential_denied(
+    db_session, test_user: User
+) -> None:
+    """他人创建的 team 凭据 → member 不可复制（404）。"""
+    team = await TeamService(db_session).create_team(
+        name="copy-perm-team",
+        slug=f"copy-perm-{uuid.uuid4().hex[:8]}",
+        owner_user_id=test_user.id,
+    )
+    other_user = User(
+        email=f"other_copy_{uuid.uuid4()}@example.com",
+        hashed_password="hashed_password",
+        name="Other Copy User",
+    )
+    db_session.add(other_user)
+    await db_session.flush()
+    await TeamService(db_session).add_member(team.id, other_user.id, role="member")
+    await db_session.commit()
+
+    encryption_key = derive_encryption_key(settings.secret_key.get_secret_value())
+    team_cred = await ProviderCredentialRepository(db_session).create_for_tenant(
+        tenant_id=team.id,
+        provider="openai",
+        name="owner-only-cred",
+        api_key_encrypted=encrypt_value("sk-owner-only", encryption_key),
+        created_by_user_id=test_user.id,
+    )
+    await db_session.commit()
+
+    from domains.gateway.domain.policies.credential_copy_policy import CredentialCopyScope
+
+    writes = GatewayManagementWriteService(db_session)
+    result = await writes.copy_credentials_with_models(
+        credential_ids=[team_cred.id],
+        source=CredentialCopyScope(kind="team", team_id=team.id),
+        destination=CredentialCopyScope(kind="personal"),
+        actor_user_id=other_user.id,
+        is_platform_admin=False,
+        source_team_role="member",
+        destination_team_role=None,
+    )
+
+    assert len(result.succeeded) == 0
+    assert len(result.failed) == 1
+
+
+@pytest.mark.asyncio
+async def test_platform_admin_can_copy_other_user_byok(db_session, test_user: User) -> None:
+    """平台 admin 可复制他人 personal 凭据到团队。"""
+    from domains.gateway.domain.policies.credential_copy_policy import CredentialCopyScope
+
+    admin_user = User(
+        email=f"platform_admin_{uuid.uuid4()}@example.com",
+        hashed_password="hashed_password",
+        name="Platform Admin",
+        role="admin",
+    )
+    db_session.add(admin_user)
+    await db_session.flush()
+
+    target_team = await TeamService(db_session).create_team(
+        name="admin-copy-target",
+        slug=f"admin-copy-{uuid.uuid4().hex[:8]}",
+        owner_user_id=admin_user.id,
+    )
+    cred = await _create_user_credential(db_session, test_user, name="victim-byok")
+    await db_session.commit()
+
+    writes = GatewayManagementWriteService(db_session)
+    result = await writes.copy_credentials_with_models(
+        credential_ids=[cred.id],
+        source=CredentialCopyScope(kind="personal"),
+        destination=CredentialCopyScope(kind="team", team_id=target_team.id),
+        actor_user_id=admin_user.id,
+        is_platform_admin=True,
+        source_team_role=None,
+        destination_team_role="owner",
+    )
+
+    assert len(result.succeeded) == 1
+    assert len(result.failed) == 0
+    team_creds = await ProviderCredentialRepository(db_session).list_for_tenant(target_team.id)
+    assert len(team_creds) == 1
+
+
+@pytest.mark.asyncio
+async def test_platform_admin_cannot_copy_other_user_team_credential(
+    db_session, test_user: User
+) -> None:
+    """平台 admin 不能复制他人私有 team 凭据（无旁路）。"""
+    from domains.gateway.domain.policies.credential_copy_policy import CredentialCopyScope
+
+    admin_user = User(
+        email=f"platform_admin2_{uuid.uuid4()}@example.com",
+        hashed_password="hashed_password",
+        name="Platform Admin 2",
+        role="admin",
+    )
+    db_session.add(admin_user)
+    await db_session.flush()
+
+    source_team = await TeamService(db_session).create_team(
+        name="admin-deny-source",
+        slug=f"admin-deny-{uuid.uuid4().hex[:8]}",
+        owner_user_id=test_user.id,
+    )
+    target_team = await TeamService(db_session).create_team(
+        name="admin-deny-target",
+        slug=f"admin-deny-t-{uuid.uuid4().hex[:8]}",
+        owner_user_id=admin_user.id,
+    )
+    encryption_key = derive_encryption_key(settings.secret_key.get_secret_value())
+    team_cred = await ProviderCredentialRepository(db_session).create_for_tenant(
+        tenant_id=source_team.id,
+        provider="openai",
+        name="owner-private-cred",
+        api_key_encrypted=encrypt_value("sk-private", encryption_key),
+        created_by_user_id=test_user.id,
+    )
+    await db_session.commit()
+
+    writes = GatewayManagementWriteService(db_session)
+    result = await writes.copy_credentials_with_models(
+        credential_ids=[team_cred.id],
+        source=CredentialCopyScope(kind="team", team_id=source_team.id),
+        destination=CredentialCopyScope(kind="team", team_id=target_team.id),
+        actor_user_id=admin_user.id,
+        is_platform_admin=True,
+        source_team_role="admin",
+        destination_team_role="owner",
+    )
+
+    assert len(result.succeeded) == 0
+    assert len(result.failed) == 1
+    assert result.failed[0].reason == "credential not found"

@@ -13,7 +13,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
-from typing import TYPE_CHECKING, Final, Literal
+from typing import TYPE_CHECKING, Final, Literal, cast
 
 if TYPE_CHECKING:
     import uuid
@@ -40,6 +40,22 @@ ResetStrategy = Literal[
     "plan_anniversary",
 ]
 RESET_STRATEGY_DEFAULT: Final[ResetStrategy] = "rolling"
+
+_VALID_RESET_STRATEGIES: Final[frozenset[ResetStrategy]] = frozenset(
+    (
+        "rolling",
+        "calendar_daily_utc",
+        "calendar_monthly_utc",
+        "plan_anniversary",
+    )
+)
+
+
+def normalize_reset_strategy(value: str) -> ResetStrategy:
+    """将仓储/缓存中的字符串归一为合法 ``ResetStrategy``，未知值回退 ``rolling``。"""
+    if value in _VALID_RESET_STRATEGIES:
+        return cast("ResetStrategy", value)
+    return RESET_STRATEGY_DEFAULT
 
 
 @dataclass(frozen=True)
@@ -243,4 +259,5 @@ __all__ = [
     "compute_minute_index",
     "compute_reset_at",
     "compute_window_start_minute",
+    "normalize_reset_strategy",
 ]

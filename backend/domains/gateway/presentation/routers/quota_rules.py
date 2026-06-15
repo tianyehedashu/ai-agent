@@ -90,7 +90,7 @@ async def batch_upsert_self_quota_rules(
     team: CurrentTeam,
     writes: MgmtWrites,
 ) -> QuotaRuleBatchUpsertResponse:
-    """成员自助：仅写本人「user + 本人凭据(+模型)」的平台配额（自我约束）。"""
+    """成员自助：写本人 platform 配额或本人 BYOK 的 upstream 厂商额度。"""
     commands = [_upsert_to_command(item) for item in body.rules]
     result = await writes.batch_upsert_self_quota_rules(
         commands,

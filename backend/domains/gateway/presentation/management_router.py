@@ -21,6 +21,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from domains.gateway.presentation.routers import (
+    credential_copy,
     managed_team_credentials,
     managed_team_models,
     managed_team_routes,
@@ -38,6 +39,7 @@ router = APIRouter(tags=["AI Gateway"])
 router.include_router(team_scoped.router)
 router.include_router(my_credentials.router)
 router.include_router(playground.router)
+router.include_router(credential_copy.router)
 router.include_router(managed_team_credentials.router)
 router.include_router(managed_team_models.router)
 router.include_router(managed_team_routes.router)

@@ -30,7 +30,7 @@ from domains.gateway.domain.quota_plan import (
     PlanQuotaSnapshot,
     PlanQuotaSpec,
     QuotaPlanReservation,
-    ResetStrategy,
+    normalize_reset_strategy,
 )
 from domains.gateway.domain.types import EntitlementListStatus
 from domains.gateway.infrastructure.repositories.entitlement_plan_repository import (
@@ -68,18 +68,6 @@ class EntitlementCheckResult:
     quota_quotas_unit_prices: dict[uuid.UUID, tuple[Decimal | None, Decimal | None]]
 
 
-_RESET_STRATEGIES: set[ResetStrategy] = {
-    "rolling",
-    "calendar_daily_utc",
-    "calendar_monthly_utc",
-    "plan_anniversary",
-}
-
-
-def _reset_strategy(value: str) -> ResetStrategy:
-    return value if value in _RESET_STRATEGIES else "rolling"
-
-
 def _status_from_quota_snapshots(
     snapshots: list[PlanQuotaSnapshot],
     *,
@@ -109,7 +97,7 @@ def _quota_to_spec(row: EntitlementPlanQuota, *, plan: EntitlementPlan) -> PlanQ
         limit_usd=row.limit_usd,
         limit_tokens=row.limit_tokens,
         limit_requests=row.limit_requests,
-        reset_strategy=_reset_strategy(row.reset_strategy),
+        reset_strategy=normalize_reset_strategy(row.reset_strategy),
         plan_valid_from=plan.valid_from,
     )
 

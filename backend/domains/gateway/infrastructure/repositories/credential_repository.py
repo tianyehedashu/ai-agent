@@ -356,21 +356,20 @@ class ProviderCredentialRepository:
         result = await self._session.execute(stmt)
         return result.scalar_one_or_none()
 
-    async def copy_to_team(
+    async def _duplicate_credential(
         self,
-        credential_id: uuid.UUID,
-        tenant_id: uuid.UUID,
+        source: ProviderCredential,
         *,
-        created_by_user_id: uuid.UUID | None = None,
-        name_override: str | None = None,
-    ) -> ProviderCredential | None:
-        source = await self.get(credential_id)
-        if source is None:
-            return None
+        tenant_id: uuid.UUID | None,
+        scope: str | None,
+        scope_id: uuid.UUID | None,
+        created_by_user_id: uuid.UUID | None,
+        name_override: str | None,
+    ) -> ProviderCredential:
         new_cred = ProviderCredential(
             tenant_id=tenant_id,
-            scope=None,
-            scope_id=None,
+            scope=scope,
+            scope_id=scope_id,
             provider=source.provider,
             name=name_override or source.name,
             api_key_encrypted=source.api_key_encrypted,
@@ -384,6 +383,46 @@ class ProviderCredentialRepository:
         self._session.add(new_cred)
         await self._session.flush()
         return new_cred
+
+    async def copy_to_team(
+        self,
+        credential_id: uuid.UUID,
+        tenant_id: uuid.UUID,
+        *,
+        created_by_user_id: uuid.UUID | None = None,
+        name_override: str | None = None,
+    ) -> ProviderCredential | None:
+        source = await self.get(credential_id)
+        if source is None:
+            return None
+        return await self._duplicate_credential(
+            source,
+            tenant_id=tenant_id,
+            scope=None,
+            scope_id=None,
+            created_by_user_id=created_by_user_id,
+            name_override=name_override,
+        )
+
+    async def copy_to_user(
+        self,
+        credential_id: uuid.UUID,
+        user_id: uuid.UUID,
+        *,
+        created_by_user_id: uuid.UUID | None = None,
+        name_override: str | None = None,
+    ) -> ProviderCredential | None:
+        source = await self.get(credential_id)
+        if source is None:
+            return None
+        return await self._duplicate_credential(
+            source,
+            tenant_id=None,
+            scope="user",
+            scope_id=user_id,
+            created_by_user_id=created_by_user_id,
+            name_override=name_override,
+        )
 
 
 __all__ = [

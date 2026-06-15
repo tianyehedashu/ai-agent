@@ -218,9 +218,22 @@ export interface ImportedCredentialItem {
   models_failed: ModelImportFailureItem[]
 }
 
+export interface CredentialCopyFailureItem {
+  credential_id: string
+  reason: string
+}
+
 export interface ImportCredentialsWithModelsResponse {
   succeeded: ImportedCredentialItem[]
-  failed: BatchImportFailureItem[]
+  failed: CredentialCopyFailureItem[]
+}
+
+export type CredentialCopyEndpoint = { kind: 'personal' } | { kind: 'team'; team_id: string }
+
+export interface CopyCredentialsWithModelsBody {
+  credential_ids: string[]
+  source: CredentialCopyEndpoint
+  destination: CredentialCopyEndpoint
 }
 
 /** GET /managed-team-credentials 分页响应 */
@@ -373,8 +386,8 @@ export const credentialsApi = {
   importFromUserConfig: (teamId: string) =>
     apiClient.post<{ created: number }>(teamGatewayPath(teamId, '/credentials/import')),
 
-  /** 将选中的个人凭据及其关联模型批量导入到团队 */
-  importCredentialsWithModels: async (teamId: string, body: { credential_ids: string[] }) => {
+  /** 跨个人/团队 scope 复制凭据及关联模型 */
+  copyCredentialsWithModels: async (body: CopyCredentialsWithModelsBody) => {
     const data = await apiClient.post<{
       succeeded: Array<{
         source_credential_id: string
@@ -383,7 +396,7 @@ export const credentialsApi = {
         models_failed: ModelImportFailureItem[]
       }>
       failed: BatchImportFailureItem[]
-    }>(teamGatewayPath(teamId, '/credentials/import-with-models'), body)
+    }>(`${GATEWAY_API_BASE}/credentials/copy-with-models`, body)
     return {
       ...data,
       succeeded: data.succeeded.map((s) => ({

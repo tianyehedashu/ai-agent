@@ -14,7 +14,6 @@ import {
   type ProviderCredential,
 } from '@/api/gateway'
 import type { GatewayBudget } from '@/api/gateway/budgets'
-import type { GatewayTeam } from '@/api/gateway/teams'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -33,6 +32,10 @@ import { PersonalCredentialsList } from '@/features/gateway-credentials/personal
 import { useInfinitePersonalModelPages } from '@/features/gateway-models/hooks/use-infinite-gateway-model-pages'
 import { combineFetching } from '@/features/gateway-shared/combine-fetching'
 import { GatewayRefreshButton } from '@/features/gateway-shared/gateway-refresh-button'
+import {
+  useGatewayContributorCollaborationTeams,
+  useGatewayTeamNameMap,
+} from '@/features/gateway-teams/use-gateway-teams'
 import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { useToast } from '@/hooks/use-toast'
 import { lazyWithReload } from '@/lib/lazy-with-reload'
@@ -47,8 +50,8 @@ import { useProviderProfilesCatalog } from './hooks/use-provider-profiles-catalo
 import { invalidateGatewayCredentialCaches } from './query-keys'
 import { useCredentialEditForm } from './use-credential-edit-form'
 
-const ImportToTeamDialog = lazyWithReload(() =>
-  import('./import-to-team-dialog').then((m) => ({ default: m.ImportToTeamDialog }))
+const CopyCredentialsDialog = lazyWithReload(() =>
+  import('./copy-credentials-dialog').then((m) => ({ default: m.CopyCredentialsDialog }))
 )
 
 export interface PersonalCredentialsPanelProps {
@@ -57,7 +60,6 @@ export interface PersonalCredentialsPanelProps {
   editCredential?: ProviderCredential | null
   onEditCredentialChange?: (credential: ProviderCredential | null) => void
   highlightCredentialId?: string
-  writableTeams?: GatewayTeam[]
 }
 
 export function PersonalCredentialsPanel({
@@ -65,7 +67,7 @@ export function PersonalCredentialsPanel({
   onAddModels,
   editCredential = null,
   onEditCredentialChange,
-  writableTeams = [],
+  highlightCredentialId: _highlightCredentialId,
 }: PersonalCredentialsPanelProps = {}): React.ReactElement {
   useProviderProfilesCatalog()
   const queryClient = useQueryClient()
@@ -73,10 +75,12 @@ export function PersonalCredentialsPanel({
   const currentUser = useCurrentUser()
   const hasAuthSession = currentUser !== null
   const teamId = useGatewayTeamId()
+  const contributorTeams = useGatewayContributorCollaborationTeams()
+  const teamNameById = useGatewayTeamNameMap()
   const [credentialPendingDelete, setCredentialPendingDelete] = useState<ProviderCredential | null>(
     null
   )
-  const [importDialogState, setImportDialogState] = useState<{
+  const [copyDialogState, setCopyDialogState] = useState<{
     open: boolean
     preselectedIds: string[]
   }>({ open: false, preselectedIds: [] })
@@ -200,16 +204,16 @@ export function PersonalCredentialsPanel({
           ariaLabel="刷新个人凭据"
           onRefresh={handleRefresh}
         />
-        {writableTeams.length > 0 && credentials.length > 0 ? (
+        {contributorTeams.length > 0 && credentials.length > 0 ? (
           <Button
             variant="outline"
             size="sm"
             onClick={() => {
-              setImportDialogState({ open: true, preselectedIds: [] })
+              setCopyDialogState({ open: true, preselectedIds: [] })
             }}
           >
             <Upload className="mr-1.5 h-4 w-4" />
-            导入到团队
+            复制凭据
           </Button>
         ) : null}
         {credentials.length > 0 ? (
@@ -302,18 +306,20 @@ export function PersonalCredentialsPanel({
         fallback={
           <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            加载导入…
+            加载复制…
           </div>
         }
       >
-        <ImportToTeamDialog
-          open={importDialogState.open}
+        <CopyCredentialsDialog
+          open={copyDialogState.open}
           onOpenChange={(next) => {
-            setImportDialogState((prev) => ({ ...prev, open: next }))
+            setCopyDialogState((prev) => ({ ...prev, open: next }))
           }}
-          preselectedCredentialIds={importDialogState.preselectedIds}
-          credentials={credentials}
-          writableTeams={writableTeams}
+          preselectedCredentialIds={copyDialogState.preselectedIds}
+          personalCredentials={credentials}
+          teamCredentials={[]}
+          contributorTeams={contributorTeams}
+          teamNameById={teamNameById}
         />
       </Suspense>
     </>

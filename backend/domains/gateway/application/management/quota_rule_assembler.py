@@ -85,11 +85,7 @@ async def assemble_team_quota_rules(
             actor_user_id,
             is_platform_admin=is_platform_admin,
         )
-        upstream_cred_ids = [
-            item.credential.id
-            for item in playground_items
-            if item.credential.scope != "user"
-        ]
+        upstream_cred_ids = [item.credential.id for item in playground_items]
         context_team_by_cred = {
             item.credential.id: item.context_team_id for item in playground_items
         }

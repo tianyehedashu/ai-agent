@@ -17,12 +17,18 @@ from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 import uuid
 
+from domains.gateway.application.provider_plan_config_cache import (
+    ProviderPlanConfigSnapshot,
+    get_cached_active_provider_plan,
+    plan_quota_specs_from_config,
+    provider_plan_config_from_orm,
+)
 from domains.gateway.domain.errors import ProviderPlanExhaustedError
 from domains.gateway.domain.quota_plan import (
     PROVIDER_NS,
     PlanQuotaSpec,
     QuotaPlanReservation,
-    ResetStrategy,
+    normalize_reset_strategy,
 )
 from domains.gateway.infrastructure.repositories.provider_plan_repository import (
     ProviderPlanRepository,
@@ -39,17 +45,6 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
-_RESET_STRATEGIES: set[ResetStrategy] = {
-    "rolling",
-    "calendar_daily_utc",
-    "calendar_monthly_utc",
-    "plan_anniversary",
-}
-
-
-def _reset_strategy(value: str) -> ResetStrategy:
-    return value if value in _RESET_STRATEGIES else "rolling"
-
 
 def _quota_to_spec(row: ProviderPlanQuota, *, plan: ProviderPlan) -> PlanQuotaSpec:
     return PlanQuotaSpec(
@@ -59,13 +54,13 @@ def _quota_to_spec(row: ProviderPlanQuota, *, plan: ProviderPlan) -> PlanQuotaSp
         limit_usd=row.limit_usd,
         limit_tokens=row.limit_tokens,
         limit_requests=row.limit_requests,
-        reset_strategy=_reset_strategy(row.reset_strategy),
+        reset_strategy=normalize_reset_strategy(row.reset_strategy),
         plan_valid_from=plan.valid_from,
     )
 
 
 class ProviderPlanGuard:
-    """轻量 facade：内部按需开 ``AsyncSession`` 查仓储；不持有 session。"""
+    """轻量 facade：活跃套餐配置经 ``provider_plan_config_cache`` 缓存；loader 按需开 session。"""
 
     def __init__(self, *, quota_service: QuotaPlanService) -> None:
         self._quota = quota_service
@@ -80,18 +75,33 @@ class ProviderPlanGuard:
     ) -> tuple[uuid.UUID | None, list[PlanQuotaSpec], list[QuotaPlanReservation]]:
         """命中活跃 plan 时返回 ``(plan_id, specs, reservations)``；未命中返回 ``(None, [], [])``。"""
         when = now or datetime.now(UTC)
-        async with get_session_context() as session:
-            repo = ProviderPlanRepository(session)
-            plan = await repo.get_active_for_credential_model(credential_id, real_model, now=when)
-            if plan is None:
-                return None, [], []
-            quotas = await repo.list_quotas(plan.id)
-        specs = [_quota_to_spec(q, plan=plan) for q in quotas]
+
+        async def _loader() -> ProviderPlanConfigSnapshot | None:
+            async with get_session_context() as session:
+                repo = ProviderPlanRepository(session)
+                plan = await repo.get_active_for_credential_model(
+                    credential_id, real_model, now=when
+                )
+                if plan is None:
+                    return None
+                quotas = await repo.list_quotas(plan.id)
+            return provider_plan_config_from_orm(plan, quotas)
+
+        config = await get_cached_active_provider_plan(
+            credential_id,
+            real_model,
+            now=when,
+            loader=_loader,
+        )
+        if config is None:
+            return None, [], []
+
+        specs = plan_quota_specs_from_config(config)
         if not specs:
-            return plan.id, [], []
+            return config.plan_id, [], []
         result = await self._quota.check_and_reserve(
             PROVIDER_NS,
-            plan.id,
+            config.plan_id,
             specs,
             estimate_tokens=estimate_tokens,
             now=when,
@@ -108,12 +118,12 @@ class ProviderPlanGuard:
                 else 60
             )
             raise ProviderPlanExhaustedError(
-                plan_id=str(plan.id),
+                plan_id=str(config.plan_id),
                 quota_label=label,
                 reason=reason,
                 cooldown_seconds=cooldown_seconds,
             )
-        return plan.id, specs, result.reservations
+        return config.plan_id, specs, result.reservations
 
     async def commit(
         self,
@@ -211,7 +221,11 @@ def _extract_credential_and_model(kwargs: dict[str, Any]) -> tuple[uuid.UUID | N
             if raw_cid:
                 with suppress(ValueError, TypeError):
                     cred_id = uuid.UUID(str(raw_cid))
-            raw_real = mi.get("model_real") or container.get("model")
+            raw_real = (
+                mi.get("gateway_real_model")
+                or mi.get("model_real")
+                or container.get("model")
+            )
             if isinstance(raw_real, str) and raw_real:
                 real_model = raw_real
     if real_model is None:

@@ -156,15 +156,21 @@ class GatewayManagementWriteBaseMixin:
         is_platform_admin: bool,
         request_tenant_id: uuid.UUID,
     ) -> uuid.UUID:
-        """上游配额：凭据须为团队/系统 scope，且 actor 对该凭据所属团队有 admin（或平台管理员写 system）。
+        """上游配额写权限与展示 team_id。
 
-        返回用于 quota rule 展示的 ``team_id``（系统凭据回退为请求上下文团队）。
+        - ``scope=user``：仅凭据所有者；展示 team = 所有者 personal team。
+        - ``scope=team``：actor 对该 ``tenant_id`` 有 admin（或平台管理员）。
+        - system：平台管理员；展示 team 回退为请求上下文团队。
         """
         from domains.tenancy.domain.policies.team_role import is_admin_or_owner_team_role
 
         row = await self._creds.get(credential_id)
         if row is not None:
-            if row.scope == "user" or row.tenant_id is None:
+            if row.scope == "user":
+                if row.scope_id is None or row.scope_id != actor_user_id:
+                    raise CredentialNotFoundError(str(credential_id))
+                return await self._ensure_personal_tenant_id(row.scope_id)
+            if row.tenant_id is None:
                 raise ValidationError("upstream 配额仅支持团队或系统凭据")
             if is_platform_admin:
                 return row.tenant_id
@@ -351,8 +357,12 @@ class GatewayManagementWriteBaseMixin:
         全部 membership 团队的列表缓存，否则其它团队页仍命中旧快照。
         """
         from domains.gateway.application.gateway_cache_invalidation import (
+            invalidate_gateway_provider_plan_config_cache,
             invalidate_gateway_quota_rule_cache_for_team,
         )
+
+        if upstream_changed:
+            await invalidate_gateway_provider_plan_config_cache()
 
         team_ids: set[uuid.UUID] = {tenant_id}
         if upstream_changed and actor_user_id is not None:
