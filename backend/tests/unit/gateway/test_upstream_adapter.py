@@ -86,6 +86,23 @@ def test_reasoning_model_locks_temperature() -> None:
     assert out["temperature"] == 1.0
 
 
+def test_kimi_for_coding_locks_temperature_when_thinking_disabled() -> None:
+    out = UpstreamAdapter().adapt(
+        {"temperature": 0.2, "max_tokens": 100},
+        client_model="kimi-for-coding-chat",
+        resolved=ResolvedModelName(
+            record=_FakeRecord(
+                provider="moonshot",
+                real_model="kimi-for-coding",
+                tags={"thinking_param": "none", "thinking_param_locked": True},
+            ),
+            route=None,
+            via_route=None,
+        ),
+    )
+    assert out["temperature"] == 1.0
+
+
 def test_max_tokens_clamped_to_tag_limit() -> None:
     out = UpstreamAdapter().adapt(
         {"max_tokens": 99999},
