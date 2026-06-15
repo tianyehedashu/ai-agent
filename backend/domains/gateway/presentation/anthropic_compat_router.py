@@ -25,6 +25,7 @@ from domains.gateway.presentation.deps import (
 from domains.gateway.presentation.gateway_proxy_business_error_classify import (
     classify_proxy_use_case_business_error,
 )
+from domains.gateway.presentation.gateway_proxy_context import apply_vkey_team_dispatch
 from domains.gateway.presentation.proxy_request_context import (
     prepare_proxy_body,
     proxy_context_from_request,
@@ -88,6 +89,7 @@ async def create_message(
     use_case = ProxyUseCase(db)
     ctx = proxy_context_from_request(principal, GatewayCapability.CHAT, request)
     proxy_body = prepare_proxy_body(body, request)
+    await apply_vkey_team_dispatch(ctx, proxy_body, db)
 
     try:
         result = await use_case.anthropic_messages(ctx, proxy_body)
@@ -141,6 +143,7 @@ async def count_message_tokens(
     use_case = ProxyUseCase(db)
     ctx = proxy_context_from_request(principal, GatewayCapability.CHAT, request)
     proxy_body = prepare_proxy_body(body, request)
+    await apply_vkey_team_dispatch(ctx, proxy_body, db)
     try:
         payload = await use_case.anthropic_count_tokens(ctx, proxy_body)
     except ValueError as exc:

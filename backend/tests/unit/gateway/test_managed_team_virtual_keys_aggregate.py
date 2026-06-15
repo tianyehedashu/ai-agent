@@ -77,19 +77,20 @@ async def test_list_managed_team_keys_filters_by_actor_and_paginates() -> None:
         return_value=[personal_id]
     )
 
+    async def _fake_map_with_grants(_session, rows):
+        return [
+            MagicMock(id=row.id, tenant_id=row.tenant_id, team_id=row.tenant_id, name=row.name)
+            for row in rows
+        ]
+
     with (
         patch(
             "domains.gateway.application.management.managed_team_virtual_key_reads.VirtualKeyRepository",
             return_value=vkey_repo,
         ),
         patch(
-            "domains.gateway.application.management.managed_team_virtual_key_reads.virtual_key_from_orm",
-            side_effect=lambda row: MagicMock(
-                id=row.id,
-                tenant_id=row.tenant_id,
-                team_id=row.tenant_id,
-                name=row.name,
-            ),
+            "domains.gateway.application.management.managed_team_virtual_key_reads.virtual_keys_from_orm_with_grants",
+            side_effect=_fake_map_with_grants,
         ),
     ):
         result = await list_managed_team_virtual_keys_for_actor(

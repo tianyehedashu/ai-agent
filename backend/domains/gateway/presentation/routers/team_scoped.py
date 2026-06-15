@@ -16,12 +16,14 @@ from . import (
     pricing,
     quota_rules,
     routes,
+    virtual_key_grants,
     virtual_keys,
 )
 
 router = APIRouter(prefix="/teams/{team_id}")
 
 router.include_router(virtual_keys.router)
+router.include_router(virtual_key_grants.router)
 router.include_router(credentials.router)
 router.include_router(models.router)
 router.include_router(routes.router)

@@ -65,6 +65,11 @@ class ProxyContext:
     """``chat_completion`` 写入的网关内耗时，供 OpenAI 兼容面响应头透出。"""
     personal_team_id: uuid.UUID | None = None
     """触发用户个人工作区 team id（请求级懒加载缓存，用于平台配额豁免判定）。"""
+    # ─── 跨团队派发（multi-tenant vkey）────────────────────────────────────
+    client_raw_model: str | None = None
+    """派发前的原始 model 名（含 ``<slug>/`` 前缀，若有）；写到日志 ``gateway_route_name``。"""
+    dispatched_via_prefix: bool = False
+    """本次调用是否通过 ``<team-slug>/<model>`` 前缀派发（写到日志 ``gateway_dispatched_via_prefix``）。"""
 
 
 __all__ = ["EntitlementReservationState", "ProxyContext"]

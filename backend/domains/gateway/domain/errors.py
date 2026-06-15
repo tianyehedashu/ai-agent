@@ -5,6 +5,7 @@ Gateway Domain Errors - 领域错误
 from __future__ import annotations
 
 from contextlib import suppress
+import uuid
 
 from domains.tenancy.domain.errors import (
     PersonalTeamNotInitializedError,
@@ -41,13 +42,46 @@ class GatewayTeamHeaderRequiredError(GatewayError):
 
 
 class GatewayVkeyTeamHeaderMismatchError(GatewayError):
-    """sk-gw-* 请求携带的 X-Team-Id 与虚拟 Key 绑定团队不一致。"""
+    """sk-gw-* 请求携带的 X-Team-Id 不在 vkey 主属或已授权 team 集合内。"""
 
     def __init__(self) -> None:
         super().__init__(
-            "X-Team-Id must not be sent with sk-gw-* virtual keys, "
-            "or must match the key's bound team"
+            "X-Team-Id must be vkey's bound team or a granted team"
         )
+
+
+class VkeyTeamPrefixUnknownError(GatewayError):
+    """``<slug>/<model>`` 前缀中的 slug 不在 vkey 已授权 team 集合内（strict 模式）。"""
+
+    def __init__(self, slug: str, available: list[str]) -> None:
+        available_str = ", ".join(sorted(available)) if available else "<none>"
+        super().__init__(
+            f"Team prefix '{slug}' not in vkey grants "
+            f"(available: {available_str})"
+        )
+        self.slug = slug
+        self.available = available
+
+
+class VkeyAmbiguousModelError(GatewayError):
+    """无前缀调用时 model 名在多个 grant team 均存在（strict 模式拒绝）。"""
+
+    def __init__(self, model_name: str, team_count: int) -> None:
+        super().__init__(
+            f"Model '{model_name}' exists in {team_count} granted teams; "
+            "use '<team-slug>/<model>' prefix to disambiguate"
+        )
+        self.model_name = model_name
+        self.team_count = team_count
+
+
+class VkeyGrantTargetNotMemberError(GatewayError):
+    """Grant 目标 team 不在 actor 当前 membership 内。"""
+
+    def __init__(self, tenant_ids: list[uuid.UUID]) -> None:
+        ids_str = ", ".join(str(t) for t in tenant_ids)
+        super().__init__(f"Target team(s) not in your membership: {ids_str}")
+        self.tenant_ids = tenant_ids
 
 
 class ApiKeyGatewayGrantRequiredError(GatewayError):
@@ -375,4 +409,7 @@ __all__ = [
     "VirtualKeyDecryptError",
     "VirtualKeyInvalidError",
     "VirtualKeyNotFoundError",
+    "VkeyAmbiguousModelError",
+    "VkeyGrantTargetNotMemberError",
+    "VkeyTeamPrefixUnknownError",
 ]

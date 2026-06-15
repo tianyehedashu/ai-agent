@@ -145,6 +145,13 @@ def test_vkey_team_header_matching_ok() -> None:
 
 
 @pytest.mark.unit
+def test_vkey_team_header_granted_team_ok() -> None:
+    bound = uuid.uuid4()
+    granted = uuid.uuid4()
+    assert_vkey_team_header_compatible(bound, str(granted), granted_team_ids=(granted,)) is None
+
+
+@pytest.mark.unit
 def test_vkey_team_header_mismatch_raises() -> None:
     with pytest.raises(GatewayVkeyTeamHeaderMismatchError):
         assert_vkey_team_header_compatible(uuid.uuid4(), str(uuid.uuid4()))

@@ -139,7 +139,7 @@ export function GatewayKeysWorkspace({
   )
 
   const columnCount =
-    (canManageKeys ? 1 : 0) + 6 + (showEntitlementsColumn ? 1 : 0) + (showBudgetsColumn ? 1 : 0) + 1
+    (canManageKeys ? 1 : 0) + 7 + (showEntitlementsColumn ? 1 : 0) + (showBudgetsColumn ? 1 : 0) + 1
 
   const allSelectableSelected =
     visibleKeys.length > 0 && visibleKeys.every((k) => selectedIds.has(k.id))

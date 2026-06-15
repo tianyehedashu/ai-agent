@@ -130,18 +130,21 @@ def _prepare_gateway_model_write_fields(
         raise ValidationError(
             f"凭据提供商为 {credential_provider}，与请求的 provider {provider} 不一致"
         )
-    prefix_msg = litellm_prefix_violation_message(provider, raw_rm)
+    from domains.gateway.domain.litellm_model_id import build_litellm_model_id
+
+    normalized_rm = build_litellm_model_id(prov_norm, raw_rm)
+    prefix_msg = litellm_prefix_violation_message(provider, normalized_rm)
     if prefix_msg:
         raise ValidationError(prefix_msg)
     enriched_tags = build_gateway_model_tags(
         tags,
         provider=provider,
-        real_model=raw_rm,
+        real_model=normalized_rm,
         upstream_profile_id=upstream_profile_id,
         skip_hints=is_config_managed_system_gateway_model(tags=tags),
     )
     return _PreparedGatewayModelWrite(
-        normalized_real_model=raw_rm,
+        normalized_real_model=normalized_rm,
         enriched_tags=enriched_tags,
     )
 

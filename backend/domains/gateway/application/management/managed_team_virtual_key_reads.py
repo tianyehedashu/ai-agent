@@ -8,7 +8,9 @@ import uuid
 
 from domains.gateway.application.management.plan_read_mappers import entitlement_plan_from_orm
 from domains.gateway.application.management.plan_read_models import EntitlementPlanReadModel
-from domains.gateway.application.management.virtual_key_read_mappers import virtual_key_from_orm
+from domains.gateway.application.management.virtual_key_read_mappers import (
+    virtual_keys_from_orm_with_grants,
+)
 from domains.gateway.application.management.virtual_key_read_model import VirtualKeyReadModel
 from domains.gateway.domain.virtual_key_access import filter_virtual_keys_visible_to_actor
 from domains.gateway.infrastructure.repositories.entitlement_plan_repository import (
@@ -88,7 +90,7 @@ async def list_managed_team_virtual_keys_for_actor(
         limit=page_params.page_size,
     )
     filtered = filter_virtual_keys_visible_to_actor(rows, actor_user_id=user_id)
-    page_items = [virtual_key_from_orm(k) for k in filtered]
+    page_items = await virtual_keys_from_orm_with_grants(session, filtered)
     tenant_ids_with_keys = tuple(
         await repo.list_distinct_tenant_ids_with_non_system_active_keys(
             tenant_ids,

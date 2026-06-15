@@ -211,24 +211,14 @@ async def _ensure_test_database():
 
 
 def _create_test_engine():
-    """创建测试引擎（延迟创建）"""
+    """创建测试引擎（延迟创建，避免在导入时连接数据库）。
+
+    仅创建 Engine 对象；数据库存在性检查与建表在 ``_ensure_test_engine_async`` 中
+    于当前 pytest event loop 内完成，避免 ``asyncio.run()`` 绑定错误 loop 导致
+    asyncpg 连接跨 loop 复用。
+    """
     global test_engine, TestAsyncSessionLocal
     if test_engine is None:
-        # 先确保数据库存在（在创建引擎之前）
-        try:
-            # 尝试在现有事件循环中运行，如果没有则创建新的
-            try:
-                asyncio.get_running_loop()
-                # 如果事件循环正在运行，需要特殊处理
-                nest_asyncio.apply()
-                asyncio.run(_ensure_test_database())
-            except RuntimeError:
-                # 没有运行的事件循环，直接运行
-                asyncio.run(_ensure_test_database())
-        except Exception:
-            # 如果创建数据库失败，继续尝试连接（可能数据库已存在）
-            pass
-
         try:
             test_engine = create_async_engine(
                 TEST_DATABASE_URL,
@@ -240,7 +230,6 @@ def _create_test_engine():
                 expire_on_commit=False,
             )
         except Exception as e:
-            # 如果创建失败，设置为 None
             test_engine = None
             TestAsyncSessionLocal = None
             db_name = TEST_DATABASE_URL.rsplit("/", maxsplit=1)[-1]
@@ -250,6 +239,32 @@ def _create_test_engine():
                 f"You can create it with: CREATE DATABASE {db_name};"
             ) from e
     return test_engine, TestAsyncSessionLocal
+
+
+async def _ensure_test_engine_async() -> object:
+    """在当前 event loop 内确保测试库存在且表结构就绪。"""
+    global _tables_created
+
+    with contextlib.suppress(Exception):
+        await _ensure_test_database()
+
+    engine, _ = _create_test_engine()
+    if engine is None:
+        raise RuntimeError("Database engine creation failed")
+
+    if not _tables_created:
+        try:
+            _run_test_db_migrations()
+        except Exception as e:
+            logging.getLogger(__name__).warning(
+                "Test DB migration failed (%s), falling back to create_all", e
+            )
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+            await _ensure_mcp_servers_template_columns(conn)
+        _tables_created = True
+
+    return engine
 
 
 @pytest_asyncio.fixture(scope="function")
@@ -276,12 +291,8 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
         await _ensure_test_database()
 
     try:
-        # 延迟创建测试引擎
-        engine, _ = _create_test_engine()
-        if engine is None:
-            pytest.skip("Database engine creation failed (asyncpg may not be installed)")
+        engine = await _ensure_test_engine_async()
     except RuntimeError as e:
-        # 如果是数据库不存在的错误，提供更友好的提示
         error_msg = str(e)
         if "does not exist" in error_msg or "InvalidCatalogNameError" in error_msg:
             db_name = TEST_DATABASE_URL.rsplit("/", maxsplit=1)[-1]
@@ -292,21 +303,6 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
         raise
     except Exception as e:
         pytest.skip(f"Database setup failed: {e}")
-
-    # 确保表存在且与迁移一致（先跑迁移再 create_all 补缺）
-    if not _tables_created:
-        try:
-            _run_test_db_migrations()
-        except Exception as e:
-            logging.getLogger(__name__).warning(
-                "Test DB migration failed (%s), falling back to create_all", e
-            )
-        async with engine.begin() as conn:
-            # create_all 补全迁移未覆盖的表（幂等）
-            await conn.run_sync(Base.metadata.create_all)
-            # 若 mcp_servers 已存在但缺少新列（历史 create_all 建的），补上
-            await _ensure_mcp_servers_template_columns(conn)
-        _tables_created = True
 
     # 创建独立的数据库连接
     # 使用 begin() 开始一个事务，然后在其中创建 SAVEPOINT
@@ -358,10 +354,13 @@ def _asgi_app_with_streaming_spec(app: object) -> object:
 def _apply_db_overrides(app: object, db_session: AsyncSession) -> None:
     """统一为 app 注入测试用 DB 会话（仅覆盖 get_db；get_session 由 patch get_session_factory 间接满足）。"""
     # pylint: disable=import-outside-toplevel
-    from libs.db.database import get_db
+    from libs.db.database import _finalize_dependency_session, get_db
 
     async def override_get_db() -> AsyncGenerator[AsyncSession, None]:
-        yield db_session
+        try:
+            yield db_session
+        finally:
+            await _finalize_dependency_session(db_session)
 
     app.dependency_overrides[get_db] = override_get_db  # type: ignore[attr-defined]
 
@@ -373,9 +372,6 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
     # pylint: disable=import-outside-toplevel
     from unittest.mock import AsyncMock, MagicMock, patch
 
-    # Mock init_db 和 init_redis 以避免在测试时初始化
-    # get_session_factory / get_async_session 必须仍 yield 同一 db_session，
-    # 否则 ChatUseCase 等经 get_session_context 的路径看不到 get_db 未提交的数据（会 422）。
     mock_factory = MagicMock()
     mock_factory.return_value.__aenter__ = AsyncMock(return_value=db_session)
     mock_factory.return_value.__aexit__ = AsyncMock(return_value=None)
@@ -622,6 +618,16 @@ async def permission_context(test_user: User, db_session: AsyncSession):
         yield ctx
     finally:
         clear_permission_context()
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def _reset_redis_client_between_tests() -> AsyncGenerator[None, None]:
+    """避免全局 Redis 客户端绑定到已关闭的 pytest event loop。"""
+    from libs.db import redis as redis_module
+
+    await redis_module.close_redis()
+    yield
+    await redis_module.close_redis()
 
 
 @pytest.fixture(autouse=True)

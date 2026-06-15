@@ -29,6 +29,9 @@ from domains.gateway.domain.errors import (
     VirtualKeyDecryptError,
     VirtualKeyInvalidError,
     VirtualKeyNotFoundError,
+    VkeyAmbiguousModelError,
+    VkeyGrantTargetNotMemberError,
+    VkeyTeamPrefixUnknownError,
 )
 from libs.api.problem_details import ProblemContext, default_title_for_status
 from libs.exceptions import PermissionDeniedError
@@ -40,10 +43,13 @@ from libs.exceptions.codes import (
     CREDENTIAL_NOT_FOUND,
     GATEWAY_DOMAIN_ERROR,
     GATEWAY_ENTITLEMENT_EXHAUSTED,
+    GATEWAY_GRANT_TARGET_NOT_MEMBER,
     GATEWAY_MODEL_NOT_FOUND,
     GATEWAY_TEAM_HEADER_INVALID,
     GATEWAY_TEAM_HEADER_REQUIRED,
+    GATEWAY_VKEY_AMBIGUOUS_MODEL,
     GATEWAY_VKEY_TEAM_HEADER_MISMATCH,
+    GATEWAY_VKEY_TEAM_PREFIX_UNKNOWN,
     INVALID_SYSTEM_VISIBILITY,
     MANAGEMENT_ENTITY_NOT_FOUND,
     NO_PERSONAL_TEAM_FOR_PROXY,
@@ -160,6 +166,36 @@ _DOMAIN_PROBLEM_BUILDERS: list[tuple[tuple[type[Exception], ...], _ProblemBuilde
             detail=str(exc),
             title=default_title_for_status(status.HTTP_400_BAD_REQUEST),
             code=GATEWAY_VKEY_TEAM_HEADER_MISMATCH,
+        ),
+    ),
+    (
+        (VkeyTeamPrefixUnknownError,),
+        lambda exc: ProblemContext(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+            title=default_title_for_status(status.HTTP_400_BAD_REQUEST),
+            code=GATEWAY_VKEY_TEAM_PREFIX_UNKNOWN,
+            extra={"slug": exc.slug, "available": exc.available},
+        ),
+    ),
+    (
+        (VkeyAmbiguousModelError,),
+        lambda exc: ProblemContext(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+            title=default_title_for_status(status.HTTP_400_BAD_REQUEST),
+            code=GATEWAY_VKEY_AMBIGUOUS_MODEL,
+            extra={"model": exc.model_name, "team_count": exc.team_count},
+        ),
+    ),
+    (
+        (VkeyGrantTargetNotMemberError,),
+        lambda exc: ProblemContext(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+            title=default_title_for_status(status.HTTP_422_UNPROCESSABLE_ENTITY),
+            code=GATEWAY_GRANT_TARGET_NOT_MEMBER,
+            extra={"tenant_ids": [str(t) for t in exc.tenant_ids]},
         ),
     ),
     (

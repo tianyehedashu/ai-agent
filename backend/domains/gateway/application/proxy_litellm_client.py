@@ -89,8 +89,15 @@ class ProxyLiteLLMClient:
 
         model_resolved = resolved
         if model_resolved is None:
+            # 跨团队聚合 vkey：仅主属 grant 时保留 personal team fallback
+            enable_fb = (
+                ctx.vkey is None
+                or ctx.vkey.is_system
+                or len(ctx.vkey.granted_team_ids) <= 1
+            )
             model_resolved = await resolve_model_or_route(
-                self._session, ctx.team_id, model, user_id=ctx.user_id
+                self._session, ctx.team_id, model, user_id=ctx.user_id,
+                enable_personal_fallback=enable_fb,
             )
         if model_resolved is None:
             return True

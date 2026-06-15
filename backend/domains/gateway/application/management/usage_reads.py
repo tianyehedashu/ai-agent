@@ -320,6 +320,10 @@ class GatewayPlanUsageReadService:
             func.count(GatewayRequestLog.id).label("requests"),
             func.coalesce(func.sum(GatewayRequestLog.input_tokens), 0).label("input_tokens"),
             func.coalesce(func.sum(GatewayRequestLog.output_tokens), 0).label("output_tokens"),
+            func.coalesce(func.sum(GatewayRequestLog.cached_tokens), 0).label("cached_tokens"),
+            func.coalesce(func.sum(GatewayRequestLog.cache_creation_tokens), 0).label(
+                "cache_creation_tokens"
+            ),
             func.coalesce(func.sum(GatewayRequestLog.cost_usd), 0).label("cost_usd"),
         ).where(
             and_(
@@ -332,6 +336,8 @@ class GatewayPlanUsageReadService:
         requests = int(row.requests or 0)
         input_tokens = int(row.input_tokens or 0)
         output_tokens = int(row.output_tokens or 0)
+        cached_tokens = int(row.cached_tokens or 0)
+        cache_creation_tokens = int(row.cache_creation_tokens or 0)
         cost_usd = Decimal(row.cost_usd or 0)
 
         repo = EntitlementPlanRepository(self._session)
@@ -356,6 +362,8 @@ class GatewayPlanUsageReadService:
             requests=requests,
             input_tokens=input_tokens,
             output_tokens=output_tokens,
+            cached_tokens=cached_tokens,
+            cache_creation_tokens=cache_creation_tokens,
             cost_usd=cost_usd,
             charged_usd=charged,
             period_start=start,
@@ -375,6 +383,10 @@ class GatewayPlanUsageReadService:
             func.count(GatewayRequestLog.id).label("requests"),
             func.coalesce(func.sum(GatewayRequestLog.input_tokens), 0).label("input_tokens"),
             func.coalesce(func.sum(GatewayRequestLog.output_tokens), 0).label("output_tokens"),
+            func.coalesce(func.sum(GatewayRequestLog.cached_tokens), 0).label("cached_tokens"),
+            func.coalesce(func.sum(GatewayRequestLog.cache_creation_tokens), 0).label(
+                "cache_creation_tokens"
+            ),
             func.coalesce(func.sum(GatewayRequestLog.cost_usd), 0).label("cost_usd"),
         ).where(
             and_(
@@ -389,6 +401,8 @@ class GatewayPlanUsageReadService:
             requests=int(row.requests or 0),
             input_tokens=int(row.input_tokens or 0),
             output_tokens=int(row.output_tokens or 0),
+            cached_tokens=int(row.cached_tokens or 0),
+            cache_creation_tokens=int(row.cache_creation_tokens or 0),
             cost_usd=Decimal(row.cost_usd or 0),
             period_start=start,
             period_end=end,

@@ -11,7 +11,6 @@ from domains.gateway.application.gateway_model_listing import list_merged_models
 from domains.gateway.application.model_credential_enrichment import (
     build_credential_name_map_for_models,
 )
-from domains.gateway.domain.policies.model_selection import registry_kind_for_merged_row
 from domains.gateway.application.model_list_readable_credentials import (
     readable_team_credential_ids_for_tenant,
     readable_team_credential_ids_for_tenants,
@@ -33,6 +32,7 @@ from domains.gateway.domain.policies.model_registry_scope import (
     is_requestable_registry_scope,
     uses_merged_registry_list,
 )
+from domains.gateway.domain.policies.model_selection import registry_kind_for_merged_row
 from domains.gateway.domain.registry_model_types import (
     ability_filters_via_sql_capability_column,
     registry_row_matches_ability_filter,

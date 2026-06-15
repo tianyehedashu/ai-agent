@@ -175,6 +175,7 @@ def vkey_to_response(record: VirtualKeyReadModel) -> VirtualKeyResponse:
         last_used_at=record.last_used_at,
         usage_count=record.usage_count,
         created_at=record.created_at,
+        granted_team_ids=list(record.granted_team_ids),
     )
 
 

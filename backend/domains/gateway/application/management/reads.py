@@ -44,7 +44,10 @@ from domains.gateway.application.management.usage_reads import (
     MarginSummaryReadModel,
     ProviderPlanCostReadModel,
 )
-from domains.gateway.application.management.virtual_key_read_mappers import virtual_key_from_orm
+from domains.gateway.application.management.virtual_key_read_mappers import (
+    virtual_key_from_orm,
+    virtual_keys_from_orm_with_grants,
+)
 from domains.gateway.application.management.virtual_key_read_model import VirtualKeyReadModel
 from domains.gateway.application.model_list_credential_assertions import (
     assert_personal_model_list_credential_filter,
@@ -122,6 +125,9 @@ from domains.gateway.infrastructure.repositories.system_credential_repository im
 )
 from domains.gateway.infrastructure.repositories.virtual_key_repository import (
     VirtualKeyRepository,
+)
+from domains.gateway.infrastructure.repositories.virtual_key_team_grant_repository import (
+    VirtualKeyTeamGrantRepository,
 )
 from domains.identity.application.api_key_use_case import ApiKeyUseCase
 from domains.identity.application.ports import ApiKeyGatewayGrantQueryPort, UserSummaryQueryPort
@@ -209,7 +215,7 @@ class GatewayManagementReadService(GatewayUsageLogReadMixin):
             keys,
             actor_user_id=actor_user_id,
         )
-        return [virtual_key_from_orm(k) for k in filtered]
+        return await virtual_keys_from_orm_with_grants(self._session, filtered)
 
     async def get_virtual_key_for_team_member(
         self,
@@ -231,7 +237,10 @@ class GatewayManagementReadService(GatewayUsageLogReadMixin):
         )
         if record is None:
             raise VirtualKeyNotFoundError(str(key_id))
-        return virtual_key_from_orm(record)
+        grants = await VirtualKeyTeamGrantRepository(self._session).list_active_tenant_ids(
+            record.id
+        )
+        return virtual_key_from_orm(record, granted_team_ids=grants)
 
     async def list_credentials_for_team(
         self,
@@ -273,16 +282,16 @@ class GatewayManagementReadService(GatewayUsageLogReadMixin):
     ) -> list[CredentialReadModel]:
         """团队内全部 team 凭据摘要 + ACL 过滤后的 system（无密钥；模型绑定下拉用）。"""
         out: list[CredentialReadModel] = []
-        
+
         # 团队凭据
         rows = await self._creds.list_for_tenant(team_id)
         out.extend(credential_from_orm(c) for c in rows)
-        
+
         # 个人凭据（BYOK）
         if user_id is not None:
             user_rows = await self._creds.list_for_user(user_id)
             out.extend(credential_from_orm(c) for c in user_rows)
-        
+
         # 系统凭据
         system_rows = await self._system_creds.list_all()
         visible_system = await filter_visible_system_provider_credentials(
@@ -293,7 +302,7 @@ class GatewayManagementReadService(GatewayUsageLogReadMixin):
             is_platform_admin=is_platform_admin,
         )
         out.extend(system_credential_from_orm(c) for c in visible_system)
-        
+
         return out
 
     async def _visible_credential_ids_for_team(

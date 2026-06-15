@@ -2,24 +2,25 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from domains.identity.application.ports import UserPlatformRoleLookupPort, user_display_label
 from domains.identity.application.user_use_case import UserUseCase
-from domains.tenancy.domain.team_display_label import format_team_display_label
 from domains.tenancy.application.ports import GatewayTeamMembershipSnapshot, TeamSnapshot
 from domains.tenancy.domain.policies.gateway_team_list_visibility import (
     is_visible_in_platform_admin_gateway_list,
 )
+from domains.tenancy.domain.policies.reserved_team_slugs import assert_slug_not_reserved
 from domains.tenancy.domain.policies.team_invite_candidate_scope import (
     SETTINGS_KEY,
     validate_invite_candidate_scope_value,
 )
 from domains.tenancy.domain.policies.team_list_filter import team_metadata_matches_search
 from domains.tenancy.domain.policies.team_role import TeamRole, effective_team_role
+from domains.tenancy.domain.team_display_label import format_team_display_label
 from domains.tenancy.infrastructure.identity_user_role_lookup import (
     user_platform_role_lookup_for_session,
 )
@@ -36,6 +37,9 @@ from libs.exceptions import (
 )
 from libs.iam.tenancy import MembershipPort, TenantId
 
+if TYPE_CHECKING:
+    from domains.gateway.application.ports import VirtualKeyGrantLifecyclePort
+
 
 class TeamService:
     """团队 / 租户作用域管理。"""
@@ -46,6 +50,7 @@ class TeamService:
         *,
         membership: MembershipPort | None = None,
         user_role_lookup: UserPlatformRoleLookupPort | None = None,
+        vkey_grant_lifecycle: VirtualKeyGrantLifecyclePort | None = None,
     ) -> None:
         self._session = session
         self._teams = TeamRepository(session)
@@ -53,6 +58,16 @@ class TeamService:
         self._membership = membership or TenancyMembershipAdapter()
         self._user_role_lookup = user_role_lookup or user_platform_role_lookup_for_session(session)
         self._users = UserUseCase(session)
+        self._vkey_grant_lifecycle = vkey_grant_lifecycle
+
+    def _grant_lifecycle(self) -> VirtualKeyGrantLifecyclePort:
+        if self._vkey_grant_lifecycle is not None:
+            return self._vkey_grant_lifecycle
+        from domains.gateway.application.virtual_key_grant_lifecycle_adapter import (
+            VirtualKeyGrantLifecycleAdapter,
+        )
+
+        return VirtualKeyGrantLifecycleAdapter(self._session)
 
     async def _filter_platform_admin_teams(
         self,
@@ -101,9 +116,11 @@ class TeamService:
         slug: str | None = None,
         settings: dict[str, Any] | None = None,
     ) -> Team:
+        final_slug = slug or f"team-{uuid.uuid4().hex[:8]}"
+        assert_slug_not_reserved(final_slug)
         team = await self._teams.create(
             name=name,
-            slug=slug or f"team-{uuid.uuid4().hex[:8]}",
+            slug=final_slug,
             kind="shared",
             owner_user_id=owner_user_id,
             settings=settings,
@@ -137,6 +154,14 @@ class TeamService:
             return False
         if team.kind == "personal" and team.owner_user_id == user_id:
             raise ValueError("Cannot remove owner from personal team")
+        if await self._members.get(team_id, user_id) is None:
+            return False
+
+        # 先撤销 grant，再移出成员：避免 member 已删但 grant 仍 active 的窗口
+        await self._grant_lifecycle().revoke_for_membership_lost(
+            user_id=user_id,
+            tenant_id=team_id,
+        )
         removed = await self._members.remove(team_id, user_id)
         if removed:
             from domains.tenancy.application.team_cache import invalidate_member
@@ -262,6 +287,7 @@ class TeamService:
             return
         if team.kind == "personal":
             raise ValueError("Cannot delete personal team")
+        await self._grant_lifecycle().revoke_for_team_deleted(tenant_id=team_id)
         await self._teams.delete(team_id)
 
     async def get_display_names_by_ids(

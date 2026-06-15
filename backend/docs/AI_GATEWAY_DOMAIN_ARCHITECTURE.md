@@ -288,6 +288,25 @@ RBAC 与 `libs/db/permission_context.py`：`deps.py` 调用 **`GatewayAccessUseC
 4. `X-Team-Id` 非法返回 400；未命中 grant 返回 403；命中 grant 后仍会校验当前 Key 所属用户仍是团队成员。
 5. 模型、能力与 RPM/TPM 按 grant 生效；日志 metadata 写入 `gateway_platform_api_key_id` 与 `gateway_platform_api_key_grant_id`。
 
+### 4.4.1 虚拟 Key 跨团队授权（`gateway_virtual_key_team_grants`）
+
+**显式 Opt-In**：vkey 创建时写入主属 team 的**自洽 grant**（`is_self=true`）；其他 team **不会自动进入**调用范围，需创建者本人通过管理 API 逐个授权。
+
+| 概念 | 说明 |
+|------|------|
+| **存储** | `gateway_virtual_key_team_grants`：`(virtual_key_id, tenant_id)` 唯一；**无 DB FK**（离线清理 + 生命周期端口保证一致性） |
+| **鉴权** | `VirtualKeyPrincipal.granted_team_ids`（`deps._gateway_principal_from_vkey_plain` 加载 active grants）；`X-Team-Id` 允许落在 **主属 ∪ grants**（与旧行为兼容：grant team 从 400 放宽为 200） |
+| **model 派发** | Router 层（body 反序列化后）经 `gateway_proxy_context.apply_vkey_team_dispatch` → `vkey_team_resolution.dispatch_vkey_model`；仅当首段 slug **∈ granted teams** 时识别为 `{slug}/{model}` 前缀，否则按 vendor/model 或主属解析；`settings.gateway_vkey_strict_team_prefix=true` 时未知前缀 **422**（默认 false=落主属） |
+| **热路径** | 重写 `proxy_body["model"]` 并设 `ctx.team_id = effective_team_id`；审计/预算/限流/metadata 仍读 `ctx.team_id`，**业务管线零侵入**；跨 grants 隐式 fallback **已关闭** |
+| **管理 API** | JWT + 团队路径（挂载于 `team_scoped`）：`GET/POST .../keys/{key_id}/grants`、`DELETE .../grants/{tenant_id}`、`GET .../grants/grantable-teams`；**仅 vkey 创建者本人**可操作；system vkey 全拒 |
+| **生命周期** | `team_service.remove_member` 经 `VirtualKeyGrantLifecyclePort` **先 revoke grant 再删成员**；运维脚本 `scripts/cleanup_stale_vkey_grants.py` 做 set-based 离线补救（非热路径 cron 依赖） |
+| **reserved slug** | `tenancy/domain/policies/reserved_team_slugs.py` 拦截 team 创建/改名与 LiteLLM provider 名冲突 |
+| **错误码** | `GATEWAY_VKEY_AMBIGUOUS_MODEL`（多 grant team 同名模型且无前缀）、`GATEWAY_GRANT_TARGET_NOT_MEMBER`、`GATEWAY_VKEY_TEAM_PREFIX_UNKNOWN`（strict 模式） |
+
+**审计**：日志 `tenant_id` 为实际命中 team；metadata 另写 `gateway_vkey_owner_team_id` 供跨 team 流量分析。EntitlementPlan 仍按 **vkey 维度**（不做 per-grant 套餐）。
+
+**已知限制（P2）**：`GET /v1/models` 暂未合并 granted team 的模型列表；多 team 同名模型需客户端显式 `{slug}/{model}` 或观察 `gateway_vkey_ambiguous_model_invocations_total` 后开启 strict。
+
 ### 4.5 模型注册：主调用面（`capability`）与特性（`tags` / `model_types`）
 
 | 概念 | 含义 | 典型存储 |

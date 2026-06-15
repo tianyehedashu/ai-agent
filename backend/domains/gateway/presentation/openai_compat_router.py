@@ -35,6 +35,7 @@ from domains.gateway.presentation.deps import (
     bearer_vkey_or_apikey_auth,
 )
 from domains.gateway.presentation.gateway_proxy_context import (
+    apply_vkey_team_dispatch,
     proxy_context_from_gateway_principal,
 )
 from domains.gateway.presentation.openai_compat_error_map import (
@@ -76,6 +77,7 @@ async def chat_completions(
     use_case = ProxyUseCase(db)
     ctx = proxy_context_from_request(principal, GatewayCapability.CHAT, request)
     proxy_body = prepare_proxy_body(body, request)
+    await apply_vkey_team_dispatch(ctx, proxy_body, db)
     try:
         result = await use_case.chat_completion(ctx, proxy_body)
     except Exception as exc:
@@ -125,8 +127,10 @@ async def embeddings(
 ) -> Response:
     use_case = ProxyUseCase(db)
     ctx = proxy_context_from_gateway_principal(principal, GatewayCapability.EMBEDDING)
+    proxy_body = _as_proxy_body(body)
+    await apply_vkey_team_dispatch(ctx, proxy_body, db)
     try:
-        result = await use_case.embedding(ctx, _as_proxy_body(body))
+        result = await use_case.embedding(ctx, proxy_body)
     except Exception as exc:
         raise openai_http_exception_from_proxy_business_error(exc) from exc
     return Response(content=orjson.dumps(result), media_type="application/json")
@@ -145,8 +149,10 @@ async def image_generations(
 ) -> Response:
     use_case = ProxyUseCase(db)
     ctx = proxy_context_from_gateway_principal(principal, GatewayCapability.IMAGE)
+    proxy_body = _as_proxy_body(body)
+    await apply_vkey_team_dispatch(ctx, proxy_body, db)
     try:
-        result = await use_case.image_generation(ctx, _as_proxy_body(body))
+        result = await use_case.image_generation(ctx, proxy_body)
     except Exception as exc:
         raise openai_http_exception_from_proxy_business_error(exc) from exc
     return Response(content=orjson.dumps(result), media_type="application/json")
@@ -184,8 +190,10 @@ async def audio_transcriptions(
 
     use_case = ProxyUseCase(db)
     ctx = proxy_context_from_gateway_principal(principal, GatewayCapability.AUDIO_TRANSCRIPTION)
+    proxy_body = _as_proxy_body(body)
+    await apply_vkey_team_dispatch(ctx, proxy_body, db)
     try:
-        result = await use_case.audio_transcription(ctx, _as_proxy_body(body))
+        result = await use_case.audio_transcription(ctx, proxy_body)
     except Exception as exc:
         raise openai_http_exception_from_proxy_business_error(exc) from exc
     return Response(content=orjson.dumps(result), media_type="application/json")
@@ -204,8 +212,10 @@ async def audio_speech(
 ) -> Response:
     use_case = ProxyUseCase(db)
     ctx = proxy_context_from_gateway_principal(principal, GatewayCapability.AUDIO_SPEECH)
+    proxy_body = _as_proxy_body(body)
+    await apply_vkey_team_dispatch(ctx, proxy_body, db)
     try:
-        result = await use_case.audio_speech(ctx, _as_proxy_body(body))
+        result = await use_case.audio_speech(ctx, proxy_body)
     except Exception as exc:
         raise openai_http_exception_from_proxy_business_error(exc) from exc
     if isinstance(result, bytes):
@@ -231,8 +241,10 @@ async def rerank(
 ) -> Response:
     use_case = ProxyUseCase(db)
     ctx = proxy_context_from_gateway_principal(principal, GatewayCapability.RERANK)
+    proxy_body = _as_proxy_body(body)
+    await apply_vkey_team_dispatch(ctx, proxy_body, db)
     try:
-        result = await use_case.rerank(ctx, _as_proxy_body(body))
+        result = await use_case.rerank(ctx, proxy_body)
     except Exception as exc:
         raise openai_http_exception_from_proxy_business_error(exc) from exc
     return Response(content=orjson.dumps(result), media_type="application/json")
@@ -251,8 +263,10 @@ async def moderations(
 ) -> Response:
     use_case = ProxyUseCase(db)
     ctx = proxy_context_from_gateway_principal(principal, GatewayCapability.MODERATION)
+    proxy_body = _as_proxy_body(body)
+    await apply_vkey_team_dispatch(ctx, proxy_body, db)
     try:
-        result = await use_case.moderation(ctx, _as_proxy_body(body))
+        result = await use_case.moderation(ctx, proxy_body)
     except Exception as exc:
         raise openai_http_exception_from_proxy_business_error(exc) from exc
     return Response(content=orjson.dumps(result), media_type="application/json")
@@ -271,8 +285,10 @@ async def videos(
 ) -> Response:
     use_case = ProxyUseCase(db)
     ctx = proxy_context_from_gateway_principal(principal, GatewayCapability.VIDEO_GENERATION)
+    proxy_body = _as_proxy_body(body)
+    await apply_vkey_team_dispatch(ctx, proxy_body, db)
     try:
-        result = await use_case.video_generation(ctx, _as_proxy_body(body))
+        result = await use_case.video_generation(ctx, proxy_body)
     except Exception as exc:
         raise openai_http_exception_from_proxy_business_error(exc) from exc
     return Response(content=orjson.dumps(result), media_type="application/json")

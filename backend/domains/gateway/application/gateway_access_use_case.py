@@ -211,5 +211,13 @@ class GatewayAccessUseCase:
             raise TeamPermissionDeniedError(str(team.id))
         return team, role, grant
 
+    async def list_active_grant_tenant_ids(self, vkey_id: uuid.UUID) -> tuple[uuid.UUID, ...]:
+        """鉴权热路径：返回 vkey 所有 active grant 的 tenant_id。"""
+        from domains.gateway.application.management.virtual_key_team_grant_reads import (
+            list_active_grant_tenant_ids,
+        )
+
+        return await list_active_grant_tenant_ids(self._session, vkey_id)
+
 
 __all__ = ["GatewayAccessUseCase"]

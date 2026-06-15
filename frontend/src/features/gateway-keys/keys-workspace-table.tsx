@@ -110,6 +110,7 @@ export const KeysWorkspaceTable = memo(function KeysWorkspaceTable({
                 {showBudgetsColumn ? (
                   <th className="px-4 py-2 text-left font-medium">平台预算</th>
                 ) : null}
+                <th className="px-4 py-2 text-left font-medium">跨 team 派发</th>
                 <th className="px-4 py-2 text-left font-medium">状态</th>
                 <th className="px-4 py-2 text-left font-medium" />
               </tr>

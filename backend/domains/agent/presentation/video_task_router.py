@@ -17,11 +17,11 @@ from domains.agent.application.video_prompt_optimize_use_case import (
 )
 from domains.agent.application.video_task_use_case import VideoTaskUseCase
 from domains.gateway.application.sql_model_catalog import get_model_catalog_adapter
-from domains.identity.presentation.deps import AuthUser
+from domains.identity.presentation.deps import AuthUser, OptionalUser
 from libs.api.deps import get_video_task_service
 from libs.api.params import parse_optional_uuid
 from libs.db.database import get_db
-from libs.exceptions import ValidationError
+from libs.exceptions import AuthenticationError, PermissionDeniedError, ValidationError
 
 router = APIRouter()
 
@@ -225,10 +225,18 @@ async def list_video_tasks(
 @router.post("/", response_model=VideoTaskResponse, status_code=status.HTTP_201_CREATED)
 async def create_video_task(
     data: VideoTaskCreate,
-    current_user: AuthUser,
+    current_user: OptionalUser,
     video_task_service: VideoTaskUseCase = Depends(get_video_task_service),
 ) -> VideoTaskResponse:
     """创建视频生成任务"""
+    if current_user is None:
+        if data.session_id:
+            raise PermissionDeniedError(
+                message="Cannot use session without authentication",
+                resource="Session",
+            )
+        raise AuthenticationError("Authentication required")
+
     vendor_creator_id = current_user.vendor_creator_id
     session_uuid = parse_optional_uuid(data.session_id, "session_id")
 
