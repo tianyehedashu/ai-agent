@@ -1,4 +1,9 @@
-"""诊断指定团队模型的 Router deployment 状态。"""
+"""诊断指定团队模型的 Router deployment 状态。
+
+用法:
+    cd backend && uv run python scripts/diagnose_router_deployment.py
+    cd backend && uv run python scripts/diagnose_router_deployment.py --call
+"""
 
 from __future__ import annotations
 
