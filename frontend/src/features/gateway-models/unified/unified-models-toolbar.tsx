@@ -21,6 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { ConnectivityHealthStrip } from '@/features/gateway-models/connectivity-health-strip'
 import { FILTER_ALL, type HealthFilter } from '@/features/gateway-models/constants'
 import {
   shouldShowUnifiedTeamFilter,
@@ -113,6 +114,17 @@ export const UnifiedModelsToolbar = memo(function UnifiedModelsToolbar({
   showAdd = false,
   onAdd,
   showBatchOps = false,
+  connectivityModels = [],
+  canWrite = false,
+  onTestAll,
+  onTestUntested,
+  untestedTestableCount = 0,
+  testingAll = false,
+  batchBusy = false,
+  onResyncAll,
+  resyncingAll = false,
+  onDeleteFailed,
+  deletingFailed = false,
   deleteAllFilteredSlot,
 }: UnifiedModelsToolbarProps): React.JSX.Element {
   const countByKey = {
@@ -191,30 +203,6 @@ export const UnifiedModelsToolbar = memo(function UnifiedModelsToolbar({
           />
         ) : null}
 
-        <Select
-          value={healthFilter}
-          onValueChange={(v) => {
-            onHealthFilterChange(v as HealthFilter)
-          }}
-        >
-          <SelectTrigger className="h-8 w-[120px] text-xs lg:hidden">
-            <SelectValue placeholder="状态" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">全部状态</SelectItem>
-            <SelectItem value="success">可用</SelectItem>
-            <SelectItem value="failed">不可用</SelectItem>
-            <SelectItem value="unknown">未测</SelectItem>
-          </SelectContent>
-        </Select>
-
-        {!showBatchOps && connectivitySummary.total > 0 ? (
-          <span className="text-xs tabular-nums text-muted-foreground">
-            可用 {connectivitySummary.success} · 不可用 {connectivitySummary.failed} · 未测{' '}
-            {connectivitySummary.unknown}
-          </span>
-        ) : null}
-
         <div className="ml-auto flex flex-wrap items-center gap-2">
           <div className="relative min-w-[200px] max-w-xs flex-1 sm:flex-none">
             <Search className="pointer-events-none absolute left-2.5 top-2 h-4 w-4 text-muted-foreground" />
@@ -260,7 +248,22 @@ export const UnifiedModelsToolbar = memo(function UnifiedModelsToolbar({
         </div>
       </div>
 
-      {/* 探活条与批量测试已移至选中批量操作；避免占用主界面打断浏览 */}
+      <ConnectivityHealthStrip
+        models={connectivityModels}
+        connectivitySummary={connectivitySummary}
+        healthFilter={healthFilter}
+        onHealthFilterChange={onHealthFilterChange}
+        canWrite={showBatchOps && canWrite}
+        onTestAll={showBatchOps ? onTestAll : undefined}
+        onTestUntested={showBatchOps ? onTestUntested : undefined}
+        untestedTestableCount={untestedTestableCount}
+        testingAll={testingAll}
+        batchBusy={batchBusy}
+        onResyncAll={showBatchOps ? onResyncAll : undefined}
+        resyncingAll={resyncingAll}
+        onDeleteFailed={showBatchOps ? onDeleteFailed : undefined}
+        deletingFailed={deletingFailed}
+      />
     </div>
   )
 })
