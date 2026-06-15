@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
+import type { ModelType } from '@/types/user-model'
+
 import {
   personalModelInspectorContext,
   personalModelToInspectorModel,
@@ -16,7 +18,7 @@ describe('personal-model-inspector-adapter', () => {
     has_api_key: true,
     api_base: null,
     credential_id: 'cred-1',
-    model_types: ['text', 'image'] as const,
+    model_types: ['text', 'image'] as ModelType[],
     config: null,
     is_active: true,
     is_system: false,
