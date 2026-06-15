@@ -35,6 +35,13 @@ import { ArrowLeft, Check, ChevronRight, Loader2, Pencil, Trash2, X } from '@/li
 import { cn } from '@/lib/utils'
 
 import { BudgetModelCombobox } from './budget-model-combobox'
+import {
+  expandBatchFormValues,
+  patchQuotaBatchFormForLayer,
+  patchQuotaBatchFormForSubjectMode,
+  type QuotaBatchFormValues,
+} from './quota-batch-form'
+import { upstreamModelAllowedOnCredential } from './quota-batch-rules'
 import { QUOTA_TEMPLATES, applyQuotaTemplate } from './quota-batch-templates'
 import { LAYER_LABELS } from './quota-rule-utils'
 import {
@@ -43,13 +50,9 @@ import {
   resolveQuotaWindowPreset,
   type QuotaWindowPresetValue,
 } from './quota-window-presets'
-import {
-  patchQuotaBatchFormForLayer,
-  patchQuotaBatchFormForSubjectMode,
-  type QuotaBatchFormValues,
-} from './use-quota-center'
 
 import type { BudgetModelOption } from './budget-model-options'
+import type { RealModelsByCredential } from './quota-batch-rules'
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -83,6 +86,8 @@ export interface QuotaBatchWizardProps {
   onModelPickerOpenChange?: (open: boolean) => void
   /** 编辑模式：锁定维度字段不可改，标题显示「编辑配额」 */
   editingRuleId?: string | null
+  /** 上游层：凭据→real_model，用于预览/计数过滤非法组合 */
+  upstreamRealModelsByCredential?: RealModelsByCredential
 }
 
 type Step = 1 | 2 | 3
@@ -105,7 +110,11 @@ function useFilteredOptions(
 /** 展开批量表单为预览规则列表（复用 buildBatchRules 逻辑的简化版） */
 function expandPreviewRules(
   values: QuotaBatchFormValues,
-  teamName?: string
+  teamName?: string,
+  options?: {
+    credentialIds?: readonly string[]
+    realModelsByCredential?: RealModelsByCredential
+  }
 ): {
   layer: string
   subject: string
@@ -120,6 +129,10 @@ function expandPreviewRules(
   const lt = values.limit_tokens.trim() ? values.limit_tokens : ''
   const lr = values.limit_requests.trim() ? values.limit_requests : ''
   const models = values.allModels ? [null] : values.modelNames.map((m) => m || null)
+  const effectiveValues =
+    values.layer === 'upstream' && options?.credentialIds
+      ? expandBatchFormValues(values, options.credentialIds)
+      : values
   const periodLabel =
     values.layer === 'platform'
       ? values.period === 'daily'
@@ -171,13 +184,16 @@ function expandPreviewRules(
       }
     }
   } else if (values.layer === 'upstream') {
-    const creds = values.allCredentials ? [null] : values.credentialIds
+    const creds = effectiveValues.credentialIds
     for (const credId of creds) {
       for (const model of models) {
+        if (!upstreamModelAllowedOnCredential(credId, model, options?.realModelsByCredential)) {
+          continue
+        }
         rows.push({
           layer: '上游',
           subject: '—',
-          credential: credId ? credId.slice(0, 8) : '全部凭据',
+          credential: credId.slice(0, 8),
           model: model ?? '全模型',
           period: periodLabel,
           usd: lu,
@@ -206,8 +222,15 @@ function expandPreviewRules(
 }
 
 /** 计算当前选择将生成的规则数（轻量版，不构建完整 body） */
-function estimateRuleCount(values: QuotaBatchFormValues): number {
+function estimateRuleCount(
+  values: QuotaBatchFormValues,
+  options?: {
+    credentialIds?: readonly string[]
+    realModelsByCredential?: RealModelsByCredential
+  }
+): number {
   const modelCount = values.allModels ? 1 : Math.max(values.modelNames.length, 1)
+  const models = values.allModels ? [null] : values.modelNames.map((m) => m || null)
   if (values.layer === 'platform') {
     if (values.subjectMode === 'tenant') {
       return modelCount
@@ -219,8 +242,22 @@ function estimateRuleCount(values: QuotaBatchFormValues): number {
     return values.keyIds.length * modelCount
   }
   if (values.layer === 'upstream') {
-    const credCount = values.allCredentials ? 1 : Math.max(values.credentialIds.length, 1)
-    return credCount * modelCount
+    const effectiveValues =
+      options?.credentialIds !== undefined
+        ? expandBatchFormValues(values, options.credentialIds)
+        : values
+    const creds = effectiveValues.credentialIds
+    if (creds.length === 0) return 0
+    if (values.allModels) return creds.length
+    let count = 0
+    for (const credId of creds) {
+      for (const model of models) {
+        if (upstreamModelAllowedOnCredential(credId, model, options?.realModelsByCredential)) {
+          count += 1
+        }
+      }
+    }
+    return count
   }
   return values.keyIds.length * modelCount
 }
@@ -470,10 +507,24 @@ function StepTarget({
   credentialOptions,
   metaLoading,
   editingRuleId,
+  upstreamRealModelsByCredential,
 }: QuotaBatchWizardProps): React.JSX.Element {
   const isEditing = !!editingRuleId
   const isMember = mode === 'member'
-  const estimatedCount = useMemo(() => estimateRuleCount(values), [values])
+  const pickerCredentialIds = useMemo(() => credentialOptions.map((c) => c.id), [credentialOptions])
+
+  const upstreamEstimateOptions = useMemo(
+    () => ({
+      credentialIds: pickerCredentialIds,
+      realModelsByCredential: upstreamRealModelsByCredential,
+    }),
+    [pickerCredentialIds, upstreamRealModelsByCredential]
+  )
+
+  const estimatedCount = useMemo(
+    () => estimateRuleCount(values, upstreamEstimateOptions),
+    [values, upstreamEstimateOptions]
+  )
 
   return (
     <div className="space-y-5">
@@ -1018,9 +1069,21 @@ function StepPreview({
   pending,
   mode,
   teamName,
+  credentialOptions,
+  upstreamRealModelsByCredential,
 }: QuotaBatchWizardProps & { previewCount: number }): React.JSX.Element {
   const isMember = mode === 'member'
-  const rows = useMemo(() => expandPreviewRules(values, teamName), [values, teamName])
+  const previewOptions = useMemo(
+    () => ({
+      credentialIds: credentialOptions.map((c) => c.id),
+      realModelsByCredential: upstreamRealModelsByCredential,
+    }),
+    [credentialOptions, upstreamRealModelsByCredential]
+  )
+  const rows = useMemo(
+    () => expandPreviewRules(values, teamName, previewOptions),
+    [values, teamName, previewOptions]
+  )
 
   return (
     <div className="space-y-4">
@@ -1120,7 +1183,18 @@ export function QuotaBatchWizard(props: QuotaBatchWizardProps): React.JSX.Elemen
     previewCount,
     mode = 'admin',
     editingRuleId,
+    credentialOptions,
+    upstreamRealModelsByCredential,
+    modelsLoading,
   } = props
+
+  const upstreamEstimateOptions = useMemo(
+    () => ({
+      credentialIds: credentialOptions.map((c) => c.id),
+      realModelsByCredential: upstreamRealModelsByCredential,
+    }),
+    [credentialOptions, upstreamRealModelsByCredential]
+  )
 
   const isMember = mode === 'member'
   const isEditing = !!editingRuleId
@@ -1160,7 +1234,12 @@ export function QuotaBatchWizard(props: QuotaBatchWizardProps): React.JSX.Elemen
         values.limit_tokens.trim() !== '' ||
         values.limit_requests.trim() !== ''
       if (!values.allModels && values.modelNames.length === 0) return false
-      return hasLimit
+      if (!hasLimit) return false
+      if (values.layer === 'upstream' && !values.allModels) {
+        if (modelsLoading) return false
+        if (estimateRuleCount(values, upstreamEstimateOptions) === 0) return false
+      }
+      return true
     }
     return true
   }

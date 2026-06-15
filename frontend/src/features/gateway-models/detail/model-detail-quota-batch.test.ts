@@ -22,11 +22,12 @@ describe('model detail quota batch payload', () => {
     })
   })
 
-  it('builds upstream rule with credential and model', () => {
+  it('builds upstream rule with credential and real_model', () => {
     const form = buildModelQuotaDefaultForm({
       modelName: 'alias-model',
       credentialId: 'cred-1',
       layer: 'upstream',
+      upstreamRealModel: 'openai/gpt-4o-mini',
     })
     const withLimits = { ...form, limit_tokens: '500000' }
     const rules = buildBatchRules(withLimits)
@@ -34,7 +35,7 @@ describe('model detail quota batch payload', () => {
     expect(rules?.[0]).toMatchObject({
       layer: 'upstream',
       credential_id: 'cred-1',
-      model_name: 'alias-model',
+      model_name: 'openai/gpt-4o-mini',
       limit_tokens: 500000,
     })
   })

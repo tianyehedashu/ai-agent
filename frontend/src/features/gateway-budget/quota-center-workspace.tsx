@@ -105,6 +105,7 @@ export function QuotaCenterWorkspace(): React.JSX.Element {
           modelOptionMetaLabel={ws.batchModelOptionMetaLabel}
           onModelPickerOpenChange={ws.onModelPickerOpenChange}
           editingRuleId={ws.editingRuleId}
+          upstreamRealModelsByCredential={ws.upstreamRealModelsByCredential}
         />
       </Suspense>
     )

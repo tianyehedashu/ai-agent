@@ -119,7 +119,8 @@ sequenceDiagram
 2. **成员归属** `_assert_budget_target_in_team`（复用 `budget_scope_policy`）。
 3. **凭据归属** `_assert_credential_in_team`（`credential_id` 非空时）：仅当前 tenant 凭据或平台管理员 system 凭据；**BYOK `scope=user` 自动拒绝**。
 4. **模型归属** `_assert_model_alias_on_credential`（`credential_id` + `model_name` 都非空时）：别名须在该凭据下已注册。
-5. **唯一性**：DB 部分唯一索引冲突 → 友好 `ValidationError`。
+5. **上游模型归属** `_upsert_upstream_quota_rule` 与凭据页 `create_provider_plan` / `update_provider_plan`（`real_model` 非空时）均调用 `_assert_real_model_on_credential`：`model_name` 为上游 **real_model**（LiteLLM id），须已在该凭据的 `gateway_models` / `system_gateway_models` 注册；`model_name=null` 表示整凭据套餐（`provider_plans.real_model IS NULL`），不做此项校验。
+6. **唯一性**：DB 部分唯一索引冲突 → 友好 `ValidationError`。
 
 写成功后三条缓存线均失效：`invalidate_gateway_budget_config_cache`（配置 cache）+ `invalidate_gateway_quota_rule_cache_for_team`（读侧列表）+ 维护 `gw:budget_uc:{user_id}` 存在性索引。
 

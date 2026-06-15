@@ -228,6 +228,14 @@ class GatewayManagementWriteBaseMixin:
                 f"模型别名 {model_name!r} 未注册在该凭据下；多凭据路由请使用「别名--凭据」具体别名"
             )
 
+    async def _assert_real_model_on_credential(
+        self, credential_id: uuid.UUID, real_model: str
+    ) -> None:
+        """上游配额的 ``real_model`` 须为该凭据下已注册模型的上游 id。"""
+        pairs = await self._models.list_name_real_model_pairs_for_credential(credential_id)
+        if real_model not in {rm for _, rm in pairs}:
+            raise ValidationError(f"上游模型 {real_model!r} 未注册在该凭据下")
+
     async def _assert_provider_plan_in_credential(
         self, plan_id: uuid.UUID, *, credential_id: uuid.UUID
     ) -> ProviderPlan:

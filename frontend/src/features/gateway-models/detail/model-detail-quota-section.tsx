@@ -7,6 +7,7 @@ import {
   matchQuotaRulesForContext,
   type BudgetViewContext,
 } from '@/features/gateway-budget/budget-match'
+import { buildRealModelsByCredentialMap } from '@/features/gateway-budget/quota-batch-rules'
 import { quotaListParamsForContext } from '@/features/gateway-budget/quota-rule-utils'
 import { useGatewayQuotaRules } from '@/features/gateway-budget/use-gateway-quota-rules'
 import { useQuotaBatchSubmit } from '@/features/gateway-budget/use-quota-batch-submit'
@@ -89,10 +90,25 @@ export function ModelDetailQuotaSection({
 
   const [formMode, setFormMode] = useState<FormMode>({ kind: 'closed' })
 
+  const upstreamBatchRuleOptions = useMemo(
+    () => ({
+      realModelsByCredential: buildRealModelsByCredentialMap({
+        teamModels: isPersonal
+          ? []
+          : [{ credential_id: model.credential_id, real_model: model.real_model }],
+        personalModels: isPersonal
+          ? [{ credential_id: model.credential_id, model_id: model.real_model }]
+          : [],
+      }),
+    }),
+    [isPersonal, model.credential_id, model.real_model]
+  )
+
   const { submitForm, deleteRule, batchPending, deletePending } = useQuotaBatchSubmit({
     teamId,
     mode,
     selfUserId: userId,
+    buildBatchRulesOptions: upstreamBatchRuleOptions,
     onSuccess: () => {
       setFormMode({ kind: 'closed' })
     },

@@ -44,7 +44,11 @@ import {
   type QuotaBatchFormValues,
 } from './quota-batch-form'
 import { quotaRuleToBatchFormValues, type EditingRuleInfo } from './quota-batch-from-rule'
-import { buildBatchRules } from './quota-batch-rules'
+import {
+  buildBatchRules,
+  buildRealModelsByCredentialMap,
+  type RealModelsByCredential,
+} from './quota-batch-rules'
 import { executeQuotaBatchUpsert } from './quota-batch-upsert'
 import { quotaRuleRowId, type QuotaRuleLabelContext } from './quota-rule-utils'
 import { gatewayBudgetsBaseQueryKey } from './use-gateway-budgets'
@@ -111,6 +115,7 @@ export interface QuotaCenterState {
   batchModelOptionMetaLabel?: (option: BudgetModelOption) => string
   onModelPickerOpenChange?: (open: boolean) => void
   batchPreviewCount: number
+  upstreamRealModelsByCredential: RealModelsByCredential
   /** 当前处于编辑状态的规则信息；null 表示创建/批量模式 */
   editingRuleId: string | null
   onEditRule: (rule: QuotaRule) => void
@@ -325,6 +330,14 @@ function useQuotaCenterImpl(): QuotaCenterState {
 
   const memberUpstreamMode = mode === 'member' && batchValues.layer === 'upstream'
 
+  const upstreamPickerHasUserScope = useMemo(() => {
+    if (memberUpstreamMode || upstreamCredentialIds.length === 0) return false
+    const credSet = new Set(upstreamCredentialIds)
+    return pickerCredentials.some((c) => credSet.has(c.id) && c.scope === 'user')
+  }, [memberUpstreamMode, upstreamCredentialIds, pickerCredentials])
+
+  const needsUpstreamPersonalModels = memberUpstreamMode || upstreamPickerHasUserScope
+
   const upstreamTeamModelsQuery = useQuery({
     queryKey: [
       'gateway',
@@ -352,7 +365,7 @@ function useQuotaCenterImpl(): QuotaCenterState {
     enabled:
       batchOpen &&
       batchValues.layer === 'upstream' &&
-      memberUpstreamMode &&
+      needsUpstreamPersonalModels &&
       upstreamCredentialIds.length > 0,
     staleTime: GATEWAY_MODELS_STALE_MS,
   })
@@ -364,12 +377,12 @@ function useQuotaCenterImpl(): QuotaCenterState {
   }, [memberUpstreamMode, upstreamCredentialIds, upstreamTeamModelsQuery.data])
 
   const upstreamPersonalModelsForSelection = useMemo((): PersonalGatewayModel[] => {
-    if (!memberUpstreamMode) return []
+    if (!needsUpstreamPersonalModels) return []
     const credSet = new Set(upstreamCredentialIds)
     return (upstreamPersonalModelsQuery.data ?? []).filter((model) =>
       credSet.has(model.credential_id)
     )
-  }, [memberUpstreamMode, upstreamCredentialIds, upstreamPersonalModelsQuery.data])
+  }, [needsUpstreamPersonalModels, upstreamCredentialIds, upstreamPersonalModelsQuery.data])
 
   const upstreamModelAliasByReal = useMemo(() => {
     const map = new Map<string, string>()
@@ -385,6 +398,25 @@ function useQuotaCenterImpl(): QuotaCenterState {
     }
     return map
   }, [upstreamPersonalModelsForSelection, upstreamTeamModelsForSelection])
+
+  const upstreamRealModelsByCredential = useMemo(
+    () =>
+      buildRealModelsByCredentialMap({
+        teamModels: memberUpstreamMode ? [] : upstreamTeamModelsForSelection,
+        personalModels: needsUpstreamPersonalModels ? upstreamPersonalModelsForSelection : [],
+      }),
+    [
+      memberUpstreamMode,
+      needsUpstreamPersonalModels,
+      upstreamPersonalModelsForSelection,
+      upstreamTeamModelsForSelection,
+    ]
+  )
+
+  const upstreamBatchRuleOptions = useMemo(
+    () => ({ realModelsByCredential: upstreamRealModelsByCredential }),
+    [upstreamRealModelsByCredential]
+  )
 
   const batchModelOptions = useMemo(() => {
     if (batchValues.layer !== 'upstream') {
@@ -447,8 +479,8 @@ function useQuotaCenterImpl(): QuotaCenterState {
         keyIds: [],
       }
     }
-    return buildBatchRules(v)?.length ?? 0
-  }, [resolvedBatchValues, mode, selfUserId])
+    return buildBatchRules(v, upstreamBatchRuleOptions)?.length ?? 0
+  }, [resolvedBatchValues, mode, selfUserId, upstreamBatchRuleOptions])
 
   const memberOptions = useMemo(
     () =>
@@ -499,7 +531,7 @@ function useQuotaCenterImpl(): QuotaCenterState {
       // 直接按表单值提交（维度已锁定，仅限额变更）。
       formValues = resolvedBatchValues
     }
-    const rules = buildBatchRules(formValues)
+    const rules = buildBatchRules(formValues, upstreamBatchRuleOptions)
     if (!rules || rules.length === 0) {
       toast({
         title: '请完善表单',
@@ -513,7 +545,15 @@ function useQuotaCenterImpl(): QuotaCenterState {
       return
     }
     batchMutation.mutate(rules)
-  }, [resolvedBatchValues, batchMutation, toast, mode, selfUserId, editingRuleId])
+  }, [
+    resolvedBatchValues,
+    batchMutation,
+    toast,
+    mode,
+    selfUserId,
+    editingRuleId,
+    upstreamBatchRuleOptions,
+  ])
 
   const confirmDelete = useCallback(
     (rule: QuotaRule) => {
@@ -727,13 +767,14 @@ function useQuotaCenterImpl(): QuotaCenterState {
     modelsLoading: modelPages.isLoading || routesQuery.isLoading,
     batchModelsLoading:
       batchValues.layer === 'upstream'
-        ? memberUpstreamMode
+        ? memberUpstreamMode || upstreamPickerHasUserScope
           ? upstreamPersonalModelsQuery.isLoading
           : upstreamTeamModelsQuery.isLoading
         : modelPages.isLoading || routesQuery.isLoading,
     batchModelOptionMetaLabel,
     onModelPickerOpenChange: modelPages.onPickerOpenChange,
     batchPreviewCount,
+    upstreamRealModelsByCredential,
     editingRuleId,
     onEditRule,
     deleteEditingRule,

@@ -7,7 +7,7 @@ import { gatewayApi } from '@/api/gateway'
 import { useActorCredentialSummaries } from '@/features/gateway-credentials/hooks/use-actor-credential-summaries'
 import { useToast } from '@/hooks/use-toast'
 
-import { buildBatchRules } from './quota-batch-rules'
+import { buildBatchRules, type BuildBatchRulesOptions } from './quota-batch-rules'
 import { collectQuotaBatchInvalidationTeamIds, executeQuotaBatchUpsert } from './quota-batch-upsert'
 import { gatewayBudgetsBaseQueryKey } from './use-gateway-budgets'
 import { gatewayQuotaRulesBaseQueryKey } from './use-gateway-quota-rules'
@@ -20,6 +20,8 @@ interface UseQuotaBatchSubmitOptions {
   mode: QuotaCenterMode
   selfUserId?: string | null
   onSuccess?: () => void
+  /** upstream 层批量展开时过滤非法凭据×模型组合 */
+  buildBatchRulesOptions?: BuildBatchRulesOptions
 }
 
 function invalidateQuotaCaches(
@@ -37,6 +39,7 @@ export function useQuotaBatchSubmit({
   mode,
   selfUserId = null,
   onSuccess,
+  buildBatchRulesOptions,
 }: UseQuotaBatchSubmitOptions): {
   submitForm: (values: QuotaBatchFormValues) => void
   deleteRule: (budgetId: string) => void
@@ -118,7 +121,19 @@ export function useQuotaBatchSubmit({
           keyIds: [],
         }
       }
-      const rules = buildBatchRules(values)
+      if (
+        values.layer === 'upstream' &&
+        values.credentialIds.length > 1 &&
+        buildBatchRulesOptions?.realModelsByCredential === undefined
+      ) {
+        toast({
+          title: '无法批量设置',
+          description: '多凭据上游配额请从配额中心设置。',
+          variant: 'destructive',
+        })
+        return
+      }
+      const rules = buildBatchRules(values, buildBatchRulesOptions)
       if (!rules || rules.length === 0) {
         toast({
           title: '请完善表单',
@@ -133,7 +148,7 @@ export function useQuotaBatchSubmit({
       }
       batchMutation.mutate(rules)
     },
-    [batchMutation, mode, selfUserId, toast]
+    [batchMutation, mode, selfUserId, toast, buildBatchRulesOptions]
   )
 
   const deleteRule = useCallback(

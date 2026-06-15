@@ -229,3 +229,61 @@ async def test_upstream_cache_invalidates_all_membership_teams() -> None:
 
     assert provider_plan_cache_invalidated
     assert set(invalidated) == {tenant_id, other_team_id}
+
+
+@pytest.mark.asyncio
+async def test_upsert_upstream_validates_real_model_on_credential() -> None:
+    """上游配额写入前校验 real_model 已在凭据注册。"""
+    svc = _writes()
+    tenant_id = uuid.uuid4()
+    actor_user_id = uuid.uuid4()
+    cred_id = uuid.uuid4()
+
+    svc._assert_upstream_credential_writable = AsyncMock(return_value=tenant_id)  # type: ignore[method-assign]
+    svc._assert_real_model_on_credential = AsyncMock()  # type: ignore[method-assign]
+    svc._provider_plans.get_active_for_credential_model = AsyncMock(return_value=None)  # type: ignore[method-assign]
+    svc._provider_plans.create = AsyncMock()  # type: ignore[method-assign]
+    svc._provider_plans.list_quotas = AsyncMock(return_value=[])  # type: ignore[method-assign]
+    svc._provider_plans.replace_quotas = AsyncMock()  # type: ignore[method-assign]
+
+    await svc._upsert_upstream_quota_rule(
+        QuotaRuleUpsertCommand(
+            layer="upstream",
+            credential_id=cred_id,
+            model_name="gpt-4o",
+            limit_usd=Decimal("10"),
+        ),
+        tenant_id=tenant_id,
+        actor_user_id=actor_user_id,
+        is_platform_admin=False,
+    )
+
+    svc._assert_real_model_on_credential.assert_awaited_once_with(cred_id, "gpt-4o")
+
+
+@pytest.mark.asyncio
+async def test_create_provider_plan_validates_real_model_on_credential() -> None:
+    """凭据 API 创建 ProviderPlan 时校验 real_model 已在凭据注册。"""
+    from datetime import UTC, datetime, timedelta
+
+    svc = _writes()
+    tenant_id = uuid.uuid4()
+    cred_id = uuid.uuid4()
+    now = datetime.now(UTC)
+
+    svc._assert_credential_in_team = AsyncMock()  # type: ignore[method-assign]
+    svc._assert_real_model_on_credential = AsyncMock()  # type: ignore[method-assign]
+    svc._provider_plans.create = AsyncMock(return_value=MagicMock(id=uuid.uuid4()))  # type: ignore[method-assign]
+    svc._invalidate_upstream_quota_rule_list_cache = AsyncMock()  # type: ignore[method-assign]
+
+    await svc.create_provider_plan(
+        credential_id=cred_id,
+        tenant_id=tenant_id,
+        is_platform_admin=False,
+        real_model="openai/gpt-4o-mini",
+        label="pack",
+        valid_from=now,
+        valid_until=now + timedelta(days=30),
+    )
+
+    svc._assert_real_model_on_credential.assert_awaited_once_with(cred_id, "openai/gpt-4o-mini")

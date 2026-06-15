@@ -4,8 +4,59 @@ import { parseOptionalInt, parseOptionalUsd } from './budget-form-utils'
 
 import type { QuotaBatchFormValues } from './quota-batch-form'
 
+export type RealModelsByCredential = ReadonlyMap<string, readonly string[]>
+
+export interface BuildBatchRulesOptions {
+  /** 上游层：凭据 id → 已注册 real_model 列表；用于过滤非法笛卡尔积 */
+  realModelsByCredential?: RealModelsByCredential
+}
+
+/** 从团队/个人模型列表构建 upstream 凭据→real_model 映射 */
+export function buildRealModelsByCredentialMap(input: {
+  teamModels?: readonly { credential_id: string; real_model: string }[]
+  personalModels?: readonly { credential_id: string; model_id: string }[]
+}): RealModelsByCredential {
+  const map = new Map<string, Set<string>>()
+  const add = (credId: string, realModel: string): void => {
+    const trimmed = realModel.trim()
+    if (!trimmed) return
+    let set = map.get(credId)
+    if (!set) {
+      set = new Set()
+      map.set(credId, set)
+    }
+    set.add(trimmed)
+  }
+  for (const model of input.teamModels ?? []) {
+    add(model.credential_id, model.real_model)
+  }
+  for (const model of input.personalModels ?? []) {
+    add(model.credential_id, model.model_id)
+  }
+  const result = new Map<string, readonly string[]>()
+  for (const [credId, set] of map) {
+    result.set(credId, [...set])
+  }
+  return result
+}
+
+export function upstreamModelAllowedOnCredential(
+  credId: string,
+  model: string | null,
+  realModelsByCredential?: RealModelsByCredential
+): boolean {
+  if (model === null) return true
+  // 无映射时不过滤，由后端 _assert_real_model_on_credential 兜底
+  if (!realModelsByCredential) return true
+  const allowed = realModelsByCredential.get(credId)
+  return allowed?.includes(model) ?? false
+}
+
 /** 将批量表单展开为 upsert 规则列表；至少一项限额且主体/模型有效。 */
-export function buildBatchRules(values: QuotaBatchFormValues): QuotaRuleUpsertBody[] | null {
+export function buildBatchRules(
+  values: QuotaBatchFormValues,
+  options?: BuildBatchRulesOptions
+): QuotaRuleUpsertBody[] | null {
   const lu = parseOptionalUsd(values.limit_usd)
   const lt = parseOptionalInt(values.limit_tokens)
   const lr = parseOptionalInt(values.limit_requests)
@@ -60,14 +111,19 @@ export function buildBatchRules(values: QuotaBatchFormValues): QuotaRuleUpsertBo
     if (!values.allCredentials && creds.length === 0) return null
     const credentialTargets = values.allCredentials ? [null] : creds
     const ws = parseOptionalInt(values.windowSeconds) ?? 0
+    const realModelsByCredential = options?.realModelsByCredential
     for (const credId of credentialTargets) {
+      if (credId === null) continue
       for (const model of models) {
+        if (!upstreamModelAllowedOnCredential(credId, model, realModelsByCredential)) {
+          continue
+        }
         const body: QuotaRuleUpsertBody = {
           layer: 'upstream',
           window_seconds: ws,
           quota_label: values.quotaLabel.trim() || 'default',
         }
-        if (credId) body.credential_id = credId
+        body.credential_id = credId
         if (model) body.model_name = model
         if (lu !== null) body.limit_usd = lu
         if (lt !== null) body.limit_tokens = lt
@@ -75,7 +131,7 @@ export function buildBatchRules(values: QuotaBatchFormValues): QuotaRuleUpsertBo
         rules.push(body)
       }
     }
-    return rules
+    return rules.length > 0 ? rules : null
   }
 
   const ws = parseOptionalInt(values.windowSeconds) ?? 0

@@ -17,13 +17,16 @@ export function buildModelQuotaDefaultForm(options: {
   layer?: QuotaRuleLayer
   selfUserId?: string | null
   memberMode?: boolean
+  /** upstream 层使用 real_model（非 Gateway 别名） */
+  upstreamRealModel?: string
 }): QuotaBatchFormValues {
   const layer = options.layer ?? 'platform'
+  const upstreamModel = options.upstreamRealModel ?? options.modelName
   const base: QuotaBatchFormValues = {
     ...DEFAULT_BATCH_FORM,
     layer,
     allModels: false,
-    modelNames: [options.modelName],
+    modelNames: [layer === 'upstream' ? upstreamModel : options.modelName],
     allCredentials: false,
     credentialIds: layer === 'upstream' ? [options.credentialId] : [],
   }

@@ -114,6 +114,22 @@ export function buildUpstreamQuotaModelOptions(input: {
   for (const raw of input.existingModelNames) {
     const name = (raw ?? '').trim()
     if (!name || seenReal.has(name)) continue
+    let onSelectedCred = false
+    for (const model of input.models ?? []) {
+      if (credSet.has(model.credential_id) && model.real_model.trim() === name) {
+        onSelectedCred = true
+        break
+      }
+    }
+    if (!onSelectedCred) {
+      for (const model of input.personalModels ?? []) {
+        if (credSet.has(model.credential_id) && model.model_id.trim() === name) {
+          onSelectedCred = true
+          break
+        }
+      }
+    }
+    if (!onSelectedCred) continue
     seenReal.add(name)
     options.push({
       name,

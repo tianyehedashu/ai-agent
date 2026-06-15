@@ -143,4 +143,13 @@ describe('buildUpstreamQuotaModelOptions', () => {
     })
     expect(options.map((o) => o.name).sort()).toEqual(['claude-3', 'gpt-4o'])
   })
+
+  it('filters legacy names to selected credentials only', () => {
+    const options = buildUpstreamQuotaModelOptions({
+      models: [model({ name: 'alias-a', real_model: 'gpt-4o', credential_id: 'c1' })],
+      credentialIds: ['c1'],
+      existingModelNames: ['gpt-4o', 'orphan-model'],
+    })
+    expect(options.map((o) => o.name)).toEqual(['gpt-4o'])
+  })
 })

@@ -139,7 +139,8 @@ function useModelQuotaFormState(
   layer: 'platform' | 'upstream',
   mode: 'admin' | 'member',
   selfUserId: string | null,
-  editingRule: QuotaRule | null
+  editingRule: QuotaRule | null,
+  upstreamRealModel?: string
 ): {
   values: QuotaBatchFormValues
   limitTokensWan: string
@@ -155,6 +156,7 @@ function useModelQuotaFormState(
       layer,
       memberMode: mode === 'member',
       selfUserId,
+      upstreamRealModel: layer === 'upstream' ? upstreamRealModel : undefined,
     })
   )
   const [limitTokensWan, setLimitTokensWan] = useState('')
@@ -170,6 +172,7 @@ function useModelQuotaFormState(
           layer,
           memberMode: mode === 'member',
           selfUserId,
+          upstreamRealModel: layer === 'upstream' ? upstreamRealModel : undefined,
         })
       setValues(next)
       setLimitTokensWan(tokensToWanInput(next.limit_tokens))
@@ -181,10 +184,11 @@ function useModelQuotaFormState(
       layer,
       memberMode: mode === 'member',
       selfUserId,
+      upstreamRealModel: layer === 'upstream' ? upstreamRealModel : undefined,
     })
     setValues(next)
     setLimitTokensWan(tokensToWanInput(next.limit_tokens))
-  }, [editingRule, modelName, credentialId, layer, mode, selfUserId])
+  }, [editingRule, modelName, credentialId, layer, mode, selfUserId, upstreamRealModel])
 
   const update = <K extends keyof QuotaBatchFormValues>(
     key: K,
@@ -198,7 +202,7 @@ function useModelQuotaFormState(
     layer,
     limit_tokens: wanInputToTokenString(limitTokensWan),
     allModels: false,
-    modelNames: [modelName],
+    modelNames: [layer === 'upstream' && upstreamRealModel ? upstreamRealModel : modelName],
     allCredentials: false,
     credentialIds:
       layer === 'upstream' || (mode === 'member' && credentialId)
@@ -321,7 +325,15 @@ export function ModelDetailUpstreamQuotaForm({
   upstreamModelId: string
 }): React.JSX.Element {
   const { values, limitTokensWan, setLimitTokensWan, update, editingBudgetId, buildSubmitPayload } =
-    useModelQuotaFormState(modelName, credentialId, 'upstream', mode, selfUserId, editingRule)
+    useModelQuotaFormState(
+      modelName,
+      credentialId,
+      'upstream',
+      mode,
+      selfUserId,
+      editingRule,
+      upstreamModelId
+    )
 
   const windowPreset = useMemo(
     () => resolveQuotaWindowPreset(values.windowSeconds),

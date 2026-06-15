@@ -470,6 +470,9 @@ class QuotaRuleWritesMixin:
             request_tenant_id=tenant_id,
         )
 
+        if cmd.model_name:
+            await self._assert_real_model_on_credential(cmd.credential_id, cmd.model_name)
+
         label = cmd.quota_label or "default"
 
         window_seconds = cmd.window_seconds if cmd.window_seconds is not None else 0
