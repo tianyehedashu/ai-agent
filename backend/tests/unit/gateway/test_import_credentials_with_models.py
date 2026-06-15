@@ -7,10 +7,10 @@ import uuid
 import pytest
 
 from bootstrap.config import settings
-from domains.gateway.application.management.writes import GatewayManagementWriteService
 from domains.gateway.application.management.credential_copy_types import (
     ImportCredentialsWithModelsResult,
 )
+from domains.gateway.application.management.writes import GatewayManagementWriteService
 from domains.gateway.infrastructure.repositories.credential_repository import (
     ProviderCredentialRepository,
 )
@@ -105,7 +105,6 @@ async def test_import_credential_name_conflict_auto_rename(
     db_session, test_user: User
 ) -> None:
     """目标团队已有同名凭据 → 自动追加 -imported-xxxx 后缀。"""
-    personal_team = await TeamService(db_session).ensure_personal_team(test_user.id)
     target_team = await TeamService(db_session).create_team(
         name="import-conflict-team",
         slug=f"import-conflict-{uuid.uuid4().hex[:8]}",

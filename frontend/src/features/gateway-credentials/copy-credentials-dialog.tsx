@@ -1,5 +1,6 @@
 /**
  * 凭据 + 关联模型跨 scope 复制对话框（个人 / 团队双向）。
+ * 由父级在 open 时条件挂载，关闭即卸载，无需 open 重置 effect。
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
@@ -47,10 +48,13 @@ const PERSONAL_DEST = '__personal_dest__' as const
 type SourceKey = string
 type DestKey = string
 
-type CopyStep = 'select' | 'copying' | 'result'
+interface CopyMutationVars {
+  sourceKey: SourceKey
+  destKey: DestKey
+  credentialIds: string[]
+}
 
 export interface CopyCredentialsDialogProps {
-  open: boolean
   onOpenChange: (open: boolean) => void
   preselectedCredentialIds?: string[]
   personalCredentials: readonly ProviderCredential[]
@@ -75,11 +79,8 @@ function destLabel(key: DestKey, teamNameById: Map<string, string>): string {
   return teamNameById.get(key) ?? key.slice(0, 8)
 }
 
-function buildCopyBody(
-  sourceKey: SourceKey,
-  destKey: DestKey,
-  credentialIds: string[]
-): CopyCredentialsWithModelsBody {
+function buildCopyBody(vars: CopyMutationVars): CopyCredentialsWithModelsBody {
+  const { sourceKey, destKey, credentialIds } = vars
   const source: CopyCredentialsWithModelsBody['source'] =
     sourceKey === PERSONAL_SOURCE ? { kind: 'personal' } : { kind: 'team', team_id: sourceKey }
   const destination: CopyCredentialsWithModelsBody['destination'] =
@@ -93,17 +94,13 @@ function buildAvailableSourceKeys(
 ): SourceKey[] {
   const keys: SourceKey[] = []
   if (personalCredentials.length > 0) keys.push(PERSONAL_SOURCE)
-  for (const team of sourceTeamOptions) {
-    keys.push(team.id)
-  }
+  for (const team of sourceTeamOptions) keys.push(team.id)
   return keys
 }
 
 function buildDestinationOptions(sourceKey: SourceKey, contributorTeams: GatewayTeam[]): DestKey[] {
   const opts: DestKey[] = []
-  if (sourceKey !== PERSONAL_SOURCE) {
-    opts.push(PERSONAL_DEST)
-  }
+  if (sourceKey !== PERSONAL_SOURCE) opts.push(PERSONAL_DEST)
   for (const team of contributorTeams) {
     if (sourceKey !== PERSONAL_SOURCE && team.id === sourceKey) continue
     opts.push(team.id)
@@ -111,10 +108,14 @@ function buildDestinationOptions(sourceKey: SourceKey, contributorTeams: Gateway
   return opts
 }
 
+function filterSelectedIds(ids: Set<string>, allowed: ReadonlySet<string>): Set<string> {
+  const next = new Set([...ids].filter((id) => allowed.has(id)))
+  return next.size === ids.size ? ids : next
+}
+
 export function CopyCredentialsDialog({
-  open,
   onOpenChange,
-  preselectedCredentialIds,
+  preselectedCredentialIds = [],
   personalCredentials,
   teamCredentials,
   teamCredentialsLoading = false,
@@ -123,12 +124,6 @@ export function CopyCredentialsDialog({
 }: CopyCredentialsDialogProps): React.ReactElement {
   const queryClient = useQueryClient()
   const { toast } = useToast()
-  const [step, setStep] = useState<CopyStep>('select')
-  const [sourceKey, setSourceKey] = useState<SourceKey>(PERSONAL_SOURCE)
-  const [destKey, setDestKey] = useState<DestKey>('')
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
-  const [result, setResult] = useState<ImportCredentialsWithModelsResponse | null>(null)
-  const [directionLabel, setDirectionLabel] = useState('')
 
   const copyableTeamCredentials = useMemo(
     () => teamCredentials.filter(isFullAccessCredential),
@@ -148,36 +143,45 @@ export function CopyCredentialsDialog({
     [personalCredentials, sourceTeamOptions]
   )
 
+  const [sourceKey, setSourceKey] = useState<SourceKey>(
+    () => availableSourceKeys[0] ?? PERSONAL_SOURCE
+  )
+  const [destKey, setDestKey] = useState<DestKey>(() => {
+    const initialSource = availableSourceKeys[0] ?? PERSONAL_SOURCE
+    return buildDestinationOptions(initialSource, contributorTeams)[0] ?? ''
+  })
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(
+    () => new Set(preselectedCredentialIds)
+  )
+  const [result, setResult] = useState<ImportCredentialsWithModelsResponse | null>(null)
+  const [directionLabel, setDirectionLabel] = useState('')
+
   const destinationOptions = useMemo(
     () => buildDestinationOptions(sourceKey, contributorTeams),
     [sourceKey, contributorTeams]
   )
 
   const sourceCredentials = useMemo(() => {
-    if (sourceKey === PERSONAL_SOURCE) return [...personalCredentials]
+    if (sourceKey === PERSONAL_SOURCE) return personalCredentials
     return copyableTeamCredentials.filter((c) => c.tenant_id === sourceKey)
   }, [sourceKey, personalCredentials, copyableTeamCredentials])
 
+  const allowedCredentialIds = useMemo(
+    () => new Set(sourceCredentials.map((c) => c.id)),
+    [sourceCredentials]
+  )
+
   const copyMutation = useMutation({
-    mutationFn: () => {
-      if (!destKey) throw new Error('请选择目标')
-      if (selectedIds.size === 0) throw new Error('请选择至少一个凭据')
-      return credentialsApi.copyCredentialsWithModels(
-        buildCopyBody(sourceKey, destKey, Array.from(selectedIds))
-      )
-    },
-    onSuccess: (data) => {
+    mutationFn: (vars: CopyMutationVars) =>
+      credentialsApi.copyCredentialsWithModels(buildCopyBody(vars)),
+    onSuccess: (data, vars) => {
       setResult(data)
       setDirectionLabel(
-        `${sourceLabel(sourceKey, teamNameById)} → ${destLabel(destKey, teamNameById)}`
+        `${sourceLabel(vars.sourceKey, teamNameById)} → ${destLabel(vars.destKey, teamNameById)}`
       )
-      setStep('result')
-      const destTeamId = destKey === PERSONAL_DEST ? undefined : destKey
-      const sourceTeamId = sourceKey === PERSONAL_SOURCE ? undefined : sourceKey
-      invalidateGatewayCredentialCaches(queryClient, {
-        teamId: destTeamId,
-        includeModels: true,
-      })
+      const destTeamId = vars.destKey === PERSONAL_DEST ? undefined : vars.destKey
+      const sourceTeamId = vars.sourceKey === PERSONAL_SOURCE ? undefined : vars.sourceKey
+      invalidateGatewayCredentialCaches(queryClient, { teamId: destTeamId, includeModels: true })
       if (sourceTeamId && sourceTeamId !== destTeamId) {
         invalidateGatewayCredentialCaches(queryClient, {
           teamId: sourceTeamId,
@@ -193,50 +197,29 @@ export function CopyCredentialsDialog({
     },
     onError: (e: Error) => {
       toast({ variant: 'destructive', title: '复制失败', description: e.message })
-      setStep('select')
     },
   })
 
+  // 异步数据到达后校正来源/目标；来源变更时清空非法选中项
   useEffect(() => {
-    if (!open) return
-    const nextSource =
-      buildAvailableSourceKeys(personalCredentials, sourceTeamOptions)[0] ?? PERSONAL_SOURCE
-    const nextDest = buildDestinationOptions(nextSource, contributorTeams)[0] ?? ''
-    setStep('select')
-    setSourceKey(nextSource)
-    setDestKey(nextDest)
-    setSelectedIds(new Set(preselectedCredentialIds ?? []))
-    setResult(null)
-    setDirectionLabel('')
-    copyMutation.reset()
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- reset when dialog opens
-  }, [open, preselectedCredentialIds])
-
-  useEffect(() => {
-    if (!open) return
-    if (!availableSourceKeys.includes(sourceKey)) {
-      const nextSource = availableSourceKeys[0] ?? PERSONAL_SOURCE
+    const nextSource = availableSourceKeys.includes(sourceKey)
+      ? sourceKey
+      : (availableSourceKeys[0] ?? PERSONAL_SOURCE)
+    if (nextSource !== sourceKey) {
       setSourceKey(nextSource)
       setDestKey(buildDestinationOptions(nextSource, contributorTeams)[0] ?? '')
       setSelectedIds(new Set())
+      return
     }
-  }, [open, availableSourceKeys, sourceKey, contributorTeams])
+    const destOpts = buildDestinationOptions(nextSource, contributorTeams)
+    if (!destKey || !destOpts.includes(destKey)) {
+      setDestKey(destOpts[0] ?? '')
+    }
+  }, [availableSourceKeys, sourceKey, destKey, contributorTeams])
 
   useEffect(() => {
-    if (!open) return
-    if (destKey === '' || !destinationOptions.includes(destKey)) {
-      setDestKey(destinationOptions[0] ?? '')
-    }
-  }, [open, destinationOptions, destKey])
-
-  useEffect(() => {
-    if (!open) return
-    const allowed = new Set(sourceCredentials.map((c) => c.id))
-    setSelectedIds((prev) => {
-      const next = new Set([...prev].filter((id) => allowed.has(id)))
-      return next.size === prev.size ? prev : next
-    })
-  }, [open, sourceCredentials])
+    setSelectedIds((prev) => filterSelectedIds(prev, allowedCredentialIds))
+  }, [allowedCredentialIds])
 
   const byProvider = useMemo(() => {
     const map = new Map<string, ProviderCredential[]>()
@@ -269,16 +252,35 @@ export function CopyCredentialsDialog({
     })
   }, [])
 
-  const canSubmit =
-    selectedIds.size > 0 && destKey !== '' && step === 'select' && !teamCredentialsLoading
+  const handleSourceChange = useCallback(
+    (nextSource: SourceKey): void => {
+      setSourceKey(nextSource)
+      setDestKey(buildDestinationOptions(nextSource, contributorTeams)[0] ?? '')
+      setSelectedIds(new Set())
+    },
+    [contributorTeams]
+  )
 
   const handleCopy = useCallback((): void => {
-    setStep('copying')
-    copyMutation.mutate()
-  }, [copyMutation])
+    if (!destKey || selectedIds.size === 0) return
+    copyMutation.mutate({
+      sourceKey,
+      destKey,
+      credentialIds: Array.from(selectedIds),
+    })
+  }, [copyMutation, destKey, selectedIds, sourceKey])
+
+  const showResult = result !== null
+  const isCopying = copyMutation.isPending
+  const canSubmit = selectedIds.size > 0 && destKey !== '' && !isCopying && !teamCredentialsLoading
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog
+      open
+      onOpenChange={(next) => {
+        if (!next) onOpenChange(false)
+      }}
+    >
       <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>复制凭据和模型</DialogTitle>
@@ -287,22 +289,71 @@ export function CopyCredentialsDialog({
           </DialogDescription>
         </DialogHeader>
 
-        {step === 'select' ? (
+        {isCopying ? (
+          <div className="flex flex-col items-center gap-3 py-8">
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            <p className="text-sm text-muted-foreground">正在复制凭据和模型…</p>
+          </div>
+        ) : showResult ? (
+          <div className="space-y-4">
+            <div className="flex items-center gap-2 text-sm">
+              <CheckCircle2 className="h-5 w-5 text-green-600" />
+              <span className="font-medium">复制完成</span>
+            </div>
+            {directionLabel ? (
+              <p className="text-xs text-muted-foreground">{directionLabel}</p>
+            ) : null}
+            {result.succeeded.length > 0 ? (
+              <div className="space-y-2">
+                <Label className="text-xs">成功复制</Label>
+                <ul className="space-y-1">
+                  {result.succeeded.map((s) => (
+                    <li
+                      key={s.source_credential_id}
+                      className="rounded-md border px-3 py-2 text-sm"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium">{s.new_credential.name}</span>
+                        <Badge variant="secondary" className="text-[11px]">
+                          {s.new_credential.provider}
+                        </Badge>
+                      </div>
+                      <p className="mt-0.5 text-[11px] text-muted-foreground">
+                        创建 {s.models_created.length} 个模型
+                        {s.models_failed.length > 0
+                          ? `，${String(s.models_failed.length)} 个模型失败`
+                          : ''}
+                      </p>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+            {result.failed.length > 0 ? (
+              <div className="space-y-2">
+                <Label className="text-xs text-destructive">失败</Label>
+                <ul className="space-y-1">
+                  {result.failed.map((f) => (
+                    <li
+                      key={f.credential_id}
+                      className="rounded-md border border-destructive/30 px-3 py-2 text-sm"
+                    >
+                      <span className="font-mono text-[11px]">{f.credential_id}</span>
+                      <p className="text-[11px] text-destructive">{f.reason}</p>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+          </div>
+        ) : (
           <div className="space-y-4">
             <div className="space-y-2">
               <Label>来源</Label>
               {availableSourceKeys.length === 0 ? (
                 <p className="text-sm text-muted-foreground">暂无可复制的凭据</p>
               ) : (
-                <Select
-                  value={sourceKey}
-                  onValueChange={(v) => {
-                    const nextSource = v
-                    setSourceKey(nextSource)
-                    setDestKey(buildDestinationOptions(nextSource, contributorTeams)[0] ?? '')
-                    setSelectedIds(new Set())
-                  }}
-                >
+                <Select value={sourceKey} onValueChange={handleSourceChange}>
                   <SelectTrigger>
                     <SelectValue placeholder="请选择来源" />
                   </SelectTrigger>
@@ -391,12 +442,7 @@ export function CopyCredentialsDialog({
                   暂无可用的目标。请先创建或加入一个协作团队。
                 </p>
               ) : (
-                <Select
-                  value={destKey}
-                  onValueChange={(v) => {
-                    setDestKey(v)
-                  }}
-                >
+                <Select value={destKey} onValueChange={setDestKey}>
                   <SelectTrigger>
                     <SelectValue placeholder="请选择目标" />
                   </SelectTrigger>
@@ -411,71 +457,10 @@ export function CopyCredentialsDialog({
               )}
             </div>
           </div>
-        ) : step === 'copying' ? (
-          <div className="flex flex-col items-center gap-3 py-8">
-            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-            <p className="text-sm text-muted-foreground">正在复制凭据和模型…</p>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {result ? (
-              <>
-                <div className="flex items-center gap-2 text-sm">
-                  <CheckCircle2 className="h-5 w-5 text-green-600" />
-                  <span className="font-medium">复制完成</span>
-                </div>
-                {directionLabel ? (
-                  <p className="text-xs text-muted-foreground">{directionLabel}</p>
-                ) : null}
-                {result.succeeded.length > 0 ? (
-                  <div className="space-y-2">
-                    <Label className="text-xs">成功复制</Label>
-                    <ul className="space-y-1">
-                      {result.succeeded.map((s) => (
-                        <li
-                          key={s.source_credential_id}
-                          className="rounded-md border px-3 py-2 text-sm"
-                        >
-                          <div className="flex items-center gap-2">
-                            <span className="font-medium">{s.new_credential.name}</span>
-                            <Badge variant="secondary" className="text-[11px]">
-                              {s.new_credential.provider}
-                            </Badge>
-                          </div>
-                          <p className="mt-0.5 text-[11px] text-muted-foreground">
-                            创建 {s.models_created.length} 个模型
-                            {s.models_failed.length > 0
-                              ? `，${String(s.models_failed.length)} 个模型失败`
-                              : ''}
-                          </p>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                ) : null}
-                {result.failed.length > 0 ? (
-                  <div className="space-y-2">
-                    <Label className="text-xs text-destructive">失败</Label>
-                    <ul className="space-y-1">
-                      {result.failed.map((f, i) => (
-                        <li
-                          key={i}
-                          className="rounded-md border border-destructive/30 px-3 py-2 text-sm"
-                        >
-                          <span className="font-mono text-[11px]">{f.credential_id}</span>
-                          <p className="text-[11px] text-destructive">{f.reason}</p>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                ) : null}
-              </>
-            ) : null}
-          </div>
         )}
 
         <DialogFooter>
-          {step === 'result' ? (
+          {showResult ? (
             <Button
               onClick={() => {
                 onOpenChange(false)
@@ -487,6 +472,7 @@ export function CopyCredentialsDialog({
             <>
               <Button
                 variant="outline"
+                disabled={isCopying}
                 onClick={() => {
                   onOpenChange(false)
                 }}
@@ -494,7 +480,7 @@ export function CopyCredentialsDialog({
                 取消
               </Button>
               <Button onClick={handleCopy} disabled={!canSubmit}>
-                {step === 'copying' ? (
+                {isCopying ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     复制中…

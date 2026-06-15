@@ -302,26 +302,27 @@ export function PersonalCredentialsPanel({
         onConfirm={handleDeleteConfirm}
       />
 
-      <Suspense
-        fallback={
-          <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            加载复制…
-          </div>
-        }
-      >
-        <CopyCredentialsDialog
-          open={copyDialogState.open}
-          onOpenChange={(next) => {
-            setCopyDialogState((prev) => ({ ...prev, open: next }))
-          }}
-          preselectedCredentialIds={copyDialogState.preselectedIds}
-          personalCredentials={credentials}
-          teamCredentials={[]}
-          contributorTeams={contributorTeams}
-          teamNameById={teamNameById}
-        />
-      </Suspense>
+      {copyDialogState.open ? (
+        <Suspense
+          fallback={
+            <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              加载复制…
+            </div>
+          }
+        >
+          <CopyCredentialsDialog
+            onOpenChange={(next) => {
+              if (!next) setCopyDialogState({ open: false, preselectedIds: [] })
+            }}
+            preselectedCredentialIds={copyDialogState.preselectedIds}
+            personalCredentials={credentials}
+            teamCredentials={[]}
+            contributorTeams={contributorTeams}
+            teamNameById={teamNameById}
+          />
+        </Suspense>
+      ) : null}
     </>
   )
 }

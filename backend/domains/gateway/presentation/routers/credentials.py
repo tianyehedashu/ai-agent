@@ -30,6 +30,7 @@ from domains.gateway.presentation.schemas.credential_import import (
     ImportCredentialsWithModelsResponse,
 )
 from domains.gateway.presentation.schemas.credential_upstream_catalog import (
+    BatchImportFailureItem,
     CredentialProbeResponse,
     TeamGatewayModelBatchImportCreatedItem,
     TeamGatewayModelBatchImportRequest,

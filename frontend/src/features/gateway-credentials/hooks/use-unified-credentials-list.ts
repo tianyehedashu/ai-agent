@@ -48,6 +48,7 @@ export interface UnifiedCredentialsListResult {
   personalCredentials: readonly ProviderCredential[]
   /** management_access=full 的团队凭据（供复制源判断） */
   copyableTeamCredentials: readonly ProviderCredential[]
+  teamCredentialsLoading: boolean
   pagination: {
     page: number
     page_size: number
@@ -171,6 +172,7 @@ export function useUnifiedCredentialsList({
 
   const isLoading = personalQuery.isLoading || teamQuery.isLoading || systemQuery.isLoading
   const isFetching = personalQuery.isFetching || teamQuery.isFetching || systemQuery.isFetching
+  const teamCredentialsLoading = teamQuery.isLoading
 
   return {
     items: paginationSlice.items,
@@ -181,6 +183,7 @@ export function useUnifiedCredentialsList({
     filteredTotal: filteredEntries.length,
     personalCredentials,
     copyableTeamCredentials,
+    teamCredentialsLoading,
     pagination: {
       page: paginationSlice.page,
       page_size: paginationSlice.page_size,

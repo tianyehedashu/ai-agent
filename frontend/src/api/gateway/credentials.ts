@@ -395,7 +395,7 @@ export const credentialsApi = {
         models_created: ImportedModelSummary[]
         models_failed: ModelImportFailureItem[]
       }>
-      failed: BatchImportFailureItem[]
+      failed: CredentialCopyFailureItem[]
     }>(`${GATEWAY_API_BASE}/credentials/copy-with-models`, body)
     return {
       ...data,

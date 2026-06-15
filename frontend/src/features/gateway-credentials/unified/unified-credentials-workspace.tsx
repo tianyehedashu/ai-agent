@@ -88,6 +88,7 @@ export function UnifiedCredentialsWorkspace({
     filteredTotal,
     personalCredentials,
     copyableTeamCredentials,
+    teamCredentialsLoading,
     pagination,
   } = useUnifiedCredentialsList({ search, scopeFilter, page })
   const hasActiveFilters = scopeFilter !== 'all' || search.trim().length > 0
@@ -316,27 +317,28 @@ export function UnifiedCredentialsWorkspace({
         onConfirm={handlePersonalDeleteConfirm}
       />
 
-      <Suspense
-        fallback={
-          <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            加载复制…
-          </div>
-        }
-      >
-        <CopyCredentialsDialog
-          open={copyDialogState.open}
-          onOpenChange={(next) => {
-            setCopyDialogState((prev) => ({ ...prev, open: next }))
-          }}
-          preselectedCredentialIds={copyDialogState.preselectedIds}
-          personalCredentials={[...personalCredentialsForActions]}
-          teamCredentials={copyableTeamCredentials}
-          teamCredentialsLoading={isLoading}
-          contributorTeams={contributorTeams}
-          teamNameById={teamNameById}
-        />
-      </Suspense>
+      {copyDialogState.open ? (
+        <Suspense
+          fallback={
+            <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              加载复制…
+            </div>
+          }
+        >
+          <CopyCredentialsDialog
+            onOpenChange={(next) => {
+              if (!next) setCopyDialogState({ open: false, preselectedIds: [] })
+            }}
+            preselectedCredentialIds={copyDialogState.preselectedIds}
+            personalCredentials={personalCredentialsForActions}
+            teamCredentials={copyableTeamCredentials}
+            teamCredentialsLoading={teamCredentialsLoading}
+            contributorTeams={contributorTeams}
+            teamNameById={teamNameById}
+          />
+        </Suspense>
+      ) : null}
     </>
   )
 }
