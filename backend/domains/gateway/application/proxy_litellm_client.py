@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any
+import uuid
 
 from bootstrap.config import settings
 from domains.gateway.application.model_or_route_resolution import (
@@ -28,7 +29,10 @@ from domains.gateway.domain.policies.volcengine_video import (
     build_volcengine_video_create_request,
     map_volcengine_video_task_to_openai,
 )
-from domains.gateway.domain.proxy_policy import allows_unregistered_gateway_model
+from domains.gateway.domain.proxy_policy import (
+    allows_unregistered_gateway_model,
+    upstream_exception_http_status,
+)
 from domains.gateway.infrastructure.router_singleton import (
     ensure_router_deployment,
     filter_litellm_params_for_direct_anthropic,
@@ -116,6 +120,44 @@ class ProxyLiteLLMClient:
         apply_upstream_timeout(kwargs)
         await self._release_session_before_upstream()
         return await acompletion(**kwargs)
+
+    async def probe_chat_deployment_upstream_error(
+        self,
+        team_id: uuid.UUID,
+        client_model: str,
+        *,
+        user_id: uuid.UUID | None = None,
+    ) -> Exception | None:
+        """Router 聚合失败且无嵌套上游异常时，用最小 chat 探测真实上游错误（仅错误路径）。"""
+        from litellm import acompletion
+
+        from domains.gateway.infrastructure.router_singleton import ensure_gateway_callbacks
+
+        dep = await resolve_deployment_litellm_params(
+            self._session,
+            team_id,
+            client_model,
+            user_id=user_id,
+        )
+        if dep is None:
+            return None
+        probe_kwargs: dict[str, Any] = {
+            **dep,
+            "messages": [{"role": "user", "content": "ping"}],
+            "max_tokens": 1,
+        }
+        ensure_gateway_callbacks()
+        apply_upstream_timeout(probe_kwargs)
+        await self._release_session_before_upstream()
+        try:
+            await acompletion(**probe_kwargs)
+        except Exception as exc:
+            if upstream_exception_http_status(exc) is not None:
+                return exc
+            name = type(exc).__name__
+            if name.endswith("Error") and name not in ("BadRequestError",):
+                return exc
+        return None
 
     async def direct_embedding(self, kwargs: dict[str, Any]) -> Any:
         from litellm import aembedding

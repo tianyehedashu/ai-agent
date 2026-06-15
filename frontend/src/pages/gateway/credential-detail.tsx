@@ -7,7 +7,7 @@
  * - 头部「启用」Switch 走独立的乐观更新 mutation，UI 即时响应。
  */
 
-import { Suspense, useCallback, useMemo, useState } from 'react'
+import { Suspense, useCallback, useState } from 'react'
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
@@ -16,8 +16,6 @@ import {
   gatewayApi,
   type GatewayCredentialUpdateBody,
   type ProviderCredential,
-  type ProviderPlan,
-  type ProviderPlanCost,
 } from '@/api/gateway'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -398,8 +396,6 @@ export default function GatewayCredentialDetailPage(): React.JSX.Element {
           </CardContent>
         </Card>
 
-        <ProviderPlansSection teamId={teamId} credentialId={id} />
-
         {currentUser?.id ? (
           <CredentialBudgetSection
             credentialId={id}
@@ -450,115 +446,6 @@ export default function GatewayCredentialDetailPage(): React.JSX.Element {
         onConfirm={handleDeleteConfirm}
       />
     </div>
-  )
-}
-
-function formatDateTime(value: string): string {
-  const d = new Date(value)
-  if (Number.isNaN(d.getTime())) return value
-  return d.toLocaleString()
-}
-
-function formatMoney(value: number | string | null | undefined): string {
-  const n = Number(value ?? 0)
-  return Number.isFinite(n) ? `$${n.toFixed(4)}` : '$0.0000'
-}
-
-function formatQuotaLimit(plan: ProviderPlan): string {
-  if (plan.quotas.length === 0) return '不限'
-  return plan.quotas
-    .map((q) => {
-      const limits = [
-        q.limit_requests !== null ? `${String(q.limit_requests)} req` : null,
-        q.limit_tokens !== null ? `${String(q.limit_tokens)} token` : null,
-        q.limit_usd !== null ? formatMoney(q.limit_usd) : null,
-      ].filter(Boolean)
-      const strategy =
-        q.reset_strategy === 'calendar_daily_utc'
-          ? '每日 UTC'
-          : q.reset_strategy === 'calendar_monthly_utc'
-            ? '自然月'
-            : q.reset_strategy === 'plan_anniversary'
-              ? '订阅锚点'
-              : '滚动'
-      return `${q.label}：${limits.join(' / ') || '不限'} · ${strategy}`
-    })
-    .join('；')
-}
-
-function usageByPlanId(rows: ProviderPlanCost[] | undefined): Map<string, ProviderPlanCost> {
-  return new Map((rows ?? []).map((row) => [row.plan_id, row]))
-}
-
-function ProviderPlansSection({
-  teamId,
-  credentialId,
-}: Readonly<{
-  teamId: string
-  credentialId: string
-}>): React.JSX.Element {
-  const { data: plans, isLoading: plansLoading } = useQuery({
-    queryKey: ['gateway', 'credential', teamId, credentialId, 'provider-plans'],
-    queryFn: () => gatewayApi.listProviderPlans(teamId, credentialId),
-    enabled: credentialId.length > 0,
-  })
-  const { data: usage } = useQuery({
-    queryKey: ['gateway', 'credential', teamId, credentialId, 'provider-plan-usage', 30],
-    queryFn: () => gatewayApi.listProviderPlanUsage(teamId, credentialId, { days: 30 }),
-    enabled: credentialId.length > 0,
-  })
-  const usageMap = useMemo(() => usageByPlanId(usage), [usage])
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>厂商套餐</CardTitle>
-        <CardDescription>
-          上游购买的套餐额度。若厂商返回配额耗尽，系统会立即同步本地套餐状态并触发路由 fallback。
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        {plansLoading ? (
-          <p className="text-sm text-muted-foreground">加载中…</p>
-        ) : (plans?.length ?? 0) === 0 ? (
-          <p className="text-sm text-muted-foreground">暂无厂商套餐；该凭据按普通按量模式路由。</p>
-        ) : (
-          <div className="space-y-2">
-            {plans?.map((plan) => {
-              const row = usageMap.get(plan.id)
-              const activeNow =
-                plan.is_active &&
-                new Date(plan.valid_from).getTime() <= Date.now() &&
-                new Date(plan.valid_until).getTime() > Date.now()
-              return (
-                <div key={plan.id} className="rounded-lg border p-3">
-                  <div className="flex flex-wrap items-start justify-between gap-2">
-                    <div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <p className="font-medium">{plan.label}</p>
-                        <Badge variant={activeNow ? 'default' : 'secondary'}>
-                          {activeNow ? '生效中' : plan.is_active ? '未在有效期' : '已停用'}
-                        </Badge>
-                        {plan.auto_renew ? <Badge variant="outline">自动续期</Badge> : null}
-                      </div>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        {plan.real_model ?? '整凭据共享'} · {formatDateTime(plan.valid_from)} →{' '}
-                        {formatDateTime(plan.valid_until)}
-                      </p>
-                    </div>
-                    <div className="text-right text-xs tabular-nums text-muted-foreground">
-                      <p>30 天请求：{String(row?.requests ?? 0)}</p>
-                      <p>成本：{formatMoney(row?.cost_usd)}</p>
-                    </div>
-                  </div>
-                  <p className="mt-2 text-xs text-muted-foreground">{formatQuotaLimit(plan)}</p>
-                </div>
-              )
-            })}
-          </div>
-        )}
-      </CardContent>
-    </Card>
   )
 }
 

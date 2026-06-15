@@ -8,8 +8,6 @@ import type { GatewayModel } from '@/api/gateway/models'
 import { pricingApi } from '@/api/gateway/pricing'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import {
   Select,
   SelectContent,
@@ -17,6 +15,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import {
+  DOWNSTREAM_PRICING_FORM_BORDER,
+  downstreamPricingFormIcon,
+  PricingCurrencyField,
+  PricingInlineFormShell,
+  PricingModelKeyCard,
+  UPSTREAM_PRICING_FORM_BORDER,
+  upstreamPricingFormIcon,
+} from '@/features/gateway-models/detail/model-detail-pricing-inline-form'
 import type { ModelInspectorScope } from '@/features/gateway-models/detail/model-inspector'
 import { useModelDetailPricingMutations } from '@/features/gateway-models/detail/use-model-detail-pricing-mutations'
 import { GATEWAY_DISPLAY_CURRENCY } from '@/features/gateway-pricing/display-currency'
@@ -33,7 +40,7 @@ import {
 } from '@/features/gateway-pricing/upstream-pricing-view'
 import { useGatewayModelPrices } from '@/features/gateway-pricing/use-gateway-model-prices'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
-import { Loader2, Pencil, RotateCcw, X } from '@/lib/lucide-icons'
+import { Loader2, Pencil, RotateCcw } from '@/lib/lucide-icons'
 
 interface ModelDetailPricingSectionProps {
   model: GatewayModel
@@ -298,21 +305,20 @@ export function ModelDetailPricingSection({
             }
             inlineForm={
               editing === 'downstream' ? (
-                <div className="space-y-3 rounded-md border border-primary/20 bg-background p-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">调整下游售价</span>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7"
-                      onClick={() => {
-                        setEditing(null)
-                      }}
-                    >
-                      <X className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
+                <PricingInlineFormShell
+                  icon={downstreamPricingFormIcon()}
+                  title="调整下游售价"
+                  subtitle={`按百万 token 计费的团队售价（${currency}）`}
+                  borderClass={DOWNSTREAM_PRICING_FORM_BORDER}
+                  pending={downstreamPending}
+                  canSubmit={canSubmitDownstream}
+                  onCancel={() => {
+                    setEditing(null)
+                  }}
+                  onSubmit={() => {
+                    upsertDownstream(buildDownstreamPricingPayload(downstreamValues, currency))
+                  }}
+                >
                   <Select
                     value={downstreamValues.inheritance_strategy}
                     onValueChange={(v) => {
@@ -331,63 +337,30 @@ export function ModelDetailPricingSection({
                     </SelectContent>
                   </Select>
                   {downstreamManual ? (
-                    <div className="grid gap-2 sm:grid-cols-2">
-                      <div className="space-y-1">
-                        <Label className="text-xs">输入 / 1M ({currency})</Label>
-                        <Input
-                          className="h-8"
-                          type="number"
-                          min="0"
-                          step="0.0001"
-                          value={downstreamValues.input}
-                          onChange={(e) => {
-                            setDownstreamValues((c) => ({ ...c, input: e.target.value }))
-                          }}
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-xs">输出 / 1M ({currency})</Label>
-                        <Input
-                          className="h-8"
-                          type="number"
-                          min="0"
-                          step="0.0001"
-                          value={downstreamValues.output}
-                          onChange={(e) => {
-                            setDownstreamValues((c) => ({ ...c, output: e.target.value }))
-                          }}
-                        />
-                      </div>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <PricingCurrencyField
+                        label="输入 token"
+                        currency={currency}
+                        value={downstreamValues.input}
+                        onChange={(input) => {
+                          setDownstreamValues((c) => ({ ...c, input }))
+                        }}
+                      />
+                      <PricingCurrencyField
+                        label="输出 token"
+                        currency={currency}
+                        value={downstreamValues.output}
+                        onChange={(output) => {
+                          setDownstreamValues((c) => ({ ...c, output }))
+                        }}
+                      />
                     </div>
                   ) : (
-                    <p className="text-xs text-muted-foreground">保存后将跟随上游成本定价。</p>
+                    <p className="rounded-md border border-emerald-500/15 bg-background/70 px-3 py-2 text-xs text-muted-foreground">
+                      保存后将自动跟随上游成本定价，无需手动填写单价。
+                    </p>
                   )}
-                  <div className="flex justify-end gap-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="h-7 text-xs"
-                      onClick={() => {
-                        setEditing(null)
-                      }}
-                    >
-                      取消
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      className="h-7 text-xs"
-                      disabled={!canSubmitDownstream}
-                      onClick={() => {
-                        upsertDownstream(buildDownstreamPricingPayload(downstreamValues, currency))
-                      }}
-                    >
-                      {downstreamPending ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : null}
-                      保存
-                    </Button>
-                  </div>
-                </div>
+                </PricingInlineFormShell>
               ) : undefined
             }
           />
@@ -416,80 +389,46 @@ export function ModelDetailPricingSection({
           }
           inlineForm={
             editing === 'upstream' ? (
-              <div className="space-y-3 rounded-md border border-primary/20 bg-background p-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium">上游成本 (USD)</span>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7"
-                    onClick={() => {
-                      setEditing(null)
+              <PricingInlineFormShell
+                icon={upstreamPricingFormIcon()}
+                title={upstreamRow ? '调整上游成本' : '登记上游成本'}
+                subtitle={`按百万 token 计费的输入/输出单价（${UPSTREAM_DISPLAY_CURRENCY}）`}
+                borderClass={UPSTREAM_PRICING_FORM_BORDER}
+                pending={upstreamPending}
+                canSubmit={canSubmitUpstream}
+                onCancel={() => {
+                  setEditing(null)
+                }}
+                onSubmit={() => {
+                  upsertUpstream(
+                    buildUpstreamPricingPayload(upstreamValues, UPSTREAM_DISPLAY_CURRENCY)
+                  )
+                }}
+              >
+                <PricingModelKeyCard
+                  provider={model.provider}
+                  upstreamModel={model.real_model}
+                  capability={model.capability || 'chat'}
+                />
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <PricingCurrencyField
+                    label="输入 token"
+                    currency={UPSTREAM_DISPLAY_CURRENCY}
+                    value={upstreamValues.input}
+                    onChange={(input) => {
+                      setUpstreamValues((c) => ({ ...c, input }))
                     }}
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
-                <p className="font-mono text-xs text-muted-foreground">
-                  {model.provider}/{model.real_model}
-                </p>
-                <div className="grid gap-2 sm:grid-cols-2">
-                  <div className="space-y-1">
-                    <Label className="text-xs">输入 / 1M</Label>
-                    <Input
-                      className="h-8"
-                      type="number"
-                      min="0"
-                      step="0.0001"
-                      value={upstreamValues.input}
-                      onChange={(e) => {
-                        setUpstreamValues((c) => ({ ...c, input: e.target.value }))
-                      }}
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs">输出 / 1M</Label>
-                    <Input
-                      className="h-8"
-                      type="number"
-                      min="0"
-                      step="0.0001"
-                      value={upstreamValues.output}
-                      onChange={(e) => {
-                        setUpstreamValues((c) => ({ ...c, output: e.target.value }))
-                      }}
-                    />
-                  </div>
-                </div>
-                <div className="flex justify-end gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="h-7 text-xs"
-                    onClick={() => {
-                      setEditing(null)
+                  />
+                  <PricingCurrencyField
+                    label="输出 token"
+                    currency={UPSTREAM_DISPLAY_CURRENCY}
+                    value={upstreamValues.output}
+                    onChange={(output) => {
+                      setUpstreamValues((c) => ({ ...c, output }))
                     }}
-                  >
-                    取消
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    className="h-7 text-xs"
-                    disabled={!canSubmitUpstream}
-                    onClick={() => {
-                      upsertUpstream(
-                        buildUpstreamPricingPayload(upstreamValues, UPSTREAM_DISPLAY_CURRENCY)
-                      )
-                    }}
-                  >
-                    {upstreamPending ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : null}
-                    保存
-                  </Button>
+                  />
                 </div>
-              </div>
+              </PricingInlineFormShell>
             ) : undefined
           }
         />

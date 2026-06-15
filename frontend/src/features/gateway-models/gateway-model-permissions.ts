@@ -42,11 +42,6 @@ function teamCredentialOwnerId(model: GatewayModel): string | null | undefined {
   return model.credential_created_by_user_id
 }
 
-function isLegacyTeamModel(model: GatewayModel): boolean {
-  const ownerId = teamCredentialOwnerId(model)
-  return ownerId === null || ownerId === undefined || ownerId === ''
-}
-
 function actorOwnsTeamModel(model: GatewayModel, viewerUserId: string | null | undefined): boolean {
   const ownerId = teamCredentialOwnerId(model)
   if (ownerId === null || ownerId === undefined || ownerId === '') return false
@@ -63,7 +58,7 @@ function actorCreatedModel(model: GatewayModel, viewerUserId: string | null | un
   return viewerUserId !== null && viewerUserId !== undefined && viewerUserId === creatorId
 }
 
-/** 团队模型：凭据 owner、模型创建者、legacy admin+ 或 team admin/owner（与 delete 对齐）；系统模型：平台管理员 */
+/** 团队模型：凭据 owner、模型创建者或 team admin/owner（与 delete 对齐）；系统模型：平台管理员 */
 export function canManageGatewayModel(
   model: GatewayModel,
   viewerUserId: string | null | undefined,
@@ -76,9 +71,7 @@ export function canManageGatewayModel(
   }
   if (actorOwnsTeamModel(model, viewerUserId)) return true
   if (actorCreatedModel(model, viewerUserId)) return true
-  if (isLegacyTeamModel(model) && canWrite) return true
-  // 与 canDeleteGatewayModel 对齐：团队 admin/owner 可禁用他人凭据上的模型
-  if (canWrite && !isLegacyTeamModel(model)) return true
+  if (canWrite) return true
   return false
 }
 
@@ -93,7 +86,7 @@ export function isModelBatchSelectable(
   return canDeleteGatewayModel(model, viewerUserId, canWrite, isPlatformAdmin, context)
 }
 
-/** 团队模型：owner 或 team admin（含 legacy admin+）；系统模型：平台管理员且非配置托管 */
+/** 团队模型：owner 或 team admin；系统模型：平台管理员且非配置托管 */
 export function canDeleteGatewayModel(
   model: GatewayModel,
   viewerUserId: string | null | undefined,
@@ -106,8 +99,7 @@ export function canDeleteGatewayModel(
   }
   if (actorOwnsTeamModel(model, viewerUserId)) return true
   if (actorCreatedModel(model, viewerUserId)) return true
-  if (isLegacyTeamModel(model) && canWrite) return true
-  if (canWrite && !isLegacyTeamModel(model)) return true
+  if (canWrite) return true
   return false
 }
 
@@ -120,6 +112,29 @@ export function canResyncGatewayModelCapabilities(
   context?: GatewayModelPermissionContext
 ): boolean {
   return canManageGatewayModel(model, viewerUserId, canWrite, isPlatformAdmin, context)
+}
+
+/** 团队模型批量导入源：凭据 owner（reveal 级，严于 delete） */
+export function canBatchImportGatewayModel(
+  model: GatewayModel,
+  viewerUserId: string | null | undefined,
+  _canWrite: boolean,
+  isPlatformAdmin: boolean,
+  context?: GatewayModelPermissionContext
+): boolean {
+  if (resolveGatewayModelRegistryKind(model, context) === 'system') {
+    return false
+  }
+  return actorOwnsTeamModel(model, viewerUserId)
+}
+
+/** 个人模型批量导入：仅 owner */
+export function canBatchImportPersonalGatewayModel(
+  ownerUserId: string | null | undefined,
+  viewerUserId: string | null | undefined,
+  hasAuthSession: boolean
+): boolean {
+  return canManagePersonalGatewayModel(ownerUserId, viewerUserId, hasAuthSession)
 }
 
 /** member+ 可尝试注册团队模型（具体凭据绑定仍受 canBindCredentialForTeamModel 约束） */

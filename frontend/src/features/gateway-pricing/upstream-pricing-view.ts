@@ -1,8 +1,10 @@
 import type { GatewayModel } from '@/api/gateway/models'
 import type { UpstreamPricingRow } from '@/api/gateway/pricing'
 
-/** 上游成本固定以 USD 展示（LiteLLM 价表原始币种） */
-export const UPSTREAM_DISPLAY_CURRENCY = 'USD' as const
+import { GATEWAY_DISPLAY_CURRENCY } from './display-currency'
+
+/** 上游成本展示币种（USD 底稿经 FX 折算为人民币） */
+export const UPSTREAM_DISPLAY_CURRENCY = GATEWAY_DISPLAY_CURRENCY
 
 export function upstreamPricingKey(
   provider: string,

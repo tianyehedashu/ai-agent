@@ -6,12 +6,39 @@ from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any
 
 from domains.gateway.application.proxy_litellm_client import ProxyLiteLLMClient
-from domains.gateway.domain.proxy_policy import is_router_model_miss
+from domains.gateway.domain.proxy_policy import (
+    is_router_model_miss,
+    is_router_unavailable_wrapper,
+    resolve_upstream_proxy_exception,
+    upstream_exception_http_status,
+)
 
 if TYPE_CHECKING:
     from domains.gateway.application.proxy_context import ProxyContext
     from domains.gateway.application.proxy_guard import ProxyGuard
     from domains.gateway.domain.proxy_policy import BudgetReservation
+
+
+async def _surface_router_failure(
+    *,
+    litellm: ProxyLiteLLMClient,
+    ctx: ProxyContext,
+    model: str,
+    exc: Exception,
+    upstream_probe: Callable[[], Awaitable[Exception | None]] | None,
+) -> Exception:
+    """Router 聚合失败时尽量还原嵌套或探测到的上游异常。"""
+    unwrapped = resolve_upstream_proxy_exception(exc)
+    if unwrapped is not None and unwrapped is not exc:
+        return unwrapped
+    if upstream_probe is not None and is_router_unavailable_wrapper(exc):
+        probed = await upstream_probe()
+        if probed is not None and (
+            upstream_exception_http_status(probed) is not None
+            or type(probed).__name__.endswith("Error")
+        ):
+            return probed
+    return exc
 
 
 async def invoke_router_with_direct_fallback(
@@ -24,8 +51,9 @@ async def invoke_router_with_direct_fallback(
     use_direct: bool,
     direct_call: Callable[[], Awaitable[Any]],
     router_call: Callable[[], Awaitable[Any]],
+    upstream_probe: Callable[[], Awaitable[Exception | None]] | None = None,
 ) -> Any:
-    """Router 调用；model miss 时回退直连，失败时释放预扣。"""
+    """Router 调用；model miss 时回退直连，失败时释放预扣并尽量透传上游错误。"""
     try:
         if use_direct:
             return await direct_call()
@@ -40,8 +68,17 @@ async def invoke_router_with_direct_fallback(
                 await guard.release_budget_reservations(reservations)
                 await guard.release_entitlement_reservations(ctx)
                 raise
+        surfaced = await _surface_router_failure(
+            litellm=litellm,
+            ctx=ctx,
+            model=model,
+            exc=exc,
+            upstream_probe=upstream_probe,
+        )
         await guard.release_budget_reservations(reservations)
         await guard.release_entitlement_reservations(ctx)
+        if surfaced is not exc:
+            raise surfaced from exc
         raise
 
 

@@ -51,6 +51,42 @@ def test_classify_router_model_miss_maps_404() -> None:
     assert "Gateway 注册" in biz.message
 
 
+def test_classify_router_wrapper_with_upstream_auth_maps_401() -> None:
+    import litellm
+
+    auth = litellm.AuthenticationError(
+        message="The API key doesn't exist",
+        llm_provider="volcengine",
+        model="GLM-5.1",
+    )
+    wrapper = litellm.BadRequestError(
+        message="You passed in model=gw/t/x/m. There are no healthy deployments for this model",
+        model="gw/t/x/m",
+        llm_provider="",
+    )
+    wrapper.__cause__ = auth
+    biz = classify_proxy_use_case_business_error(wrapper)
+    assert biz is not None
+    assert biz.http_status == status.HTTP_401_UNAUTHORIZED
+    assert biz.openai_error_type == "authentication_error"
+    assert "API key doesn't exist" in biz.message
+
+
+def test_classify_router_wrapper_bad_request_400_not_treated_as_upstream() -> None:
+    import litellm
+
+    wrapper = litellm.BadRequestError(
+        message="You passed in model=gw/t/x/m. There are no healthy deployments for this model",
+        model="gw/t/x/m",
+        llm_provider="",
+    )
+    biz = classify_proxy_use_case_business_error(wrapper)
+    assert biz is not None
+    assert biz.http_status == status.HTTP_404_NOT_FOUND
+    assert biz.openai_error_type == "model_not_found"
+    assert "Gateway 注册" in biz.message
+
+
 def test_classify_rate_limit_maps_anthropic_rate_limit_error() -> None:
     biz = classify_proxy_use_case_business_error(RateLimitExceededError("vkey", retry_after=30))
     assert biz is not None

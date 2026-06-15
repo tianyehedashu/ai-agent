@@ -106,6 +106,13 @@ export function matchQuotaRulesForContext(rules: QuotaRule[], ctx: BudgetViewCon
     case 'credential':
       return rules.filter((r) => {
         if (r.key.layer === 'upstream') {
+          if (
+            ctx.credentialId !== undefined &&
+            r.key.credential_id !== null &&
+            r.key.credential_id !== ctx.credentialId
+          ) {
+            return false
+          }
           return ctx.linkedModelNames.length === 0
             ? true
             : r.key.model_name === null || ctx.linkedModelNames.includes(r.key.model_name)
@@ -226,7 +233,12 @@ export function quotaListParamsForContext(
       return { user_id: context.userId, include_usage: true }
     case 'team_model':
       return { model_name: context.modelName, include_usage: true }
-    default:
+    case 'credential':
+      return {
+        credential_id: context.credentialId,
+        include_usage: true,
+      }
+    case 'virtual_key':
       return { include_usage: true }
   }
 }

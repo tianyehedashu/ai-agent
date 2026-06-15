@@ -159,7 +159,7 @@ export function VirtualKeyRevealDialog({
                   </button>
                   {hintOpen ? (
                     <div className="space-y-2 border-t px-3 py-2 text-xs text-muted-foreground">
-                      <p>无前缀时调用主属工作区模型；跨 team 请带 slug 前缀：</p>
+                      <p>无前缀时调用个人模型；跨 team 请带 slug 前缀：</p>
                       <ul className="list-inside list-disc space-y-1">
                         {crossGrants.map((g) => (
                           <li key={g.id}>

@@ -11,7 +11,9 @@ from domains.gateway.domain.proxy_policy import (
     build_budget_check_plan,
     is_router_deployment_cooldown,
     is_router_model_miss,
+    is_router_unavailable_wrapper,
     proxy_budget_targets,
+    resolve_upstream_proxy_exception,
     router_cooldown_retry_after,
 )
 
@@ -67,6 +69,30 @@ def test_is_router_deployment_cooldown_from_message() -> None:
     assert is_router_deployment_cooldown(exc) is True
     assert is_router_model_miss(exc) is False
     assert router_cooldown_retry_after(exc) == 45
+
+
+def test_is_router_unavailable_wrapper() -> None:
+    miss = RuntimeError("no healthy deployments for model=foo")
+    assert is_router_unavailable_wrapper(miss) is True
+    assert is_router_unavailable_wrapper(ValueError("bad input")) is False
+
+
+def test_resolve_upstream_proxy_exception_from_router_wrapper() -> None:
+    import litellm
+
+    auth = litellm.AuthenticationError(
+        message="The API key doesn't exist",
+        llm_provider="volcengine",
+        model="GLM-5.1",
+    )
+    wrapper = litellm.BadRequestError(
+        message="no healthy deployments for model=gw/t/x/m",
+        model="gw/t/x/m",
+        llm_provider="",
+    )
+    wrapper.__cause__ = auth
+    resolved = resolve_upstream_proxy_exception(wrapper)
+    assert resolved is auth
 
 
 def test_proxy_budget_targets_includes_system() -> None:

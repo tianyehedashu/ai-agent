@@ -7,6 +7,7 @@ from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Literal
 import uuid
 
+from domains.gateway.application.management.plan_quota_merge import merge_plan_quotas_by_label
 from domains.gateway.domain.policies.platform_budget_upsert_policy import (
     validate_platform_budget_upsert,
 )
@@ -508,20 +509,7 @@ class QuotaRuleWritesMixin:
             "limit_requests": cmd.limit_requests,
         }
 
-        merged = [
-            {
-                "label": q.label,
-                "window_seconds": q.window_seconds,
-                "reset_strategy": q.reset_strategy,
-                "limit_usd": q.limit_usd,
-                "limit_tokens": q.limit_tokens,
-                "limit_requests": q.limit_requests,
-            }
-            for q in existing_quotas
-            if q.label != label
-        ]
-
-        merged.append(quota_payload)
+        merged = merge_plan_quotas_by_label(existing_quotas, label, quota_payload)
 
         await self._provider_plans.replace_quotas(plan.id, merged)
 
@@ -604,22 +592,12 @@ class QuotaRuleWritesMixin:
         if cmd.unit_price_usd_per_request is not None:
             quota_payload["unit_price_usd_per_request"] = cmd.unit_price_usd_per_request
 
-        merged = [
-            {
-                "label": q.label,
-                "window_seconds": q.window_seconds,
-                "reset_strategy": q.reset_strategy,
-                "limit_usd": q.limit_usd,
-                "limit_tokens": q.limit_tokens,
-                "limit_requests": q.limit_requests,
-                "unit_price_usd_per_token": getattr(q, "unit_price_usd_per_token", None),
-                "unit_price_usd_per_request": getattr(q, "unit_price_usd_per_request", None),
-            }
-            for q in existing_quotas
-            if q.label != label
-        ]
-
-        merged.append(quota_payload)
+        merged = merge_plan_quotas_by_label(
+            existing_quotas,
+            label,
+            quota_payload,
+            extra_fields=("unit_price_usd_per_token", "unit_price_usd_per_request"),
+        )
 
         await self._entitlement_plans.replace_quotas(plan.id, merged)
 

@@ -249,8 +249,6 @@ def is_router_deployment_cooldown(exc: Exception) -> bool:
     """LiteLLM Router 全部 deployment 处于 cooldown（常见原因：上游 429 限流）。"""
     if type(exc).__name__ in ("RouterRateLimitError", "RouterRateLimitErrorBasic"):
         return True
-    if getattr(exc, "cooldown_time", None) is not None:
-        return True
     message = str(exc).lower()
     return "no deployments available" in message and "try again in" in message
 
@@ -299,6 +297,80 @@ def is_router_model_miss(exc: Exception) -> bool:
     return any(marker in message for marker in _ROUTER_MODEL_MISS_MARKERS)
 
 
+def is_router_unavailable_wrapper(exc: Exception) -> bool:
+    """Router 聚合失败（无 healthy deployment / cooldown），非上游直出异常。"""
+    return is_router_deployment_cooldown(exc) or is_router_model_miss(exc)
+
+
+_ROUTER_WRAPPER_TYPE_NAMES: frozenset[str] = frozenset(
+    {
+        "BadRequestError",
+        "RouterRateLimitError",
+        "RouterRateLimitErrorBasic",
+    }
+)
+
+
+def iter_proxy_exception_chain(exc: BaseException) -> list[BaseException]:
+    """广度优先遍历异常链（``__cause__`` / ``__context__`` / ``ExceptionGroup``）。"""
+    ordered: list[BaseException] = []
+    seen: set[int] = set()
+    stack: list[BaseException] = [exc]
+    while stack:
+        current = stack.pop(0)
+        marker = id(current)
+        if marker in seen:
+            continue
+        seen.add(marker)
+        ordered.append(current)
+        cause = current.__cause__
+        if cause is not None:
+            stack.append(cause)
+        context = current.__context__
+        if context is not None and context is not cause:
+            stack.append(context)
+        nested = getattr(current, "exceptions", None)
+        if nested:
+            stack.extend(nested)
+    return ordered
+
+
+def _upstream_exception_rank(exc: Exception) -> int:
+    status = upstream_exception_http_status(exc)
+    if status in (401, 403):
+        return 100
+    if status == 429:
+        return 90
+    if status is not None and status >= 500:
+        return 80
+    if status is not None:
+        return 70
+    if type(exc).__name__ == "HTTPStatusError":
+        return 60
+    name = type(exc).__name__
+    if name.endswith("Error") and name not in _ROUTER_WRAPPER_TYPE_NAMES:
+        return 50
+    return 0
+
+
+def resolve_upstream_proxy_exception(exc: Exception) -> Exception | None:
+    """从 Router 包装异常链中提取最应透传给客户端的上游异常。"""
+    best: Exception | None = None
+    best_rank = 0
+    for item in iter_proxy_exception_chain(exc):
+        if not isinstance(item, Exception):
+            continue
+        if item is exc and is_router_unavailable_wrapper(item):
+            continue
+        if is_router_unavailable_wrapper(item):
+            continue
+        rank = _upstream_exception_rank(item)
+        if rank > best_rank:
+            best_rank = rank
+            best = item
+    return best
+
+
 __all__ = [
     "BudgetCheckQuery",
     "BudgetReservation",
@@ -313,7 +385,10 @@ __all__ = [
     "first_present_limit",
     "is_router_deployment_cooldown",
     "is_router_model_miss",
+    "is_router_unavailable_wrapper",
+    "iter_proxy_exception_chain",
     "proxy_budget_targets",
+    "resolve_upstream_proxy_exception",
     "rate_limit_target",
     "router_cooldown_retry_after",
     "upstream_exception_http_status",

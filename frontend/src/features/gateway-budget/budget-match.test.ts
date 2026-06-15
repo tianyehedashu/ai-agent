@@ -61,13 +61,14 @@ describe('quotaListParamsForContext', () => {
     ).toEqual({ model_name: 'claude-3', include_usage: true })
   })
 
-  it('falls back to usage-only fetch for credential context', () => {
+  it('passes credential_id for credential context', () => {
     expect(
       quotaListParamsForContext({
         kind: 'credential',
         userId: 'u1',
         linkedModelNames: ['m1'],
+        credentialId: 'cred-a',
       })
-    ).toEqual({ include_usage: true })
+    ).toEqual({ credential_id: 'cred-a', include_usage: true })
   })
 })

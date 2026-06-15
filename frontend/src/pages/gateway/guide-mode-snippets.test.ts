@@ -44,5 +44,13 @@ describe('buildGuideSnippets chat', () => {
     expect(snippets.openai.curl).toContain('/chat/completions')
     expect(snippets.openai.curlStream).toContain('stream')
     expect(snippets.anthropic.curl).toContain('/messages')
+    expect(snippets.modelsCurlNote).toBeNull()
+  })
+
+  it('multi-grant vkey 的 modelsCurl 含前缀说明注释', () => {
+    const snippets = buildGuideSnippets(BASE, KEY, MODEL, { multiGrantVkey: true })
+    expect(snippets.modelsCurlNote).toContain('team-slug/name')
+    expect(snippets.modelsCurlNote).toContain('个人')
+    expect(snippets.modelsCurl).toContain('# multi-grant vkey')
   })
 })

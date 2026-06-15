@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom'
 
 import type { GatewayTeam } from '@/api/gateway/teams'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   Dialog,
   DialogContent,
@@ -27,6 +28,15 @@ export interface CreateKeyValues {
   store_full_messages: boolean
   rpm_limit?: number | null
   tpm_limit?: number | null
+  granted_team_ids?: string[]
+}
+
+/** 创建 vkey 时可勾选的跨团队 grant 候选（排除主属 team）。 */
+export function grantableCrossTeams(
+  teams: readonly GatewayTeam[],
+  boundTeamId: string
+): GatewayTeam[] {
+  return teams.filter((team) => team.id !== boundTeamId)
 }
 
 function resolveInitialTeamId(
@@ -60,6 +70,8 @@ export function CreateKeyDialog({
 }: Readonly<CreateKeyDialogProps>): React.JSX.Element {
   const viewerUserId = useCurrentUser()?.id ?? null
   const [targetTeamId, setTargetTeamId] = useState('')
+  const [grantTeamFilter, setGrantTeamFilter] = useState('')
+  const [selectedGrantTeamIds, setSelectedGrantTeamIds] = useState<Set<string>>(() => new Set())
   const [values, setValues] = useState<CreateKeyValues>({
     name: '',
     store_full_messages: false,
@@ -79,17 +91,54 @@ export function CreateKeyDialog({
   const crossWorkspaceTarget =
     targetTeamId.length > 0 && routeTeamId.length > 0 && targetTeamId !== routeTeamId
 
+  const grantableTeams = useMemo(
+    () => grantableCrossTeams(targetTeams, targetTeamId),
+    [targetTeams, targetTeamId]
+  )
+
+  const filteredGrantableTeams = useMemo(() => {
+    const q = grantTeamFilter.trim().toLowerCase()
+    if (!q) return grantableTeams
+    return grantableTeams.filter(
+      (team) =>
+        team.name.toLowerCase().includes(q) ||
+        team.slug.toLowerCase().includes(q) ||
+        labelForTeam(team).toLowerCase().includes(q)
+    )
+  }, [grantableTeams, grantTeamFilter, labelForTeam])
+
   useEffect(() => {
     if (!open || plaintext) return
     setTargetTeamId(resolveInitialTeamId(targetTeams, routeTeamId))
+    setSelectedGrantTeamIds(new Set())
+    setGrantTeamFilter('')
   }, [open, plaintext, routeTeamId, targetTeams])
+
+  useEffect(() => {
+    if (!targetTeamId) return
+    setSelectedGrantTeamIds((prev) => {
+      if (!prev.has(targetTeamId)) return prev
+      const next = new Set(prev)
+      next.delete(targetTeamId)
+      return next
+    })
+  }, [targetTeamId])
+
+  const toggleGrantTeam = (teamId: string, checked: boolean): void => {
+    setSelectedGrantTeamIds((prev) => {
+      const next = new Set(prev)
+      if (checked) next.add(teamId)
+      else next.delete(teamId)
+      return next
+    })
+  }
 
   const canSubmit =
     values.name.trim().length > 0 && targetTeamId.length > 0 && targetTeams.length > 0
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="max-h-[min(90vh,720px)] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>创建虚拟 Key</DialogTitle>
           <DialogDescription>
@@ -149,7 +198,8 @@ export function CreateKeyDialog({
                   <p className="text-[11px] text-muted-foreground">
                     Key 将绑定到{' '}
                     <span className="font-medium text-foreground">{workspaceLabel}</span>
-                    ，调用时无需再传团队头。
+                    {selectedTeam?.kind === 'personal' ? '（个人）' : ''}
+                    ；无前缀调用走{selectedTeam?.kind === 'personal' ? '个人' : '该工作区'}。
                   </p>
                   {crossWorkspaceTarget ? (
                     <p className="text-[11px] text-amber-700 dark:text-amber-400">
@@ -159,6 +209,57 @@ export function CreateKeyDialog({
                 </>
               )}
             </div>
+
+            {grantableTeams.length > 0 ? (
+              <div className="space-y-2 rounded-md border border-dashed p-3">
+                <Label>跨工作区授权（可选）</Label>
+                <p className="text-[11px] text-muted-foreground">
+                  勾选后 Key 可同时访问其他工作区模型；跨 team 调用须带{' '}
+                  <code className="rounded bg-muted px-1">team-slug/model-name</code> 前缀。
+                </p>
+                {grantableTeams.length > 10 ? (
+                  <Input
+                    placeholder="搜索工作区名称或 slug…"
+                    value={grantTeamFilter}
+                    onChange={(e) => {
+                      setGrantTeamFilter(e.target.value)
+                    }}
+                    className="h-8 text-sm"
+                  />
+                ) : null}
+                {filteredGrantableTeams.length === 0 ? (
+                  <p className="py-2 text-center text-xs text-muted-foreground">无匹配工作区</p>
+                ) : (
+                  <ul className="max-h-40 space-y-1.5 overflow-y-auto">
+                    {filteredGrantableTeams.map((team) => (
+                      <li
+                        key={team.id}
+                        className="flex items-center gap-3 rounded-md border px-3 py-2"
+                      >
+                        <Checkbox
+                          checked={selectedGrantTeamIds.has(team.id)}
+                          onCheckedChange={(v) => {
+                            toggleGrantTeam(team.id, v === true)
+                          }}
+                        />
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium">{labelForTeam(team)}</p>
+                          <p className="truncate font-mono text-xs text-muted-foreground">
+                            {team.slug}
+                          </p>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {selectedGrantTeamIds.size > 0 ? (
+                  <p className="text-[11px] text-muted-foreground">
+                    已选 {selectedGrantTeamIds.size} 个额外工作区
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+
             <div>
               <Label htmlFor="key-name">名称</Label>
               <Input
@@ -239,7 +340,9 @@ export function CreateKeyDialog({
               <Button
                 onClick={() => {
                   if (!canSubmit) return
-                  onSubmit(targetTeamId, values)
+                  const granted_team_ids =
+                    selectedGrantTeamIds.size > 0 ? [...selectedGrantTeamIds] : undefined
+                  onSubmit(targetTeamId, { ...values, granted_team_ids })
                 }}
                 disabled={!canSubmit}
               >

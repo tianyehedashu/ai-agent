@@ -44,6 +44,11 @@ class VirtualKeyCreate(BaseModel):
     store_full_messages: bool = False
     guardrail_enabled: bool = False
     expires_in_days: int | None = None
+    granted_team_ids: list[uuid.UUID] = Field(
+        default_factory=list,
+        max_length=50,
+        description="创建时额外授权的工作区（不含绑定 team；绑定 team 自动写入自洽 grant）",
+    )
 
 
 class VirtualKeyResponse(BaseModel):

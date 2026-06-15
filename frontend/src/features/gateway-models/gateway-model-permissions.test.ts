@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import type { GatewayModel } from '@/api/gateway'
 
 import {
+  canBatchImportGatewayModel,
   canDeleteGatewayModel,
   canDeletePersonalGatewayModel,
   canManageGatewayModel,
@@ -69,7 +70,7 @@ describe('canManageGatewayModel', () => {
     ).toBe(true)
   })
 
-  it('allows team admin on legacy team models', () => {
+  it('denies team admin without credential ownership', () => {
     expect(
       canManageGatewayModel(
         model({ registry_kind: 'team', credential_created_by_user_id: null }),
@@ -224,6 +225,22 @@ describe('isModelBatchSelectable', () => {
     const teamModel = model({ registry_kind: 'team', credential_created_by_user_id: ownerId })
     expect(isModelBatchSelectable(teamModel, viewerId, true, false)).toBe(true)
     expect(isModelBatchSelectable(teamModel, viewerId, false, false)).toBe(false)
+  })
+})
+
+describe('canBatchImportGatewayModel', () => {
+  it('allows credential owner but not team admin on others credential', () => {
+    const owned = model({ registry_kind: 'team', credential_created_by_user_id: ownerId })
+    const other = model({ registry_kind: 'team', credential_created_by_user_id: ownerId })
+    expect(canBatchImportGatewayModel(owned, ownerId, false, false)).toBe(true)
+    expect(canBatchImportGatewayModel(other, viewerId, true, false)).toBe(false)
+    expect(canDeleteGatewayModel(other, viewerId, true, false)).toBe(true)
+  })
+
+  it('rejects system models', () => {
+    expect(
+      canBatchImportGatewayModel(model({ registry_kind: 'system' }), viewerId, false, true)
+    ).toBe(false)
   })
 })
 

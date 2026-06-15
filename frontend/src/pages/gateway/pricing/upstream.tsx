@@ -42,7 +42,7 @@ import { Loader2, Plus, RefreshCw } from '@/lib/lucide-icons'
 const columns: readonly PricingTableColumn[] = [
   { key: 'provider', label: '提供商', className: 'px-3 py-2' },
   { key: 'model', label: '上游模型', className: 'px-3 py-2' },
-  { key: 'rate', label: '单价（USD / 1M）', className: 'px-3 py-2' },
+  { key: 'rate', label: `单价（${UPSTREAM_DISPLAY_CURRENCY} / 1M）`, className: 'px-3 py-2' },
   { key: 'source', label: '来源', className: 'px-3 py-2' },
   { key: 'actions', label: '操作', className: 'px-3 py-2 text-right' },
 ]

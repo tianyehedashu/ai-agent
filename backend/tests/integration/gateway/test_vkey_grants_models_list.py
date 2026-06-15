@@ -269,3 +269,75 @@ class TestVkeyGrantsModelsList:
         assert f"{dup_slug}/{grant_b_model}" not in ids
         assert grant_a_model not in ids
         assert grant_b_model not in ids
+
+    @pytest.mark.asyncio
+    async def test_create_vkey_with_granted_team_ids(
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict[str, str],
+        db_session,
+        test_user,
+    ) -> None:
+        primary, shared = await ensure_two_teams(db_session, test_user)
+        vkey_id, _plain = await create_vkey_with_plain(
+            dev_client,
+            primary.id,
+            auth_headers,
+            granted_team_ids=[shared.id],
+        )
+        r_grants = await dev_client.get(
+            f"/api/v1/gateway/teams/{primary.id}/keys/{vkey_id}/grants",
+            headers=auth_headers,
+        )
+        assert r_grants.status_code == 200, r_grants.text
+        grants = r_grants.json()
+        tenant_ids = {g["tenant_id"] for g in grants}
+        assert str(primary.id) in tenant_ids
+        assert str(shared.id) in tenant_ids
+        r_create = await dev_client.post(
+            f"/api/v1/gateway/teams/{primary.id}/keys",
+            headers=auth_headers,
+            json={
+                "name": f"mvkey-check-{uuid.uuid4().hex[:6]}",
+                "granted_team_ids": [str(shared.id), str(primary.id)],
+            },
+        )
+        assert r_create.status_code == 201, r_create.text
+        created = r_create.json()
+        assert str(primary.id) in created["granted_team_ids"]
+        assert str(shared.id) in created["granted_team_ids"]
+
+    @pytest.mark.asyncio
+    async def test_create_vkey_rejects_grant_to_non_member_team(
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict[str, str],
+        db_session,
+        test_user,
+    ) -> None:
+        from domains.identity.infrastructure.models.user import User
+        from domains.tenancy.application.team_service import TeamService
+
+        primary, _shared = await ensure_two_teams(db_session, test_user)
+        other = User(
+            email=f"other-{uuid.uuid4().hex[:8]}@example.com",
+            hashed_password="hashed_password",
+            name="Other",
+        )
+        db_session.add(other)
+        await db_session.flush()
+        foreign_team = await TeamService(db_session).create_team(
+            name=f"foreign-{uuid.uuid4().hex[:4]}",
+            owner_user_id=other.id,
+        )
+        await db_session.commit()
+
+        r = await dev_client.post(
+            f"/api/v1/gateway/teams/{primary.id}/keys",
+            headers=auth_headers,
+            json={
+                "name": f"mvkey-bad-{uuid.uuid4().hex[:6]}",
+                "granted_team_ids": [str(foreign_team.id)],
+            },
+        )
+        assert r.status_code == 422, r.text

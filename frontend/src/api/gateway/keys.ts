@@ -67,6 +67,8 @@ export interface VirtualKeyCreateBody {
   tpm_limit?: number | null
   store_full_messages?: boolean
   guardrail_enabled?: boolean
+  /** 创建时额外授权的工作区（不含绑定 team） */
+  granted_team_ids?: string[]
 }
 
 export interface ManagedTeamVirtualKeyListResponse extends PaginatedList<VirtualKey> {

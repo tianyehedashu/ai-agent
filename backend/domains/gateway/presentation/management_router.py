@@ -26,6 +26,7 @@ from domains.gateway.presentation.routers import (
     managed_team_models,
     managed_team_routes,
     managed_team_virtual_keys,
+    model_copy,
     my_credentials,
     my_models,
     playground,
@@ -40,6 +41,7 @@ router.include_router(team_scoped.router)
 router.include_router(my_credentials.router)
 router.include_router(playground.router)
 router.include_router(credential_copy.router)
+router.include_router(model_copy.router)
 router.include_router(managed_team_credentials.router)
 router.include_router(managed_team_models.router)
 router.include_router(managed_team_routes.router)

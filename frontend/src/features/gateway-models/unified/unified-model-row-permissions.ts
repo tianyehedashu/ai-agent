@@ -5,11 +5,12 @@
 import type { GatewayModel } from '@/api/gateway/models'
 import type { GatewayTeam } from '@/api/gateway/teams'
 import {
+  canBatchImportGatewayModel,
+  canBatchImportPersonalGatewayModel,
   canDeleteGatewayModel,
   canManageGatewayModel,
   canResyncGatewayModelCapabilities,
   isConfigManagedSystemModel,
-  isModelBatchSelectable,
 } from '@/features/gateway-models/gateway-model-permissions'
 import type { GatewayModelListItem } from '@/features/gateway-models/list/types'
 import { isGatewayTeamWritable } from '@/features/gateway-teams/gateway-team-write-policy'
@@ -102,11 +103,24 @@ export function canBatchSelectUnifiedModelItem(
   item: GatewayModelListItem,
   ctx: UnifiedModelRowPermissionContext
 ): boolean {
+  return canBatchImportUnifiedModelItem(item, ctx) || canDeleteUnifiedModelItem(item, ctx)
+}
+
+export function canBatchImportUnifiedModelItem(
+  item: GatewayModelListItem,
+  ctx: UnifiedModelRowPermissionContext
+): boolean {
+  if (!ctx.hasAuthSession) return false
   if (isConfigManagedUnifiedModelItem(item)) return false
-  if (item.scope === 'personal') return canDeleteUnifiedModelItem(item, ctx)
+  if (item.scope === 'personal') {
+    const source = item.source
+    const ownerId =
+      'user_id' in source && typeof source.user_id === 'string' ? source.user_id : null
+    return canBatchImportPersonalGatewayModel(ownerId, ctx.viewerUserId, ctx.hasAuthSession)
+  }
   const model = asGatewayModel(item)
   if (!model) return false
-  return isModelBatchSelectable(
+  return canBatchImportGatewayModel(
     model,
     ctx.viewerUserId,
     teamCanWrite(item, ctx),

@@ -19,9 +19,16 @@ export interface GuideSnippets {
   anthropicBaseUrl: string
   authHeader: string
   modelsCurl: string
+  /** multi-grant vkey 时在 modelsCurl 前的注释说明 */
+  modelsCurlNote: string | null
   streamHint: string
   openai: FlavorSnippets
   anthropic: FlavorSnippets
+}
+
+export interface BuildGuideSnippetsOptions {
+  /** 存在跨 team grant 时为 true，用于 models 列表示例注释 */
+  multiGrantVkey?: boolean
 }
 
 export type ClientIntegrationId = 'claude-code' | 'cursor' | 'openai-sdk' | 'anthropic-sdk'
@@ -37,9 +44,13 @@ export function buildClientIntegrations(
   baseUrl: string,
   key: string,
   model: string,
-  snippets: GuideSnippets
+  snippets: GuideSnippets,
+  options?: BuildGuideSnippetsOptions
 ): ClientIntegration[] {
   const anthropicBase = snippets.anthropicBaseUrl
+  const modelIdHint = options?.multiGrantVkey
+    ? '模型 id 须与 GET /v1/models 一致（跨工作区带 team-slug/ 前缀）。'
+    : '模型名须与网关注册别名一致。'
   return [
     {
       id: 'claude-code',
@@ -70,14 +81,13 @@ export ANTHROPIC_SMALL_FAST_MODEL="claude-haiku-4-5"`,
     {
       id: 'cursor',
       title: 'Cursor',
-      summary:
-        'Settings → Models：Override OpenAI Base URL 与 API Key；模型名须与网关注册别名一致。',
+      summary: `Settings → Models：Override OpenAI Base URL 与 API Key；${modelIdHint}`,
       blocks: [
         {
           label: '配置步骤',
           code: `1. OpenAI API Key: ${key}
 2. Override OpenAI Base URL: ${baseUrl}
-3. Add Model: ${model}（与 GatewayModel.name 一致）
+3. Add Model: ${model}（${options?.multiGrantVkey ? '与 /v1/models id 一致' : '与 GatewayModel.name 一致'}）
 4. 点击 Verify，期望 HTTP 200`,
         },
         {
@@ -107,16 +117,26 @@ export ANTHROPIC_SMALL_FAST_MODEL="claude-haiku-4-5"`,
   ]
 }
 
-export function buildGuideSnippets(baseUrl: string, key: string, model: string): GuideSnippets {
+export function buildGuideSnippets(
+  baseUrl: string,
+  key: string,
+  model: string,
+  options?: BuildGuideSnippetsOptions
+): GuideSnippets {
   const authHeader = `Authorization: Bearer ${key}`
   const anthropicBase = baseUrl.replace(/\/openai\/v1\/?$/, '/anthropic')
   const anthropicV1 = `${anthropicBase}/v1`
+  const modelsCurlNote = options?.multiGrantVkey
+    ? `# multi-grant vkey：个人（主属 team）为裸注册名，其他授权工作区为 team-slug/name`
+    : null
+  const modelsCurlPrefix = modelsCurlNote ? `${modelsCurlNote}\n` : ''
   return {
     baseUrl,
     anthropicBaseUrl: anthropicBase,
     authHeader,
-    modelsCurl: `curl "${baseUrl}/models" \\
+    modelsCurl: `${modelsCurlPrefix}curl "${baseUrl}/models" \\
   -H "${authHeader}"`,
+    modelsCurlNote,
     streamHint: `// 流式：在请求体中设置 stream: true
 {
   "model": "${model}",

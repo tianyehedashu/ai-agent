@@ -62,6 +62,12 @@ async def create_key(
     expires_at = (
         datetime.now(UTC) + timedelta(days=body.expires_in_days) if body.expires_in_days else None
     )
+    extra_grant_ids = await writes.resolve_extra_vkey_grant_tenant_ids_for_actor(
+        actor_user_id=team.user_id,
+        bound_team_id=team.team_id,
+        requested_tenant_ids=body.granted_team_ids,
+    )
+
     record = await writes.create_virtual_key(
         tenant_id=team.team_id,
         created_by_user_id=team.user_id,
@@ -77,8 +83,12 @@ async def create_key(
         store_full_messages=body.store_full_messages,
         guardrail_enabled=body.guardrail_enabled,
         expires_at=expires_at,
+        extra_granted_team_ids=extra_grant_ids or None,
     )
-    base = vkey_to_response(virtual_key_from_orm(record)).model_dump()
+    granted_team_ids = await writes.list_active_grant_tenant_ids_for_vkey(record.id)
+    base = vkey_to_response(
+        virtual_key_from_orm(record, granted_team_ids=granted_team_ids)
+    ).model_dump()
     return VirtualKeyCreateResponse(**base, plain_key=plain)
 
 

@@ -16,6 +16,7 @@ import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
+import { useVkeyGrants } from '@/features/gateway-keys/grants/use-vkey-grants'
 import { GATEWAY_DISPLAY_CURRENCY } from '@/features/gateway-pricing/display-currency'
 import { useGatewayModelPrices } from '@/features/gateway-pricing/use-gateway-model-prices'
 import {
@@ -56,7 +57,9 @@ import {
 } from './playground-mode-filter'
 import { PlaygroundModelField, type RouteCandidate } from './playground-model-field'
 import { PlaygroundOutputPanel } from './playground-output-panel'
+import { isMultiGrantVirtualKey } from './playground-proxy-models'
 import {
+  buildMultiGrantTeamModelGroups,
   filterPlaygroundCandidatesForVirtualKey,
   filterPlaygroundNamesForVirtualKey,
   splitPlaygroundModelCandidatesForDisplay,
@@ -110,6 +113,7 @@ export function PlaygroundCard({
     isPersonalProxyTeam,
     onModelPickerOpenChange,
     ensureModelNameLoaded,
+    usingProxyModelList,
   },
 }: PlaygroundCardProps): React.JSX.Element {
   const isCredentialControlled = onCredentialChange !== undefined
@@ -229,6 +233,27 @@ export function PlaygroundCard({
     [modeFilteredModels, isPersonalProxyTeam]
   )
 
+  const multiGrantVkey = isMultiGrantVirtualKey(selectedKey?.granted_team_ids)
+  const grantsTeamId = selectedKey?.team_id ?? ''
+  const { data: vkeyGrants = [] } = useVkeyGrants(
+    grantsTeamId,
+    selectedKey?.id ?? '',
+    multiGrantVkey && Boolean(selectedKey?.id)
+  )
+
+  const teamModelGroups = useMemo(() => {
+    if (!multiGrantVkey || !usingProxyModelList) return undefined
+    const candidatesForGrouping = isPersonalProxyTeam ? personalCandidates : teamCandidates
+    return buildMultiGrantTeamModelGroups(candidatesForGrouping, vkeyGrants)
+  }, [
+    multiGrantVkey,
+    usingProxyModelList,
+    isPersonalProxyTeam,
+    personalCandidates,
+    teamCandidates,
+    vkeyGrants,
+  ])
+
   const selectedCandidate = useMemo(
     () => modeFilteredModels.find((m) => m.name === model),
     [modeFilteredModels, model]
@@ -240,6 +265,10 @@ export function PlaygroundCard({
   )
 
   const trimmedModel = model.trim()
+
+  const customModelPlaceholder = multiGrantVkey
+    ? '注册别名或 team-slug/model-name（跨工作区须带 slug 前缀）'
+    : '输入模型别名或虚拟路由名（也可输入未列出的名称）'
 
   const imageGenProvider = useMemo(
     () =>
@@ -585,6 +614,11 @@ export function PlaygroundCard({
               isLoading={credentialsLoading}
               isEmpty={credentialsEmpty}
             />
+            {usingProxyModelList && credentialId ? (
+              <p className="text-xs text-muted-foreground md:col-span-2 xl:col-span-3 2xl:col-span-4">
+                跨 team Key 的模型列表来自 GET /v1/models，不受凭据筛选影响。
+              </p>
+            ) : null}
             <div className="md:col-span-2 xl:col-span-1 2xl:col-span-2">
               <PlaygroundModelField
                 modelSelectId={modelSelectId}
@@ -598,6 +632,7 @@ export function PlaygroundCard({
                 }}
                 routeCandidates={routeCandidates}
                 teamCandidates={teamCandidates}
+                teamModelGroups={teamModelGroups}
                 personalCandidates={personalCandidates}
                 filteredModels={modeFilteredModels}
                 selectedCandidate={selectedCandidate}
@@ -607,7 +642,7 @@ export function PlaygroundCard({
                 playgroundMode={playgroundMode}
                 modelsLoading={modelsLoading}
                 onOpenChange={onModelPickerOpenChange}
-                personalModelsLabel={isPersonalProxyTeam ? '工作区模型' : '个人模型'}
+                customModelPlaceholder={customModelPlaceholder}
               />
             </div>
           </div>

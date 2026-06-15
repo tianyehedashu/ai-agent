@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from collections.abc import Sequence
 from datetime import datetime
 from typing import Any
 import uuid
@@ -79,6 +79,33 @@ def _credential_update_api_fields(
 class CredentialWritesMixin:
     """写侧 mixin — 由 GatewayManagementWriteService 组合。"""
 
+    async def resolve_extra_vkey_grant_tenant_ids_for_actor(
+        self,
+        *,
+        actor_user_id: uuid.UUID,
+        bound_team_id: uuid.UUID,
+        requested_tenant_ids: Sequence[uuid.UUID],
+    ) -> list[uuid.UUID]:
+        from domains.gateway.application.management.vkey_team_grant_policy import (
+            resolve_extra_vkey_grant_tenant_ids,
+        )
+
+        return await resolve_extra_vkey_grant_tenant_ids(
+            self._session,
+            actor_user_id=actor_user_id,
+            bound_team_id=bound_team_id,
+            requested_tenant_ids=requested_tenant_ids,
+        )
+
+    async def list_active_grant_tenant_ids_for_vkey(
+        self, vkey_id: uuid.UUID
+    ) -> tuple[uuid.UUID, ...]:
+        from domains.gateway.application.management.virtual_key_team_grant_reads import (
+            list_active_grant_tenant_ids,
+        )
+
+        return await list_active_grant_tenant_ids(self._session, vkey_id)
+
     async def create_virtual_key(
         self,
         *,
@@ -96,6 +123,7 @@ class CredentialWritesMixin:
         store_full_messages: bool,
         guardrail_enabled: bool,
         expires_at: datetime | None,
+        extra_granted_team_ids: Sequence[uuid.UUID] | None = None,
     ) -> Any:
         assert_vkey_guardrail_create_allowed(
             global_guardrail_enabled=settings.gateway_default_guardrail_enabled,
@@ -128,6 +156,18 @@ class CredentialWritesMixin:
                 tenant_id=tenant_id,
                 granted_by_user_id=created_by_user_id,
             )
+            if extra_granted_team_ids:
+                from domains.gateway.application.management.virtual_key_team_grant_writes import (
+                    grant_vkey_to_teams,
+                )
+
+                await grant_vkey_to_teams(
+                    self._session,
+                    vkey_id=record.id,
+                    vkey_tenant_id=tenant_id,
+                    tenant_ids=extra_granted_team_ids,
+                    granted_by_user_id=created_by_user_id,
+                )
         return record
 
     async def revoke_virtual_key(

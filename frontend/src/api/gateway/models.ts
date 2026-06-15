@@ -88,6 +88,36 @@ export interface GatewayModelBatchResyncCapabilitiesResponse {
   failed: GatewayModelBatchDeleteFailureItem[]
 }
 
+export type ModelCopyCredentialMode = 'existing' | 'copy_credential'
+
+export interface ModelCopyCredentialPlanBody {
+  source_credential_id: string
+  mode: ModelCopyCredentialMode
+  destination_credential_id?: string | null
+}
+
+export interface CopyModelsToTeamBody {
+  model_ids: string[]
+  destination_team_id: string
+  credential_plans: ModelCopyCredentialPlanBody[]
+}
+
+export interface ModelCopySuccessItem {
+  source_model_id: string
+  new_model_id: string
+  name: string
+}
+
+export interface ModelCopyFailureItem {
+  model_id: string
+  reason: string
+}
+
+export interface CopyModelsToTeamResponse {
+  succeeded: ModelCopySuccessItem[]
+  failed: ModelCopyFailureItem[]
+}
+
 /** GET /models/usage-summary 单条 route 的切片 */
 export interface GatewayModelRouteUsageSlice {
   requests: number
@@ -557,4 +587,7 @@ export const modelsApi = {
   /** 对一条 Gateway 团队模型发起最小 LLM 调用，结果同步落到 last_test_status / last_tested_at */
   testModel: (teamId: string, id: string) =>
     apiClient.post<GatewayModelTestResult>(teamGatewayPath(teamId, `/models/${id}/test`), {}),
+  /** 将所选模型子集复制到另一团队 */
+  copyModelsToTeam: (body: CopyModelsToTeamBody) =>
+    apiClient.post<CopyModelsToTeamResponse>(`${GATEWAY_API_BASE}/models/copy-to-team`, body),
 } as const

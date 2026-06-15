@@ -79,11 +79,16 @@ async def create_vkey_with_plain(
     dev_client: AsyncClient,
     team_id: uuid.UUID,
     headers: dict[str, str],
+    *,
+    granted_team_ids: list[uuid.UUID] | None = None,
 ) -> tuple[str, str]:
+    payload: dict[str, object] = {"name": f"mvkey-{uuid.uuid4().hex[:8]}"}
+    if granted_team_ids:
+        payload["granted_team_ids"] = [str(tid) for tid in granted_team_ids]
     r = await dev_client.post(
         f"/api/v1/gateway/teams/{team_id}/keys",
         headers=headers,
-        json={"name": f"mvkey-{uuid.uuid4().hex[:8]}"},
+        json=payload,
     )
     assert r.status_code == 201, r.text
     body = r.json()

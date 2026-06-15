@@ -21,6 +21,8 @@ from domains.gateway.domain.errors import (
 from domains.gateway.domain.proxy_policy import (
     is_router_deployment_cooldown,
     is_router_model_miss,
+    is_router_unavailable_wrapper,
+    resolve_upstream_proxy_exception,
     router_cooldown_retry_after,
     upstream_exception_http_status,
     upstream_exception_retry_after,
@@ -163,13 +165,22 @@ def classify_proxy_use_case_business_error(exc: Exception) -> ProxyUseCaseBusine
             openai_error_type="entitlement_exhausted",
             anthropic_error_type="rate_limit_error",
         )
+    unwrapped = resolve_upstream_proxy_exception(exc)
+    classify_exc = unwrapped if unwrapped is not None else exc
     # 优先按上游真实 status_code 分流；LiteLLM Router 会给原始异常 setattr ``cooldown_time``，
     # 若先走 cooldown 判定，401/403/404 等会被错误吞成 429。
-    upstream_status = upstream_exception_http_status(exc)
+    # 仅当 Router 包装异常自身携带泛化 ``400`` 且无更具体嵌套上游时，跳过按 400 透传。
+    upstream_status = upstream_exception_http_status(classify_exc)
     if upstream_status is not None:
-        failure = _classify_by_upstream_status(exc, upstream_status)
-        if failure is not None:
-            return failure
+        skip_generic_router_400 = (
+            classify_exc is exc
+            and is_router_unavailable_wrapper(exc)
+            and upstream_status == status.HTTP_400_BAD_REQUEST
+        )
+        if not skip_generic_router_400:
+            failure = _classify_by_upstream_status(classify_exc, upstream_status)
+            if failure is not None:
+                return failure
     if is_router_deployment_cooldown(exc):
         retry_after = router_cooldown_retry_after(exc)
         message = (

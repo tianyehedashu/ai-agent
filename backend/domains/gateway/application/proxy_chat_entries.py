@@ -155,6 +155,13 @@ class ProxyChatMixin:
             await rollback_open_transaction(self.session)
             return await router.acompletion(**prepared.kwargs)
 
+        async def _upstream_probe() -> Exception | None:
+            return await self.litellm.probe_chat_deployment_upstream_error(
+                ctx.team_id,
+                prepared.model,
+                user_id=ctx.user_id,
+            )
+
         upstream_started = time.perf_counter()
         response = await invoke_router_with_direct_fallback(
             guard=self.guard,
@@ -165,6 +172,7 @@ class ProxyChatMixin:
             use_direct=use_direct,
             direct_call=_direct,
             router_call=_router,
+            upstream_probe=_upstream_probe,
         )
         if prepared.stream:
             response = _collect_ttfb_stream(response, prepared.metadata, upstream_started)
@@ -256,6 +264,13 @@ class ProxyChatMixin:
         async def _router() -> Any:
             return await self.litellm.router_anthropic_messages(prepared.kwargs)
 
+        async def _upstream_probe() -> Exception | None:
+            return await self.litellm.probe_chat_deployment_upstream_error(
+                ctx.team_id,
+                prepared.model,
+                user_id=ctx.user_id,
+            )
+
         upstream_started = time.perf_counter()
         response = await invoke_router_with_direct_fallback(
             guard=self.guard,
@@ -266,6 +281,7 @@ class ProxyChatMixin:
             use_direct=use_direct,
             direct_call=_direct,
             router_call=_router,
+            upstream_probe=_upstream_probe,
         )
         if prepared.stream:
             response = _collect_ttfb_stream(response, prepared.metadata, upstream_started)

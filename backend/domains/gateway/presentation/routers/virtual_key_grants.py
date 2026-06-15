@@ -16,10 +16,10 @@ from domains.gateway.application.management.virtual_key_team_grant_writes import
     grant_vkey_to_teams,
     revoke_vkey_team_grant,
 )
-from domains.gateway.domain.errors import (
-    VirtualKeyNotFoundError,
-    VkeyGrantTargetNotMemberError,
+from domains.gateway.application.management.vkey_team_grant_policy import (
+    assert_actor_member_of_vkey_grant_targets,
 )
+from domains.gateway.domain.errors import VirtualKeyNotFoundError
 from domains.gateway.domain.virtual_key_access import assert_virtual_key_accessible_by_actor
 from domains.gateway.infrastructure.repositories.virtual_key_repository import (
     VirtualKeyRepository,
@@ -81,12 +81,11 @@ async def grant_to_teams(
     """幂等批量授权 vkey 到指定 team（仅 vkey 创建者可操作）。"""
     record = await _load_vkey_or_404(db, key_id, team.team_id, team.user_id)
 
-    from domains.tenancy.application.team_membership_queries import list_team_ids_for_user
-
-    actor_membership_ids = set(await list_team_ids_for_user(db, team.user_id))
-    invalid = [tid for tid in body.tenant_ids if tid not in actor_membership_ids]
-    if invalid:
-        raise VkeyGrantTargetNotMemberError(invalid)
+    await assert_actor_member_of_vkey_grant_targets(
+        db,
+        actor_user_id=team.user_id,
+        tenant_ids=body.tenant_ids,
+    )
 
     grants = await grant_vkey_to_teams(
         db,

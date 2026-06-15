@@ -131,7 +131,7 @@ export function VKeyGrantsDrawer({
             </span>
           ))}
           请使用 <code className="rounded bg-muted px-1">team-slug/model-name</code> 显式指定目标
-          team，避免无前缀调用落到主属工作区。
+          team，避免无前缀调用落到个人。
         </AlertDescription>
       </Alert>
     ) : null
@@ -155,9 +155,7 @@ export function VKeyGrantsDrawer({
           {homonymBanner}
 
           <section>
-            <h4 className="mb-2 text-xs font-semibold uppercase text-muted-foreground">
-              主属工作区
-            </h4>
+            <h4 className="mb-2 text-xs font-semibold uppercase text-muted-foreground">个人</h4>
             {isLoading ? (
               <p className="text-sm text-muted-foreground">加载中…</p>
             ) : selfGrant ? (
@@ -172,7 +170,7 @@ export function VKeyGrantsDrawer({
                     </p>
                   </div>
                   <Badge variant="secondary" className="shrink-0 text-xs">
-                    主属 · {selfGrant.model_count ?? 0} 模型
+                    个人 · {selfGrant.model_count ?? 0} 模型
                   </Badge>
                 </div>
                 <GrantTeamModels grant={selfGrant} />
@@ -212,7 +210,7 @@ export function VKeyGrantsDrawer({
 
             {crossGrants.length === 0 && !addingMode ? (
               <p className="py-4 text-center text-sm text-muted-foreground">
-                尚无跨团队授权。使用此 Key 只能访问主属工作区的模型。
+                尚无跨团队授权。使用此 Key 只能访问个人的模型。
               </p>
             ) : (
               <ul className="space-y-1.5">

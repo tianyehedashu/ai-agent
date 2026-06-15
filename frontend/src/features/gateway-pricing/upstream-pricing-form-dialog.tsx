@@ -148,7 +148,7 @@ export function UpstreamPricingFormDialog({
 
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label>输入价 / 1M tokens (USD)</Label>
+              <Label>输入价 / 1M tokens ({UPSTREAM_DISPLAY_CURRENCY})</Label>
               <Input
                 type="number"
                 min="0"
@@ -160,7 +160,7 @@ export function UpstreamPricingFormDialog({
               />
             </div>
             <div className="space-y-2">
-              <Label>输出价 / 1M tokens (USD)</Label>
+              <Label>输出价 / 1M tokens ({UPSTREAM_DISPLAY_CURRENCY})</Label>
               <Input
                 type="number"
                 min="0"

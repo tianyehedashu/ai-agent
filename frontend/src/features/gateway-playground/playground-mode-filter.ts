@@ -13,6 +13,8 @@ export interface ModelCandidate {
   capability: string
   /** 注册行厂商（生图尺寸预设应与模型 provider 对齐，不能只看凭据筛选） */
   provider: string
+  /** multi-grant vkey GET /v1/models：个人（主属 team）为 null，跨 team 为 slug */
+  teamSlug?: string | null
   selector_capabilities?: Record<string, unknown>
   model_types?: string[]
 }

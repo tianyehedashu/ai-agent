@@ -40,6 +40,7 @@ export interface GatewayModelListCapabilities {
   batchTest?: boolean
   batchResync?: boolean
   batchDelete?: boolean
+  batchCopyToTeam?: boolean
   deleteAllFiltered?: boolean
   deleteAllFilteredFetcher?: DeleteAllFilteredFetcher
   deleteFailed?: boolean
@@ -93,7 +94,7 @@ export interface GatewayModelListItem {
 
 /** Shell 权限裁剪输入 */
 export interface GatewayModelListPermissionContext {
-  /** 团队 admin+（含 legacy 共享凭据/跨筛选批量等管理面写权限） */
+  /** 团队 admin+（跨筛选批量等管理面写权限） */
   canWrite: boolean
   /**
    * 团队 member+（创建者私有）：可对自有模型行级启停/删除、批量勾选删除自有模型。
@@ -196,6 +197,9 @@ export interface GatewayModelBatchBarProps {
   onBatchTestSelected?: () => void
   onBatchResyncSelected?: () => void
   onBatchDelete?: () => void
+  onBatchCopyToTeam?: () => void
+  batchCopyToTeamDisabled?: boolean
+  batchCopyToTeamDisabledReason?: string
   batchBusy?: boolean
   testingAll?: boolean
   resyncingAll?: boolean

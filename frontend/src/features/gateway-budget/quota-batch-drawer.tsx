@@ -24,6 +24,7 @@ import { OverlayScope } from '@/lib/ui-overlay'
 
 import { BudgetModelCombobox } from './budget-model-combobox'
 import { QUOTA_TEMPLATES, applyQuotaTemplate } from './quota-batch-templates'
+import { QuotaLimitValueFields } from './quota-limit-fields'
 import { LAYER_LABELS } from './quota-rule-utils'
 import {
   patchQuotaBatchFormForLayer,
@@ -624,44 +625,26 @@ export function QuotaBatchDrawer({
                 </div>
               ) : null}
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Label htmlFor="quota-batch-usd">限额 USD</Label>
-                  <Input
-                    id="quota-batch-usd"
-                    value={values.limit_usd}
-                    onChange={(e) => {
-                      onChange({ ...values, limit_usd: e.target.value })
-                    }}
-                    disabled={disabled}
-                    placeholder="可选"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="quota-batch-tokens">Token</Label>
-                  <Input
-                    id="quota-batch-tokens"
-                    value={values.limit_tokens}
-                    onChange={(e) => {
-                      onChange({ ...values, limit_tokens: e.target.value })
-                    }}
-                    disabled={disabled}
-                    placeholder="可选"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="quota-batch-requests">请求数</Label>
-                  <Input
-                    id="quota-batch-requests"
-                    value={values.limit_requests}
-                    onChange={(e) => {
-                      onChange({ ...values, limit_requests: e.target.value })
-                    }}
-                    disabled={disabled}
-                    placeholder="可选"
-                  />
-                </div>
-              </div>
+              <QuotaLimitValueFields
+                layout="grid"
+                usdId="quota-batch-usd"
+                tokensId="quota-batch-tokens"
+                requestsId="quota-batch-requests"
+                limitUsd={values.limit_usd}
+                onLimitUsdChange={(v) => {
+                  onChange({ ...values, limit_usd: v })
+                }}
+                tokenMode="raw"
+                limitTokens={values.limit_tokens}
+                onLimitTokensChange={(v) => {
+                  onChange({ ...values, limit_tokens: v })
+                }}
+                limitRequests={values.limit_requests}
+                onLimitRequestsChange={(v) => {
+                  onChange({ ...values, limit_requests: v })
+                }}
+                disabled={disabled}
+              />
               <p className="text-xs text-muted-foreground">
                 至少填写 USD、Token 或请求数中的一项。
               </p>

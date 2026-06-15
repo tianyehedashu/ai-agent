@@ -43,6 +43,7 @@ import {
 } from './quota-batch-form'
 import { upstreamModelAllowedOnCredential } from './quota-batch-rules'
 import { QUOTA_TEMPLATES, applyQuotaTemplate } from './quota-batch-templates'
+import { QuotaLimitValueFields } from './quota-limit-fields'
 import { LAYER_LABELS } from './quota-rule-utils'
 import {
   applyQuotaWindowPreset,
@@ -989,62 +990,26 @@ function StepLimits({
       {/* 限额输入 */}
       <div className="space-y-3">
         <Label>限额值（至少填写一项）</Label>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <div className="space-y-1">
-            <Label htmlFor="qbw-usd" className="text-xs text-muted-foreground">
-              USD 限额
-            </Label>
-            <Input
-              id="qbw-usd"
-              type="number"
-              step="0.01"
-              min="0"
-              value={values.limit_usd}
-              onChange={(e) => {
-                onChange({ ...values, limit_usd: e.target.value })
-              }}
-              placeholder="如 100"
-              disabled={disabled}
-              className="h-9"
-            />
-          </div>
-          <div className="space-y-1">
-            <Label htmlFor="qbw-tokens" className="text-xs text-muted-foreground">
-              Token 限额
-            </Label>
-            <Input
-              id="qbw-tokens"
-              type="number"
-              step="1"
-              min="0"
-              value={values.limit_tokens}
-              onChange={(e) => {
-                onChange({ ...values, limit_tokens: e.target.value })
-              }}
-              placeholder="如 1000000"
-              disabled={disabled}
-              className="h-9"
-            />
-          </div>
-          <div className="space-y-1">
-            <Label htmlFor="qbw-requests" className="text-xs text-muted-foreground">
-              请求数限额
-            </Label>
-            <Input
-              id="qbw-requests"
-              type="number"
-              step="1"
-              min="0"
-              value={values.limit_requests}
-              onChange={(e) => {
-                onChange({ ...values, limit_requests: e.target.value })
-              }}
-              placeholder="如 1000"
-              disabled={disabled}
-              className="h-9"
-            />
-          </div>
-        </div>
+        <QuotaLimitValueFields
+          layout="grid"
+          usdId="qbw-usd"
+          tokensId="qbw-tokens"
+          requestsId="qbw-requests"
+          limitUsd={values.limit_usd}
+          onLimitUsdChange={(v) => {
+            onChange({ ...values, limit_usd: v })
+          }}
+          tokenMode="raw"
+          limitTokens={values.limit_tokens}
+          onLimitTokensChange={(v) => {
+            onChange({ ...values, limit_tokens: v })
+          }}
+          limitRequests={values.limit_requests}
+          onLimitRequestsChange={(v) => {
+            onChange({ ...values, limit_requests: v })
+          }}
+          disabled={disabled}
+        />
       </div>
 
       {/* P10: 编辑模式提示 + 删除按钮 */}

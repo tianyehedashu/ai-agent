@@ -1233,3 +1233,245 @@ class ModelWritesMixin:
             succeeded=succeeded,
             failed=failed,
         )
+
+    async def copy_models_to_team(
+        self,
+        *,
+        model_ids: list[uuid.UUID],
+        destination_team_id: uuid.UUID,
+        credential_plans: list,
+        actor_user_id: uuid.UUID,
+        is_platform_admin: bool,
+        destination_team_role: str,
+        platform_user_role: str,
+    ):
+        """Copy a subset of gateway_models rows to another team."""
+        from domains.gateway.application.management.model_copy_types import (
+            CopyModelsToTeamResult,
+            ModelCopyCredentialPlan,
+            ModelCopyFailure,
+            ModelCopySuccess,
+        )
+        from domains.gateway.domain.policies.credential_copy_policy import (
+            CredentialCopyScope,
+            assert_credential_copy_destination_allowed,
+            assert_credential_copy_source_allowed,
+        )
+        from domains.gateway.domain.policies.model_copy_policy import (
+            assert_model_copy_credential_plan_valid,
+            assert_model_copy_destination_credential_allowed,
+            assert_model_copy_destination_differs,
+            assert_model_copy_source_credential_allowed,
+            model_copy_failure_reason,
+        )
+
+        if len(model_ids) > _BATCH_MODEL_OP_MAX:
+            raise ValidationError(
+                f"单次最多复制 {_BATCH_MODEL_OP_MAX} 个模型",
+            )
+        if not model_ids:
+            raise ValidationError("model_ids must not be empty")
+
+        assert_credential_copy_destination_allowed(
+            destination=CredentialCopyScope(kind="team", team_id=destination_team_id),
+            destination_team_role=destination_team_role,
+            is_platform_admin=is_platform_admin,
+        )
+
+        personal_team_id = await self._ensure_personal_tenant_id(actor_user_id)
+        plan_by_cred: dict[uuid.UUID, ModelCopyCredentialPlan] = {
+            plan.source_credential_id: plan for plan in credential_plans
+        }
+        for plan in credential_plans:
+            assert_model_copy_credential_plan_valid(
+                mode=plan.mode,
+                destination_credential_id=plan.destination_credential_id,
+            )
+
+        unique_ids = list(dict.fromkeys(model_ids))
+        models_by_id: dict[uuid.UUID, Any] = {}
+        for model_id in unique_ids:
+            row = await self._models.get(model_id)
+            if row is not None:
+                models_by_id[model_id] = row
+
+        from domains.tenancy.application.management_team_resolve_use_case import (
+            TenancyManagementTeamResolveUseCase,
+        )
+
+        team_resolver = TenancyManagementTeamResolveUseCase(self._session)
+        source_team_roles: dict[uuid.UUID, str] = {}
+        for tenant_id in {
+            row.tenant_id
+            for row in models_by_id.values()
+            if row.tenant_id != personal_team_id
+        }:
+            ctx = await team_resolver.resolve_management_team(
+                user_id=actor_user_id,
+                platform_user_role=platform_user_role,
+                x_team_id=None,
+                path_team_id=str(tenant_id),
+            )
+            source_team_roles[tenant_id] = ctx.team_role
+
+        groups: dict[uuid.UUID, list[Any]] = {}
+        succeeded: list[ModelCopySuccess] = []
+        failed: list[ModelCopyFailure] = []
+
+        for model_id in unique_ids:
+            row = models_by_id.get(model_id)
+            if row is None:
+                failed.append(
+                    ModelCopyFailure(model_id=str(model_id), reason="model not found")
+                )
+                continue
+            groups.setdefault(row.credential_id, []).append(row)
+
+        dest_cred_cache: dict[uuid.UUID, uuid.UUID] = {}
+        any_created = False
+
+        for source_cred_id, group_rows in groups.items():
+            plan = plan_by_cred.get(source_cred_id)
+            if plan is None:
+                for row in group_rows:
+                    failed.append(
+                        ModelCopyFailure(
+                            model_id=str(row.id),
+                            reason="credential plan not found",
+                        )
+                    )
+                continue
+
+            try:
+                source_cred = await self._creds.get(source_cred_id)
+                if source_cred is None:
+                    raise CredentialNotFoundError(str(source_cred_id))
+
+                sample_tenant_id = group_rows[0].tenant_id
+                source_team_role = (
+                    None
+                    if sample_tenant_id == personal_team_id
+                    else source_team_roles.get(sample_tenant_id)
+                )
+                if sample_tenant_id != personal_team_id and source_team_role is None:
+                    raise CredentialNotFoundError(str(source_cred_id))
+
+                assert_model_copy_source_credential_allowed(
+                    source_cred,
+                    source_tenant_id=sample_tenant_id,
+                    personal_team_id=personal_team_id,
+                    actor_user_id=actor_user_id,
+                    is_platform_admin=is_platform_admin,
+                    source_team_role=source_team_role,
+                    permission_denied_tenant_id=destination_team_id,
+                )
+
+                dest_cred_id = dest_cred_cache.get(source_cred_id)
+                if dest_cred_id is None:
+                    if plan.mode == "copy_credential":
+                        source_scope = (
+                            CredentialCopyScope(kind="personal")
+                            if sample_tenant_id == personal_team_id
+                            else CredentialCopyScope(
+                                kind="team",
+                                team_id=sample_tenant_id,
+                            )
+                        )
+                        assert_credential_copy_source_allowed(
+                            source_cred,
+                            source=source_scope,
+                            actor_user_id=actor_user_id,
+                            is_platform_admin=is_platform_admin,
+                            source_team_role=source_team_role,
+                            permission_denied_tenant_id=destination_team_id,
+                        )
+                        target_name = await self._unique_copy_credential_name(
+                            source_cred,
+                            destination=CredentialCopyScope(
+                                kind="team",
+                                team_id=destination_team_id,
+                            ),
+                            actor_user_id=actor_user_id,
+                        )
+                        new_cred = await self._copy_credential_to_destination(
+                            source_cred_id,
+                            destination=CredentialCopyScope(
+                                kind="team",
+                                team_id=destination_team_id,
+                            ),
+                            actor_user_id=actor_user_id,
+                            name_override=target_name,
+                        )
+                        if new_cred is None:
+                            raise CredentialNotFoundError(str(source_cred_id))
+                        dest_cred_id = new_cred.id
+                    else:
+                        assert plan.destination_credential_id is not None
+                        dest_cred = await self._creds.get(plan.destination_credential_id)
+                        if dest_cred is None:
+                            raise CredentialNotFoundError(str(plan.destination_credential_id))
+                        assert_model_copy_destination_credential_allowed(
+                            dest_cred,
+                            destination_team_id=destination_team_id,
+                            source_provider=str(group_rows[0].provider),
+                            actor_user_id=actor_user_id,
+                            destination_team_role=destination_team_role,
+                            is_platform_admin=is_platform_admin,
+                        )
+                        dest_cred_id = dest_cred.id
+                    dest_cred_cache[source_cred_id] = dest_cred_id
+
+                for row in group_rows:
+                    try:
+                        assert_model_copy_destination_differs(
+                            source_tenant_id=row.tenant_id,
+                            destination_team_id=destination_team_id,
+                        )
+                        unique_name = await generate_unique_model_name(
+                            lambda n, _tid=destination_team_id: self._models.name_exists_for_tenant(
+                                _tid, n
+                            ),
+                            row.name,
+                        )
+                        created = await self._models.create(
+                            tenant_id=destination_team_id,
+                            name=unique_name,
+                            capability=row.capability,
+                            real_model=row.real_model,
+                            credential_id=dest_cred_id,
+                            provider=row.provider,
+                            weight=row.weight or 1,
+                            rpm_limit=row.rpm_limit,
+                            tpm_limit=row.tpm_limit,
+                            tags=row.tags,
+                            upstream_call_shape=row.upstream_call_shape,
+                            enabled=row.enabled,
+                            created_by_user_id=actor_user_id,
+                        )
+                        succeeded.append(
+                            ModelCopySuccess(
+                                source_model_id=str(row.id),
+                                new_model_id=str(created.id),
+                                name=unique_name,
+                            )
+                        )
+                        any_created = True
+                    except Exception as exc:
+                        failed.append(
+                            ModelCopyFailure(
+                                model_id=str(row.id),
+                                reason=model_copy_failure_reason(exc),
+                            )
+                        )
+            except Exception as exc:
+                reason = model_copy_failure_reason(exc)
+                for row in group_rows:
+                    if not any(s.source_model_id == str(row.id) for s in succeeded):
+                        failed.append(
+                            ModelCopyFailure(model_id=str(row.id), reason=reason)
+                        )
+
+        if any_created:
+            await self.reload_litellm_router(tenant_id=destination_team_id)
+
+        return CopyModelsToTeamResult(succeeded=succeeded, failed=failed)

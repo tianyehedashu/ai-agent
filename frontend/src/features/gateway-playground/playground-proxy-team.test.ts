@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 
+import type { VirtualKeyTeamGrant } from '@/api/gateway/grants'
+
 import {
+  buildMultiGrantTeamModelGroups,
   filterPlaygroundCandidatesForVirtualKey,
   filterPlaygroundNamesForVirtualKey,
   resolvePlaygroundProxyTeamId,
@@ -105,5 +108,85 @@ describe('splitPlaygroundModelCandidatesForDisplay', () => {
     )
     expect(teamCandidates.map((m) => m.name)).toEqual(['team-m'])
     expect(personalCandidates).toHaveLength(0)
+  })
+})
+
+describe('buildMultiGrantTeamModelGroups', () => {
+  const teamRow: ModelCandidate = {
+    name: 'team-m',
+    scope: 'team',
+    status: 'success',
+    capability: 'chat',
+    provider: 'openai',
+  }
+
+  const grants: VirtualKeyTeamGrant[] = [
+    {
+      id: 'g1',
+      vkey_id: 'k1',
+      tenant_id: 'team-a',
+      is_self: true,
+      created_at: '',
+      revoked_at: null,
+      granted_team_name: 'Alpha Team',
+      granted_team_slug: 'alpha',
+    },
+    {
+      id: 'g2',
+      vkey_id: 'k1',
+      tenant_id: 'team-b',
+      is_self: false,
+      created_at: '',
+      revoked_at: null,
+      granted_team_name: 'Beta Team',
+      granted_team_slug: 'beta',
+    },
+  ]
+
+  it('groups proxy models by team slug with primary first', () => {
+    const models: ModelCandidate[] = [
+      { ...teamRow, name: 'beta/gpt-4o', teamSlug: 'beta' },
+      { ...teamRow, name: 'gpt-4o', teamSlug: null },
+      { ...teamRow, name: 'gamma/claude', teamSlug: 'gamma' },
+    ]
+    const groups = buildMultiGrantTeamModelGroups(models, [
+      ...grants,
+      {
+        id: 'g3',
+        vkey_id: 'k1',
+        tenant_id: 'team-c',
+        is_self: false,
+        created_at: '',
+        revoked_at: null,
+        granted_team_name: 'Gamma Team',
+        granted_team_slug: 'gamma',
+      },
+    ])
+    expect(groups?.map((g) => g.label)).toEqual([
+      'Alpha Team · 个人',
+      'Beta Team (beta)',
+      'Gamma Team (gamma)',
+    ])
+    expect(groups?.[0]?.models.map((m) => m.name)).toEqual(['gpt-4o'])
+    expect(groups?.[1]?.models.map((m) => m.name)).toEqual(['beta/gpt-4o'])
+    expect(groups?.[2]?.models.map((m) => m.name)).toEqual(['gamma/claude'])
+  })
+
+  it('returns undefined for single-team lists', () => {
+    expect(buildMultiGrantTeamModelGroups([{ ...teamRow, teamSlug: null }], grants)).toBeUndefined()
+  })
+
+  it('infers team bucket from model name prefix when teamSlug missing', () => {
+    const groups = buildMultiGrantTeamModelGroups(
+      [
+        { ...teamRow, name: 'gpt-4o', teamSlug: null },
+        { ...teamRow, name: 'team-982b6a39/composer-2-5-chat' },
+      ],
+      grants
+    )
+    expect(groups).toHaveLength(2)
+    expect(groups?.[0]?.label).toBe('Alpha Team · 个人')
+    expect(groups?.[1]?.label).toBe('team-982b6a39')
+    expect(groups?.[1]?.models.map((m) => m.name)).toEqual(['team-982b6a39/composer-2-5-chat'])
   })
 })

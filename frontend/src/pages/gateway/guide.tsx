@@ -19,6 +19,9 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { findHomonymModels } from '@/features/gateway-keys/grants/use-team-slug-map'
+import { useVkeyGrants } from '@/features/gateway-keys/grants/use-vkey-grants'
+import { VkeyCrossTeamBanner } from '@/features/gateway-keys/grants/vkey-cross-team-banner'
 import { usePlaygroundCredentialOptions } from '@/features/gateway-playground/playground-credential-options'
 import { resolvePlaygroundVirtualKeyTeamIds } from '@/features/gateway-playground/playground-credential-summaries'
 import {
@@ -27,6 +30,7 @@ import {
   filterPlaygroundRouteCandidates,
   type PlaygroundMode,
 } from '@/features/gateway-playground/playground-mode-filter'
+import { isMultiGrantVirtualKey } from '@/features/gateway-playground/playground-proxy-models'
 import { usePlaygroundFilteredModels } from '@/features/gateway-playground/use-playground-filtered-models'
 import { usePlaygroundVirtualKey } from '@/features/gateway-playground/use-playground-virtual-key'
 import { combineFetching } from '@/features/gateway-shared/combine-fetching'
@@ -98,7 +102,10 @@ function buildQuickSteps(teamId: string | null): readonly QuickStep[] {
   ]
 }
 
-function buildTroubleshooting(teamId: string | null): readonly TroubleshootingItem[] {
+function buildTroubleshooting(
+  teamId: string | null,
+  multiGrantVkey: boolean
+): readonly TroubleshootingItem[] {
   const modelsHref = gatewayTeamModelsHref(teamId)
   return [
     { code: '401', title: '鉴权失败', href: gatewayTeamKeysHref(teamId), linkLabel: '虚拟 Key' },
@@ -107,7 +114,9 @@ function buildTroubleshooting(teamId: string | null): readonly TroubleshootingIt
       title: '模型不存在',
       href: modelsHref,
       linkLabel: '模型',
-      description: '确认 model 注册名、Key 所属团队与模型管理一致，且模型已启用、凭据可用。',
+      description: multiGrantVkey
+        ? '确认 model 与 GET /v1/models 返回的 id 一致；跨工作区须使用 team-slug/model-name 前缀，无前缀时仅命中 Key 个人。'
+        : '确认 model 注册名、Key 所属团队与模型管理一致，且模型已启用、凭据可用。',
     },
     { code: '429', title: '限流', href: modelsHref, linkLabel: '查看模型配额' },
     { code: '5xx', title: '上游失败', href: '/gateway/logs', linkLabel: '调用日志' },
@@ -185,6 +194,7 @@ export default function GatewayGuidePage(): React.JSX.Element {
 
   const workspaceTeamId = useGatewayWorkspaceTeamId()
   const membershipTeamIds = useGatewayMembershipTeamIds()
+  const [gatewayV1Base] = useState(resolveGatewayV1BaseUrl)
   const { byId: credentialById } = usePlaygroundCredentialOptions()
   const vkeyTeamIds = useMemo(
     () =>
@@ -202,10 +212,25 @@ export default function GatewayGuidePage(): React.JSX.Element {
     teamIds: vkeyTeamIds,
   })
 
+  const selectedKey = virtualKey.selectedKey
+  const multiGrantVkey = isMultiGrantVirtualKey(selectedKey?.granted_team_ids)
+  const grantsTeamId = selectedKey?.team_id ?? workspaceTeamId ?? ''
+  const { data: vkeyGrants = [] } = useVkeyGrants(
+    grantsTeamId,
+    selectedKey?.id ?? '',
+    Boolean(selectedKey?.id)
+  )
+  const crossGrants = useMemo(() => vkeyGrants.filter((g) => !g.is_self), [vkeyGrants])
+  const homonymModels = useMemo(() => findHomonymModels(vkeyGrants), [vkeyGrants])
+
   const playgroundFilteredModels = usePlaygroundFilteredModels({
     credentialId,
     includeRoutes: true,
-    proxyTeamId: virtualKey.selectedKey?.team_id ?? null,
+    proxyTeamId: selectedKey?.team_id ?? null,
+    proxyVkeyPlain: virtualKey.plain,
+    proxyVkeyBaseUrl: gatewayV1Base,
+    proxyVkeyId: selectedKey?.id ?? null,
+    multiGrantVkey,
   })
   const {
     credentialsLoading,
@@ -214,9 +239,9 @@ export default function GatewayGuidePage(): React.JSX.Element {
     ensureModelNameLoaded,
     isRefreshing: playgroundModelsRefreshing,
     refreshAll: refreshPlaygroundModels,
+    proxyModelsError,
   } = playgroundFilteredModels
   const { plain: revealedKey, isRevealing } = virtualKey
-  const [gatewayV1Base] = useState(resolveGatewayV1BaseUrl)
   const [activeModel, setActiveModel] = useState<string>(PLACEHOLDER_MODEL)
   const [playgroundMode, setPlaygroundMode] = useState<PlaygroundMode>('chat')
   const [apiFlavor, setApiFlavor] = useState<ApiFlavor>('openai')
@@ -236,8 +261,11 @@ export default function GatewayGuidePage(): React.JSX.Element {
       : 'placeholder'
 
   const snippets = useMemo(
-    () => buildGuideSnippets(gatewayV1Base, displayKey, activeModel || PLACEHOLDER_MODEL),
-    [gatewayV1Base, displayKey, activeModel]
+    () =>
+      buildGuideSnippets(gatewayV1Base, displayKey, activeModel || PLACEHOLDER_MODEL, {
+        multiGrantVkey,
+      }),
+    [gatewayV1Base, displayKey, activeModel, multiGrantVkey]
   )
   const clientIntegrations = useMemo(
     () =>
@@ -245,9 +273,10 @@ export default function GatewayGuidePage(): React.JSX.Element {
         gatewayV1Base,
         displayKey,
         activeModel || PLACEHOLDER_MODEL,
-        snippets
+        snippets,
+        { multiGrantVkey }
       ),
-    [gatewayV1Base, displayKey, activeModel, snippets]
+    [gatewayV1Base, displayKey, activeModel, snippets, multiGrantVkey]
   )
 
   useEffect(() => {
@@ -356,7 +385,16 @@ export default function GatewayGuidePage(): React.JSX.Element {
 
   const activeAnchor = useActiveGuideAnchor()
   const quickSteps = useMemo(() => buildQuickSteps(workspaceTeamId), [workspaceTeamId])
-  const troubleshooting = useMemo(() => buildTroubleshooting(workspaceTeamId), [workspaceTeamId])
+  const troubleshooting = useMemo(
+    () => buildTroubleshooting(workspaceTeamId, multiGrantVkey),
+    [workspaceTeamId, multiGrantVkey]
+  )
+  const awaitingCrossTeamReveal = multiGrantVkey && !revealedKey
+  const proxyModelsErrorMessage = proxyModelsError?.message ?? null
+
+  const handleRetryProxyModels = useCallback((): void => {
+    refreshPlaygroundModels()
+  }, [refreshPlaygroundModels])
 
   return (
     <div className="w-full">
@@ -382,6 +420,19 @@ export default function GatewayGuidePage(): React.JSX.Element {
           <h3 id="playground-heading" className="sr-only">
             在线试调
           </h3>
+          {multiGrantVkey ? (
+            <div className="mb-3">
+              <VkeyCrossTeamBanner
+                visible
+                crossTeamCount={crossGrants.length}
+                homonymModels={homonymModels}
+                awaitingReveal={awaitingCrossTeamReveal}
+                proxyModelsError={proxyModelsErrorMessage}
+                onRetryProxyModels={handleRetryProxyModels}
+                keysHrefTeamId={workspaceTeamId}
+              />
+            </div>
+          ) : null}
           <div className="mb-2 flex justify-end">
             <GatewayRefreshButton
               isFetching={combineFetching(playgroundModelsRefreshing, virtualKey.isRefreshingKeys)}

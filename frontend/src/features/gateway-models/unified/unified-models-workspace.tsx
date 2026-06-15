@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button'
 import { DropdownMenuItem } from '@/components/ui/dropdown-menu'
 import { ConnectivityBatchTestBanner } from '@/features/gateway-models/connectivity-batch-test-banner'
 import type { HealthFilter } from '@/features/gateway-models/constants'
+import { CopyModelsToTeamDialog } from '@/features/gateway-models/copy-models-to-team-dialog'
 import { preloadGatewayModelDetailPanes } from '@/features/gateway-models/detail/preload'
 import { useGatewayModelMutations } from '@/features/gateway-models/hooks/use-gateway-model-mutations'
 import { usePersonalModelMutations } from '@/features/gateway-models/hooks/use-personal-model-mutations'
@@ -39,6 +40,7 @@ import {
 } from '@/features/gateway-models/paths'
 import { invalidateUnifiedModelsCache } from '@/features/gateway-models/unified/invalidate-unified-models-cache'
 import {
+  canBatchImportUnifiedModelItem,
   canDeleteUnifiedModelItem,
   canManageUnifiedModelItem,
   canResyncUnifiedModelItem,
@@ -59,6 +61,7 @@ import {
   formatBatchDeleteConfirmLabel,
 } from '@/features/gateway-models/utils'
 import {
+  useGatewayContributorCollaborationTeams,
   useGatewayMemberCollaborationTeams,
   useGatewayTeamNameMap,
   useGatewayTeams,
@@ -78,6 +81,7 @@ const UNIFIED_LIST_CAPABILITIES = {
   batchTest: true,
   batchResync: true,
   batchDelete: true,
+  batchCopyToTeam: true,
   deleteAllFiltered: true,
   deleteFailed: true,
   rowToggleEnabled: true,
@@ -102,6 +106,7 @@ export function UnifiedModelsWorkspace(): React.JSX.Element {
   const teamNameById = useGatewayTeamNameMap()
   const { data: gatewayTeams = [] } = useGatewayTeams()
   const memberTeams = useGatewayMemberCollaborationTeams()
+  const contributorTeams = useGatewayContributorCollaborationTeams()
   const writableTeams = useGatewayWritableCollaborationTeams()
   const currentUser = useCurrentUser()
   const viewerUserId = currentUser?.id ?? null
@@ -132,6 +137,7 @@ export function UnifiedModelsWorkspace(): React.JSX.Element {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set())
   const [batchDeleteOpen, setBatchDeleteOpen] = useState(false)
   const [deleteFilteredOpen, setDeleteFilteredOpen] = useState(false)
+  const [copyToTeamOpen, setCopyToTeamOpen] = useState(false)
 
   const {
     items,
@@ -272,6 +278,30 @@ export function UnifiedModelsWorkspace(): React.JSX.Element {
     () => items.filter((item) => visibleSelectedIds.has(item.id)),
     [items, visibleSelectedIds]
   )
+
+  const personalTeamId = useMemo(
+    () => gatewayTeams.find((team) => team.kind === 'personal')?.id,
+    [gatewayTeams]
+  )
+
+  const hasImportableModels = useMemo(
+    () =>
+      entriesBeforeHealthFilter.some((item) => canBatchImportUnifiedModelItem(item, permissionCtx)),
+    [entriesBeforeHealthFilter, permissionCtx]
+  )
+
+  const selectedImportableItems = useMemo(
+    () =>
+      selectedItemsForBatch.filter((item) => canBatchImportUnifiedModelItem(item, permissionCtx)),
+    [selectedItemsForBatch, permissionCtx]
+  )
+
+  const allSelectedImportable =
+    selectedItemsForBatch.length > 0 &&
+    selectedImportableItems.length === selectedItemsForBatch.length
+
+  const showBatchCopyToTeam =
+    canContribute && hasImportableModels && contributorTeams.some((team) => team.kind === 'shared')
 
   const selectedTestable = useMemo(
     () =>
@@ -672,6 +702,17 @@ export function UnifiedModelsWorkspace(): React.JSX.Element {
                   : undefined
               }
               onBatchDelete={visibleSelectedIds.size > 0 ? handleOpenBatchDelete : undefined}
+              onBatchCopyToTeam={
+                showBatchCopyToTeam && visibleSelectedIds.size > 0
+                  ? () => {
+                      setCopyToTeamOpen(true)
+                    }
+                  : undefined
+              }
+              batchCopyToTeamDisabled={!allSelectedImportable}
+              batchCopyToTeamDisabledReason={
+                !allSelectedImportable ? '部分选中项无导出权限' : undefined
+              }
               batchBusy={batchBusy}
               testingAll={batchTesting}
               resyncingAll={batchResyncing}
@@ -764,6 +805,19 @@ export function UnifiedModelsWorkspace(): React.JSX.Element {
         pending={deletingModelId !== null}
         onConfirm={handleConfirmDelete}
       />
+
+      {copyToTeamOpen && allSelectedImportable ? (
+        <CopyModelsToTeamDialog
+          onOpenChange={(open) => {
+            if (!open) setCopyToTeamOpen(false)
+          }}
+          selectedItems={selectedImportableItems}
+          contributorTeams={contributorTeams}
+          personalTeamId={personalTeamId}
+          viewerUserId={viewerUserId}
+          isPlatformAdmin={isPlatformAdmin}
+        />
+      ) : null}
     </>
   )
 }

@@ -5,6 +5,7 @@ import type { PersonalGatewayModel } from '@/api/gateway/my-models'
 import type { GatewayTeam } from '@/api/gateway/teams'
 import { fromGatewayModel, fromPersonalModel } from '@/features/gateway-models/list/adapters'
 import {
+  canBatchImportUnifiedModelItem,
   canBatchSelectUnifiedModelItem,
   canDeleteUnifiedModelItem,
   canManageUnifiedModelItem,
@@ -136,6 +137,7 @@ describe('unified-model-row-permissions', () => {
     expect(canManageUnifiedModelItem(item, adminCtx)).toBe(true)
     expect(canDeleteUnifiedModelItem(item, adminCtx)).toBe(true)
     expect(canBatchSelectUnifiedModelItem(item, adminCtx)).toBe(true)
+    expect(canBatchImportUnifiedModelItem(item, adminCtx)).toBe(false)
   })
 
   it('allows credential owner to manage team model without admin role', () => {
@@ -153,6 +155,7 @@ describe('unified-model-row-permissions', () => {
     })
     expect(canManageUnifiedModelItem(item, memberCtx)).toBe(true)
     expect(canBatchSelectUnifiedModelItem(item, memberCtx)).toBe(true)
+    expect(canBatchImportUnifiedModelItem(item, memberCtx)).toBe(true)
   })
 
   it('blocks batch select for config-managed system models', () => {

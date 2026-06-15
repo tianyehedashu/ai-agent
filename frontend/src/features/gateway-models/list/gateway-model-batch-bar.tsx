@@ -2,7 +2,7 @@ import { memo } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Loader2, RefreshCw, Trash2 } from '@/lib/lucide-icons'
+import { Loader2, RefreshCw, Trash2, Upload } from '@/lib/lucide-icons'
 
 import type { GatewayModelBatchBarProps } from './types'
 
@@ -16,6 +16,9 @@ export const GatewayModelBatchBar = memo(function GatewayModelBatchBar({
   onBatchTestSelected,
   onBatchResyncSelected,
   onBatchDelete,
+  onBatchCopyToTeam,
+  batchCopyToTeamDisabled = false,
+  batchCopyToTeamDisabledReason,
   batchBusy = false,
   testingAll = false,
   resyncingAll = false,
@@ -73,6 +76,20 @@ export const GatewayModelBatchBar = memo(function GatewayModelBatchBar({
               <RefreshCw className="mr-1 h-3 w-3" />
             )}
             同步能力
+          </Button>
+        ) : null}
+
+        {capabilities.batchCopyToTeam !== false && onBatchCopyToTeam ? (
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 text-xs"
+            disabled={batchBusy || selectedCount === 0 || batchCopyToTeamDisabled}
+            title={batchCopyToTeamDisabled ? batchCopyToTeamDisabledReason : undefined}
+            onClick={onBatchCopyToTeam}
+          >
+            <Upload className="mr-1 h-3 w-3" />
+            导入到团队
           </Button>
         ) : null}
 

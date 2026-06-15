@@ -4,7 +4,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
-import { useInfiniteQuery, useQueries, useQueryClient } from '@tanstack/react-query'
+import { useInfiniteQuery, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { gatewayApi } from '@/api/gateway'
 import { MANAGED_TEAM_MODELS_QUERY_KEY } from '@/features/gateway-models/use-managed-team-models-list'
@@ -26,6 +26,7 @@ import {
   type PlaygroundCredentialOption,
 } from './playground-credential-options'
 import { buildPlaygroundCandidateModels } from './playground-model-sources'
+import { fetchPlaygroundProxyModels } from './playground-proxy-models'
 import { isPersonalGatewayTeam, resolvePlaygroundProxyTeamId } from './playground-proxy-team'
 import {
   filterPlaygroundManagedTeamModels,
@@ -40,6 +41,11 @@ export interface UsePlaygroundFilteredModelsOptions {
   includeRoutes?: boolean
   /** 已选虚拟 Key 的 team_id；与后端 Bearer 鉴权团队对齐，避免模型列表与 Key 不一致 */
   proxyTeamId?: string | null
+  /** multi-grant vkey 已 reveal 明文时，经 GET /v1/models 拉合并 callable 列表 */
+  proxyVkeyPlain?: string | null
+  proxyVkeyBaseUrl?: string | null
+  proxyVkeyId?: string | null
+  multiGrantVkey?: boolean
 }
 
 export interface UsePlaygroundFilteredModelsResult {
@@ -71,6 +77,10 @@ export interface UsePlaygroundFilteredModelsResult {
   ensureModelNameLoaded: (modelName: string) => void
   isRefreshing: boolean
   refreshAll: () => void
+  /** multi-grant vkey 使用代理 /v1/models 列表 */
+  usingProxyModelList: boolean
+  proxyModelsLoading: boolean
+  proxyModelsError: Error | null
 }
 
 /** 父级注入 PlaygroundCard 的快照，避免同页重复跑 hook */
@@ -85,6 +95,12 @@ export function usePlaygroundFilteredModels(
   const credentialId = options.credentialId ?? ''
   const fetchRoutes = options.includeRoutes ?? false
   const selectedKeyTeamId = options.proxyTeamId ?? null
+  const proxyVkeyPlain = options.proxyVkeyPlain?.trim() ?? ''
+  const proxyVkeyBaseUrl = options.proxyVkeyBaseUrl?.trim() ?? ''
+  const proxyVkeyId = options.proxyVkeyId ?? null
+  const multiGrantVkey = options.multiGrantVkey ?? false
+  const usingProxyModelList =
+    multiGrantVkey && proxyVkeyPlain.length > 0 && proxyVkeyBaseUrl.length > 0
 
   const queryClient = useQueryClient()
   const [modelPickerOpen, setModelPickerOpen] = useState(false)
@@ -125,11 +141,25 @@ export function usePlaygroundFilteredModels(
     isPersonalCredential
   )
   const includeTeamModels =
-    useManagedTeamModelsQuery || (Boolean(proxyTeamId) && (!credentialId || !isPersonalCredential))
+    !usingProxyModelList &&
+    (useManagedTeamModelsQuery ||
+      (Boolean(proxyTeamId) && (!credentialId || !isPersonalCredential)))
   const includeMyModels =
-    (!credentialId || isPersonalCredential) && (!selectedKeyTeamId || isPersonalProxyTeam)
+    !usingProxyModelList &&
+    (!credentialId || isPersonalCredential) &&
+    (!selectedKeyTeamId || isPersonalProxyTeam)
   const includeRoutes =
-    fetchRoutes && Boolean(proxyTeamId) && !(credentialId && isPersonalCredential)
+    !usingProxyModelList &&
+    fetchRoutes &&
+    Boolean(proxyTeamId) &&
+    !(credentialId && isPersonalCredential)
+
+  const proxyModelsQuery = useQuery({
+    queryKey: ['gateway', 'playground', 'proxy-models', proxyVkeyId, proxyVkeyBaseUrl] as const,
+    queryFn: () => fetchPlaygroundProxyModels(proxyVkeyBaseUrl, proxyVkeyPlain),
+    enabled: usingProxyModelList,
+    staleTime: GATEWAY_MODELS_STALE_MS,
+  })
 
   const teamModelsQuery = useInfiniteQuery({
     queryKey: useManagedTeamModelsQuery
@@ -200,6 +230,12 @@ export function usePlaygroundFilteredModels(
   } = teamModelsQuery
 
   const {
+    refetch: refetchProxyModels,
+    isSuccess: proxyModelsSuccess,
+    isError: proxyModelsIsError,
+  } = proxyModelsQuery
+
+  const {
     fetchNextPage: fetchNextMyPage,
     hasNextPage: myHasNextPage,
     isFetchingNextPage: isFetchingNextMyPage,
@@ -240,16 +276,24 @@ export function usePlaygroundFilteredModels(
     myData?.pages.length,
   ])
 
-  const candidateModels = useMemo<ModelCandidate[]>(
-    () =>
-      buildPlaygroundCandidateModels({
-        credentialId,
-        isPersonalCredential,
-        teamModels,
-        myModels,
-      }),
-    [credentialId, isPersonalCredential, teamModels, myModels]
-  )
+  const candidateModels = useMemo<ModelCandidate[]>(() => {
+    if (usingProxyModelList) {
+      return proxyModelsQuery.data ?? []
+    }
+    return buildPlaygroundCandidateModels({
+      credentialId,
+      isPersonalCredential,
+      teamModels,
+      myModels,
+    })
+  }, [
+    usingProxyModelList,
+    proxyModelsQuery.data,
+    credentialId,
+    isPersonalCredential,
+    teamModels,
+    myModels,
+  ])
 
   const candidateNames = useMemo(
     () => new Set(candidateModels.map((m) => m.name)),
@@ -300,21 +344,48 @@ export function usePlaygroundFilteredModels(
     setModelPickerOpen(open)
   }, [])
 
+  const proxyModelsLoading = usingProxyModelList && proxyModelsQuery.isLoading
+  const proxyModelsError = proxyModelsQuery.error instanceof Error ? proxyModelsQuery.error : null
+
+  const proxyModelsSettled =
+    !usingProxyModelList || (!proxyModelsLoading && (proxyModelsSuccess || proxyModelsIsError))
+
+  const teamModelsLoaded = usingProxyModelList
+    ? proxyModelsSettled && proxyModelsSuccess
+    : !includeTeamModels || teamModelsSuccess
+
+  const myModelsLoaded = usingProxyModelList ? true : !includeMyModels || myModelsSuccess
+
   const modelsLoading =
-    teamModelsLoading || myModelsLoading || routesQuery.isLoading || credentialsLoading
+    teamModelsLoading ||
+    myModelsLoading ||
+    routesQuery.isLoading ||
+    credentialsLoading ||
+    proxyModelsLoading
 
   const isRefreshing =
-    teamModelsFetching || myModelsFetching || routesQuery.isFetching || credentialsFetching
+    teamModelsFetching ||
+    myModelsFetching ||
+    routesQuery.isFetching ||
+    credentialsFetching ||
+    (usingProxyModelList && proxyModelsQuery.isFetching)
 
   const refreshAll = useCallback((): void => {
     void Promise.all([
-      refetchTeamModels(),
-      refetchMyModels(),
-      routesQuery.refetch(),
+      usingProxyModelList ? refetchProxyModels() : refetchTeamModels(),
+      usingProxyModelList ? Promise.resolve() : refetchMyModels(),
+      usingProxyModelList ? Promise.resolve() : routesQuery.refetch(),
       queryClient.invalidateQueries({ queryKey: [...PLAYGROUND_CREDENTIAL_SUMMARIES_QUERY_KEY] }),
       queryClient.invalidateQueries({ queryKey: [...MANAGED_TEAM_MODELS_QUERY_KEY] }),
     ])
-  }, [queryClient, refetchMyModels, refetchTeamModels, routesQuery])
+  }, [
+    queryClient,
+    refetchMyModels,
+    refetchTeamModels,
+    refetchProxyModels,
+    routesQuery,
+    usingProxyModelList,
+  ])
 
   return {
     workspaceTeamId,
@@ -333,11 +404,14 @@ export function usePlaygroundFilteredModels(
     candidateModels,
     routes: routesQuery.data,
     modelsLoading,
-    teamModelsLoaded: !includeTeamModels || teamModelsSuccess,
-    myModelsLoaded: !includeMyModels || myModelsSuccess,
+    teamModelsLoaded,
+    myModelsLoaded,
     onModelPickerOpenChange,
     ensureModelNameLoaded,
     isRefreshing,
     refreshAll,
+    usingProxyModelList,
+    proxyModelsLoading,
+    proxyModelsError,
   }
 }

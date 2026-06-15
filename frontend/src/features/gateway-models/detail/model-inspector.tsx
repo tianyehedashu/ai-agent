@@ -52,7 +52,7 @@ import {
 import { UsageAggregationToggle } from '@/features/gateway-usage/usage-aggregation-toggle'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
-import { Copy, Info, Loader2, RefreshCw, Trash2 } from '@/lib/lucide-icons'
+import { Copy, Info, Loader2, Play, RefreshCw, Trash2 } from '@/lib/lucide-icons'
 import { copyToClipboard } from '@/lib/utils'
 import { useCurrentUser } from '@/stores/user'
 
@@ -224,6 +224,7 @@ const ModelInspectorPanel = memo(function ModelInspectorPanel({
   }, [credentials, model.credential_id, model.provider])
 
   const isTestable = TESTABLE_CAPABILITIES.has(capabilityValues.capability)
+  const testButtonLabel = model.last_test_status !== null ? '重新测试' : '测试连通性'
   const slice = usageScope === 'workspace' ? usageRow?.workspace : usageRow?.user
   const req = slice?.requests ?? 0
   const tok = (slice?.input_tokens ?? 0) + (slice?.output_tokens ?? 0)
@@ -337,6 +338,23 @@ const ModelInspectorPanel = memo(function ModelInspectorPanel({
                   }}
                   aria-label={model.enabled ? '停用模型' : '启用模型'}
                 />
+                {isTestable ? (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={isTesting || isSaving}
+                    onClick={() => {
+                      onTest(model.id)
+                    }}
+                  >
+                    {isTesting ? (
+                      <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Play className="mr-1 h-3.5 w-3.5" />
+                    )}
+                    {testButtonLabel}
+                  </Button>
+                ) : null}
                 {canResync && onResyncCapabilities ? (
                   <Button
                     size="sm"
@@ -421,7 +439,7 @@ const ModelInspectorPanel = memo(function ModelInspectorPanel({
                     <Copy className="mr-1 h-3 w-3" />
                     {copied ? '已复制' : '复制错误'}
                   </Button>
-                  {canManage && isTestable ? (
+                  {isTestable ? (
                     <Button
                       type="button"
                       size="sm"
@@ -433,7 +451,7 @@ const ModelInspectorPanel = memo(function ModelInspectorPanel({
                       }}
                     >
                       {isTesting ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : null}
-                      重新测试
+                      {testButtonLabel}
                     </Button>
                   ) : null}
                 </div>
