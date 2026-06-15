@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Annotated
 import uuid
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from domains.gateway.application.management.model_copy_types import (
@@ -50,13 +50,14 @@ async def _resolve_team_role(
 @router.post(
     "/models/copy-to-team",
     response_model=CopyModelsToTeamResponse,
-    status_code=status.HTTP_201_CREATED,
+    status_code=status.HTTP_200_OK,
 )
 async def copy_models_to_team(
     body: CopyModelsToTeamRequest,
     current_user: RequiredAuthUser,
     db: DbSession,
     writes: MgmtWrites,
+    response: Response,
 ) -> CopyModelsToTeamResponse:
     """Copy selected gateway_models rows to another team."""
     assert_gateway_write_allowed(current_user.role, "POST")
@@ -87,6 +88,10 @@ async def copy_models_to_team(
         is_platform_admin=is_platform_admin,
         destination_team_role=destination_team_role,
         platform_user_role=current_user.role,
+    )
+
+    response.status_code = (
+        status.HTTP_201_CREATED if result.succeeded else status.HTTP_200_OK
     )
 
     return CopyModelsToTeamResponse(

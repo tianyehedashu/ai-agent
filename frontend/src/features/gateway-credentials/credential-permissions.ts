@@ -1,7 +1,7 @@
 /**
  * Gateway 凭据管理面权限（对齐 backend team_credential_access.py）。
  *
- * - canEditGatewayCredential：改/删/启用（创建者私有；legacy NULL + admin+）
+ * - canEditGatewayCredential：改/删/启用（创建者私有）
  * - canLinkToCredentialDetail：详情深链（与可读集合一致）
  */
 
@@ -14,15 +14,6 @@ export type CredentialLinkScope = Pick<
   CredentialSummary,
   'scope' | 'created_by_user_id' | 'management_access'
 >
-
-export function isLegacySharedTeamCredential(cred: CredentialOwnerFields): boolean {
-  return (
-    cred.scope === 'team' &&
-    (cred.created_by_user_id === null ||
-      cred.created_by_user_id === undefined ||
-      cred.created_by_user_id === '')
-  )
-}
 
 export function actorOwnsTeamCredential(
   cred: CredentialOwnerFields,
@@ -47,8 +38,7 @@ export function canEditGatewayCredential(
   if (c.management_access === 'metadata') return false
   if (c.scope === 'system') return isPlatformAdmin
   if (c.scope !== 'team') return false
-  if (actorOwnsTeamCredential(c, viewerUserId)) return true
-  return isLegacySharedTeamCredential(c) && canWrite
+  return actorOwnsTeamCredential(c, viewerUserId)
 }
 
 /** 团队凭据：API 已过滤可见集合；system 仅平台管理员 */
@@ -67,10 +57,7 @@ export function canLinkToCredentialDetail(
   if (summary.scope !== 'team') return false
 
   const createdBy = summary.created_by_user_id ?? null
-  if (actorOwnsTeamCredential({ scope: 'team', created_by_user_id: createdBy }, viewerUserId)) {
-    return true
-  }
-  return isLegacySharedTeamCredential({ scope: 'team', created_by_user_id: createdBy }) && canWrite
+  return actorOwnsTeamCredential({ scope: 'team', created_by_user_id: createdBy }, viewerUserId)
 }
 
 export function canCreateTeamCredential(_team: Pick<GatewayTeam, 'kind'>): boolean {
@@ -99,13 +86,12 @@ export function credentialDetailTeamId(
   return routeTeamId
 }
 
-/** 注册模型时可绑定的 team 凭据（仅创建者 + legacy admin 可见集合） */
+/** 注册模型时可绑定的 team 凭据（仅创建者） */
 export function canBindCredentialForTeamModel(
   c: ProviderCredential,
   viewerUserId: string | null | undefined,
-  canWrite: boolean
+  _canWrite: boolean
 ): boolean {
   if (c.scope !== 'team') return false
-  if (actorOwnsTeamCredential(c, viewerUserId)) return true
-  return isLegacySharedTeamCredential(c) && canWrite
+  return actorOwnsTeamCredential(c, viewerUserId)
 }

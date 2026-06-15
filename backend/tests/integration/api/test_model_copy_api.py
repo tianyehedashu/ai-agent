@@ -168,7 +168,7 @@ class TestModelCopyApi:
                 ],
             },
         )
-        assert r_copy.status_code == 201, r_copy.text
+        assert r_copy.status_code == 200, r_copy.text
         body = r_copy.json()
         assert body["succeeded"] == []
         assert len(body["failed"]) == 1

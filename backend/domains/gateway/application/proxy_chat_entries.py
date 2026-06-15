@@ -156,9 +156,10 @@ class ProxyChatMixin:
             return await router.acompletion(**prepared.kwargs)
 
         async def _upstream_probe() -> Exception | None:
-            return await self.litellm.probe_chat_deployment_upstream_error(
+            return await self.litellm.probe_deployment_upstream_error(
                 ctx.team_id,
                 prepared.model,
+                capability=GatewayCapability.CHAT,
                 user_id=ctx.user_id,
             )
 
@@ -265,9 +266,10 @@ class ProxyChatMixin:
             return await self.litellm.router_anthropic_messages(prepared.kwargs)
 
         async def _upstream_probe() -> Exception | None:
-            return await self.litellm.probe_chat_deployment_upstream_error(
+            return await self.litellm.probe_deployment_upstream_error(
                 ctx.team_id,
                 prepared.model,
+                capability=GatewayCapability.CHAT,
                 user_id=ctx.user_id,
             )
 

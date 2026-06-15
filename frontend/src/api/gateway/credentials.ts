@@ -65,7 +65,7 @@ export interface ProviderCredential {
   created_at: string
   /** 后端解密后掩码展示，不含完整密钥 */
   api_key_masked: string
-  /** 团队 scope 凭据创建者；NULL 表示 legacy 共享 */
+  /** 团队 scope 凭据创建者 */
   created_by_user_id?: string | null
   /** full=可管理；metadata=团队内仅展示非敏感字段 */
   management_access?: 'full' | 'metadata'

@@ -212,20 +212,19 @@ RBAC 与 `libs/db/permission_context.py`：`deps.py` 调用 **`GatewayAccessUseC
 | 自己创建的 team 凭据 | member+ | 全部字段（含掩码） | 仅创建者 | 仅创建者 | 创建者 | 创建者 + team admin |
 | 他人 team 凭据 | — | 非敏感字段（名/通道/状态/创建者） | 不可（详情 404） | 不可 | team admin/owner | team admin/owner |
 | system 凭据 | 平台 admin | 平台 admin + ACL | 平台 admin | 平台 admin | 平台 admin | 平台 admin |
-| legacy（`created_by_user_id IS NULL`） | — | **保留旧行为**：team admin+ | team admin+ | team admin+ | team admin+ | team admin+ |
 
-- **数据列**：`provider_credentials.created_by_user_id`（团队 scope 创建者；BYOK `scope=user` 不写入）。
-- **读侧（凭据管理列表）**：`list_credentials_for_team` / `GET /managed-team-credentials` 列出 membership 协作团队内**全部** team 凭据；`management_access=metadata` 时无 `api_base`/`extra`/真实掩码；`full` 仅创建者与 legacy admin+。
+- **数据列**：`provider_credentials.created_by_user_id`（团队 scope 创建者；BYOK `scope=user` 不写入）。历史 `NULL` 行由迁移 ``20260619_tccb`` 回填为团队 owner。
+- **读侧（凭据管理列表）**：`list_credentials_for_team` / `GET /managed-team-credentials` 列出 membership 协作团队内**全部** team 凭据；`management_access=metadata` 时无 `api_base`/`extra`/真实掩码；`full` 仅创建者。
 - **读侧（凭据详情/reveal）**：`GET /credentials/{id}`、`reveal`、写操作仍经 `filter_team_credentials_visible_to_actor`（他人私有 404，防枚举）。
-- **读侧（模型上下文）**：团队/跨团队模型列表与详情、``GET /managed-team-model-credential-filters`` 可展示绑定凭据的 **`credential_name`**、**`credential_created_by_user_id`**、通道等**非敏感**字段；**不**含 `api_key` / `reveal` / 完整 `api_base`（仍仅创建者或 team admin+ legacy）。
-- **写侧**：`POST /teams/{id}/credentials` 对 member+ 开放；`PATCH/DELETE/{id}`、`probe`、`batch-import-models` 经 owner 或 legacy admin 断言。
+- **读侧（模型上下文）**：团队/跨团队模型列表与详情、``GET /managed-team-model-credential-filters`` 可展示绑定凭据的 **`credential_name`**、**`credential_created_by_user_id`**、通道等**非敏感**字段；**不**含 `api_key` / `reveal` / 完整 `api_base`（仍仅创建者）。
+- **写侧**：`POST /teams/{id}/credentials` 对 member+ 开放；`PATCH/DELETE/{id}`、`probe`、`batch-import-models` 经 owner 断言。
 - **凭据复制（`POST /credentials/copy-with-models`）**：在 personal / team 间复制凭据及关联 `gateway_models`（不复制 routes/vkeys/budgets）。源侧权限对齐 **reveal**（`assert_team_credential_readable_by_actor` / `assert_user_credential_importable`）；团队凭据**平台 admin 无旁路**。目标侧需 membership（team 目标 member+）；`import-with-models` 保留为 personal→team 兼容别名。
 - **模型子集复制（`POST /models/copy-to-team`）**：从统一模型列表勾选子集导入另一团队。源侧 **reveal**（与凭据复制一致；team admin 可删但不可导他人私有凭据模型）；目标侧 **create**（`assert_can_create_model_on_team_credential`）。按源 `credential_id` 分组：`existing` 绑定目标 team 同 provider 凭据，或 `copy_credential` 复制凭据后仅导入所选模型行。
 - **代理面不变**：`registry_scope=callable` 仍路由到他人注册的模型；变更仅限管理面 UI/API。
 - **前端 UI 对齐（创建者私有 member-friendly）**：成员能力由 `useGatewayPermission().canContribute`（= team member+ 且非平台 viewer）驱动，与团队 admin 的 `canWrite` 区分：
   - 凭据 Tab：`canContribute` 时「新增凭据」可选 `team` scope，目标团队取 `useGatewayContributorCollaborationTeams`（membership 协作团队）；改/删/reveal 仍仅创建者（`canEditGatewayCredential`）。
   - 模型 Tab：Toolbar/BatchBar 的可见性由当前列表是否存在可管理项（`hasManageableModels`）裁剪；行级启停/删除/批量勾选由 `canManageGatewayModel` / `canDeleteGatewayModel` 决定（团队 admin/owner 对他人凭据上的模型与 delete 对齐，可启停+删除；普通 member 仅自有）。分组「添加模型」对 member+ 开放，注册表单仅列出本人可绑定凭据（`canBindCredentialForTeamModel`）。
-  - 仅 admin+（`canWrite`）：跨「当前筛选」的 `deleteAllFiltered`（会触及他人模型）、legacy 共享凭据/模型管理。
+  - 仅 admin+（`canWrite`）：跨「当前筛选」的 `deleteAllFiltered`（会触及他人模型）。
   - 平台 viewer：`canContribute=false`，全站管理面只读。
 
 **入口凭据 vs 存储 `tenant_id`**：业务表 `tenant_id` 是行级归属键；代理面 `sk-gw-*` 对调用方是「一个 token 即完整上下文」，解析后仍展开为 `team_id` + `vkey_id` 等正交字段，并非重复标识。

@@ -31,8 +31,9 @@ from domains.gateway.domain.policies.volcengine_video import (
 )
 from domains.gateway.domain.proxy_policy import (
     allows_unregistered_gateway_model,
-    upstream_exception_http_status,
+    is_reportable_upstream_proxy_exception,
 )
+from domains.gateway.domain.types import GatewayCapability
 from domains.gateway.infrastructure.router_singleton import (
     ensure_router_deployment,
     filter_litellm_params_for_direct_anthropic,
@@ -121,16 +122,15 @@ class ProxyLiteLLMClient:
         await self._release_session_before_upstream()
         return await acompletion(**kwargs)
 
-    async def probe_chat_deployment_upstream_error(
+    async def probe_deployment_upstream_error(
         self,
         team_id: uuid.UUID,
         client_model: str,
         *,
+        capability: GatewayCapability = GatewayCapability.CHAT,
         user_id: uuid.UUID | None = None,
     ) -> Exception | None:
-        """Router 聚合失败且无嵌套上游异常时，用最小 chat 探测真实上游错误（仅错误路径）。"""
-        from litellm import acompletion
-
+        """Router 聚合失败且无嵌套上游异常时，用最小请求探测真实上游错误（仅错误路径）。"""
         from domains.gateway.infrastructure.router_singleton import ensure_gateway_callbacks
 
         dep = await resolve_deployment_litellm_params(
@@ -141,23 +141,50 @@ class ProxyLiteLLMClient:
         )
         if dep is None:
             return None
-        probe_kwargs: dict[str, Any] = {
-            **dep,
-            "messages": [{"role": "user", "content": "ping"}],
-            "max_tokens": 1,
-        }
         ensure_gateway_callbacks()
+        probe_kwargs: dict[str, Any] = dict(dep)
         apply_upstream_timeout(probe_kwargs)
         await self._release_session_before_upstream()
         try:
-            await acompletion(**probe_kwargs)
+            await self._run_deployment_upstream_probe(probe_kwargs, capability)
         except Exception as exc:
-            if upstream_exception_http_status(exc) is not None:
-                return exc
-            name = type(exc).__name__
-            if name.endswith("Error") and name not in ("BadRequestError",):
+            if is_reportable_upstream_proxy_exception(exc):
                 return exc
         return None
+
+    async def _run_deployment_upstream_probe(
+        self,
+        probe_kwargs: dict[str, Any],
+        capability: GatewayCapability,
+    ) -> None:
+        """按 capability 发起最小上游探测调用。"""
+        if capability == GatewayCapability.EMBEDDING:
+            from litellm import aembedding
+
+            await aembedding(**probe_kwargs, input="ping")
+            return
+        if capability == GatewayCapability.MODERATION:
+            from litellm import amoderation
+
+            await amoderation(**probe_kwargs, input="ping")
+            return
+        if capability == GatewayCapability.IMAGE:
+            from litellm import aimage_generation
+
+            await aimage_generation(**probe_kwargs, prompt="ping", n=1)
+            return
+        if capability == GatewayCapability.RERANK:
+            from litellm import arerank
+
+            await arerank(**probe_kwargs, query="ping", documents=["ping"])
+            return
+        from litellm import acompletion
+
+        await acompletion(
+            **probe_kwargs,
+            messages=[{"role": "user", "content": "ping"}],
+            max_tokens=1,
+        )
 
     async def direct_embedding(self, kwargs: dict[str, Any]) -> Any:
         from litellm import aembedding
@@ -170,6 +197,13 @@ class ProxyLiteLLMClient:
         apply_upstream_timeout(kwargs)
         await self._release_session_before_upstream()
         return await aembedding(**kwargs)
+
+    async def router_embedding(self, kwargs: dict[str, Any]) -> Any:
+        return await self._invoke_router_or_direct(
+            router_method="aembedding",
+            direct_call=lambda: self.direct_embedding(kwargs),
+            kwargs=kwargs,
+        )
 
     async def dashscope_direct_embedding(
         self,

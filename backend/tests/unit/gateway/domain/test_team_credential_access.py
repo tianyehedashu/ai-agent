@@ -10,10 +10,8 @@ from domains.gateway.domain.team_credential_access import (
     assert_team_credential_readable_by_actor,
     assert_team_credential_writable_by_actor,
     can_filter_team_models_by_credential,
-    can_manage_legacy_team_credential,
     can_read_team_credential,
     filter_team_credentials_visible_to_actor,
-    is_legacy_shared_team_credential,
 )
 from domains.tenancy.domain.policies.team_role import TeamRole
 
@@ -29,26 +27,7 @@ class _FakeCred:
         self.created_by_user_id = created_by_user_id
 
 
-def test_legacy_null_creator_is_shared() -> None:
-    assert is_legacy_shared_team_credential(None)
-    assert can_manage_legacy_team_credential(
-        created_by_user_id=None,
-        team_role=TeamRole.ADMIN.value,
-        is_platform_admin=False,
-    )
-    assert not can_manage_legacy_team_credential(
-        created_by_user_id=None,
-        team_role=TeamRole.MEMBER.value,
-        is_platform_admin=False,
-    )
-    assert not can_manage_legacy_team_credential(
-        created_by_user_id=None,
-        team_role=TeamRole.MEMBER.value,
-        is_platform_admin=True,
-    )
-
-
-def test_owner_only_for_non_legacy() -> None:
+def test_owner_only_reveal() -> None:
     owner = uuid4()
     other = uuid4()
     tenant = uuid4()
@@ -94,29 +73,37 @@ def test_owner_only_for_non_legacy() -> None:
     )
 
 
+def test_null_creator_not_readable() -> None:
+    tenant = uuid4()
+    actor = uuid4()
+    null_cred = _FakeCred(tenant_id=tenant, created_by_user_id=None)
+    assert not can_read_team_credential(
+        created_by_user_id=None,
+        actor_user_id=actor,
+        team_role=TeamRole.ADMIN.value,
+        is_platform_admin=False,
+    )
+    visible = filter_team_credentials_visible_to_actor(
+        [null_cred],
+        actor_user_id=actor,
+        team_role=TeamRole.ADMIN.value,
+        is_platform_admin=False,
+    )
+    assert visible == []
+
+
 def test_filter_visible_credentials() -> None:
     owner = uuid4()
     tenant = uuid4()
     own = _FakeCred(tenant_id=tenant, created_by_user_id=owner)
-    legacy = _FakeCred(tenant_id=tenant, created_by_user_id=None)
     other = _FakeCred(tenant_id=tenant, created_by_user_id=uuid4())
     visible = filter_team_credentials_visible_to_actor(
-        [own, legacy, other],
+        [own, other],
         actor_user_id=owner,
         team_role=TeamRole.MEMBER.value,
         is_platform_admin=False,
     )
     assert visible == [own]
-
-    admin_visible = filter_team_credentials_visible_to_actor(
-        [own, legacy, other],
-        actor_user_id=uuid4(),
-        team_role=TeamRole.ADMIN.value,
-        is_platform_admin=False,
-    )
-    assert legacy in admin_visible
-    assert own not in admin_visible
-    assert other not in admin_visible
 
 
 def test_can_filter_team_models_by_credential() -> None:
@@ -149,7 +136,7 @@ def test_can_filter_team_models_by_credential() -> None:
         creator_team_role=TeamRole.MEMBER.value,
         is_platform_admin=False,
     )
-    assert can_filter_team_models_by_credential(
+    assert not can_filter_team_models_by_credential(
         created_by_user_id=None,
         actor_user_id=member,
         creator_team_role=None,

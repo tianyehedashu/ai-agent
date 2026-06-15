@@ -45,7 +45,6 @@ import {
 import type { GatewayModelListItem } from '@/features/gateway-models/list/types'
 import { invalidateUnifiedModelsCache } from '@/features/gateway-models/unified/invalidate-unified-models-cache'
 import { gatewayTeamDisplayLabel } from '@/features/gateway-teams/gateway-team-display'
-import { isGatewayTeamWritable } from '@/features/gateway-teams/gateway-team-write-policy'
 import { useToast } from '@/hooks/use-toast'
 import { CheckCircle2, Loader2 } from '@/lib/lucide-icons'
 
@@ -55,7 +54,6 @@ export interface CopyModelsToTeamDialogProps {
   contributorTeams: readonly GatewayTeam[]
   personalTeamId: string | null | undefined
   viewerUserId: string | null | undefined
-  isPlatformAdmin: boolean
 }
 
 export function CopyModelsToTeamDialog({
@@ -64,7 +62,6 @@ export function CopyModelsToTeamDialog({
   contributorTeams,
   personalTeamId,
   viewerUserId,
-  isPlatformAdmin,
 }: CopyModelsToTeamDialogProps): React.ReactElement {
   const queryClient = useQueryClient()
   const { toast } = useToast()
@@ -100,11 +97,6 @@ export function CopyModelsToTeamDialog({
     [contributorTeams, destinationTeamId]
   )
 
-  const canWriteDestTeam = useMemo(
-    () => (destinationTeam ? isGatewayTeamWritable(destinationTeam, isPlatformAdmin) : false),
-    [destinationTeam, isPlatformAdmin]
-  )
-
   useEffect(() => {
     if (!destinationTeamId && destinationTeams[0]?.id) {
       setDestinationTeamId(destinationTeams[0].id)
@@ -114,15 +106,9 @@ export function CopyModelsToTeamDialog({
   useEffect(() => {
     if (!destinationTeamId) return
     setGroupPlans(
-      buildDefaultGroupPlans(
-        groups,
-        destinationTeamId,
-        fullTeamCredentials,
-        viewerUserId,
-        canWriteDestTeam
-      )
+      buildDefaultGroupPlans(groups, destinationTeamId, fullTeamCredentials, viewerUserId)
     )
-  }, [groups, destinationTeamId, fullTeamCredentials, viewerUserId, canWriteDestTeam])
+  }, [groups, destinationTeamId, fullTeamCredentials, viewerUserId])
 
   const planValid = useMemo(() => isCopyModelsPlanValid(groups, groupPlans), [groups, groupPlans])
 
@@ -169,8 +155,7 @@ export function CopyModelsToTeamDialog({
           fullTeamCredentials,
           group,
           destinationTeamId,
-          viewerUserId,
-          canWriteDestTeam
+          viewerUserId
         )
         return {
           ...prev,
@@ -181,7 +166,7 @@ export function CopyModelsToTeamDialog({
         }
       })
     },
-    [fullTeamCredentials, destinationTeamId, viewerUserId, canWriteDestTeam]
+    [fullTeamCredentials, destinationTeamId, viewerUserId]
   )
 
   const handleDestCredentialChange = useCallback(
@@ -259,7 +244,6 @@ export function CopyModelsToTeamDialog({
                 destinationTeamId={destinationTeamId}
                 teamCredentials={fullTeamCredentials}
                 viewerUserId={viewerUserId}
-                canWriteDestTeam={canWriteDestTeam}
                 onModeChange={handlePlanModeChange}
                 onCredentialChange={handleDestCredentialChange}
               />
@@ -312,7 +296,6 @@ interface CredentialGroupPlanFieldsProps {
   destinationTeamId: string
   teamCredentials: readonly ProviderCredential[]
   viewerUserId: string | null | undefined
-  canWriteDestTeam: boolean
   onModeChange: (group: ModelCopyCredentialGroup, mode: ModelCopyCredentialMode) => void
   onCredentialChange: (sourceCredentialId: string, credentialId: string) => void
 }
@@ -323,20 +306,13 @@ function CredentialGroupPlanFields({
   destinationTeamId,
   teamCredentials,
   viewerUserId,
-  canWriteDestTeam,
   onModeChange,
   onCredentialChange,
 }: CredentialGroupPlanFieldsProps): React.ReactElement {
   const destOptions = useMemo(
     () =>
-      filterDestinationCredentialsForGroup(
-        teamCredentials,
-        group,
-        destinationTeamId,
-        viewerUserId,
-        canWriteDestTeam
-      ),
-    [teamCredentials, group, destinationTeamId, viewerUserId, canWriteDestTeam]
+      filterDestinationCredentialsForGroup(teamCredentials, group, destinationTeamId, viewerUserId),
+    [teamCredentials, group, destinationTeamId, viewerUserId]
   )
 
   const mode = plan?.mode ?? (destOptions.length > 0 ? 'existing' : 'copy_credential')

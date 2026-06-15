@@ -66,15 +66,14 @@ export function filterDestinationCredentialsForGroup(
   teamCredentials: readonly ProviderCredential[],
   group: ModelCopyCredentialGroup,
   destinationTeamId: string,
-  viewerUserId: string | null | undefined,
-  canWriteDestTeam: boolean
+  viewerUserId: string | null | undefined
 ): ProviderCredential[] {
   return teamCredentials.filter(
     (cred) =>
       cred.tenant_id === destinationTeamId &&
       cred.management_access !== 'metadata' &&
       cred.provider === group.provider &&
-      canBindCredentialForTeamModel(cred, viewerUserId, canWriteDestTeam)
+      canBindCredentialForTeamModel(cred, viewerUserId, false)
   )
 }
 
@@ -82,8 +81,7 @@ export function buildDefaultGroupPlans(
   groups: readonly ModelCopyCredentialGroup[],
   destinationTeamId: string,
   teamCredentials: readonly ProviderCredential[],
-  viewerUserId: string | null | undefined,
-  canWriteDestTeam: boolean
+  viewerUserId: string | null | undefined
 ): Record<string, ModelCopyGroupPlanState> {
   const plans: Record<string, ModelCopyGroupPlanState> = {}
   for (const group of groups) {
@@ -91,8 +89,7 @@ export function buildDefaultGroupPlans(
       teamCredentials,
       group,
       destinationTeamId,
-      viewerUserId,
-      canWriteDestTeam
+      viewerUserId
     )
     plans[group.sourceCredentialId] = {
       mode: matches.length > 0 ? 'existing' : 'copy_credential',

@@ -27,6 +27,13 @@ class CopyModelsToTeamRequest(BaseModel):
     destination_team_id: uuid.UUID
     credential_plans: list[ModelCopyCredentialPlanRequest] = Field(..., min_length=1)
 
+    @model_validator(mode="after")
+    def validate_unique_source_credentials(self) -> CopyModelsToTeamRequest:
+        source_ids = [plan.source_credential_id for plan in self.credential_plans]
+        if len(source_ids) != len(set(source_ids)):
+            raise ValueError("credential_plans must have unique source_credential_id values")
+        return self
+
 
 class ModelCopySuccessItem(BaseModel):
     source_model_id: str

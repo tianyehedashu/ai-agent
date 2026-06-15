@@ -9,6 +9,7 @@ import pytest
 from domains.gateway.domain.proxy_policy import (
     allows_unregistered_gateway_model,
     build_budget_check_plan,
+    is_reportable_upstream_proxy_exception,
     is_router_deployment_cooldown,
     is_router_model_miss,
     is_router_unavailable_wrapper,
@@ -93,6 +94,24 @@ def test_resolve_upstream_proxy_exception_from_router_wrapper() -> None:
     wrapper.__cause__ = auth
     resolved = resolve_upstream_proxy_exception(wrapper)
     assert resolved is auth
+
+
+def test_is_reportable_upstream_proxy_exception() -> None:
+    import litellm
+
+    auth = litellm.AuthenticationError(
+        message="bad key",
+        llm_provider="openai",
+        model="gpt-4o",
+    )
+    assert is_reportable_upstream_proxy_exception(auth) is True
+    assert is_reportable_upstream_proxy_exception(ValueError("local")) is False
+    wrapper = litellm.BadRequestError(
+        message="no healthy deployments",
+        model="m",
+        llm_provider="",
+    )
+    assert is_reportable_upstream_proxy_exception(wrapper) is False
 
 
 def test_proxy_budget_targets_includes_system() -> None:

@@ -18,11 +18,6 @@ class TeamCredentialAccessView(Protocol):
     created_by_user_id: UUID | None
 
 
-def is_legacy_shared_team_credential(created_by_user_id: UUID | None) -> bool:
-    """NULL 创建者表示迁移前 legacy 共享凭据（team admin+ 可管）。"""
-    return created_by_user_id is None
-
-
 def actor_owns_team_credential(
     *,
     created_by_user_id: UUID | None,
@@ -33,17 +28,6 @@ def actor_owns_team_credential(
 
 def is_team_admin_role(team_role: str) -> bool:
     return is_admin_or_owner_team_role(team_role)
-
-
-def can_manage_legacy_team_credential(
-    *,
-    created_by_user_id: UUID | None,
-    team_role: str,
-    is_platform_admin: bool,
-) -> bool:
-    if not is_legacy_shared_team_credential(created_by_user_id):
-        return False
-    return is_team_admin_role(team_role)
 
 
 def can_filter_team_models_by_credential(
@@ -61,8 +45,6 @@ def can_filter_team_models_by_credential(
         actor_user_id=actor_user_id,
     ):
         return True
-    if is_legacy_shared_team_credential(created_by_user_id):
-        return True
     return is_team_admin_role(creator_team_role or TeamRole.MEMBER.value)
 
 
@@ -75,15 +57,9 @@ def can_read_team_credential(
 ) -> bool:
     if actor_user_id is None:
         return False
-    if actor_owns_team_credential(
+    return actor_owns_team_credential(
         created_by_user_id=created_by_user_id,
         actor_user_id=actor_user_id,
-    ):
-        return True
-    return can_manage_legacy_team_credential(
-        created_by_user_id=created_by_user_id,
-        team_role=team_role,
-        is_platform_admin=is_platform_admin,
     )
 
 
@@ -223,11 +199,9 @@ __all__ = [
     "assert_team_credential_readable_by_actor",
     "assert_team_credential_writable_by_actor",
     "can_filter_team_models_by_credential",
-    "can_manage_legacy_team_credential",
     "can_read_team_credential",
     "can_write_team_credential",
     "filter_team_credentials_visible_to_actor",
-    "is_legacy_shared_team_credential",
     "is_team_admin_role",
     "team_credential_management_access",
 ]

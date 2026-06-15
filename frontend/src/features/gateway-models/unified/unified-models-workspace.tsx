@@ -815,7 +815,6 @@ export function UnifiedModelsWorkspace(): React.JSX.Element {
           contributorTeams={contributorTeams}
           personalTeamId={personalTeamId}
           viewerUserId={viewerUserId}
-          isPlatformAdmin={isPlatformAdmin}
         />
       ) : null}
     </>

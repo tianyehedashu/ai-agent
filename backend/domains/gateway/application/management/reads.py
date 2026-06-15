@@ -329,7 +329,7 @@ class GatewayManagementReadService(GatewayUsageLogReadMixin):
         team_role: str,
         is_platform_admin: bool,
     ) -> CredentialReadModel:
-        """reveal/写路径：仅创建者或 legacy admin+ 可读（与 workspace 全量列表分离）。"""
+        """reveal/写路径：仅创建者可读（与 workspace 全量列表分离）。"""
         row = await self._creds.get_bindable_for_team_gateway_model(
             credential_id,
             tenant_id=tenant_id,

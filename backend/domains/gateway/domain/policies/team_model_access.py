@@ -1,6 +1,6 @@
 """团队模型写侧权限：凭据绑定 create / update / delete 规则。
 
-create 较严（仅凭据 owner 或 legacy admin+）；update/delete 对 team admin/owner 对齐（可启停/删除他人凭据上的模型）。
+create 较严（仅凭据 owner）；update/delete 对 team admin/owner 对齐（可启停/删除他人凭据上的模型）。
 """
 
 from __future__ import annotations
@@ -9,11 +9,7 @@ from collections.abc import Callable
 from typing import Protocol
 from uuid import UUID
 
-from domains.gateway.domain.team_credential_access import (
-    actor_owns_team_credential,
-    can_manage_legacy_team_credential,
-    is_legacy_shared_team_credential,
-)
+from domains.gateway.domain.team_credential_access import actor_owns_team_credential
 from domains.tenancy.domain.errors import TeamPermissionDeniedError
 from domains.tenancy.domain.policies.team_role import is_admin_or_owner_team_role
 
@@ -40,15 +36,9 @@ def can_create_model_on_team_credential(
 ) -> bool:
     if actor_user_id is None:
         return False
-    if actor_owns_team_credential(
+    return actor_owns_team_credential(
         created_by_user_id=credential.created_by_user_id,
         actor_user_id=actor_user_id,
-    ):
-        return True
-    return can_manage_legacy_team_credential(
-        created_by_user_id=credential.created_by_user_id,
-        team_role=team_role,
-        is_platform_admin=is_platform_admin,
     )
 
 
@@ -82,12 +72,6 @@ def can_delete_team_model_on_credential(
         actor_user_id=actor_user_id,
     ):
         return True
-    if is_legacy_shared_team_credential(credential.created_by_user_id):
-        return can_manage_legacy_team_credential(
-            created_by_user_id=credential.created_by_user_id,
-            team_role=team_role,
-            is_platform_admin=is_platform_admin,
-        )
     if is_platform_admin:
         return False
     return is_admin_or_owner_team_role(team_role)

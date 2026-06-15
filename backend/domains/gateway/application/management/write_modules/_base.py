@@ -22,7 +22,6 @@ from domains.gateway.domain.policies.budget_scope_policy import (
 )
 from domains.gateway.domain.team_credential_access import (
     actor_owns_team_credential,
-    is_legacy_shared_team_credential,
 )
 from domains.gateway.domain.types import BudgetScope
 from domains.gateway.infrastructure.models.entitlement_plan import EntitlementPlan
@@ -195,8 +194,7 @@ class GatewayManagementWriteBaseMixin:
         self, credential_id: uuid.UUID, *, actor_user_id: uuid.UUID, tenant_id: uuid.UUID
     ) -> None:
         """成员自助配额：凭据须为本人 BYOK（``scope=user`` 且 ``scope_id==actor``）
-        或本人在该团队创建的凭据（``created_by_user_id==actor``）或 legacy 共享凭据
-        （``created_by_user_id is None``，迁移前团队凭据，成员可设自助限额）。
+        或本人在该团队创建的凭据（``created_by_user_id==actor``）。
         否则抛 ``CredentialNotFoundError``（防枚举他人凭据）。
         """
         cred = await self._creds.get(credential_id)
@@ -209,11 +207,6 @@ class GatewayManagementWriteBaseMixin:
         if cred.tenant_id == tenant_id and actor_owns_team_credential(
             created_by_user_id=cred.created_by_user_id,
             actor_user_id=actor_user_id,
-        ):
-            return
-        # Legacy 共享凭据（created_by_user_id=None）：允许成员设自助限额（仅约束自己）
-        if cred.tenant_id == tenant_id and is_legacy_shared_team_credential(
-            cred.created_by_user_id
         ):
             return
         raise CredentialNotFoundError(str(credential_id))

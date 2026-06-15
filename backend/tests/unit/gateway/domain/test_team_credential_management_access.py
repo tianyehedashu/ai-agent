@@ -38,21 +38,6 @@ def test_owner_gets_full_access() -> None:
     )
 
 
-def test_legacy_admin_gets_full() -> None:
-    admin_id = uuid.uuid4()
-    assert (
-        team_credential_management_access(
-            scope="team",
-            tenant_id=uuid.uuid4(),
-            created_by_user_id=None,
-            actor_user_id=admin_id,
-            team_role="admin",
-            is_platform_admin=False,
-        )
-        == "full"
-    )
-
-
 def test_system_credential_metadata_for_non_platform_admin() -> None:
     assert (
         team_credential_management_access(

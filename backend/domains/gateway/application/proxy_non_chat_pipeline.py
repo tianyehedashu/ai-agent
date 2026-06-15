@@ -21,8 +21,6 @@ from domains.gateway.domain.policies.volcengine_image import should_use_volcengi
 from domains.gateway.domain.policies.volcengine_video import should_use_volcengine_direct_video
 from domains.gateway.domain.proxy_policy import BudgetReservation
 from domains.gateway.domain.types import GatewayCapability
-from domains.gateway.infrastructure.router_singleton import get_router
-from libs.db.session_lifecycle import rollback_open_transaction
 
 if TYPE_CHECKING:
     from domains.gateway.application.model_or_route_resolution import ResolvedModelName
@@ -49,6 +47,17 @@ class ProxyNonChatMixin:
             if budget_model
             else False
         )
+
+        async def _upstream_probe() -> Exception | None:
+            if not budget_model:
+                return None
+            return await self.litellm.probe_deployment_upstream_error(
+                ctx.team_id,
+                budget_model,
+                capability=ctx.capability,
+                user_id=ctx.user_id,
+            )
+
         return await invoke_router_with_direct_fallback(
             guard=self.guard,
             litellm=self.litellm,
@@ -58,6 +67,7 @@ class ProxyNonChatMixin:
             use_direct=use_direct,
             direct_call=direct_call,
             router_call=router_call,
+            upstream_probe=_upstream_probe,
         )
 
     async def _run_non_chat_preflight(
@@ -105,12 +115,15 @@ class ProxyNonChatMixin:
                     kwargs,
                     real_model=prepared.resolved.record.real_model if prepared.resolved else None,
                 )
-            elif await self.litellm.should_use_internal_direct_litellm(ctx, budget_model):
-                response = await self.litellm.direct_embedding(kwargs)
             else:
-                router = await get_router(self.session)
-                await rollback_open_transaction(self.session)
-                response = await router.aembedding(**kwargs)
+                response = await self._invoke_non_chat_with_router_fallback(
+                    ctx,
+                    budget_model,
+                    reservations,
+                    kwargs,
+                    router_call=lambda: self.litellm.router_embedding(kwargs),
+                    direct_call=lambda: self.litellm.direct_embedding(kwargs),
+                )
         except Exception:
             await self.guard.release_budget_reservations(reservations)
             await self.guard.release_entitlement_reservations(ctx)

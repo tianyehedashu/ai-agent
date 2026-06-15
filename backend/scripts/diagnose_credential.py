@@ -64,7 +64,7 @@ async def diagnose() -> None:
         )
         null_result = await session.execute(null_stmt)
         null_creds = list(null_result.scalars().all())
-        print(f"\ncreated_by_user_id 为 NULL 的团队凭据 ({len(null_creds)} 条):")
+        print(f"\ncreated_by_user_id 仍为 NULL 的团队凭据（应运行迁移 20260619_tccb 回填）({len(null_creds)} 条):")
         for c in null_creds:
             print(f"  id={c.id} name={c.name} scope={c.scope} tenant_id={c.tenant_id}")
 

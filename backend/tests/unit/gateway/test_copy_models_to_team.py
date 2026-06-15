@@ -232,3 +232,59 @@ async def test_copy_denied_for_other_user_team_credential(
     assert result.succeeded == []
     assert len(result.failed) == 1
     assert result.failed[0].reason == "credential not found"
+
+
+@pytest.mark.asyncio
+async def test_copy_credential_rolls_back_dest_cred_when_all_models_fail(
+    db_session, test_user: User, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    personal_team = await TeamService(db_session).ensure_personal_team(test_user.id)
+    target_team = await TeamService(db_session).create_team(
+        name="model-copy-rollback",
+        slug=f"model-copy-rb-{uuid.uuid4().hex[:8]}",
+        owner_user_id=test_user.id,
+    )
+    await db_session.commit()
+
+    src_cred = await _create_user_credential(db_session, test_user, name="rollback-src")
+    model = await GatewayModelRepository(db_session).create(
+        tenant_id=personal_team.id,
+        name="rollback-model",
+        capability="chat",
+        real_model="openai/gpt-4o",
+        credential_id=src_cred.id,
+        provider="openai",
+        weight=1,
+    )
+    await db_session.commit()
+
+    from domains.gateway.application.management.model_copy_types import ModelCopyCredentialPlan
+
+    writes = GatewayManagementWriteService(db_session)
+
+    async def fail_create(*_args: object, **_kwargs: object) -> object:
+        from libs.exceptions import ValidationError
+
+        raise ValidationError("forced model create failure")
+
+    monkeypatch.setattr(writes._models, "create", fail_create)
+
+    result = await writes.copy_models_to_team(
+        model_ids=[model.id],
+        destination_team_id=target_team.id,
+        credential_plans=[
+            ModelCopyCredentialPlan(
+                source_credential_id=src_cred.id,
+                mode="copy_credential",
+            )
+        ],
+        actor_user_id=test_user.id,
+        is_platform_admin=False,
+        destination_team_role="owner",
+        platform_user_role="user",
+    )
+
+    assert result.succeeded == []
+    assert len(result.failed) == 1
+    team_creds = await ProviderCredentialRepository(db_session).list_for_tenant(target_team.id)
+    assert team_creds == []

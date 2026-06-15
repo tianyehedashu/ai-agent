@@ -192,7 +192,7 @@ class CredentialResponse(BaseModel):
     )
     created_by_user_id: uuid.UUID | None = Field(
         default=None,
-        description="团队 scope 凭据创建者；NULL 表示 legacy 共享（admin+ 可管）",
+        description="团队 scope 凭据创建者",
     )
     created_at: datetime
     api_key_masked: str = Field(
@@ -200,7 +200,7 @@ class CredentialResponse(BaseModel):
     )
     management_access: Literal["full", "metadata"] = Field(
         default="full",
-        description="full=创建者/legacy admin 可管理；metadata=团队 member 仅可见非敏感字段",
+        description="full=创建者可管理；metadata=团队 member 仅可见非敏感字段",
     )
 
     model_config = ConfigDict(from_attributes=False)
@@ -220,7 +220,7 @@ class CredentialSummaryResponse(BaseModel):
     )
     created_by_user_id: uuid.UUID | None = Field(
         default=None,
-        description="团队 scope 凭据创建者；NULL 表示 legacy 共享（admin+ 可管）",
+        description="团队 scope 凭据创建者",
     )
 
     model_config = ConfigDict(from_attributes=False)

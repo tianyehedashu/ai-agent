@@ -36,19 +36,13 @@ function cred(
   }
 }
 
-const legacyTeamSummary: CredentialSummary = {
-  id: 'cred-team',
+const ownedTeamSummary: CredentialSummary = {
+  id: 'cred-owned',
   provider: 'openai',
   name: 'Team OpenAI',
   scope: 'team',
   is_active: true,
   is_config_managed: false,
-  created_by_user_id: null,
-}
-
-const ownedTeamSummary: CredentialSummary = {
-  ...legacyTeamSummary,
-  id: 'cred-owned',
   created_by_user_id: ownerId,
 }
 
@@ -62,20 +56,16 @@ const systemSummary: CredentialSummary = {
 }
 
 describe('canEditGatewayCredential', () => {
-  it('allows owner on non-legacy team cred', () => {
+  it('allows owner on team cred', () => {
     expect(canEditGatewayCredential(cred('team', ownerId), ownerId, false, false)).toBe(true)
   })
 
-  it('denies non-owner member on non-legacy team cred', () => {
+  it('denies non-owner member on team cred', () => {
     expect(canEditGatewayCredential(cred('team', ownerId), viewerId, false, false)).toBe(false)
   })
 
-  it('allows team admin on legacy team cred', () => {
-    expect(canEditGatewayCredential(cred('team', null), viewerId, true, false)).toBe(true)
-  })
-
-  it('denies member on legacy team cred without write', () => {
-    expect(canEditGatewayCredential(cred('team', null), viewerId, false, false)).toBe(false)
+  it('denies team admin on cred without ownership', () => {
+    expect(canEditGatewayCredential(cred('team', null), viewerId, true, false)).toBe(false)
   })
 
   it('allows system cred for platform admin only', () => {
@@ -96,20 +86,23 @@ describe('canEditGatewayCredential', () => {
 })
 
 describe('canLinkToCredentialDetail', () => {
-  it('allows team admin on legacy team credential', () => {
-    expect(canLinkToCredentialDetail(legacyTeamSummary, viewerId, true, false)).toBe(true)
-  })
-
-  it('denies platform admin on legacy without team admin role', () => {
-    expect(canLinkToCredentialDetail(legacyTeamSummary, viewerId, false, true)).toBe(false)
-  })
-
   it('allows owner on owned team credential', () => {
     expect(canLinkToCredentialDetail(ownedTeamSummary, ownerId, false, false)).toBe(true)
   })
 
   it('blocks non-owner member on owned team credential', () => {
     expect(canLinkToCredentialDetail(ownedTeamSummary, viewerId, false, false)).toBe(false)
+  })
+
+  it('blocks team admin without ownership', () => {
+    expect(
+      canLinkToCredentialDetail(
+        { ...ownedTeamSummary, created_by_user_id: null },
+        viewerId,
+        true,
+        false
+      )
+    ).toBe(false)
   })
 
   it('blocks non-platform admin on system credential', () => {
@@ -137,8 +130,8 @@ describe('canBindCredentialForTeamModel', () => {
     expect(canBindCredentialForTeamModel(cred('team', ownerId), ownerId, false)).toBe(true)
   })
 
-  it('allows admin to bind legacy credential', () => {
-    expect(canBindCredentialForTeamModel(cred('team', null), viewerId, true)).toBe(true)
+  it('denies admin binding credential without ownership', () => {
+    expect(canBindCredentialForTeamModel(cred('team', null), viewerId, true)).toBe(false)
   })
 
   it('denies member binding others credential', () => {

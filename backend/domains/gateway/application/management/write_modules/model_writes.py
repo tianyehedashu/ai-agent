@@ -1234,12 +1234,33 @@ class ModelWritesMixin:
             failed=failed,
         )
 
+    async def _rollback_ephemeral_model_copy_credential(
+        self,
+        *,
+        ephemeral_dest_cred_id: uuid.UUID | None,
+        group_rows: list[Any],
+        succeeded: list[Any],
+        dest_cred_cache: dict[uuid.UUID, uuid.UUID],
+        source_cred_id: uuid.UUID,
+    ) -> None:
+        """``copy_credential`` 组内无模型成功时删除刚创建的孤儿凭据。"""
+        if ephemeral_dest_cred_id is None:
+            return
+        group_had_success = any(
+            any(s.source_model_id == str(row.id) for s in succeeded) for row in group_rows
+        )
+        if group_had_success:
+            return
+        with suppress(Exception):
+            await self._creds.delete(ephemeral_dest_cred_id)
+        dest_cred_cache.pop(source_cred_id, None)
+
     async def copy_models_to_team(
         self,
         *,
         model_ids: list[uuid.UUID],
         destination_team_id: uuid.UUID,
-        credential_plans: list,
+        credential_plans: list[ModelCopyCredentialPlan],
         actor_user_id: uuid.UUID,
         is_platform_admin: bool,
         destination_team_role: str,
@@ -1282,6 +1303,10 @@ class ModelWritesMixin:
         plan_by_cred: dict[uuid.UUID, ModelCopyCredentialPlan] = {
             plan.source_credential_id: plan for plan in credential_plans
         }
+        if len(plan_by_cred) != len(credential_plans):
+            raise ValidationError(
+                "credential_plans must have unique source_credential_id values"
+            )
         for plan in credential_plans:
             assert_model_copy_credential_plan_valid(
                 mode=plan.mode,
@@ -1342,6 +1367,7 @@ class ModelWritesMixin:
                     )
                 continue
 
+            ephemeral_dest_cred_id: uuid.UUID | None = None
             try:
                 source_cred = await self._creds.get(source_cred_id)
                 if source_cred is None:
@@ -1405,6 +1431,7 @@ class ModelWritesMixin:
                         if new_cred is None:
                             raise CredentialNotFoundError(str(source_cred_id))
                         dest_cred_id = new_cred.id
+                        ephemeral_dest_cred_id = new_cred.id
                     else:
                         assert plan.destination_credential_id is not None
                         dest_cred = await self._creds.get(plan.destination_credential_id)
@@ -1463,7 +1490,21 @@ class ModelWritesMixin:
                                 reason=model_copy_failure_reason(exc),
                             )
                         )
+                await self._rollback_ephemeral_model_copy_credential(
+                    ephemeral_dest_cred_id=ephemeral_dest_cred_id,
+                    group_rows=group_rows,
+                    succeeded=succeeded,
+                    dest_cred_cache=dest_cred_cache,
+                    source_cred_id=source_cred_id,
+                )
             except Exception as exc:
+                await self._rollback_ephemeral_model_copy_credential(
+                    ephemeral_dest_cred_id=ephemeral_dest_cred_id,
+                    group_rows=group_rows,
+                    succeeded=succeeded,
+                    dest_cred_cache=dest_cred_cache,
+                    source_cred_id=source_cred_id,
+                )
                 reason = model_copy_failure_reason(exc)
                 for row in group_rows:
                     if not any(s.source_model_id == str(row.id) for s in succeeded):

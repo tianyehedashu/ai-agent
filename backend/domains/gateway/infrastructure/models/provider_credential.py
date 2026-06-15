@@ -98,7 +98,7 @@ class ProviderCredential(BaseModel):
         UUID(as_uuid=True),
         nullable=True,
         index=False,
-        comment="团队 scope 凭据创建者；NULL 表示 legacy 共享（admin+ 可管）",
+        comment="团队 scope 凭据创建者",
     )
 
     __table_args__ = (

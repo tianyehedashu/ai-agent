@@ -74,23 +74,6 @@ def test_admin_can_update_member_model() -> None:
     )
 
 
-def test_legacy_admin_can_create_and_delete() -> None:
-    admin = uuid4()
-    cred = _FakeCred(created_by_user_id=None)
-    assert_can_create_model_on_team_credential(
-        cred,
-        actor_user_id=admin,
-        team_role=TeamRole.ADMIN.value,
-        is_platform_admin=False,
-    )
-    assert_can_delete_team_model_on_credential(
-        cred,
-        actor_user_id=admin,
-        team_role=TeamRole.ADMIN.value,
-        is_platform_admin=False,
-    )
-
-
 def test_actor_created_model() -> None:
     user = uuid4()
     other = uuid4()

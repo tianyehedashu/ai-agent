@@ -371,6 +371,20 @@ def resolve_upstream_proxy_exception(exc: Exception) -> Exception | None:
     return best
 
 
+def is_reportable_upstream_proxy_exception(exc: Exception) -> bool:
+    """是否应将异常作为上游失败透传给客户端（排除 Router 包装与本地 ValueError 等）。"""
+    if is_router_unavailable_wrapper(exc):
+        return False
+    if upstream_exception_http_status(exc) is not None:
+        return True
+    if type(exc).__name__ == "HTTPStatusError":
+        return True
+    module = type(exc).__module__ or ""
+    if module.startswith("litellm"):
+        return type(exc).__name__ not in _ROUTER_WRAPPER_TYPE_NAMES
+    return False
+
+
 __all__ = [
     "BudgetCheckQuery",
     "BudgetReservation",
@@ -383,13 +397,14 @@ __all__ = [
     "budget_targets",
     "build_budget_check_plan",
     "first_present_limit",
+    "is_reportable_upstream_proxy_exception",
     "is_router_deployment_cooldown",
     "is_router_model_miss",
     "is_router_unavailable_wrapper",
     "iter_proxy_exception_chain",
     "proxy_budget_targets",
-    "resolve_upstream_proxy_exception",
     "rate_limit_target",
+    "resolve_upstream_proxy_exception",
     "router_cooldown_retry_after",
     "upstream_exception_http_status",
     "upstream_exception_retry_after",

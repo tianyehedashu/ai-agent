@@ -7,10 +7,10 @@ from typing import TYPE_CHECKING, Any
 
 from domains.gateway.application.proxy_litellm_client import ProxyLiteLLMClient
 from domains.gateway.domain.proxy_policy import (
+    is_reportable_upstream_proxy_exception,
     is_router_model_miss,
     is_router_unavailable_wrapper,
     resolve_upstream_proxy_exception,
-    upstream_exception_http_status,
 )
 
 if TYPE_CHECKING:
@@ -21,9 +21,6 @@ if TYPE_CHECKING:
 
 async def _surface_router_failure(
     *,
-    litellm: ProxyLiteLLMClient,
-    ctx: ProxyContext,
-    model: str,
     exc: Exception,
     upstream_probe: Callable[[], Awaitable[Exception | None]] | None,
 ) -> Exception:
@@ -33,10 +30,7 @@ async def _surface_router_failure(
         return unwrapped
     if upstream_probe is not None and is_router_unavailable_wrapper(exc):
         probed = await upstream_probe()
-        if probed is not None and (
-            upstream_exception_http_status(probed) is not None
-            or type(probed).__name__.endswith("Error")
-        ):
+        if probed is not None and is_reportable_upstream_proxy_exception(probed):
             return probed
     return exc
 
@@ -69,9 +63,6 @@ async def invoke_router_with_direct_fallback(
                 await guard.release_entitlement_reservations(ctx)
                 raise
         surfaced = await _surface_router_failure(
-            litellm=litellm,
-            ctx=ctx,
-            model=model,
             exc=exc,
             upstream_probe=upstream_probe,
         )
