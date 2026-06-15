@@ -60,4 +60,29 @@ def resolve_vkey_model_prefix(
     )
 
 
-__all__ = ["VkeyModelDispatch", "resolve_vkey_model_prefix"]
+def resolve_vkey_proxy_list_id(
+    *,
+    bound_team_id: UUID,
+    model_tenant_id: UUID,
+    model_name: str,
+    slug_by_tenant: dict[UUID, str],
+) -> str:
+    """代理端 GET /v1/models 列表 id（与 dispatch 前缀规则对称）。
+
+    - 主属 team → 裸注册名
+    - grant team → ``{slug}/{model_name}``
+    """
+    if model_tenant_id == bound_team_id:
+        return model_name
+    slug = slug_by_tenant.get(model_tenant_id)
+    if slug is None:
+        msg = f"missing team slug for tenant_id={model_tenant_id}"
+        raise KeyError(msg)
+    return f"{slug}/{model_name}"
+
+
+__all__ = [
+    "VkeyModelDispatch",
+    "resolve_vkey_model_prefix",
+    "resolve_vkey_proxy_list_id",
+]

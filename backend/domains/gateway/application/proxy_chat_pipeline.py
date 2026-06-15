@@ -85,7 +85,7 @@ async def prepare_chat_proxy_request(
         ctx, body, resolved=preflight.resolved, timings=timings
     )
     vision_started = time.perf_counter()
-    kwargs = await inline_vision_image_urls_in_kwargs(use_case.session, kwargs)
+    kwargs = await inline_vision_image_urls_in_kwargs(kwargs)
     timings.vision_ms = max(0, int((time.perf_counter() - vision_started) * 1000))
     meta = kwargs.get("metadata")
     metadata: dict[str, Any] = meta if isinstance(meta, dict) else {}
