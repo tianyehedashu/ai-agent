@@ -1,9 +1,19 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
+import type * as UtilsModule from '@/lib/utils'
+
 import { PlaygroundModelField } from './playground-model-field'
 
 import type { ModelCandidate } from './playground-mode-filter'
+
+vi.mock('@/lib/utils', async (importOriginal) => {
+  const actual = await importOriginal<typeof UtilsModule>()
+  return {
+    ...actual,
+    copyToClipboard: vi.fn().mockResolvedValue(undefined),
+  }
+})
 
 const MODEL_A: ModelCandidate = {
   name: 'deepseek-chat',
@@ -77,6 +87,17 @@ describe('PlaygroundModelField', () => {
 
     await waitFor(() => {
       expect(onCustomModelChange).toHaveBeenCalledWith(true, '')
+    })
+  })
+
+  it('copies selected model name', async () => {
+    render(<PlaygroundModelField {...baseProps} />)
+
+    fireEvent.click(screen.getByRole('button', { name: /复制模型名 deepseek-chat/ }))
+
+    const { copyToClipboard } = await import('@/lib/utils')
+    await waitFor(() => {
+      expect(copyToClipboard).toHaveBeenCalledWith('deepseek-chat')
     })
   })
 })

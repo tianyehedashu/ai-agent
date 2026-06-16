@@ -10,6 +10,7 @@ from .budget import GatewayBudget
 from .entitlement_plan import EntitlementPlan, EntitlementPlanQuota
 from .gateway_model import GatewayModel
 from .gateway_route import GatewayRoute
+from .gateway_rollup_state import GatewayRollupState
 from .metrics_hourly import GatewayMetricsHourly
 from .pricing_downstream import DownstreamModelPricing
 from .pricing_upstream import UpstreamModelPricing
@@ -27,6 +28,7 @@ __all__ = [
     "GatewayAlertRule",
     "GatewayBudget",
     "GatewayMetricsHourly",
+    "GatewayRollupState",
     "GatewayModel",
     "GatewayRequestLog",
     "GatewayRoute",

@@ -92,17 +92,3 @@ export function resolveLogModelIdentity(
 export function logModelIdentityTitle(identity: LogModelIdentity): string {
   return identity.invokeName ?? identity.registrationName ?? identity.upstreamName ?? '请求详情'
 }
-
-export function logModelIdentityTooltip(identity: LogModelIdentity): string | undefined {
-  const parts: string[] = []
-  if (identity.gatewayModelId) {
-    parts.push(`模型 ID ${identity.gatewayModelId}`)
-  }
-  if (identity.registrationName && identity.registrationName !== identity.invokeName) {
-    parts.push(`注册别名 ${identity.registrationName}`)
-  }
-  if (identity.upstreamName) {
-    parts.push(`上游 ${identity.upstreamName}`)
-  }
-  return parts.length > 0 ? parts.join(' · ') : undefined
-}

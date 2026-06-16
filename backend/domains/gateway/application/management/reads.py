@@ -38,6 +38,7 @@ from domains.gateway.application.management.quota_rule_read_model import (
     QuotaRuleReadModel,
 )
 from domains.gateway.application.management.usage_log_reads import GatewayUsageLogReadMixin
+from domains.gateway.application.management.usage_metrics_router import UsageMetricsRouter
 from domains.gateway.application.management.usage_reads import (
     EntitlementUsageReadModel,
     GatewayPlanUsageReadService,
@@ -117,6 +118,9 @@ from domains.gateway.infrastructure.repositories.model_repository import (
 from domains.gateway.infrastructure.repositories.provider_plan_repository import (
     ProviderPlanRepository,
 )
+from domains.gateway.infrastructure.repositories.metrics_hourly_read_repository import (
+    MetricsHourlyReadRepository,
+)
 from domains.gateway.infrastructure.repositories.request_log_repository import (
     RequestLogRepository,
 )
@@ -189,6 +193,8 @@ class GatewayManagementReadService(GatewayUsageLogReadMixin):
         self._routes = GatewayRouteRepository(session)
         self._budgets = BudgetRepository(session)
         self._logs = RequestLogRepository(session)
+        self._hourly_metrics = MetricsHourlyReadRepository(session)
+        self._usage_metrics = UsageMetricsRouter(self._logs, self._hourly_metrics)
         self._alerts = GatewayAlertRepository(session)
         self._provider_plans = ProviderPlanRepository(session)
         self._entitlement_plans = EntitlementPlanRepository(session)

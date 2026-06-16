@@ -62,6 +62,15 @@ curl -s http://121.40.54.65/ai-agent/api/v1/auth/me   # 401/200，非 404
 
 **注意**：`ROOT_PATH` 在 Secret 中必须为 `/ai-agent`（**无尾随空格**），否则 API 路由会注册成 `/ai-agent /api/...` 导致全站 404。
 
+### Gateway 请求日志与大盘 IO
+
+生产默认 **`GATEWAY_REQUEST_LOG_RETENTION_DAYS=30`**：过期整月分区自动 DROP，降低 `gateway_request_logs` 扫描体积。  
+Dashboard/Statistics 默认 **hybrid 读**（`GATEWAY_METRICS_HYBRID_READ_ENABLED=true`）：历史走 `gateway_metrics_hourly`，近 2 小时热尾走明细。回滚 hybrid：`GATEWAY_METRICS_HYBRID_READ_ENABLED=false`。
+
+详见 [deploy/k8s/README.md](../deploy/k8s/README.md) §Gateway 请求日志保留与指标读路径。
+
+**发版顺序（hybrid 读）**：`alembic upgrade head` → `python scripts/backfill_metrics_hourly.py --days 30` → 部署 backend → 观察 `gateway_rollup_job` watermark → 灰度开启 hybrid（默认已开）。回滚：`GATEWAY_METRICS_HYBRID_READ_ENABLED=false` rollout restart。
+
 ### 相关文档
 
 - HTML 版：[docs/deployment-production.html](deployment-production.html)

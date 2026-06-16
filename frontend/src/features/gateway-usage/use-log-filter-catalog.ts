@@ -29,7 +29,7 @@ export interface LogFilterCatalogResult {
   credentialOptions: GatewayFilterOption[]
   keyOptions: GatewayFilterOption[]
   modelOptions: GatewayFilterOption[]
-  /** deployment_gateway_model_id → 显示名 / 注册别名 / 上游（日志三列解析） */
+  /** deployment_gateway_model_id → 显示名 / 注册别名 / 上游（详情侧栏解析） */
   modelCatalogIndex: LogModelCatalogIndex
   credentialsLoading: boolean
   keysLoading: boolean

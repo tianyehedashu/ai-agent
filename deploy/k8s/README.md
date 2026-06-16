@@ -223,6 +223,19 @@ kubectl -n test exec deploy/backend -- which docker   # 应无输出
 | K8s 生产 | `local` | 在 Pod 内执行 `run_shell`/`run_python`，工作目录 `/app/workspace`（PVC） |
 | 本机 / Compose | `docker`（默认） | 宿主机有 Docker 时可用容器隔离 |
 
+### Gateway 请求日志保留与指标读路径
+
+后端 Secret / 环境变量（默认值见 `bootstrap/config.py`）：
+
+| 变量 | 默认 | 说明 |
+|------|------|------|
+| `GATEWAY_REQUEST_LOG_RETENTION_DAYS` | `30` | 早于保留期的**整月分区**由 `gateway_request_log_retention_loop` DROP；`None` 或空=不删 |
+| `GATEWAY_METRICS_HYBRID_READ_ENABLED` | `true` | Dashboard/Statistics 历史段读 `gateway_metrics_hourly`，热尾读明细 |
+| `GATEWAY_METRICS_HOT_TAIL_HOURS` | `2` | hybrid 热尾窗口（小时） |
+| `GATEWAY_SLOW_SQL_THRESHOLD_MS` | `50` | 慢 SQL 日志阈值；排查见 [k8s-production-debug reference](../../.agents/skills/k8s-production-debug/reference.md) §Gateway 慢 SQL |
+
+`gateway_request_log_retention_loop` 随 `schedule_gateway_jobs` 在 backend 进程内启动，无需单独 Deployment。
+
 `SANDBOX_ENABLED`（bootstrap settings）与 `execution.toml` 的 `sandbox.docker.sandbox_enabled` 无关；勿指望只改 `SANDBOX_ENABLED` 即可修复 chat。
 
 ## 与 Docker Compose 的差异

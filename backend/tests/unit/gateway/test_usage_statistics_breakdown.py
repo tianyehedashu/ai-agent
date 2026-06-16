@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from decimal import Decimal
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 import uuid
 
 import pytest
 
+from bootstrap.config import settings
 from domains.gateway.application.management.reads import GatewayManagementReadService
 from domains.gateway.domain.usage_read_model import (
     UsageAggregation,
@@ -81,18 +83,19 @@ async def test_aggregate_usage_statistics_breakdown_computes_share() -> None:
     )
     svc._system_creds.list_by_ids = AsyncMock(return_value=[])
 
-    now = MagicMock()
-    summary = await svc.aggregate_usage_statistics_breakdown(
-        ctx,
-        now,
-        now,
-        usage_aggregation=UsageAggregation.WORKSPACE,
-        filters=UsageStatisticsFilters(),
-        parent_group_by=UsageStatisticsGroupBy.USER,
-        parent_group_key=str(member_id),
-        breakdown_by=UsageStatisticsBreakdownBy.CREDENTIAL,
-        top_n=3,
-    )
+    now = datetime.now(UTC)
+    with patch.object(settings, "gateway_metrics_hybrid_read_enabled", False):
+        summary = await svc.aggregate_usage_statistics_breakdown(
+            ctx,
+            now,
+            now,
+            usage_aggregation=UsageAggregation.WORKSPACE,
+            filters=UsageStatisticsFilters(),
+            parent_group_by=UsageStatisticsGroupBy.USER,
+            parent_group_key=str(member_id),
+            breakdown_by=UsageStatisticsBreakdownBy.CREDENTIAL,
+            top_n=3,
+        )
 
     assert summary.parent_requests == 100
     assert len(summary.items) == 2

@@ -157,6 +157,7 @@ async def test_aggregate_usage_statistics_by_axis_maps_items_and_totals() -> Non
         cache_hit_count=1,
     )
     total_row = SimpleNamespace(
+        group_total=1,
         requests=3,
         success_count=2,
         failure_count=1,
@@ -169,14 +170,12 @@ async def test_aggregate_usage_statistics_by_axis_maps_items_and_totals() -> Non
         avg_ttfb_ms=42.0,
         cache_hit_count=1,
     )
-    count_result = MagicMock()
-    count_result.scalar_one.return_value = 1
     item_result = MagicMock()
     item_result.all.return_value = [item_row]
     total_result = MagicMock()
     total_result.one.return_value = total_row
     session = AsyncMock()
-    session.execute = AsyncMock(side_effect=[count_result, item_result, total_result])
+    session.execute = AsyncMock(side_effect=[item_result, total_result])
 
     repo = RequestLogRepository(session)
     now = datetime.now(UTC)
@@ -197,4 +196,4 @@ async def test_aggregate_usage_statistics_by_axis_maps_items_and_totals() -> Non
     assert items[0].cost_usd == Decimal("0.03")
     assert totals.success_count == 2
     assert totals.cached_tokens == 4
-    assert session.execute.await_count == 3
+    assert session.execute.await_count == 2

@@ -417,7 +417,16 @@ class Settings(BaseSettings):
     # 月分区维护间隔（秒）
     gateway_partition_interval_seconds: int = 86400
     # 请求明细表按月分区：保留最近 N 天以外的整月分区将自动 DROP；None=不自动删除
-    gateway_request_log_retention_days: int | None = None
+    gateway_request_log_retention_days: int | None = 30
+    # Dashboard/Statistics 读路径：历史段走 gateway_metrics_hourly，热尾走明细表
+    gateway_metrics_hybrid_read_enabled: bool = True
+    # hybrid 热尾窗口（小时）：与 rollup 延迟对齐，默认 2h
+    gateway_metrics_hot_tail_hours: int = Field(default=2, ge=0, le=168)
+    # rollup repair：每日重算最近 N 小时 hourly（覆盖写，修正迟到日志）
+    gateway_metrics_repair_hours: int = Field(default=48, ge=0, le=168)
+    gateway_metrics_repair_interval_seconds: int = 86400
+    # 跨热尾边界 statistics 内存合并：冷/热分组数之和超过此值则整窗 fallback 明细表
+    gateway_metrics_hybrid_merge_max_groups: int = Field(default=2000, ge=1, le=100_000)
     # 过期分区清理任务间隔（秒）
     gateway_request_log_retention_interval_seconds: int = 86400
     # 成功请求写入明细的采样率 0.0~1.0（1.0=全量）；低于 1 时 ``gateway_metrics_hourly`` 与基于日志的告警可能低估成功量

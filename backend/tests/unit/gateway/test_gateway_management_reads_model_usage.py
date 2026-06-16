@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from decimal import Decimal
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -9,6 +10,7 @@ import uuid
 
 import pytest
 
+from bootstrap.config import settings
 from domains.gateway.application.management.reads import GatewayManagementReadService
 from domains.gateway.domain.usage_axis import UsageAxis
 from domains.gateway.domain.usage_read_model import (
@@ -420,17 +422,18 @@ async def test_aggregate_usage_statistics_resolves_credential_label() -> None:
     )
     svc._system_creds.list_by_ids = AsyncMock(return_value=[])
 
-    now = MagicMock()
-    summary, group_total = await svc.aggregate_usage_statistics(
-        ctx,
-        now,
-        now,
-        usage_aggregation=UsageAggregation.WORKSPACE,
-        group_by=UsageStatisticsGroupBy.CREDENTIAL,
-        filters=UsageStatisticsFilters(provider="openai"),
-        page=1,
-        page_size=10,
-    )
+    now = datetime.now(UTC)
+    with patch.object(settings, "gateway_metrics_hybrid_read_enabled", False):
+        summary, group_total = await svc.aggregate_usage_statistics(
+            ctx,
+            now,
+            now,
+            usage_aggregation=UsageAggregation.WORKSPACE,
+            group_by=UsageStatisticsGroupBy.CREDENTIAL,
+            filters=UsageStatisticsFilters(provider="openai"),
+            page=1,
+            page_size=10,
+        )
 
     assert group_total == 1
     assert summary.items[0].label == "生产凭据"
@@ -488,17 +491,18 @@ async def test_aggregate_usage_statistics_team_group_resolves_names() -> None:
     )
     svc._teams.get_display_names_by_ids = AsyncMock(return_value={team_id: "研发团队"})
 
-    now = MagicMock()
-    summary, _group_total = await svc.aggregate_usage_statistics(
-        ctx,
-        now,
-        now,
-        usage_aggregation=UsageAggregation.USER,
-        group_by=UsageStatisticsGroupBy.TEAM,
-        filters=UsageStatisticsFilters(),
-        page=1,
-        page_size=10,
-    )
+    now = datetime.now(UTC)
+    with patch.object(settings, "gateway_metrics_hybrid_read_enabled", False):
+        summary, _group_total = await svc.aggregate_usage_statistics(
+            ctx,
+            now,
+            now,
+            usage_aggregation=UsageAggregation.USER,
+            group_by=UsageStatisticsGroupBy.TEAM,
+            filters=UsageStatisticsFilters(),
+            page=1,
+            page_size=10,
+        )
 
     assert summary.items[0].label == "研发团队"
     assert summary.items[0].group_key == str(team_id)
@@ -559,17 +563,18 @@ async def test_aggregate_usage_statistics_user_group_resolves_names() -> None:
         )
     )
 
-    now = MagicMock()
-    summary, _group_total = await svc.aggregate_usage_statistics(
-        ctx,
-        now,
-        now,
-        usage_aggregation=UsageAggregation.WORKSPACE,
-        group_by=UsageStatisticsGroupBy.USER,
-        filters=UsageStatisticsFilters(),
-        page=1,
-        page_size=10,
-    )
+    now = datetime.now(UTC)
+    with patch.object(settings, "gateway_metrics_hybrid_read_enabled", False):
+        summary, _group_total = await svc.aggregate_usage_statistics(
+            ctx,
+            now,
+            now,
+            usage_aggregation=UsageAggregation.WORKSPACE,
+            group_by=UsageStatisticsGroupBy.USER,
+            filters=UsageStatisticsFilters(),
+            page=1,
+            page_size=10,
+        )
 
     user_summaries.list_summary_views_by_ids.assert_awaited_once()
     assert summary.items[0].label == "张三"

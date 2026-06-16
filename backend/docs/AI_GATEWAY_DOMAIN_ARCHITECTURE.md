@@ -256,7 +256,12 @@ RBAC 与 `libs/db/permission_context.py`：`deps.py` 调用 **`GatewayAccessUseC
 
 ### 4.2 仪表盘与明细日志的数据源
 
-- **`GET /dashboard/summary`**：聚合自 **`gateway_request_logs`**（PostgreSQL），受成功请求采样配置 `gateway_request_log_success_sample_rate` 影响（见 `domains/gateway/infrastructure/gateway_log_sampling.py` 与 `custom_logger` 注释）。
+- **`GET /dashboard/summary`** / **`GET /dashboard/statistics`**：默认 **hybrid 读**（`gateway_metrics_hybrid_read_enabled=true`）。历史段聚合自 **`gateway_metrics_hourly`**，近 `gateway_metrics_hot_tail_hours`（默认 2h）热尾仍读 **`gateway_request_logs`** 保证实时性。回滚：设 `gateway_metrics_hybrid_read_enabled=false` 恢复纯明细聚合。
+- **hybrid 分场景 fallback（整窗读明细，无锁）**：`usage_aggregation=user` 轴（vkey 归因）、workspace **member** 可见性、`status` 筛选、不支持的分组维度 → 不走 hourly；跨热尾 **statistics** 在冷/热 `group_total` 之和超过 `gateway_metrics_hybrid_merge_max_groups`（默认 2000）→ 整窗 logs。
+- **纯冷段 summary**：数值走 hourly；`by_client_type` 仍对冷段时间窗扫明细（hourly 无该维度）。
+- **`GET /logs`**：始终读 **`gateway_request_logs`**（审计列表/详情）。
+- 成功请求采样 `gateway_request_log_success_sample_rate` 仍影响明细与 rollup 写入；hourly 由 `gateway_rollup_loop` 增量汇总，`gateway_metrics_repair_loop` 每日重算最近 `gateway_metrics_repair_hours` 小时。
+- 明细保留：`gateway_request_log_retention_days` 默认 **30**（整月分区 DROP）。
 - **Redis 计数**（`gateway:metrics:*`）：CustomLogger 中可与 DB 写入路径不同步；**管理面大盘以 DB 为准**。
 - **凭据归因**：`gateway_request_logs` 含可空列 **`credential_id`**、**`credential_name_snapshot`**；`GET /api/v1/gateway/logs` 支持查询参数 **`credential_id`** 过滤；LiteLLM Router deployment 的 **`model_info`** 写入 `gateway_credential_id` / `gateway_credential_name` / `gateway_credential_scope`，与 `ProxyMetadataBuilder.build` 注入的 `gateway_*` 字段互为补充；**`gateway_metrics_hourly`** rollup 唯一维度含 **`credential_id`**（与历史 NULL 行兼容）。
 

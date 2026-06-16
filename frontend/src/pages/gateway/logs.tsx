@@ -45,8 +45,12 @@ import {
   GatewayFilterCombobox,
 } from '@/features/gateway-usage/gateway-filter-combobox'
 import {
+  logCallerDisplayText,
+  logCallerDisplayTitle,
+} from '@/features/gateway-usage/log-caller-display'
+import { LogListResizableHeader } from '@/features/gateway-usage/log-list-resizable-header'
+import {
   logModelIdentityTitle,
-  logModelIdentityTooltip,
   resolveLogModelIdentity,
   type LogModelCatalogIndex,
   type LogModelIdentity,
@@ -57,7 +61,10 @@ import {
   usageAggregationScopeLabel,
 } from '@/features/gateway-usage/usage-aggregation'
 import { UsageAggregationToggle } from '@/features/gateway-usage/usage-aggregation-toggle'
+import { usageLogsShowCaller } from '@/features/gateway-usage/usage-stats-filter-catalog'
 import { useLogFilterCatalog } from '@/features/gateway-usage/use-log-filter-catalog'
+import { useLogListColumnWidths } from '@/features/gateway-usage/use-log-list-column-widths'
+import { usePlatformUserStatsFilterSearch } from '@/features/gateway-usage/use-platform-user-stats-filter-search'
 import { useTeamMemberFilterSearch } from '@/features/gateway-usage/use-team-member-filter-search'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useGatewayTeamId, useGatewayTeamRecord } from '@/hooks/use-gateway-team-id'
@@ -111,15 +118,15 @@ const DATE_RANGE_FILTERS: readonly { value: DateRangeValue; label: string }[] = 
   { value: '30d', label: '最近30天' },
 ]
 
-/** 表头与行共用，避免列宽漂移（调用名 / 显示名 / 上游 与模型列表对齐） */
-const LOG_GRID_COLS =
-  'grid grid-cols-[152px_132px_100px_128px_120px_96px_96px_88px_80px_76px_72px_minmax(160px,1fr)]'
-
 interface LogsLocationState {
   usageStatsFilters?: {
     usageAggregation?: GatewayUsageAggregation
     status?: string
     capability?: string
+    userId?: string
+    credentialId?: string
+    model?: string
+    vkeyId?: string
   }
 }
 
@@ -188,14 +195,26 @@ export default function GatewayLogsPage(): React.JSX.Element {
     teamId,
   })
 
-  // 人员筛选：workspace 模式下使用服务端搜索（支持大量成员场景）
+  // 调用人列 / 人员筛选：全平台始终显示；团队 workspace 在个人团队下隐藏
   const isPersonalTeam = teamRecord?.kind === 'personal'
-  const showMemberFilter = usageAggregation !== 'user' && !isPersonalTeam
-  const memberFilter = useTeamMemberFilterSearch({
+  const showCallerColumn = usageLogsShowCaller(usageAggregation, isPersonalTeam)
+  const usePlatformUserDirectory =
+    showCallerColumn && usageAggregation === 'platform' && isPlatformAdmin
+  const teamMemberFilter = useTeamMemberFilterSearch({
     teamId,
     selectedUserId: userFilter,
-    enabled: showMemberFilter,
+    enabled: showCallerColumn && !usePlatformUserDirectory,
   })
+  const platformMemberFilter = usePlatformUserStatsFilterSearch({
+    selectedUserId: userFilter,
+    enabled: showCallerColumn && usePlatformUserDirectory,
+  })
+  const callerFilterOptions = usePlatformUserDirectory
+    ? platformMemberFilter.options
+    : teamMemberFilter.options
+  const callerFilterLoading = usePlatformUserDirectory
+    ? platformMemberFilter.resolvingSelection
+    : teamMemberFilter.resolvingSelection
 
   // URL 同步：筛选变化时更新 query params（保留非日志相关参数）
   useEffect(() => {
@@ -309,6 +328,18 @@ export default function GatewayLogsPage(): React.JSX.Element {
     if (fromStats.capability) {
       setCapabilityFilter(fromStats.capability)
     }
+    if (fromStats.userId) {
+      setUserFilter(fromStats.userId)
+    }
+    if (fromStats.credentialId) {
+      setCredentialFilter(fromStats.credentialId)
+    }
+    if (fromStats.model) {
+      setModelFilter(fromStats.model)
+    }
+    if (fromStats.vkeyId) {
+      setVkeyFilter(fromStats.vkeyId)
+    }
     navigate(
       { pathname: location.pathname, search: location.search },
       { replace: true, state: null }
@@ -330,7 +361,7 @@ export default function GatewayLogsPage(): React.JSX.Element {
     statusFilter !== 'all' ||
     capabilityFilter !== 'all' ||
     dateRange !== 'today' ||
-    (showMemberFilter && userFilter !== GATEWAY_FILTER_ALL) ||
+    (showCallerColumn && userFilter !== GATEWAY_FILTER_ALL) ||
     credentialFilter !== GATEWAY_FILTER_ALL ||
     vkeyFilter !== GATEWAY_FILTER_ALL ||
     modelFilter !== GATEWAY_FILTER_ALL
@@ -342,7 +373,7 @@ export default function GatewayLogsPage(): React.JSX.Element {
       capability: capabilityFilter === 'all' ? undefined : capabilityFilter,
       start: rangeStart.toISOString(),
       end: rangeEnd.toISOString(),
-      user_id: showMemberFilter && userFilter !== GATEWAY_FILTER_ALL ? userFilter : undefined,
+      user_id: showCallerColumn && userFilter !== GATEWAY_FILTER_ALL ? userFilter : undefined,
       credential_id: credentialFilter === GATEWAY_FILTER_ALL ? undefined : credentialFilter,
       vkey_id: vkeyFilter === GATEWAY_FILTER_ALL ? undefined : vkeyFilter,
       model: modelFilter === GATEWAY_FILTER_ALL ? undefined : modelFilter,
@@ -353,7 +384,7 @@ export default function GatewayLogsPage(): React.JSX.Element {
       capabilityFilter,
       rangeStart,
       rangeEnd,
-      showMemberFilter,
+      showCallerColumn,
       userFilter,
       credentialFilter,
       vkeyFilter,
@@ -384,6 +415,13 @@ export default function GatewayLogsPage(): React.JSX.Element {
 
   const items = useMemo(() => data?.items ?? [], [data?.items])
   const totalCount = data?.total ?? 0
+
+  const {
+    gridTemplateColumns: logGridTemplateColumns,
+    tableMinWidth: logTableMinWidth,
+    startResize,
+    resetColumn,
+  } = useLogListColumnWidths({ showCallerColumn })
 
   const virtualizer = useVirtualizer({
     count: items.length,
@@ -583,21 +621,39 @@ export default function GatewayLogsPage(): React.JSX.Element {
             </SelectContent>
           </Select>
 
-          {showMemberFilter ? (
+          {showCallerColumn ? (
             <GatewayFilterCombobox
               value={userFilter}
               onChange={(next) => {
                 setUserFilter(next)
                 resetListPosition()
               }}
-              options={memberFilter.options}
-              placeholder="用户"
+              options={callerFilterOptions}
+              placeholder="调用人"
               active={userFilter !== GATEWAY_FILTER_ALL}
               searchMode="server"
-              onSearchQueryChange={memberFilter.onSearchQueryChange}
-              onOpenChange={memberFilter.onPickerOpenChange}
-              remoteSearching={memberFilter.remoteSearching}
-              loading={memberFilter.resolvingSelection}
+              searchPlaceholder={usePlatformUserDirectory ? '姓名或邮箱…' : '搜索人员…'}
+              onSearchQueryChange={
+                usePlatformUserDirectory
+                  ? platformMemberFilter.onSearchQueryChange
+                  : teamMemberFilter.onSearchQueryChange
+              }
+              onOpenChange={
+                usePlatformUserDirectory
+                  ? platformMemberFilter.onPickerOpenChange
+                  : teamMemberFilter.onPickerOpenChange
+              }
+              remoteSearching={
+                usePlatformUserDirectory
+                  ? platformMemberFilter.remoteSearching
+                  : teamMemberFilter.remoteSearching
+              }
+              loading={callerFilterLoading}
+              emptyHint={
+                usePlatformUserDirectory
+                  ? '输入姓名或邮箱搜索；无关键词时仅显示前 40 名活跃用户'
+                  : undefined
+              }
             />
           ) : null}
 
@@ -653,22 +709,101 @@ export default function GatewayLogsPage(): React.JSX.Element {
 
       <Card className="overflow-hidden">
         <div className="overflow-x-auto">
-          <div className="min-w-[1480px]">
+          <div style={{ minWidth: logTableMinWidth }}>
             <div
-              className={`${LOG_GRID_COLS} border-b bg-muted/30 px-3 py-2 text-xs font-medium text-muted-foreground`}
+              className="grid border-b bg-muted/30 px-3 py-2 text-xs font-medium text-muted-foreground"
+              style={{ gridTemplateColumns: logGridTemplateColumns }}
             >
-              <div>时间</div>
-              <div>调用名</div>
-              <div>显示名</div>
-              <div>上游</div>
-              <div>凭据</div>
-              <div>能力</div>
-              <div>状态</div>
-              <div className="text-right">Tokens</div>
-              <div className="text-right">成本</div>
-              <div className="text-right">延迟</div>
-              <div className="text-right">首字节</div>
-              <div>请求 ID</div>
+              <LogListResizableHeader
+                columnKey="time"
+                startResize={startResize}
+                resetColumn={resetColumn}
+              >
+                时间
+              </LogListResizableHeader>
+              {showCallerColumn ? (
+                <LogListResizableHeader
+                  columnKey="caller"
+                  startResize={startResize}
+                  resetColumn={resetColumn}
+                >
+                  调用人
+                </LogListResizableHeader>
+              ) : null}
+              <LogListResizableHeader
+                columnKey="invokeName"
+                startResize={startResize}
+                resetColumn={resetColumn}
+              >
+                调用名
+              </LogListResizableHeader>
+              <LogListResizableHeader
+                columnKey="upstream"
+                startResize={startResize}
+                resetColumn={resetColumn}
+              >
+                上游
+              </LogListResizableHeader>
+              <LogListResizableHeader
+                columnKey="credential"
+                startResize={startResize}
+                resetColumn={resetColumn}
+              >
+                凭据
+              </LogListResizableHeader>
+              <LogListResizableHeader
+                columnKey="capability"
+                startResize={startResize}
+                resetColumn={resetColumn}
+              >
+                能力
+              </LogListResizableHeader>
+              <LogListResizableHeader
+                columnKey="status"
+                startResize={startResize}
+                resetColumn={resetColumn}
+              >
+                状态
+              </LogListResizableHeader>
+              <LogListResizableHeader
+                columnKey="tokens"
+                className="text-right"
+                startResize={startResize}
+                resetColumn={resetColumn}
+              >
+                Tokens
+              </LogListResizableHeader>
+              <LogListResizableHeader
+                columnKey="cost"
+                className="text-right"
+                startResize={startResize}
+                resetColumn={resetColumn}
+              >
+                成本
+              </LogListResizableHeader>
+              <LogListResizableHeader
+                columnKey="latency"
+                className="text-right"
+                startResize={startResize}
+                resetColumn={resetColumn}
+              >
+                延迟
+              </LogListResizableHeader>
+              <LogListResizableHeader
+                columnKey="ttfb"
+                className="text-right"
+                startResize={startResize}
+                resetColumn={resetColumn}
+              >
+                首字节
+              </LogListResizableHeader>
+              <LogListResizableHeader
+                columnKey="requestId"
+                startResize={startResize}
+                resetColumn={resetColumn}
+              >
+                请求 ID
+              </LogListResizableHeader>
             </div>
             <div ref={parentRef} className="h-[560px] overflow-auto">
               {isLoading ? (
@@ -704,6 +839,8 @@ export default function GatewayLogsPage(): React.JSX.Element {
                         row={row}
                         item={item}
                         modelCatalogIndex={modelCatalogIndex}
+                        gridTemplateColumns={logGridTemplateColumns}
+                        showCallerColumn={showCallerColumn}
                         selected={item.id === selectedId}
                         onSelect={handleRowSelect}
                       />
@@ -879,17 +1016,20 @@ const LogRow = memo(function LogRow({
   row,
   item,
   modelCatalogIndex,
+  gridTemplateColumns,
+  showCallerColumn,
   selected,
   onSelect,
 }: Readonly<{
   row: VirtualItem
   item: GatewayLogItem
   modelCatalogIndex: LogModelCatalogIndex
+  gridTemplateColumns: string
+  showCallerColumn: boolean
   selected: boolean
   onSelect: (id: string) => void
 }>): React.JSX.Element {
   const identity = resolveLogModelIdentity(item, modelCatalogIndex)
-  const modelTooltip = logModelIdentityTooltip(identity)
 
   return (
     <button
@@ -900,9 +1040,10 @@ const LogRow = memo(function LogRow({
         width: '100%',
         height: `${row.size.toString()}px`,
         transform: `translateY(${row.start.toString()}px)`,
+        display: 'grid',
+        gridTemplateColumns,
       }}
       className={cn(
-        LOG_GRID_COLS,
         'cv-auto-row items-center border-b px-3 text-left text-xs transition-colors hover:bg-muted/40',
         selected ? 'bg-primary/5 ring-1 ring-inset ring-primary/20' : ''
       )}
@@ -912,11 +1053,13 @@ const LogRow = memo(function LogRow({
       }}
     >
       <div className="truncate text-muted-foreground">{formatDateTime(item.created_at)}</div>
-      <div className="truncate font-mono" title={modelTooltip}>
+      {showCallerColumn ? (
+        <div className="truncate" title={logCallerDisplayTitle(item)}>
+          {logCallerDisplayText(item)}
+        </div>
+      ) : null}
+      <div className="min-w-0 truncate font-mono" title={identity.invokeName ?? undefined}>
         {identity.invokeName ?? '—'}
-      </div>
-      <div className="truncate" title={identity.displayName ?? undefined}>
-        {identity.displayName ?? '—'}
       </div>
       <div
         className="truncate font-mono text-muted-foreground"
@@ -1078,7 +1221,9 @@ function LogModelIdentityFields({
       <DetailField label="调用名" mono>
         {identity.invokeName ?? '—'}
       </DetailField>
-      <DetailField label="显示名">{identity.displayName ?? '—'}</DetailField>
+      {identity.displayName ? (
+        <DetailField label="显示名">{identity.displayName}</DetailField>
+      ) : null}
       <DetailField label="上游" mono>
         {identity.upstreamName ?? '—'}
       </DetailField>

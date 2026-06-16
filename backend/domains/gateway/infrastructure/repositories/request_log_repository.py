@@ -768,6 +768,7 @@ class RequestLogRepository:
         page: int = 1,
         page_size: int = 20,
         parent_scope: UsageStatisticsParentScope | None = None,
+        fetch_all_groups: bool = False,
     ) -> tuple[list[RequestLogUsageAggregateRow], RequestLogUsageTotals, int]:
         """按指定维度聚合调用统计，并返回同一过滤条件下的总计与分组总数。"""
         group_exprs = self._usage_statistics_group_exprs(group_by)
@@ -783,16 +784,6 @@ class RequestLogRepository:
         success_case = case((GatewayRequestLog.status == "success", 1), else_=0)
         failure_case = case((GatewayRequestLog.status != "success", 1), else_=0)
         cache_hit_case = case((GatewayRequestLog.cache_hit.is_(True), 1), else_=0)
-
-        group_subq = (
-            select(*[expr.label(f"gk_{i}") for i, expr in enumerate(group_exprs)])
-            .where(_sql_and(*clauses))
-            .group_by(*group_exprs)
-            .subquery()
-        )
-        group_total = int(
-            (await self._session.execute(select(func.count()).select_from(group_subq))).scalar_one()
-        )
 
         offset = max(0, (page - 1) * page_size)
         selected = [
@@ -820,14 +811,18 @@ class RequestLogRepository:
                 func.sum(cache_hit_case).label("cache_hit_count"),
             ]
         )
-        rows_stmt = (
+        grouped_subq = (
             select(*selected)
             .where(_sql_and(*clauses))
             .group_by(*group_exprs)
-            .order_by(func.count(GatewayRequestLog.id).desc())
-            .offset(offset)
-            .limit(page_size)
+            .subquery("usage_grouped")
         )
+        rows_stmt = (
+            select(grouped_subq)
+            .order_by(grouped_subq.c.requests.desc())
+        )
+        if not fetch_all_groups:
+            rows_stmt = rows_stmt.offset(offset).limit(page_size)
         result = await self._session.execute(rows_stmt)
         items: list[RequestLogUsageAggregateRow] = []
         for row in result.all():
@@ -861,7 +856,9 @@ class RequestLogRepository:
                 )
             )
 
+        group_total_subq = select(func.count()).select_from(grouped_subq).scalar_subquery()
         totals_stmt = select(
+            group_total_subq.label("group_total"),
             func.count(GatewayRequestLog.id).label("requests"),
             func.sum(success_case).label("success_count"),
             func.sum(failure_case).label("failure_count"),
@@ -875,6 +872,7 @@ class RequestLogRepository:
             func.sum(cache_hit_case).label("cache_hit_count"),
         ).where(_sql_and(*clauses))
         total_row = (await self._session.execute(totals_stmt)).one()
+        group_total = int(total_row.group_total or 0)
         totals = RequestLogUsageTotals(
             requests=int(total_row.requests or 0),
             success_count=int(total_row.success_count or 0),

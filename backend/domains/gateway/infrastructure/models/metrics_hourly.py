@@ -1,7 +1,7 @@
 """
 GatewayMetricsHourly - 小时级聚合表
 
-由 rollup job 从 GatewayRequestLog 增量聚合，仪表盘读它而非扫全表。
+由 rollup job 从 GatewayRequestLog 增量聚合；Dashboard/Statistics hybrid 读路径消费。
 """
 
 from __future__ import annotations
@@ -45,6 +45,7 @@ class GatewayMetricsHourly(BaseModel):
     provider_plan_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     provider: Mapped[str | None] = mapped_column(String(50), nullable=True)
     real_model: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    model_key: Mapped[str] = mapped_column(String(200), nullable=False)
     capability: Mapped[str | None] = mapped_column(String(40), nullable=True)
 
     # 指标
@@ -60,11 +61,20 @@ class GatewayMetricsHourly(BaseModel):
     cost_usd: Mapped[Decimal] = mapped_column(
         Numeric(14, 6), nullable=False, server_default="0", default=Decimal("0")
     )
+    revenue_usd: Mapped[Decimal] = mapped_column(
+        Numeric(14, 6), nullable=False, server_default="0", default=Decimal("0")
+    )
     total_latency_ms: Mapped[int] = mapped_column(
         Integer,
         nullable=False,
         server_default="0",
         comment="累计 latency_ms，用于计算平均",
+    )
+    ttfb_total_ms: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        server_default="0",
+        comment="累计 ttfb_ms，用于计算平均",
     )
     p95_latency_ms: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     cache_hit_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
@@ -79,7 +89,7 @@ class GatewayMetricsHourly(BaseModel):
             "entitlement_plan_id",
             "provider_plan_id",
             "provider",
-            "real_model",
+            "model_key",
             "capability",
             name="uq_gateway_metrics_hourly_dim",
         ),

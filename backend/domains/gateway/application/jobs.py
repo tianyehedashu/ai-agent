@@ -1,7 +1,8 @@
 """
 Gateway Background Jobs
 
-- gateway_rollup_job: 5 分钟一次，把 GatewayRequestLog 聚合写入 gateway_metrics_hourly
+- gateway_rollup_job: 5 分钟一次，把 GatewayRequestLog 增量聚合写入 gateway_metrics_hourly
+- gateway_metrics_repair_loop: 每日一次，重算最近 N 小时 hourly（覆盖写）
 - gateway_alert_job: 1 分钟一次，扫规则、写事件、发 webhook + 站内通知
 - gateway_partition_job: 每天一次，确保下两个月的分区表存在，并清理过期配额汇总行
 - gateway_request_log_retention_loop: 按配置间隔删除早于保留期的整月分区
@@ -16,8 +17,12 @@ from typing import TYPE_CHECKING, Any
 from bootstrap.config import settings
 from domains.gateway.application.gateway_alert_job import gateway_alert_loop
 from domains.gateway.infrastructure.jobs.sql_jobs_repository import GatewaySqlJobsRepository
+from domains.gateway.infrastructure.repositories.gateway_rollup_state_repository import (
+    GatewayRollupStateRepository,
+)
 from domains.gateway.infrastructure.repositories.metrics_rollup_repository import (
     GatewayMetricsRollupRepository,
+    RollupUpsertMode,
 )
 from domains.gateway.infrastructure.repositories.quota_plan_usage_bucket_repository import (
     QuotaPlanUsageBucketRepository,
@@ -43,25 +48,72 @@ async def _cleanup_stale_quota_usage_buckets(session: AsyncSession) -> int:
     return deleted
 
 
+def _floor_hour(value: datetime) -> datetime:
+    return value.replace(minute=0, second=0, microsecond=0)
+
+
 # =============================================================================
 # Rollup
 # =============================================================================
 
 
 async def gateway_rollup_loop() -> None:
-    """5 分钟一次，rollup 最近 1 小时数据"""
+    """按 watermark 增量 rollup 至当前整点小时。"""
     interval = settings.gateway_rollup_interval_seconds
     while True:
         try:
             now = datetime.now(UTC)
-            until = now.replace(minute=0, second=0, microsecond=0)
-            since = until - timedelta(hours=2)
+            until = _floor_hour(now)
             async with get_background_session_context() as session:
-                repo = GatewayMetricsRollupRepository(session)
-                count = await repo.rollup_window(since, until)
-                logger.debug("gateway_rollup_job: upserted %d rows", count)
+                state_repo = GatewayRollupStateRepository(session)
+                since = await state_repo.read_for_update()
+                if since >= until:
+                    await session.rollback()
+                else:
+                    repo = GatewayMetricsRollupRepository(session)
+                    count = await repo.rollup_window(
+                        since,
+                        until,
+                        mode=RollupUpsertMode.INCREMENT,
+                    )
+                    await state_repo.set_last_rolled_at(until)
+                    await session.commit()
+                    logger.debug(
+                        "gateway_rollup_job: upserted %d rows [%s, %s)",
+                        count,
+                        since.isoformat(),
+                        until.isoformat(),
+                    )
         except Exception as exc:  # pragma: no cover
             logger.warning("gateway_rollup_job error: %s", exc)
+        await asyncio.sleep(interval)
+
+
+async def gateway_metrics_repair_loop() -> None:
+    """每日重算最近 N 小时 hourly，修正迟到日志与采样偏差。"""
+    interval = settings.gateway_metrics_repair_interval_seconds
+    repair_hours = settings.gateway_metrics_repair_hours
+    while True:
+        try:
+            if repair_hours > 0:
+                now = datetime.now(UTC)
+                until = _floor_hour(now)
+                since = until - timedelta(hours=repair_hours)
+                async with get_background_session_context() as session:
+                    repo = GatewayMetricsRollupRepository(session)
+                    count = await repo.rollup_window(
+                        since,
+                        until,
+                        mode=RollupUpsertMode.REPLACE,
+                    )
+                    logger.info(
+                        "gateway_metrics_repair: rebuilt %d hourly row(s) [%s, %s)",
+                        count,
+                        since.isoformat(),
+                        until.isoformat(),
+                    )
+        except Exception as exc:  # pragma: no cover
+            logger.warning("gateway_metrics_repair_loop error: %s", exc)
         await asyncio.sleep(interval)
 
 
@@ -149,6 +201,7 @@ async def gateway_plan_lifecycle_loop() -> None:
 def schedule_gateway_jobs(app: Any) -> None:
     """启动后台任务并登记到 app.state"""
     register_app_background_task(app, asyncio.create_task(gateway_rollup_loop()))
+    register_app_background_task(app, asyncio.create_task(gateway_metrics_repair_loop()))
     register_app_background_task(app, asyncio.create_task(gateway_partition_loop()))
     register_app_background_task(app, asyncio.create_task(gateway_request_log_retention_loop()))
     register_app_background_task(app, asyncio.create_task(gateway_alert_loop()))
@@ -157,6 +210,7 @@ def schedule_gateway_jobs(app: Any) -> None:
 
 __all__ = [
     "gateway_alert_loop",
+    "gateway_metrics_repair_loop",
     "gateway_partition_loop",
     "gateway_plan_lifecycle_loop",
     "gateway_request_log_retention_loop",

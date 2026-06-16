@@ -7,8 +7,26 @@ import {
   modelFilterOptionsForStats,
   modelOptionValuesFromModels,
   providerFilterOptionsFromUsageItems,
+  usageLogsShowCaller,
   usageStatsShowMemberFilter,
 } from '@/features/gateway-usage/usage-stats-filter-catalog'
+
+describe('usageLogsShowCaller', () => {
+  it('hides caller on user aggregation', () => {
+    expect(usageLogsShowCaller('user', false)).toBe(false)
+    expect(usageLogsShowCaller('user', true)).toBe(false)
+  })
+
+  it('shows caller on platform regardless of team kind', () => {
+    expect(usageLogsShowCaller('platform', true)).toBe(true)
+    expect(usageLogsShowCaller('platform', false)).toBe(true)
+  })
+
+  it('shows caller on workspace shared team only', () => {
+    expect(usageLogsShowCaller('workspace', false)).toBe(true)
+    expect(usageLogsShowCaller('workspace', true)).toBe(false)
+  })
+})
 
 describe('usageStatsShowMemberFilter', () => {
   it('hides member filter on user aggregation', () => {

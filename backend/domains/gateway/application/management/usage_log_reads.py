@@ -167,22 +167,11 @@ class GatewayUsageLogReadMixin:
         model: str | None = None,
     ) -> dict[str, Any]:
         axis = self._resolve_usage_axis(ctx, usage_aggregation)
-        summary = await self._logs.aggregate_summary_by_axis(
+        summary = await self._usage_metrics.aggregate_summary(
             axis,
             start,
             end,
-            status=status_filter,
-            capability=capability,
-            vkey_id=vkey_id,
-            credential_id=credential_id,
-            user_id=user_id,
-            model=model,
-        )
-        summary["by_client_type"] = await self._logs.aggregate_by_client_type(
-            axis,
-            start,
-            end,
-            status=status_filter,
+            status_filter=status_filter,
             capability=capability,
             vkey_id=vkey_id,
             credential_id=credential_id,
@@ -386,7 +375,7 @@ class GatewayUsageLogReadMixin:
             usage_aggregation,
             vkey_id=filters.vkey_id,
         )
-        rows, totals, group_total = await self._logs.aggregate_usage_statistics_by_axis(
+        rows, totals, group_total = await self._usage_metrics.aggregate_usage_statistics(
             axis,
             start,
             end,
@@ -441,14 +430,14 @@ class GatewayUsageLogReadMixin:
             group_by=parent_group_by,
             group_key=normalized_parent_key,
         )
-        parent_requests = await self._logs.count_usage_requests_by_axis(
+        parent_requests = await self._usage_metrics.count_usage_requests(
             axis,
             start,
             end,
             filters=filters,
             parent_scope=parent_scope,
         )
-        rows, _, _ = await self._logs.aggregate_usage_statistics_by_axis(
+        rows, _, _ = await self._usage_metrics.aggregate_usage_statistics(
             axis,
             start,
             end,

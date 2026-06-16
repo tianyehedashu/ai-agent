@@ -47,6 +47,7 @@ async def test_rollup_window_batches_upsert_in_single_execute() -> None:
         provider_plan_id=None,
         provider="openai",
         real_model="gpt-4",
+        model_key="gpt-4",
         capability="chat",
         requests=3,
         success_count=2,
@@ -56,7 +57,9 @@ async def test_rollup_window_batches_upsert_in_single_execute() -> None:
         cached_tokens=0,
         cache_creation_tokens=0,
         cost_usd=Decimal("0.001"),
+        revenue_usd=Decimal("0.002"),
         total_latency_ms=300,
+        ttfb_total_ms=120,
         cache_hit_count=0,
     )
     session.execute = AsyncMock(
@@ -74,7 +77,8 @@ async def test_rollup_window_batches_upsert_in_single_execute() -> None:
 
     assert count == 1
     assert session.execute.await_count == 2
-    session.commit.assert_awaited_once()
+    session.commit.assert_not_awaited()
+    session.flush.assert_awaited_once()
 
     upsert_stmt = session.execute.await_args_list[1].args[0]
     compiled = str(upsert_stmt.compile(compile_kwargs={"literal_binds": True}))

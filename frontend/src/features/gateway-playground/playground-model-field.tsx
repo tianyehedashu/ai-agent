@@ -16,11 +16,13 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { PricingBadge } from '@/features/gateway-pricing/pricing-badge'
+import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard'
 import {
   Check,
   CheckCircle2,
   ChevronsUpDown,
   CircleDashed,
+  Copy,
   Loader2,
   XCircle,
 } from '@/lib/lucide-icons'
@@ -37,6 +39,9 @@ import {
 import type { PlaygroundTeamModelGroup } from './playground-proxy-team'
 
 export const CUSTOM_MODEL_SENTINEL = '__custom__'
+
+const MODEL_POPOVER_WIDTH_CLASS =
+  'w-[max(var(--radix-popover-trigger-width),28rem)] max-w-[min(36rem,calc(100vw-2rem))]'
 
 export interface RouteCandidate {
   name: string
@@ -138,13 +143,15 @@ export function PlaygroundModelField({
             placeholder={customModelPlaceholder}
             autoComplete="off"
             spellCheck={false}
-            className="font-mono"
+            className="min-w-0 flex-1 font-mono"
             translate="no"
           />
+          <ModelNameCopyButton modelName={model} />
           <Button
             type="button"
             variant="outline"
             size="sm"
+            className="shrink-0"
             onClick={() => {
               onCustomModelChange(false, routeCandidates[0]?.name || filteredModels[0]?.name || '')
             }}
@@ -154,128 +161,134 @@ export function PlaygroundModelField({
           </Button>
         </div>
       ) : (
-        <Popover open={open} onOpenChange={handleOpenChange}>
-          <PopoverTrigger asChild>
-            <Button
-              id={modelSelectId}
-              type="button"
-              variant="outline"
-              role="combobox"
-              aria-expanded={open}
-              disabled={modelsLoading && listEmpty}
-              className={cn(
-                'w-full justify-between font-normal',
-                model ? 'font-mono' : 'text-muted-foreground'
-              )}
-            >
-              <span className="flex min-w-0 items-center gap-2 truncate">
-                {modelsLoading ? (
-                  <Loader2
-                    className="h-4 w-4 shrink-0 animate-spin opacity-60"
-                    aria-hidden="true"
-                  />
-                ) : null}
-                <span className="truncate" translate={model ? 'no' : undefined}>
-                  {triggerLabel}
+        <div className="flex gap-1.5">
+          <Popover open={open} onOpenChange={handleOpenChange}>
+            <PopoverTrigger asChild>
+              <Button
+                id={modelSelectId}
+                type="button"
+                variant="outline"
+                role="combobox"
+                aria-expanded={open}
+                disabled={modelsLoading && listEmpty}
+                className={cn(
+                  'min-w-0 flex-1 justify-between font-normal',
+                  model ? 'font-mono' : 'text-muted-foreground'
+                )}
+              >
+                <span className="flex min-w-0 items-center gap-2 truncate">
+                  {modelsLoading ? (
+                    <Loader2
+                      className="h-4 w-4 shrink-0 animate-spin opacity-60"
+                      aria-hidden="true"
+                    />
+                  ) : null}
+                  <span className="truncate" translate={model ? 'no' : undefined}>
+                    {triggerLabel}
+                  </span>
                 </span>
-              </span>
-              <ChevronsUpDown className="h-4 w-4 shrink-0 opacity-50" aria-hidden="true" />
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent
-            className="w-[max(var(--radix-popover-trigger-width),20rem)] max-w-[min(24rem,calc(100vw-2rem))] p-0"
-            align="start"
-            collisionPadding={8}
-          >
-            <Command>
-              <CommandInput placeholder="搜索模型别名、路由…" />
-              <CommandList>
-                <CommandEmpty>未找到匹配的模型或路由</CommandEmpty>
-                {routeCandidates.length > 0 ? (
-                  <CommandGroup heading="虚拟路由">
-                    {routeCandidates.map((item) => (
-                      <CommandItem
-                        key={`route-${item.name}`}
-                        value={routeCommandItemValue(item)}
-                        onSelect={() => {
-                          handlePick(item.name)
-                        }}
-                      >
-                        <Check
-                          className={cn(
-                            'mr-2 h-4 w-4 shrink-0',
-                            model === item.name ? 'opacity-100' : 'opacity-0'
-                          )}
-                          aria-hidden="true"
-                        />
-                        <span className="flex min-w-0 flex-1 items-center justify-between gap-3">
-                          <span className="min-w-0 flex-1 truncate font-mono" translate="no">
-                            {item.name}
-                          </span>
-                          <Badge variant="outline" className="shrink-0 text-muted-foreground">
-                            路由
-                          </Badge>
-                        </span>
-                      </CommandItem>
-                    ))}
-                  </CommandGroup>
-                ) : null}
-                {teamModelGroups && teamModelGroups.length > 0
-                  ? teamModelGroups.map((group) => (
-                      <CommandGroup key={group.groupKey} heading={group.label}>
-                        {group.models.map((item) => (
-                          <ModelCommandItem
-                            key={`team-${group.groupKey}-${item.name}`}
-                            item={item}
-                            selected={model === item.name}
-                            priceRow={priceByName.get(item.name)}
-                            currency={currency}
-                            onPick={handlePick}
+                <ChevronsUpDown className="h-4 w-4 shrink-0 opacity-50" aria-hidden="true" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent
+              className={cn(MODEL_POPOVER_WIDTH_CLASS, 'p-0')}
+              align="start"
+              collisionPadding={8}
+            >
+              <Command>
+                <CommandInput placeholder="搜索模型别名、路由…" />
+                <CommandList>
+                  <CommandEmpty>未找到匹配的模型或路由</CommandEmpty>
+                  {routeCandidates.length > 0 ? (
+                    <CommandGroup heading="虚拟路由">
+                      {routeCandidates.map((item) => (
+                        <CommandItem
+                          key={`route-${item.name}`}
+                          value={routeCommandItemValue(item)}
+                          onSelect={() => {
+                            handlePick(item.name)
+                          }}
+                        >
+                          <Check
+                            className={cn(
+                              'mr-2 h-4 w-4 shrink-0',
+                              model === item.name ? 'opacity-100' : 'opacity-0'
+                            )}
+                            aria-hidden="true"
                           />
-                        ))}
-                      </CommandGroup>
-                    ))
-                  : null}
-                {!teamModelGroups?.length && teamCandidates.length > 0 ? (
-                  <CommandGroup heading="团队模型">
-                    {teamCandidates.map((item) => (
-                      <ModelCommandItem
-                        key={`team-${item.name}`}
-                        item={item}
-                        selected={model === item.name}
-                        priceRow={priceByName.get(item.name)}
-                        currency={currency}
-                        onPick={handlePick}
-                      />
-                    ))}
+                          <span className="flex min-w-0 flex-1 items-start justify-between gap-3">
+                            <span
+                              className="min-w-0 flex-1 break-all font-mono leading-snug"
+                              translate="no"
+                            >
+                              {item.name}
+                            </span>
+                            <Badge variant="outline" className="shrink-0 text-muted-foreground">
+                              路由
+                            </Badge>
+                          </span>
+                        </CommandItem>
+                      ))}
+                    </CommandGroup>
+                  ) : null}
+                  {teamModelGroups && teamModelGroups.length > 0
+                    ? teamModelGroups.map((group) => (
+                        <CommandGroup key={group.groupKey} heading={group.label}>
+                          {group.models.map((item) => (
+                            <ModelCommandItem
+                              key={`team-${group.groupKey}-${item.name}`}
+                              item={item}
+                              selected={model === item.name}
+                              priceRow={priceByName.get(item.name)}
+                              currency={currency}
+                              onPick={handlePick}
+                            />
+                          ))}
+                        </CommandGroup>
+                      ))
+                    : null}
+                  {!teamModelGroups?.length && teamCandidates.length > 0 ? (
+                    <CommandGroup heading="团队模型">
+                      {teamCandidates.map((item) => (
+                        <ModelCommandItem
+                          key={`team-${item.name}`}
+                          item={item}
+                          selected={model === item.name}
+                          priceRow={priceByName.get(item.name)}
+                          currency={currency}
+                          onPick={handlePick}
+                        />
+                      ))}
+                    </CommandGroup>
+                  ) : null}
+                  {!teamModelGroups?.length && personalCandidates.length > 0 ? (
+                    <CommandGroup heading={personalModelsLabel}>
+                      {personalCandidates.map((item) => (
+                        <ModelCommandItem
+                          key={`personal-${item.name}`}
+                          item={item}
+                          selected={model === item.name}
+                          priceRow={priceByName.get(item.name)}
+                          currency={currency}
+                          onPick={handlePick}
+                        />
+                      ))}
+                    </CommandGroup>
+                  ) : null}
+                  <CommandGroup heading="其他">
+                    <CommandItem
+                      value={`${CUSTOM_MODEL_SENTINEL} 手动输入`}
+                      onSelect={handleManualInput}
+                    >
+                      <span className="text-muted-foreground">✏️ 手动输入…</span>
+                    </CommandItem>
                   </CommandGroup>
-                ) : null}
-                {!teamModelGroups?.length && personalCandidates.length > 0 ? (
-                  <CommandGroup heading={personalModelsLabel}>
-                    {personalCandidates.map((item) => (
-                      <ModelCommandItem
-                        key={`personal-${item.name}`}
-                        item={item}
-                        selected={model === item.name}
-                        priceRow={priceByName.get(item.name)}
-                        currency={currency}
-                        onPick={handlePick}
-                      />
-                    ))}
-                  </CommandGroup>
-                ) : null}
-                <CommandGroup heading="其他">
-                  <CommandItem
-                    value={`${CUSTOM_MODEL_SENTINEL} 手动输入`}
-                    onSelect={handleManualInput}
-                  >
-                    <span className="text-muted-foreground">✏️ 手动输入…</span>
-                  </CommandItem>
-                </CommandGroup>
-              </CommandList>
-            </Command>
-          </PopoverContent>
-        </Popover>
+                </CommandList>
+              </Command>
+            </PopoverContent>
+          </Popover>
+          <ModelNameCopyButton modelName={model} />
+        </div>
       )}
       <ModelHint
         loading={modelsLoading}
@@ -313,16 +326,43 @@ function ModelCommandItem({
         className={cn('mr-2 h-4 w-4 shrink-0', selected ? 'opacity-100' : 'opacity-0')}
         aria-hidden="true"
       />
-      <span className="flex min-w-0 flex-1 items-center justify-between gap-3">
-        <span className="min-w-0 flex-1 truncate font-mono" translate="no">
+      <span className="flex min-w-0 flex-1 items-start justify-between gap-3">
+        <span className="min-w-0 flex-1 break-all font-mono leading-snug" translate="no">
           {item.name}
         </span>
-        <span className="flex shrink-0 items-center gap-2">
+        <span className="flex shrink-0 flex-col items-end gap-1 sm:flex-row sm:items-center">
           <PricingBadge row={priceRow} currency={currency} className="hidden sm:inline" />
           <ModelStatusBadge status={item.status} />
         </span>
       </span>
     </CommandItem>
+  )
+}
+
+function ModelNameCopyButton({
+  modelName,
+}: Readonly<{ modelName: string }>): React.JSX.Element | null {
+  const [copy, copied] = useCopyToClipboard()
+  const trimmed = modelName.trim()
+  if (!trimmed) return null
+
+  return (
+    <Button
+      type="button"
+      variant="outline"
+      size="icon"
+      className="h-10 w-10 shrink-0"
+      aria-label={copied ? `已复制 ${trimmed}` : `复制模型名 ${trimmed}`}
+      onClick={() => {
+        void copy(trimmed)
+      }}
+    >
+      {copied ? (
+        <Check className="h-4 w-4 text-emerald-600" aria-hidden="true" />
+      ) : (
+        <Copy className="h-4 w-4" aria-hidden="true" />
+      )}
+    </Button>
   )
 }
 

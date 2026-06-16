@@ -13,6 +13,16 @@ export function usageStatsShowMemberFilter(aggregation: GatewayUsageAggregation)
   return aggregation !== 'user'
 }
 
+/** 调用日志：是否展示调用人列与人员筛选（全平台始终显示；团队 workspace 在个人团队下隐藏）。 */
+export function usageLogsShowCaller(
+  aggregation: GatewayUsageAggregation,
+  isPersonalTeam: boolean
+): boolean {
+  if (!usageStatsShowMemberFilter(aggregation)) return false
+  if (aggregation === 'platform') return true
+  return !isPersonalTeam
+}
+
 export type StatsFilterModelRef = Pick<GatewayModel, 'name' | 'real_model' | 'provider'>
 
 export function modelOptionValuesFromModels(models: readonly StatsFilterModelRef[]): string[] {
