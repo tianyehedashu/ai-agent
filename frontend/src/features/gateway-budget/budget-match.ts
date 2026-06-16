@@ -1,8 +1,16 @@
 import type { GatewayBudget } from '@/api/gateway/budgets'
 
 export type BudgetViewContext =
-  | { kind: 'personal'; userId: string; modelNames?: string[] }
-  | { kind: 'team_model'; modelName: string; userId?: string }
+  | { kind: 'personal'; userId: string; modelNames?: string[]; credentialId?: string }
+  | {
+      kind: 'team_model'
+      /** Gateway 注册别名（platform 层匹配） */
+      modelName: string
+      /** 上游 endpoint / real_model（upstream 层匹配） */
+      realModel?: string
+      credentialId?: string
+      userId?: string
+    }
   | { kind: 'credential'; userId: string; linkedModelNames: string[]; credentialId?: string }
   | { kind: 'virtual_key'; keyId: string }
 

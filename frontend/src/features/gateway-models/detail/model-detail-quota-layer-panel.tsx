@@ -166,6 +166,7 @@ export function ModelDetailQuotaLayerPanel({
             rule={rule}
             layer={layer}
             credentialLabel={credentialLabel}
+            upstreamModelId={upstreamModelId}
             actions={
               editable && !showForm ? (
                 <span className="inline-flex gap-1">

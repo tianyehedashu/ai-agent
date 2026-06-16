@@ -3,17 +3,12 @@ import { useMemo, useState } from 'react'
 import type { GatewayModel } from '@/api/gateway/models'
 import type { QuotaRule } from '@/api/gateway/quota-rules'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import {
-  matchQuotaRulesForContext,
-  type BudgetViewContext,
-} from '@/features/gateway-budget/budget-match'
 import { buildRealModelsByCredentialMap } from '@/features/gateway-budget/quota-batch-rules'
-import { quotaListParamsForContext } from '@/features/gateway-budget/quota-rule-utils'
-import { useGatewayQuotaRules } from '@/features/gateway-budget/use-gateway-quota-rules'
 import { useQuotaBatchSubmit } from '@/features/gateway-budget/use-quota-batch-submit'
 import { credentialSummaryLabel } from '@/features/gateway-credentials/credential-summary-display'
 import { useGatewayCredentialDirectory } from '@/features/gateway-credentials/use-credential-directory'
 import type { ModelInspectorScope } from '@/features/gateway-models/detail/model-inspector'
+import { useModelDetailQuotaRules } from '@/features/gateway-models/detail/use-model-detail-quota-rules'
 import { Loader2 } from '@/lib/lucide-icons'
 
 import { ModelDetailQuotaLayerPanel } from './model-detail-quota-layer-panel'
@@ -60,33 +55,12 @@ export function ModelDetailQuotaSection({
   const credentialSummary = credentialSummariesById.get(model.credential_id)
   const credentialLabel = credentialSummaryLabel(credentialSummary, model.credential_id)
 
-  const context = useMemo((): BudgetViewContext | null => {
-    if (!userId) return null
-    return isPersonal
-      ? { kind: 'personal', userId, modelNames: [model.real_model] }
-      : { kind: 'team_model', modelName: model.name, userId }
-  }, [isPersonal, model.name, model.real_model, userId])
-
-  const listParams = useMemo(
-    () => (context ? quotaListParamsForContext(context) : undefined),
-    [context]
-  )
-  const { data: rules, isLoading } = useGatewayQuotaRules(teamId, listParams, {
-    enabled: context !== null,
+  const { platformRules, upstreamRules, isLoading } = useModelDetailQuotaRules({
+    model,
+    scope,
+    teamId,
+    userId,
   })
-  const matched = useMemo(
-    () => (context ? matchQuotaRulesForContext(rules ?? [], context) : []),
-    [context, rules]
-  )
-
-  const platformRules = useMemo(
-    () => matched.filter((rule) => rule.key.layer === 'platform'),
-    [matched]
-  )
-  const upstreamRules = useMemo(
-    () => matched.filter((rule) => rule.key.layer === 'upstream'),
-    [matched]
-  )
 
   const [formMode, setFormMode] = useState<FormMode>({ kind: 'closed' })
 

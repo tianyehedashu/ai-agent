@@ -4,9 +4,13 @@ import type { QuotaRule } from '@/api/gateway/quota-rules'
 
 import {
   buildQuotaRuleModelLookupFromCatalog,
+  describeUpstreamQuotaRuleScope,
   hasUpstreamPlanRules,
   matchQuotaRulesForContext,
+  mergeQuotaRules,
   quotaListParamsForContext,
+  quotaListParamsForTeamModelPlatform,
+  quotaListParamsForTeamModelUpstream,
   quotaRuleCredentialRealModelKey,
   resolveQuotaRulePlanManagementLink,
 } from './quota-rule-utils'
@@ -79,6 +83,62 @@ describe('matchQuotaRulesForContext credential upstream', () => {
     })
     expect(matched).toHaveLength(1)
     expect(matched[0].key.credential_id).toBe('cred-a')
+  })
+})
+
+describe('matchQuotaRulesForContext team_model', () => {
+  it('matches platform by alias and upstream by real_model', () => {
+    const rules = [
+      upstreamRule('cred-a', 'ep-abc', {
+        limits: {
+          limit_usd: null,
+          soft_limit_usd: null,
+          limit_tokens: 4_000_000,
+          limit_requests: null,
+        },
+      }),
+      upstreamRule('cred-a', null, {
+        limits: {
+          limit_usd: null,
+          soft_limit_usd: null,
+          limit_tokens: 1_000_000,
+          limit_requests: null,
+        },
+      }),
+      {
+        ...upstreamRule('cred-a', 'Doubao-Seed-Code-online'),
+        key: {
+          ...upstreamRule('cred-a', 'Doubao-Seed-Code-online').key,
+          layer: 'platform',
+          target_kind: 'tenant',
+          target_id: null,
+        },
+        source_ref: { layer: 'platform', budget_id: 'b1' },
+      },
+    ]
+    const matched = matchQuotaRulesForContext(rules, {
+      kind: 'team_model',
+      modelName: 'Doubao-Seed-Code-online',
+      realModel: 'ep-abc',
+      credentialId: 'cred-a',
+      userId: 'u1',
+    })
+    expect(matched.map((r) => [r.key.layer, r.key.model_name, r.limits.limit_tokens])).toEqual([
+      ['upstream', 'ep-abc', 4_000_000],
+      ['upstream', null, 1_000_000],
+      ['platform', 'Doubao-Seed-Code-online', null],
+    ])
+  })
+
+  it('excludes upstream rules for other real_model endpoints', () => {
+    const rules = [upstreamRule('cred-a', 'ep-other')]
+    const matched = matchQuotaRulesForContext(rules, {
+      kind: 'team_model',
+      modelName: 'Doubao-Seed-Code-online',
+      realModel: 'ep-abc',
+      credentialId: 'cred-a',
+    })
+    expect(matched).toHaveLength(0)
   })
 })
 
@@ -230,5 +290,78 @@ describe('buildQuotaRuleModelLookupFromCatalog', () => {
     })
     expect(map.get('cred-a:ep-x')?.registryKind).toBe('team')
     expect(map.get('cred-b:ep-y')?.registryKind).toBe('personal')
+  })
+})
+
+describe('quotaListParamsForTeamModelPlatform', () => {
+  it('filters platform rules by alias', () => {
+    expect(quotaListParamsForTeamModelPlatform('Doubao-online')).toEqual({
+      model_name: 'Doubao-online',
+      include_usage: true,
+    })
+  })
+})
+
+describe('quotaListParamsForTeamModelUpstream', () => {
+  it('filters upstream by credential and real_model', () => {
+    expect(quotaListParamsForTeamModelUpstream('cred-a', 'ep-abc')).toEqual({
+      layer: 'upstream',
+      credential_id: 'cred-a',
+      model_name: 'ep-abc',
+      include_usage: true,
+    })
+  })
+})
+
+describe('mergeQuotaRules', () => {
+  it('deduplicates rules by row id', () => {
+    const rule = upstreamRule('cred-a', 'ep-1')
+    expect(mergeQuotaRules([rule], [rule], undefined)).toEqual([rule])
+  })
+
+  it('concatenates distinct rules', () => {
+    const a = upstreamRule('cred-a', 'ep-1', {
+      source_ref: { layer: 'upstream', budget_id: null, plan_id: 'p1', quota_id: 'q1' },
+    })
+    const b = upstreamRule('cred-a', 'ep-2', {
+      source_ref: { layer: 'upstream', budget_id: null, plan_id: 'p1', quota_id: 'q2' },
+    })
+    expect(mergeQuotaRules([a], [b]).map((r) => r.key.model_name)).toEqual(['ep-1', 'ep-2'])
+  })
+})
+
+describe('describeUpstreamQuotaRuleScope', () => {
+  it('labels credential-wide and endpoint scopes', () => {
+    expect(describeUpstreamQuotaRuleScope(upstreamRule('cred-a', null))).toBe('整凭据')
+    expect(describeUpstreamQuotaRuleScope(upstreamRule('cred-a', 'ep-abc'), 'ep-abc')).toBe(
+      '本 endpoint'
+    )
+    expect(describeUpstreamQuotaRuleScope(upstreamRule('cred-a', 'ep-other'), 'ep-abc')).toBe(
+      'ep-other'
+    )
+  })
+})
+
+describe('matchQuotaRulesForContext personal upstream', () => {
+  it('includes upstream rules for BYOK real_model', () => {
+    const rules = [
+      upstreamRule('cred-byok', 'ep-personal', {
+        limits: {
+          limit_usd: null,
+          soft_limit_usd: null,
+          limit_tokens: 4_000_000,
+          limit_requests: null,
+        },
+      }),
+      upstreamRule('cred-other', 'ep-x'),
+    ]
+    const matched = matchQuotaRulesForContext(rules, {
+      kind: 'personal',
+      userId: 'u1',
+      modelNames: ['ep-personal'],
+      credentialId: 'cred-byok',
+    })
+    expect(matched).toHaveLength(1)
+    expect(matched[0].limits.limit_tokens).toBe(4_000_000)
   })
 })

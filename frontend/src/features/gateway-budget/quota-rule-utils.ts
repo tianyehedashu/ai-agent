@@ -201,24 +201,49 @@ export function matchQuotaRulesForContext(rules: QuotaRule[], ctx: BudgetViewCon
   switch (ctx.kind) {
     case 'personal':
       return rules.filter((r) => {
-        if (r.key.layer !== 'platform' || r.key.user_id !== ctx.userId) return false
-        const names = ctx.modelNames ?? []
-        if (names.length === 0) return r.key.model_name === null
-        return r.key.model_name === null || names.includes(r.key.model_name)
+        if (r.key.layer === 'platform') {
+          if (r.key.user_id !== ctx.userId) return false
+          const names = ctx.modelNames ?? []
+          if (names.length === 0) return r.key.model_name === null
+          return r.key.model_name === null || names.includes(r.key.model_name)
+        }
+        if (r.key.layer === 'upstream') {
+          if (
+            ctx.credentialId &&
+            r.key.credential_id !== null &&
+            r.key.credential_id !== ctx.credentialId
+          ) {
+            return false
+          }
+          const names = ctx.modelNames ?? []
+          if (r.key.model_name === null) return true
+          return names.length > 0 && names.includes(r.key.model_name)
+        }
+        return false
       })
     case 'team_model':
       return rules.filter((r) => {
-        if (r.key.model_name !== null && r.key.model_name !== ctx.modelName) return false
         if (r.key.layer === 'platform') {
+          if (r.key.model_name !== null && r.key.model_name !== ctx.modelName) return false
           if (r.key.target_kind === 'tenant') return true
           if (r.key.target_kind === 'user' && ctx.userId && r.key.user_id === ctx.userId) {
             return true
           }
+          return false
         }
-        if (r.key.layer === 'upstream' || r.key.layer === 'downstream') {
-          return r.key.model_name === null || r.key.model_name === ctx.modelName
+        if (r.key.layer === 'upstream') {
+          if (
+            ctx.credentialId &&
+            r.key.credential_id !== null &&
+            r.key.credential_id !== ctx.credentialId
+          ) {
+            return false
+          }
+          if (r.key.model_name === null) return true
+          const realModel = ctx.realModel?.trim()
+          return Boolean(realModel) && r.key.model_name === realModel
         }
-        return false
+        return r.key.model_name === null || r.key.model_name === ctx.modelName
       })
     case 'credential':
       return rules.filter((r) => {
@@ -358,4 +383,48 @@ export function quotaListParamsForContext(
     case 'virtual_key':
       return { include_usage: true }
   }
+}
+
+/** 模型详情页：platform 规则按注册别名预过滤。 */
+export function quotaListParamsForTeamModelPlatform(modelName: string): ListQuotaRulesParams {
+  return { model_name: modelName, include_usage: true }
+}
+
+/** 模型详情页：upstream 规则按凭据 + real_model 预过滤（含凭据级 model_name=null 规则）。 */
+export function quotaListParamsForTeamModelUpstream(
+  credentialId: string,
+  realModel: string
+): ListQuotaRulesParams {
+  return {
+    layer: 'upstream',
+    credential_id: credentialId,
+    model_name: realModel,
+    include_usage: true,
+  }
+}
+
+/** 合并多次 quota-rules 请求结果并去重。 */
+export function mergeQuotaRules(
+  ...groups: readonly (readonly QuotaRule[] | undefined)[]
+): QuotaRule[] {
+  const seen = new Set<string>()
+  const merged: QuotaRule[] = []
+  for (const group of groups) {
+    for (const rule of group ?? []) {
+      const id = quotaRuleRowId(rule)
+      if (seen.has(id)) continue
+      seen.add(id)
+      merged.push(rule)
+    }
+  }
+  return merged
+}
+
+/** upstream 规则在模型详情中的适用范围文案。 */
+export function describeUpstreamQuotaRuleScope(rule: QuotaRule, currentRealModel?: string): string {
+  if (rule.key.layer !== 'upstream') return ''
+  const endpoint = rule.key.model_name?.trim()
+  if (!endpoint) return '整凭据'
+  if (currentRealModel?.trim() === endpoint) return '本 endpoint'
+  return endpoint
 }

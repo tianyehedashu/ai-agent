@@ -1,6 +1,7 @@
 import type { QuotaRule } from '@/api/gateway/quota-rules'
 import {
   computeQuotaRuleUsageRatio,
+  describeUpstreamQuotaRuleScope,
   formatQuotaRulePeriod,
 } from '@/features/gateway-budget/quota-rule-utils'
 import { formatQuotaTokens } from '@/features/gateway-budget/quota-token-display'
@@ -11,6 +12,8 @@ interface ModelDetailQuotaRuleRowProps {
   rule: QuotaRule
   layer: 'platform' | 'upstream'
   credentialLabel?: string | null
+  /** 当前模型 upstream endpoint，用于区分「本 endpoint / 整凭据」 */
+  upstreamModelId?: string
   actions?: React.ReactNode
 }
 
@@ -18,6 +21,7 @@ export function ModelDetailQuotaRuleRow({
   rule,
   layer,
   credentialLabel,
+  upstreamModelId,
   actions,
 }: ModelDetailQuotaRuleRowProps): React.JSX.Element {
   const { ratio, barColor } = computeQuotaRuleUsageRatio(rule)
@@ -25,6 +29,11 @@ export function ModelDetailQuotaRuleRow({
   const limitTok = rule.limits.limit_tokens
   const usage = rule.usage
   const isPlatform = layer === 'platform'
+  const upstreamScope = !isPlatform ? describeUpstreamQuotaRuleScope(rule, upstreamModelId) : null
+
+  const subtitleParts = [formatQuotaRulePeriod(rule)]
+  if (!isPlatform && credentialLabel) subtitleParts.push(credentialLabel)
+  if (upstreamScope) subtitleParts.push(upstreamScope)
 
   const primaryMetric =
     limitUsd !== null
@@ -56,10 +65,7 @@ export function ModelDetailQuotaRuleRow({
           </div>
           <div className="min-w-0 space-y-0.5">
             <p className="text-sm font-medium">{isPlatform ? '网关侧' : '厂商侧'}</p>
-            <p className="text-xs text-muted-foreground">
-              {formatQuotaRulePeriod(rule)}
-              {!isPlatform && credentialLabel ? ` · ${credentialLabel}` : null}
-            </p>
+            <p className="text-xs text-muted-foreground">{subtitleParts.join(' · ')}</p>
           </div>
         </div>
         {actions}
