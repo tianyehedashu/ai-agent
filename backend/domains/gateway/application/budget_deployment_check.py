@@ -260,7 +260,7 @@ async def commit_user_credential_budget(
     经存在性索引网关，仅对确有规则的用户写入，避免普通请求无谓 Redis 写；
     按 ``request_id`` 幂等，避免流式 / 多回调重复累加。
     """
-    if user_id is None or credential_id is None or cost_usd <= 0:
+    if user_id is None or credential_id is None or (cost_usd <= 0 and total_tokens <= 0):
         return
     if (await has_user_credential(user_id, credential_id)) is not True:
         return

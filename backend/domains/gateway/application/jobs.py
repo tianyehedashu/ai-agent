@@ -3,7 +3,7 @@ Gateway Background Jobs
 
 - gateway_rollup_job: 5 分钟一次，把 GatewayRequestLog 聚合写入 gateway_metrics_hourly
 - gateway_alert_job: 1 分钟一次，扫规则、写事件、发 webhook + 站内通知
-- gateway_partition_job: 每天一次，确保下两个月的分区表存在
+- gateway_partition_job: 每天一次，确保下两个月的分区表存在，并清理过期配额汇总行
 - gateway_request_log_retention_loop: 按配置间隔删除早于保留期的整月分区
 """
 
@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from bootstrap.config import settings
 from domains.gateway.application.gateway_alert_job import gateway_alert_loop
@@ -19,11 +19,28 @@ from domains.gateway.infrastructure.jobs.sql_jobs_repository import GatewaySqlJo
 from domains.gateway.infrastructure.repositories.metrics_rollup_repository import (
     GatewayMetricsRollupRepository,
 )
+from domains.gateway.infrastructure.repositories.quota_plan_usage_bucket_repository import (
+    QuotaPlanUsageBucketRepository,
+)
 from libs.background_tasks import register_app_background_task
 from libs.db.database import get_background_session_context
 from utils.logging import get_logger
 
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
+
 logger = get_logger(__name__)
+
+_QUOTA_BUCKET_RETENTION_DAYS = 90
+
+
+async def _cleanup_stale_quota_usage_buckets(session: AsyncSession) -> int:
+    cutoff = datetime.now(UTC) - timedelta(days=_QUOTA_BUCKET_RETENTION_DAYS)
+    repo = QuotaPlanUsageBucketRepository(session)
+    deleted = await repo.delete_stale_updated_before(cutoff)
+    if deleted:
+        await session.commit()
+    return deleted
 
 
 # =============================================================================
@@ -64,6 +81,12 @@ async def gateway_partition_loop() -> None:
                 for delta in (0, 1, 2):
                     target = (now.replace(day=1) + timedelta(days=delta * 32)).replace(day=1)
                     await sql_jobs.ensure_request_log_partition(target.year, target.month)
+                deleted_buckets = await _cleanup_stale_quota_usage_buckets(session)
+                if deleted_buckets:
+                    logger.info(
+                        "gateway_quota_bucket_retention: deleted %d stale row(s)",
+                        deleted_buckets,
+                    )
         except Exception as exc:  # pragma: no cover
             logger.warning("gateway_partition_job error: %s", exc)
         await asyncio.sleep(interval)

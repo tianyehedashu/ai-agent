@@ -4,7 +4,9 @@ import type { QuotaRule } from '@/api/gateway/quota-rules'
 
 import {
   buildQuotaRuleModelLookupFromCatalog,
+  buildStatsQuotaLookup,
   describeUpstreamQuotaRuleScope,
+  findQuotaRuleForStatsRow,
   hasUpstreamPlanRules,
   matchQuotaRulesForContext,
   mergeQuotaRules,
@@ -12,7 +14,9 @@ import {
   quotaListParamsForTeamModelPlatform,
   quotaListParamsForTeamModelUpstream,
   quotaRuleCredentialRealModelKey,
+  resolveQuotaRuleModelLabel,
   resolveQuotaRulePlanManagementLink,
+  type QuotaRuleLabelContext,
 } from './quota-rule-utils'
 
 function tokenLimits(tokens: number): QuotaRule['limits'] {
@@ -190,12 +194,14 @@ describe('resolveQuotaRulePlanManagementLink', () => {
       teamModels: [
         {
           id: 'model-1',
+          name: 'alias-abc',
           credential_id: 'cred-a',
           real_model: 'ep-abc',
           registry_kind: 'team',
         },
         {
           id: 'sys-1',
+          name: 'alias-sys',
           credential_id: 'cred-a',
           real_model: 'ep-sys',
           registry_kind: 'system',
@@ -204,6 +210,8 @@ describe('resolveQuotaRulePlanManagementLink', () => {
       personalModels: [
         {
           id: 'pm-1',
+          name: 'personal-alias',
+          display_name: 'Personal',
           credential_id: 'cred-byok',
           model_id: 'ep-personal',
         },
@@ -304,17 +312,34 @@ describe('buildQuotaRuleModelLookupFromCatalog', () => {
       teamModels: [
         {
           id: 'team-1',
+          name: 'Doubao-team',
           credential_id: 'cred-a',
           real_model: 'ep-x',
           registry_kind: 'team',
         },
       ],
       personalModels: [
-        { id: 'p-1', credential_id: 'cred-b', model_id: 'ep-y' },
-        { id: 'p-2', credential_id: 'cred-a', model_id: 'ep-x' },
+        {
+          id: 'p-1',
+          name: 'p-name',
+          display_name: 'Personal',
+          credential_id: 'cred-b',
+          model_id: 'ep-y',
+        },
+        {
+          id: 'p-2',
+          name: 'dup',
+          display_name: 'Dup',
+          credential_id: 'cred-a',
+          model_id: 'ep-x',
+        },
       ],
     })
-    expect(map.get('cred-a:ep-x')?.registryKind).toBe('team')
+    expect(map.get('cred-a:ep-x')).toEqual({
+      modelId: 'team-1',
+      registryKind: 'team',
+      aliasName: 'Doubao-team',
+    })
     expect(map.get('cred-b:ep-y')?.registryKind).toBe('personal')
   })
 })
@@ -353,6 +378,84 @@ describe('mergeQuotaRules', () => {
       source_ref: { layer: 'upstream', budget_id: null, plan_id: 'p1', quota_id: 'q2' },
     })
     expect(mergeQuotaRules([a], [b]).map((r) => r.key.model_name)).toEqual(['ep-1', 'ep-2'])
+  })
+})
+
+describe('findQuotaRuleForStatsRow upstream', () => {
+  const lookup = buildStatsQuotaLookup([
+    {
+      name: 'Doubao-online',
+      credential_id: 'cred-a',
+      real_model: 'ep-doubao',
+    },
+  ])
+
+  it('falls back to upstream when platform model rule missing', () => {
+    const upstream = upstreamRule('cred-a', 'ep-doubao')
+    const rules = [upstream]
+    expect(findQuotaRuleForStatsRow(rules, 'model', { group_key: 'Doubao-online' }, lookup)).toBe(
+      upstream
+    )
+  })
+
+  it('prefers platform over upstream for same alias', () => {
+    const platform = platformRule('Doubao-online')
+    const upstream = upstreamRule('cred-a', 'ep-doubao')
+    expect(
+      findQuotaRuleForStatsRow(
+        [platform, upstream],
+        'model',
+        { group_key: 'Doubao-online' },
+        lookup
+      )
+    ).toBe(platform)
+  })
+})
+
+describe('resolveQuotaRuleModelLabel', () => {
+  it('resolves upstream alias from catalog, not plan_label', () => {
+    const ctx: QuotaRuleLabelContext = {
+      memberLabels: new Map(),
+      keyLabels: new Map(),
+      credentialLabels: new Map(),
+      modelRefByCredentialRealModel: buildQuotaRuleModelLookupFromCatalog({
+        teamModels: [
+          {
+            id: 'm1',
+            name: 'daily-4M-Doubao-online',
+            credential_id: 'cred-a',
+            real_model: 'ep-abc',
+            registry_kind: 'team',
+          },
+        ],
+      }),
+    }
+    expect(
+      resolveQuotaRuleModelLabel(
+        {
+          ...upstreamRule('cred-a', 'ep-abc'),
+          plan_label: 'auto-plan-name',
+        },
+        ctx
+      )
+    ).toBe('daily-4M-Doubao-online')
+  })
+
+  it('falls back to upstream endpoint when catalog miss', () => {
+    expect(resolveQuotaRuleModelLabel(upstreamRule('cred-a', 'ep-abc'))).toBe('ep-abc')
+  })
+
+  it('uses model_name for platform rules', () => {
+    expect(
+      resolveQuotaRuleModelLabel({
+        ...upstreamRule('cred-a', 'ep-abc'),
+        key: {
+          ...upstreamRule('cred-a', 'ep-abc').key,
+          layer: 'platform',
+          model_name: 'my-alias',
+        },
+      })
+    ).toBe('my-alias')
   })
 })
 

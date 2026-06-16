@@ -1,11 +1,18 @@
 import type { QuotaRule } from '@/api/gateway/quota-rules'
 import { cn } from '@/lib/utils'
 
-import { computeQuotaRuleUsageRatio, formatQuotaRulePeriod, LAYER_LABELS } from './quota-rule-utils'
+import {
+  computeQuotaRuleUsageRatio,
+  formatQuotaRulePeriod,
+  LAYER_LABELS,
+  resolveQuotaRuleModelLabel,
+  type QuotaRuleLabelContext,
+} from './quota-rule-utils'
 import { formatQuotaTokens } from './quota-token-display'
 
 export interface QuotaUsageRowProps {
   rule: QuotaRule
+  labelContext?: QuotaRuleLabelContext
   actions?: React.ReactNode
 }
 
@@ -15,7 +22,11 @@ const LAYER_ROW_STYLE = {
   downstream: 'border-border/60 bg-muted/20',
 } as const
 
-export function QuotaUsageRow({ rule, actions }: QuotaUsageRowProps): React.JSX.Element {
+export function QuotaUsageRow({
+  rule,
+  labelContext,
+  actions,
+}: QuotaUsageRowProps): React.JSX.Element {
   const { ratio, barColor } = computeQuotaRuleUsageRatio(rule)
   const limitUsd = rule.limits.limit_usd
   const limitTok = rule.limits.limit_tokens
@@ -30,7 +41,9 @@ export function QuotaUsageRow({ rule, actions }: QuotaUsageRowProps): React.JSX.
           {LAYER_LABELS[layer]} · {formatQuotaRulePeriod(rule)}
         </span>
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-muted-foreground">{rule.key.model_name ?? '全模型'}</span>
+          <span className="text-muted-foreground">
+            {resolveQuotaRuleModelLabel(rule, labelContext)}
+          </span>
           {actions}
         </div>
       </div>

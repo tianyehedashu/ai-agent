@@ -24,7 +24,10 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { budgetsAdminHref } from '@/features/gateway-budget/paths'
-import { findQuotaRuleForStatsRow } from '@/features/gateway-budget/quota-rule-utils'
+import {
+  buildStatsQuotaLookup,
+  findQuotaRuleForStatsRow,
+} from '@/features/gateway-budget/quota-rule-utils'
 import { useGatewayQuotaRules } from '@/features/gateway-budget/use-gateway-quota-rules'
 import { useInfiniteGatewayModelPages } from '@/features/gateway-models/hooks/use-infinite-gateway-model-pages'
 import { GATEWAY_DISPLAY_CURRENCY } from '@/features/gateway-pricing/display-currency'
@@ -267,12 +270,15 @@ export default function GatewayStatsPage(): React.JSX.Element {
     crossTeamStatsEnabled,
   })
 
-  const { onPickerOpenChange: onModelPickerOpenChange, ensureModelName } =
-    useInfiniteGatewayModelPages(
-      teamId,
-      { registry_scope: 'callable' },
-      { enabled: !crossTeamStatsEnabled, prefetchMode: 'open' }
-    )
+  const {
+    items: modelCatalogItems,
+    onPickerOpenChange: onModelPickerOpenChange,
+    ensureModelName,
+  } = useInfiniteGatewayModelPages(
+    teamId,
+    { registry_scope: 'callable' },
+    { enabled: !crossTeamStatsEnabled, prefetchMode: 'open' }
+  )
 
   useEffect(() => {
     if (crossTeamStatsEnabled || filterState.model === GATEWAY_FILTER_ALL) return
@@ -420,22 +426,26 @@ export default function GatewayStatsPage(): React.JSX.Element {
 
   const items = useMemo(() => statsQuery.data?.items ?? EMPTY_STATS_ITEMS, [statsQuery.data?.items])
 
-  // 平台配额（含实时用量）：用于统计行内展示「对应配额」。跨团队聚合维度不一定属本团队，跳过。
+  // 配额（含实时用量）：platform 优先，upstream 按模型目录别名解析
   const quotaRulesQuery = useGatewayQuotaRules(
     teamId,
-    { layer: 'platform', include_usage: true },
+    { include_usage: true },
     { enabled: teamId.length > 0 && !crossTeamStatsEnabled }
+  )
+  const statsQuotaLookup = useMemo(
+    () => buildStatsQuotaLookup(modelCatalogItems),
+    [modelCatalogItems]
   )
   const quotaByRowKey = useMemo((): ReadonlyMap<string, QuotaRule> | undefined => {
     const rules = quotaRulesQuery.data ?? []
     if (crossTeamStatsEnabled || rules.length === 0) return undefined
     const map = new Map<string, QuotaRule>()
     for (const it of items) {
-      const rule = findQuotaRuleForStatsRow(rules, groupBy, it)
+      const rule = findQuotaRuleForStatsRow(rules, groupBy, it, statsQuotaLookup)
       if (rule) map.set(it.group_key, rule)
     }
     return map.size > 0 ? map : undefined
-  }, [quotaRulesQuery.data, items, groupBy, crossTeamStatsEnabled])
+  }, [quotaRulesQuery.data, items, groupBy, crossTeamStatsEnabled, statsQuotaLookup])
 
   const tableCredentialTopN = useMemo(() => {
     const credentialCount = credentialOptions.length || TABLE_CREDENTIAL_TOP_N

@@ -5,6 +5,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import {
   computeQuotaRuleUsageRatio,
   formatQuotaRulePeriod,
+  LAYER_LABELS,
 } from '@/features/gateway-budget/quota-rule-utils'
 import { formatCompact } from '@/lib/number'
 
@@ -22,7 +23,7 @@ function quotaUsageText(rule: QuotaRule): string {
   return '∞'
 }
 
-/** 调用统计行内：展示对应平台配额的「已用/上限」与使用率迷你条。 */
+/** 调用统计行内：展示对应配额的「已用/上限」与使用率迷你条。 */
 export function UsageStatsQuotaCell({
   rule,
 }: {
@@ -45,7 +46,9 @@ export function UsageStatsQuotaCell({
       </TooltipTrigger>
       <TooltipContent side="top">
         <div className="space-y-0.5 text-xs">
-          <div>{formatQuotaRulePeriod(rule)}配额</div>
+          <div>
+            {LAYER_LABELS[rule.key.layer]} · {formatQuotaRulePeriod(rule)}配额
+          </div>
           <div className="tabular-nums">使用率 {(ratio * 100).toFixed(1)}%</div>
         </div>
       </TooltipContent>

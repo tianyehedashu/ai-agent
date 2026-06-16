@@ -54,6 +54,8 @@ export function formatQuotaRulePeriod(rule: QuotaRule): string {
 export interface QuotaRuleModelRef {
   modelId: string
   registryKind: 'team' | 'system' | 'personal'
+  /** Gateway 调用别名（`gateway_models.name` / personal `name`） */
+  aliasName: string
 }
 
 export interface QuotaRuleLabelContext {
@@ -76,17 +78,22 @@ export function quotaRuleCredentialRealModelKey(credentialId: string, realModel:
 }
 
 export function buildQuotaRuleModelLookup(
-  models: readonly Pick<GatewayModel, 'id' | 'credential_id' | 'real_model' | 'registry_kind'>[]
+  models: readonly Pick<
+    GatewayModel,
+    'id' | 'name' | 'credential_id' | 'real_model' | 'registry_kind'
+  >[]
 ): Map<string, QuotaRuleModelRef> {
   const map = new Map<string, QuotaRuleModelRef>()
   for (const model of models) {
     const realModel = model.real_model.trim()
-    if (!realModel) continue
+    const aliasName = model.name.trim()
+    if (!realModel || !aliasName) continue
     const key = quotaRuleCredentialRealModelKey(model.credential_id, realModel)
     if (map.has(key)) continue
     map.set(key, {
       modelId: model.id,
       registryKind: model.registry_kind === 'system' ? 'system' : 'team',
+      aliasName,
     })
   }
   return map
@@ -96,17 +103,21 @@ export function buildQuotaRuleModelLookup(
 export function buildQuotaRuleModelLookupFromCatalog(input: {
   teamModels?: readonly Pick<
     GatewayModel,
-    'id' | 'credential_id' | 'real_model' | 'registry_kind'
+    'id' | 'name' | 'credential_id' | 'real_model' | 'registry_kind'
   >[]
-  personalModels?: readonly Pick<PersonalGatewayModel, 'id' | 'credential_id' | 'model_id'>[]
+  personalModels?: readonly Pick<
+    PersonalGatewayModel,
+    'id' | 'name' | 'display_name' | 'credential_id' | 'model_id'
+  >[]
 }): Map<string, QuotaRuleModelRef> {
   const map = buildQuotaRuleModelLookup(input.teamModels ?? [])
   for (const model of input.personalModels ?? []) {
     const realModel = model.model_id.trim()
-    if (!realModel) continue
+    const aliasName = model.name.trim() || model.display_name.trim()
+    if (!realModel || !aliasName) continue
     const key = quotaRuleCredentialRealModelKey(model.credential_id, realModel)
     if (map.has(key)) continue
-    map.set(key, { modelId: model.id, registryKind: 'personal' })
+    map.set(key, { modelId: model.id, registryKind: 'personal', aliasName })
   }
   return map
 }
@@ -194,6 +205,26 @@ export function resolveQuotaRuleCredentialLabel(
 ): string {
   if (!rule.key.credential_id) return '—'
   return ctx.credentialLabels.get(rule.key.credential_id) ?? rule.key.credential_id.slice(0, 8)
+}
+
+/**
+ * 配额中心「模型」列：platform 用别名；upstream 用目录解析的 Gateway 别名，
+ * 解析不到则回退上游 endpoint（`real_model`）。不用 `plan_label`（那是「来源」列的套餐名）。
+ */
+export function resolveQuotaRuleModelLabel(rule: QuotaRule, ctx?: QuotaRuleLabelContext): string {
+  if (!rule.key.model_name) return '（全模型）'
+  if (rule.key.layer === 'upstream') {
+    const credentialId = rule.key.credential_id
+    const realModel = rule.key.model_name.trim()
+    if (credentialId && ctx?.modelRefByCredentialRealModel) {
+      const ref = ctx.modelRefByCredentialRealModel.get(
+        quotaRuleCredentialRealModelKey(credentialId, realModel)
+      )
+      if (ref?.aliasName) return ref.aliasName
+    }
+    return realModel
+  }
+  return rule.key.model_name
 }
 
 /** 按资源上下文过滤可见配额规则（嵌入只读页使用）。 */
@@ -285,22 +316,57 @@ export function matchQuotaRulesForContext(rules: QuotaRule[], ctx: BudgetViewCon
   }
 }
 
+export interface StatsQuotaLookup {
+  /** Gateway 调用别名 → 上游 endpoint 绑定 */
+  aliasToUpstream: ReadonlyMap<string, { credentialId: string; realModel: string }>
+}
+
+/** 由 callable 模型目录构建统计页 upstream 配额匹配索引。 */
+export function buildStatsQuotaLookup(
+  models: readonly { name: string; credential_id: string; real_model: string }[]
+): StatsQuotaLookup {
+  const aliasToUpstream = new Map<string, { credentialId: string; realModel: string }>()
+  for (const model of models) {
+    const alias = model.name.trim()
+    const realModel = model.real_model.trim()
+    if (!alias || !realModel) continue
+    if (!aliasToUpstream.has(alias)) {
+      aliasToUpstream.set(alias, { credentialId: model.credential_id, realModel })
+    }
+  }
+  return { aliasToUpstream }
+}
+
+function findUpstreamQuotaForStatsRow(
+  upstream: readonly QuotaRule[],
+  credentialId: string,
+  realModel: string | null
+): QuotaRule | null {
+  return (
+    upstream.find(
+      (r) =>
+        r.key.credential_id === credentialId && realModel !== null && r.key.model_name === realModel
+    ) ??
+    upstream.find((r) => r.key.credential_id === credentialId && r.key.model_name === null) ??
+    null
+  )
+}
+
 /**
- * 调用统计行 → 对应平台配额规则（best-effort，仅 platform 层）。
+ * 调用统计行 → 对应配额规则（best-effort）。
  *
- * - `user`：成员总量护栏（user + 无凭据 + 无模型）
- * - `credential`：该凭据下任一平台配额行（成员+凭据）
- * - `model`：优先团队级该模型，其次任意该模型
- * - `user_model_credential`：Phase2 成员+凭据(+模型) 行
+ * 优先 platform；未命中时按模型目录解析 upstream（别名 → real_model）。
  */
 export function findQuotaRuleForStatsRow(
   rules: readonly QuotaRule[],
   groupBy: string,
-  row: { group_key: string; group_key_parts?: string[] | null }
+  row: { group_key: string; group_key_parts?: string[] | null },
+  lookup?: StatsQuotaLookup
 ): QuotaRule | null {
   const platform = rules.filter((r) => r.key.layer === 'platform')
+  const upstream = rules.filter((r) => r.key.layer === 'upstream')
   if (groupBy === 'user') {
-    return (
+    const matched =
       platform.find(
         (r) =>
           r.key.target_kind === 'user' &&
@@ -308,23 +374,29 @@ export function findQuotaRuleForStatsRow(
           r.key.credential_id === null &&
           r.key.model_name === null
       ) ?? null
-    )
+    return matched
   }
   if (groupBy === 'credential') {
-    return platform.find((r) => r.key.credential_id === row.group_key) ?? null
+    return (
+      platform.find((r) => r.key.credential_id === row.group_key) ??
+      findUpstreamQuotaForStatsRow(upstream, row.group_key, null)
+    )
   }
   if (groupBy === 'model') {
-    return (
+    const platformMatch =
       platform.find((r) => r.key.model_name === row.group_key && r.key.target_kind === 'tenant') ??
       platform.find((r) => r.key.model_name === row.group_key) ??
       null
-    )
+    if (platformMatch) return platformMatch
+    const resolved = lookup?.aliasToUpstream.get(row.group_key)
+    if (!resolved) return null
+    return findUpstreamQuotaForStatsRow(upstream, resolved.credentialId, resolved.realModel)
   }
   if (groupBy === 'user_model_credential') {
     const parts = row.group_key_parts ?? []
     const [userId, model, credId] = parts
     if (!userId || !credId) return null
-    return (
+    const platformMatch =
       platform.find(
         (r) =>
           r.key.target_kind === 'user' &&
@@ -332,7 +404,10 @@ export function findQuotaRuleForStatsRow(
           r.key.credential_id === credId &&
           (r.key.model_name === model || r.key.model_name === null)
       ) ?? null
-    )
+    if (platformMatch) return platformMatch
+    const resolved = model ? lookup?.aliasToUpstream.get(model) : undefined
+    const realModel = resolved?.realModel ?? (model || null)
+    return findUpstreamQuotaForStatsRow(upstream, credId, realModel)
   }
   return null
 }

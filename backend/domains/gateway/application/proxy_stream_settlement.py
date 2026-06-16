@@ -79,6 +79,7 @@ async def finalize_deferred_stream_settlement(
             )
 
     defer = bool(metadata.get("gateway_defer_cost_settlement"))
+    settled_in_callback = False
     if defer and cost > 0 and ctx.request_id:
         await commit_budget_from_callback(
             metadata=metadata,
@@ -87,11 +88,12 @@ async def finalize_deferred_stream_settlement(
             total_tokens=tokens,
             budget_model=ctx.budget_model,
         )
+        settled_in_callback = True
 
     await settle_usage(
         ctx,
         budget,
-        tokens=tokens,
+        tokens=0 if settled_in_callback else tokens,
         cost=Decimal("0") if defer else cost,
         requests=1,
         entitlement_guard=entitlement_guard,

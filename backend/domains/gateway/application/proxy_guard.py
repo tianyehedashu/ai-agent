@@ -429,6 +429,13 @@ class ProxyGuard:
             return
         with suppress(Exception):
             await self._entitlement_guard.release(state.plan_id, state.reservations)
+        if ctx.request_id:
+            with suppress(Exception):
+                from domains.gateway.application.entitlement_plan_callback_settlement import (
+                    record_proxy_entitlement_released,
+                )
+
+                await record_proxy_entitlement_released(ctx.request_id)
         ctx.entitlement_state = None
 
 

@@ -16,6 +16,7 @@ import {
   formatQuotaRulePeriod,
   LAYER_LABELS,
   parseQuotaNumeric,
+  resolveQuotaRuleModelLabel,
   resolveQuotaRulePlanManagementLink,
   type QuotaRuleLabelContext,
 } from './quota-rule-utils'
@@ -86,7 +87,7 @@ export function QuotaCardItem({
           <div className="min-w-0">
             <div className="truncate text-sm font-medium">{subjectLabel}</div>
             <div className="truncate text-xs text-muted-foreground">
-              {rule.key.model_name ?? '全模型'}
+              {resolveQuotaRuleModelLabel(rule, labelContext)}
             </div>
           </div>
           <div className="flex items-center gap-1">

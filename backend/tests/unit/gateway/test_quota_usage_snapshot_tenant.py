@@ -5,6 +5,8 @@ from __future__ import annotations
 from decimal import Decimal
 import uuid
 
+from unittest.mock import MagicMock
+
 import pytest
 
 from domains.gateway.application.budget_service import redis_tenant_segment_for_budget
@@ -60,11 +62,9 @@ async def test_member_total_usage_reads_tenant_segmented_bucket(monkeypatch) -> 
             return {c: (Decimal("42"), 7, 3) for c in coords}
 
     monkeypatch.setattr(mod, "BudgetService", _FakeBudgetService)
-    # QuotaPlanService 仅 plan 层使用，本例无 plan 规则，构造空实例即可。
-    monkeypatch.setattr(mod, "QuotaPlanService", lambda: object())
 
     rule = _member_total_rule(team_id, user_id)
-    [enriched] = await mod.enrich_quota_rules_with_usage([rule])
+    [enriched] = await mod.enrich_quota_rules_with_usage([rule], session=MagicMock())
 
     assert enriched.usage is not None
     assert enriched.usage.current_usd == Decimal("42")

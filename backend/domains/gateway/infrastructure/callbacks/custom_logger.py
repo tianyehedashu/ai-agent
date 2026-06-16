@@ -795,9 +795,11 @@ async def _settle_budgets(
     user_id: uuid.UUID | None,
     cred_id: uuid.UUID | None,
     deploy_name: str | None,
+    kwargs: dict[str, Any] | None = None,
 ) -> None:
-    """预算 commit / release。"""
-    if status == "success" and cost_usd > 0:
+    """预算 commit / release；上游 ProviderPlan 同步结算。"""
+    total_tokens = input_tokens + output_tokens
+    if status == "success" and (cost_usd > 0 or total_tokens > 0):
         with suppress(Exception):
             from domains.gateway.application.budget_callback_settlement import (
                 commit_budget_from_callback,
@@ -807,7 +809,7 @@ async def _settle_budgets(
                 metadata=metadata,
                 request_id=request_id_str,
                 cost_usd=cost_usd,
-                total_tokens=input_tokens + output_tokens,
+                total_tokens=total_tokens,
                 budget_model=str(route_name) if route_name else None,
             )
         with suppress(Exception):
@@ -820,7 +822,7 @@ async def _settle_budgets(
                 credential_id=cred_id,
                 gateway_model_name=str(deploy_name) if deploy_name else None,
                 cost_usd=cost_usd,
-                total_tokens=input_tokens + output_tokens,
+                total_tokens=total_tokens,
                 request_id=request_id_str,
             )
     elif status == "failed":
@@ -830,6 +832,33 @@ async def _settle_budgets(
             )
 
             await release_user_credential_budget_from_metadata(metadata)
+
+    with suppress(Exception):
+        from domains.gateway.application.provider_plan_callback_settlement import (
+            settle_provider_plan_from_callback,
+        )
+
+        await settle_provider_plan_from_callback(
+            metadata=metadata,
+            status=status,
+            cost_usd=cost_usd,
+            total_tokens=total_tokens,
+            request_id=request_id_str,
+        )
+
+    with suppress(Exception):
+        from domains.gateway.application.entitlement_plan_callback_settlement import (
+            settle_entitlement_plan_from_callback,
+        )
+
+        await settle_entitlement_plan_from_callback(
+            metadata=metadata,
+            status=status,
+            cost_usd=cost_usd,
+            total_tokens=total_tokens,
+            request_id=request_id_str,
+            kwargs=kwargs,
+        )
 
 
 async def _post_persist_side_effects(
@@ -1106,6 +1135,7 @@ async def _persist_event(
         user_id=user_id,
         cred_id=cred_id,
         deploy_name=deploy_name,
+        kwargs=kwargs,
     )
 
     # 9. Redis + 配额耗尽

@@ -219,6 +219,25 @@ def compute_window_start_minute(
     return compute_minute_index(now - timedelta(seconds=window_seconds))
 
 
+def compute_window_start_datetime(
+    now: datetime,
+    window_seconds: int,
+    *,
+    strategy: ResetStrategy = RESET_STRATEGY_DEFAULT,
+    plan_valid_from: datetime | None = None,
+) -> datetime:
+    """当前配额窗口起点（datetime），与 ``compute_window_start_minute`` 对偶。"""
+    if window_seconds <= 0 and plan_valid_from is not None:
+        return _as_utc(plan_valid_from)
+    minute_idx = compute_window_start_minute(
+        now,
+        window_seconds,
+        strategy=strategy,
+        plan_valid_from=plan_valid_from,
+    )
+    return datetime.fromtimestamp(minute_idx * 60, tz=UTC)
+
+
 def compute_reset_at(
     *,
     strategy: ResetStrategy,
@@ -259,5 +278,6 @@ __all__ = [
     "compute_minute_index",
     "compute_reset_at",
     "compute_window_start_minute",
+    "compute_window_start_datetime",
     "normalize_reset_strategy",
 ]

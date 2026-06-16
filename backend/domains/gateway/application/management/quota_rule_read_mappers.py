@@ -123,6 +123,7 @@ def flatten_provider_plan(
                 usage=None,
                 plan_label=plan.label,
                 is_active=plan.is_active,
+                plan_valid_from=plan.valid_from,
             )
         )
     return rules
@@ -177,6 +178,7 @@ def flatten_entitlement_plan(
                 usage=None,
                 plan_label=plan.label,
                 is_active=plan.is_active,
+                plan_valid_from=plan.valid_from,
             )
         )
     return rules

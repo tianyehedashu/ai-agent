@@ -914,7 +914,7 @@ class GatewayManagementReadService(GatewayUsageLogReadMixin):
             filters=filters,
         )
         if include_usage:
-            rules = await enrich_quota_rules_with_usage(rules)
+            rules = await enrich_quota_rules_with_usage(rules, session=self._session)
         return rules
 
     async def aggregate_personal_model_route_usage(

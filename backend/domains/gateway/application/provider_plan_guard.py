@@ -36,8 +36,9 @@ from domains.gateway.infrastructure.repositories.provider_plan_repository import
 from libs.db.database import get_session_context
 from utils.logging import get_logger
 
+from domains.gateway.application.quota_plan_service import QuotaPlanService
+
 if TYPE_CHECKING:
-    from domains.gateway.application.quota_plan_service import QuotaPlanService
     from domains.gateway.infrastructure.models.provider_plan import (
         ProviderPlan,
         ProviderPlanQuota,
@@ -235,13 +236,47 @@ def _extract_credential_and_model(kwargs: dict[str, Any]) -> tuple[uuid.UUID | N
     return cred_id, real_model
 
 
-def _inject_metadata(kwargs: dict[str, Any], *, plan_id: uuid.UUID) -> None:
-    """把 provider_plan_id 写入 metadata，供下游 callbacks 落 ``provider_plan_id``。"""
-    meta = kwargs.get("metadata")
-    if not isinstance(meta, dict):
-        meta = {}
-        kwargs["metadata"] = meta
-    meta["gateway_provider_plan_id"] = str(plan_id)
+def _metadata_dicts_on_call(data: dict[str, Any]) -> list[dict[str, Any]]:
+    """pre_call ``data`` 上可能携带 metadata 的容器（与 proxy 出站一致）。"""
+    out: list[dict[str, Any]] = []
+    top = data.get("metadata")
+    if isinstance(top, dict):
+        out.append(top)
+    litellm_params = data.get("litellm_params")
+    if isinstance(litellm_params, dict):
+        inner = litellm_params.get("metadata")
+        if isinstance(inner, dict):
+            out.append(inner)
+    return out
+
+
+def _stamp_provider_plan_on_call(
+    data: dict[str, Any],
+    *,
+    plan_id: uuid.UUID,
+    reservations: list[QuotaPlanReservation],
+) -> None:
+    """写入 plan_id / reservations，并镜像到 ``user_api_key_auth_metadata`` 供 callback 读取。"""
+    plan_id_str = str(plan_id)
+    reservations_payload = [
+        {
+            "quota_id": str(r.spec.quota_id),
+            "minute_unix": r.minute_unix,
+            "reserved_requests": r.reserved_requests,
+        }
+        for r in reservations
+    ]
+    gateway_fields: dict[str, Any] = {"gateway_provider_plan_id": plan_id_str}
+    if reservations_payload:
+        gateway_fields["gateway_provider_plan_reservations"] = reservations_payload
+
+    for meta in _metadata_dicts_on_call(data):
+        meta.update(gateway_fields)
+        auth = meta.get("user_api_key_auth_metadata")
+        if isinstance(auth, dict):
+            auth.update(gateway_fields)
+        else:
+            meta["user_api_key_auth_metadata"] = dict(gateway_fields)
 
 
 def build_provider_plan_pre_call_logger() -> Any:
@@ -269,28 +304,12 @@ def build_provider_plan_pre_call_logger() -> Any:
             cred_id, real_model = _extract_credential_and_model(data)
             if cred_id is None:
                 return None
-            try:
-                plan_id, _specs, reservations = await guard.check_and_reserve(
-                    credential_id=cred_id,
-                    real_model=real_model,
-                )
-            except ProviderPlanExhaustedError:
-                # 让 Router 走 cooldown / fallback
-                raise
-            except Exception as exc:  # pragma: no cover - 不阻断主路径
-                logger.warning("provider_plan pre-call check failed: %s", exc)
-                return None
+            plan_id, _specs, reservations = await guard.check_and_reserve(
+                credential_id=cred_id,
+                real_model=real_model,
+            )
             if plan_id is not None:
-                _inject_metadata(data, plan_id=plan_id)
-                # 在 metadata 里同时记录 reservations，供 success/failure 后续 commit/release
-                data["metadata"]["_gateway_provider_plan_reservations"] = [
-                    {
-                        "quota_id": str(r.spec.quota_id),
-                        "minute_unix": r.minute_unix,
-                        "reserved_requests": r.reserved_requests,
-                    }
-                    for r in reservations
-                ]
+                _stamp_provider_plan_on_call(data, plan_id=plan_id, reservations=reservations)
             return None
 
     return _Impl()

@@ -157,6 +157,15 @@ class ProxyMetadataBuilder:
             "gateway_client_ua": ctx.client_ua,
             "gateway_client_type": ctx.client_type,
         }
+        if ctx.entitlement_state is not None and ctx.entitlement_state.reservations:
+            meta["gateway_entitlement_plan_reservations"] = [
+                {
+                    "quota_id": str(r.spec.quota_id),
+                    "minute_unix": r.minute_unix,
+                    "reserved_requests": r.reserved_requests,
+                }
+                for r in ctx.entitlement_state.reservations
+            ]
         if ctx.vkey is not None:
             meta["gateway_vkey_owner_team_id"] = str(ctx.vkey.team_id)
         gateway_snapshot = {

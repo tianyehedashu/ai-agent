@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import AsyncGenerator, AsyncIterator
 from contextlib import suppress
+from datetime import UTC, datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
@@ -32,7 +33,9 @@ from domains.gateway.application.proxy_deferred_tasks import register_proxy_defe
 from domains.gateway.application.proxy_stream_settlement import (
     finalize_deferred_stream_settlement,
 )
+from domains.gateway.application.quota_plan_usage_persist import schedule_quota_plan_usage_upsert
 from domains.gateway.domain.proxy_policy import budget_model_keys, budget_targets
+from domains.gateway.domain.quota_plan import ENTITLEMENT_NS
 from domains.gateway.infrastructure.repositories.budget_repository import BudgetRepository
 from libs.db.database import get_session_context
 
@@ -276,22 +279,51 @@ async def settle_usage(
                     )
 
     state = ctx.entitlement_state
+    entitlement_committed = False
     if entitlement_guard is not None and state is not None and state.specs:
-        with suppress(Exception):
+        try:
             await entitlement_guard.commit(
                 state.plan_id,
                 state.specs,
                 delta_tokens=tokens,
                 delta_usd=cost,
             )
+            entitlement_committed = True
+        except Exception:
+            entitlement_committed = False
+        if request_id and entitlement_committed:
+            with suppress(Exception):
+                from domains.gateway.application.entitlement_plan_callback_settlement import (
+                    record_proxy_entitlement_commit,
+                )
 
-    if request_id and cost > 0:
-        with suppress(Exception):
-            from domains.gateway.application.budget_callback_settlement import (
-                record_proxy_cost_commit,
+                await record_proxy_entitlement_commit(request_id)
+        if (
+            entitlement_committed
+            and request_id
+            and (tokens > 0 or cost > 0)
+        ):
+            schedule_quota_plan_usage_upsert(
+                ns=ENTITLEMENT_NS,
+                plan_id=state.plan_id,
+                specs=state.specs,
+                delta_tokens=tokens,
+                delta_cost_usd=cost,
+                request_id=request_id,
+                settled_at=datetime.now(UTC),
             )
 
-            await record_proxy_cost_commit(request_id, cost)
+    if request_id and (cost > 0 or tokens > 0):
+        with suppress(Exception):
+            from domains.gateway.application.budget_callback_settlement import (
+                record_proxy_usage_commit,
+            )
+
+            await record_proxy_usage_commit(
+                request_id,
+                cost_usd=cost,
+                total_tokens=tokens,
+            )
 
     with suppress(Exception):
         async with get_session_context() as session:

@@ -44,6 +44,9 @@ def register_all_orm_models() -> None:
     from domains.gateway.infrastructure.models.metrics_hourly import (  # noqa: F401
         GatewayMetricsHourly,
     )
+    from domains.gateway.infrastructure.models.quota_plan_usage_bucket import (  # noqa: F401
+        GatewayQuotaPlanUsageBucket,
+    )
     from domains.gateway.infrastructure.models.pricing_downstream import (  # noqa: F401
         DownstreamModelPricing,
     )

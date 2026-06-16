@@ -64,6 +64,7 @@ class QuotaRuleReadModel:
     usage: QuotaRuleUsage | None
     plan_label: str | None
     is_active: bool
+    plan_valid_from: datetime | None = None
 
 
 @dataclass(frozen=True)

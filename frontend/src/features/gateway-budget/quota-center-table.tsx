@@ -19,6 +19,7 @@ import {
   LAYER_LABELS,
   LAYER_ORDER,
   quotaRuleRowId,
+  resolveQuotaRuleModelLabel,
   resolveQuotaRulePlanManagementLink,
   resolveQuotaRuleCredentialLabel,
   resolveQuotaRuleSubjectLabel,
@@ -82,7 +83,7 @@ function getSortValue(rule: QuotaRule, key: SortKey, ctx: QuotaRuleLabelContext)
     case 'subject':
       return resolveQuotaRuleSubjectLabel(rule, ctx)
     case 'model':
-      return rule.key.model_name ?? ''
+      return resolveQuotaRuleModelLabel(rule, ctx)
     case 'period':
       return formatQuotaRulePeriod(rule)
     case 'usage': {
@@ -216,7 +217,7 @@ const QuotaCenterTableRow = memo(function QuotaCenterTableRow({
         {resolveQuotaRuleCredentialLabel(rule, labelContext)}
       </td>
       <td className="max-w-[140px] truncate px-4 py-2 text-xs">
-        {rule.key.model_name ?? '（全模型）'}
+        {resolveQuotaRuleModelLabel(rule, labelContext)}
       </td>
       <td className="px-4 py-2 text-xs">{formatQuotaRulePeriod(rule)}</td>
       <td className="px-4 py-2 text-xs tabular-nums">

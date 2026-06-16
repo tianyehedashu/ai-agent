@@ -21,6 +21,7 @@ logger = get_logger(__name__)
 
 _SETTLED_KEY_PREFIX = "gateway:budget:cost_settled:"
 _PROXY_COST_PREFIX = "gateway:budget:proxy_cost:"
+_PROXY_TOKENS_PREFIX = "gateway:budget:proxy_tokens:"
 _SETTLED_TTL_SECONDS = 86400
 
 
@@ -43,6 +44,26 @@ async def record_proxy_cost_commit(request_id: str, cost_usd: Decimal) -> None:
     await client.set(key, str(cost_usd), ex=_SETTLED_TTL_SECONDS)
 
 
+async def record_proxy_usage_commit(
+    request_id: str,
+    *,
+    cost_usd: Decimal,
+    total_tokens: int,
+) -> None:
+    """proxy ``settle_usage`` 已结算的 cost/token（供 callback 仅补差，避免双计）。"""
+    if not request_id:
+        return
+    client = await get_redis_client()
+    if cost_usd > 0:
+        await client.set(f"{_PROXY_COST_PREFIX}{request_id}", str(cost_usd), ex=_SETTLED_TTL_SECONDS)
+    if total_tokens > 0:
+        await client.set(
+            f"{_PROXY_TOKENS_PREFIX}{request_id}",
+            str(total_tokens),
+            ex=_SETTLED_TTL_SECONDS,
+        )
+
+
 async def commit_budget_from_callback(
     *,
     metadata: dict[str, Any],
@@ -51,8 +72,8 @@ async def commit_budget_from_callback(
     total_tokens: int,
     budget_model: str | None,
 ) -> None:
-    """按 request_id 幂等累加预算成本；流式为全额，非流式仅补差。"""
-    if not request_id or cost_usd <= 0:
+    """按 request_id 幂等累加预算成本/token；流式为全额，非流式仅补差。"""
+    if not request_id or (cost_usd <= 0 and total_tokens <= 0):
         return
 
     client = await get_redis_client()
@@ -63,16 +84,34 @@ async def commit_budget_from_callback(
 
     defer = bool(metadata.get("gateway_defer_cost_settlement"))
     proxy_key = f"{_PROXY_COST_PREFIX}{request_id}"
+    proxy_tokens_key = f"{_PROXY_TOKENS_PREFIX}{request_id}"
     proxy_raw = await client.get(proxy_key)
+    proxy_tokens_raw = await client.get(proxy_tokens_key)
     delta = cost_usd
+    delta_tokens = total_tokens
     if not defer and proxy_raw is not None:
         with suppress(Exception):
             proxy_cost = Decimal(
                 proxy_raw.decode() if isinstance(proxy_raw, bytes) else str(proxy_raw)
             )
             delta = cost_usd - proxy_cost
-        if delta <= 0:
+        if proxy_tokens_raw is not None:
+            try:
+                proxy_tokens = int(
+                    proxy_tokens_raw.decode()
+                    if isinstance(proxy_tokens_raw, bytes)
+                    else str(proxy_tokens_raw)
+                )
+                delta_tokens = max(0, total_tokens - proxy_tokens)
+            except (TypeError, ValueError):
+                delta_tokens = 0
+        else:
+            # 同次 proxy settle_usage 已写入 token（旧部署仅记 cost 时亦成立）
+            delta_tokens = 0
+        if delta <= 0 and delta_tokens <= 0:
             return
+        if delta < 0:
+            delta = Decimal("0")
 
     team_id = _to_uuid(metadata.get("gateway_team_id"))
     user_id = _to_uuid(metadata.get("gateway_user_id"))
@@ -86,7 +125,6 @@ async def commit_budget_from_callback(
     periods = (PERIOD_DAILY, PERIOD_MONTHLY, PERIOD_TOTAL)
     model_keys = budget_model_keys(budget_model)
 
-    _ = total_tokens  # token 用量由 proxy 路径结算，callback 仅补成本
     for target_kind, target_id in target_items:
         if target_id is None:
             continue
@@ -101,12 +139,12 @@ async def commit_budget_from_callback(
                         target_id=target_id_str,
                         period=period,
                         delta_cost=delta,
-                        delta_tokens=0,
+                        delta_tokens=delta_tokens,
                         budget_model_name=mk,
                         tenant_id=tenant_scope,
                     )
 
-    if defer and delta > 0:
+    if defer and (delta > 0 or delta_tokens > 0):
         with suppress(Exception):
             from domains.gateway.infrastructure.repositories.budget_repository import (
                 BudgetRepository,
@@ -133,9 +171,13 @@ async def commit_budget_from_callback(
                             await repo.settle_usage(
                                 record.id,
                                 delta_usd=delta,
-                                delta_tokens=0,
+                                delta_tokens=delta_tokens,
                                 delta_requests=0,
                             )
 
 
-__all__ = ["commit_budget_from_callback", "record_proxy_cost_commit"]
+__all__ = [
+    "commit_budget_from_callback",
+    "record_proxy_cost_commit",
+    "record_proxy_usage_commit",
+]

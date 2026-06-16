@@ -13,6 +13,7 @@ from domains.gateway.domain.quota_plan import (
     PlanQuotaSpec,
     compute_minute_index,
     compute_reset_at,
+    compute_window_start_datetime,
     compute_window_start_minute,
     normalize_reset_strategy,
 )
@@ -26,6 +27,15 @@ class TestQuotaPlanResetStrategy:
     def test_normalize_reset_strategy_falls_back_to_rolling(self) -> None:
         assert normalize_reset_strategy("calendar_daily_utc") == "calendar_daily_utc"
         assert normalize_reset_strategy("unknown") == "rolling"
+
+    def test_compute_window_start_datetime_matches_minute_index(self) -> None:
+        now = datetime(2026, 5, 18, 11, 20, tzinfo=UTC)
+        valid_from = datetime(2026, 5, 1, tzinfo=UTC)
+
+        assert compute_window_start_datetime(
+            now, 86400, strategy="calendar_daily_utc"
+        ) == datetime(2026, 5, 18, tzinfo=UTC)
+        assert compute_window_start_datetime(now, 0, plan_valid_from=valid_from) == valid_from
 
     def test_calendar_daily_utc_uses_current_utc_day_boundary(self) -> None:
         now = datetime(2026, 5, 18, 11, 20, tzinfo=UTC)
