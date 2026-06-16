@@ -7,6 +7,7 @@ import {
   buildStatsQuotaLookup,
   describeUpstreamQuotaRuleScope,
   findQuotaRuleForStatsRow,
+  formatQuotaRulePeriod,
   hasUpstreamPlanRules,
   matchQuotaRulesForContext,
   mergeQuotaRules,
@@ -485,5 +486,42 @@ describe('matchQuotaRulesForContext personal upstream', () => {
     })
     expect(matched).toHaveLength(1)
     expect(matched[0].limits.limit_tokens).toBe(4_000_000)
+  })
+})
+
+describe('formatQuotaRulePeriod', () => {
+  it('labels platform daily/monthly as UTC calendar windows', () => {
+    const daily = platformRule('m1', {
+      key: { ...platformRule('m1').key, period: 'daily' },
+    })
+    expect(formatQuotaRulePeriod(daily)).toBe('每日 (UTC 自然日)')
+    const monthly = platformRule('m1', {
+      key: { ...platformRule('m1').key, period: 'monthly' },
+    })
+    expect(formatQuotaRulePeriod(monthly)).toBe('每月 (UTC 自然月)')
+  })
+
+  it('distinguishes upstream rolling 24h from calendar daily', () => {
+    const rolling = upstreamRule('cred-a', 'ep-1', {
+      key: {
+        ...upstreamRule('cred-a', 'ep-1').key,
+        period: null,
+        window_seconds: 86400,
+        reset_strategy: 'rolling',
+        quota_label: 'daily',
+      },
+    })
+    expect(formatQuotaRulePeriod(rolling)).toBe('滚动 24h')
+
+    const calendar = upstreamRule('cred-a', 'ep-1', {
+      key: {
+        ...upstreamRule('cred-a', 'ep-1').key,
+        period: null,
+        window_seconds: 86400,
+        reset_strategy: 'calendar_daily_utc',
+        quota_label: 'daily',
+      },
+    })
+    expect(formatQuotaRulePeriod(calendar)).toBe('UTC 自然日')
   })
 })

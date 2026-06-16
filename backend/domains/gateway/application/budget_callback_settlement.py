@@ -13,7 +13,13 @@ from domains.gateway.application.budget_service import (
     PERIOD_TOTAL,
     BudgetService,
 )
+from domains.gateway.application.budget_usage_persist import (
+    PlatformBudgetUpsertItem,
+    schedule_platform_budget_usage_upsert,
+)
 from domains.gateway.domain.proxy_policy import budget_model_keys, budget_targets
+from domains.gateway.infrastructure.repositories.budget_repository import BudgetRepository
+from libs.db.database import get_session_context
 from libs.db.redis import get_redis_client
 from utils.logging import get_logger
 
@@ -145,12 +151,8 @@ async def commit_budget_from_callback(
                     )
 
     if defer and (delta > 0 or delta_tokens > 0):
+        platform_upsert_items: list[PlatformBudgetUpsertItem] = []
         with suppress(Exception):
-            from domains.gateway.infrastructure.repositories.budget_repository import (
-                BudgetRepository,
-            )
-            from libs.db.database import get_session_context
-
             async with get_session_context() as session:
                 repo = BudgetRepository(session)
                 for target_kind, target_id in target_items:
@@ -174,6 +176,19 @@ async def commit_budget_from_callback(
                                 delta_tokens=delta_tokens,
                                 delta_requests=0,
                             )
+                            platform_upsert_items.append(
+                                PlatformBudgetUpsertItem(budget_id=record.id, period=period)
+                            )
+
+        if request_id and platform_upsert_items:
+            schedule_platform_budget_usage_upsert(
+                items=platform_upsert_items,
+                delta_tokens=delta_tokens,
+                delta_cost_usd=delta,
+                delta_requests=0,
+                request_id=request_id,
+                source="callback",
+            )
 
 
 __all__ = [

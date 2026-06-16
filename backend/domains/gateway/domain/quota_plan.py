@@ -22,6 +22,10 @@ QuotaPlanNamespace = Literal["entitlement", "provider"]
 ENTITLEMENT_NS: Final[QuotaPlanNamespace] = "entitlement"
 PROVIDER_NS: Final[QuotaPlanNamespace] = "provider"
 
+# ``gateway_quota_plan_usage_buckets`` 命名空间（含 platform 展示读汇总）。
+UsageBucketNamespace = Literal["entitlement", "provider", "platform"]
+PLATFORM_NS: Final[UsageBucketNamespace] = "platform"
+
 ExhaustedReason = Literal["usd", "tokens", "requests"]
 
 # =============================================================================
@@ -266,6 +270,7 @@ def compute_reset_at(
 
 __all__ = [
     "ENTITLEMENT_NS",
+    "PLATFORM_NS",
     "PROVIDER_NS",
     "RESET_STRATEGY_DEFAULT",
     "ExhaustedReason",
@@ -273,6 +278,7 @@ __all__ = [
     "PlanQuotaSpec",
     "QuotaPlanCheckResult",
     "QuotaPlanNamespace",
+    "UsageBucketNamespace",
     "QuotaPlanReservation",
     "ResetStrategy",
     "compute_minute_index",

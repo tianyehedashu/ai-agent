@@ -33,9 +33,9 @@ export function formatQuotaRulePeriod(rule: QuotaRule): string {
   if (rule.key.period) {
     switch (rule.key.period) {
       case 'daily':
-        return '每日'
+        return '每日 (UTC 自然日)'
       case 'monthly':
-        return '每月'
+        return '每月 (UTC 自然月)'
       case 'total':
         return '总额'
       default:
@@ -44,6 +44,11 @@ export function formatQuotaRulePeriod(rule: QuotaRule): string {
   }
   if (rule.key.window_seconds !== null) {
     if (rule.key.window_seconds === 0) return '套餐周期'
+    if (rule.key.reset_strategy === 'calendar_daily_utc') return 'UTC 自然日'
+    if (rule.key.reset_strategy === 'calendar_monthly_utc') return 'UTC 自然月'
+    if (rule.key.reset_strategy === 'rolling' && rule.key.window_seconds === 86400) {
+      return '滚动 24h'
+    }
     const hours = rule.key.window_seconds / 3600
     if (hours >= 1 && Number.isInteger(hours)) return `${String(hours)}h`
     return `${String(rule.key.window_seconds)}s`

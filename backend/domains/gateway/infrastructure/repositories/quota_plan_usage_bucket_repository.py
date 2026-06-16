@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 
     from sqlalchemy.ext.asyncio import AsyncSession
 
-    from domains.gateway.domain.quota_plan import QuotaPlanNamespace
+    from domains.gateway.domain.quota_plan import UsageBucketNamespace
 
 
 class QuotaPlanUsageBucketRepository:
@@ -27,7 +27,7 @@ class QuotaPlanUsageBucketRepository:
 
     async def increment_bucket(
         self,
-        ns: QuotaPlanNamespace,
+        ns: UsageBucketNamespace,
         plan_id: uuid.UUID,
         quota_id: uuid.UUID,
         window_start: datetime,

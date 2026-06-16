@@ -33,11 +33,18 @@ from domains.gateway.application.proxy_deferred_tasks import register_proxy_defe
 from domains.gateway.application.proxy_stream_settlement import (
     finalize_deferred_stream_settlement,
 )
+from domains.gateway.application.budget_usage_persist import (
+    PlatformBudgetUpsertItem,
+    schedule_platform_budget_usage_upsert,
+)
 from domains.gateway.application.quota_plan_usage_persist import schedule_quota_plan_usage_upsert
 from domains.gateway.domain.proxy_policy import budget_model_keys, budget_targets
 from domains.gateway.domain.quota_plan import ENTITLEMENT_NS
 from domains.gateway.infrastructure.repositories.budget_repository import BudgetRepository
 from libs.db.database import get_session_context
+from utils.logging import get_logger
+
+logger = get_logger(__name__)
 
 if TYPE_CHECKING:
     from domains.gateway.application.proxy_context import ProxyContext
@@ -325,7 +332,8 @@ async def settle_usage(
                 total_tokens=tokens,
             )
 
-    with suppress(Exception):
+    platform_upsert_items: list[PlatformBudgetUpsertItem] = []
+    try:
         async with get_session_context() as session:
             repo = BudgetRepository(session)
             for target_kind, target_id in scope_items:
@@ -349,6 +357,25 @@ async def settle_usage(
                             delta_tokens=tokens,
                             delta_requests=requests,
                         )
+                        platform_upsert_items.append(
+                            PlatformBudgetUpsertItem(budget_id=record.id, period=period)
+                        )
+    except Exception:
+        logger.exception(
+            "Platform budget PG settle failed request_id=%s team_id=%s",
+            request_id,
+            ctx.team_id,
+        )
+
+    if request_id and (cost > 0 or tokens > 0) and platform_upsert_items:
+        schedule_platform_budget_usage_upsert(
+            items=platform_upsert_items,
+            delta_tokens=tokens,
+            delta_cost_usd=cost,
+            delta_requests=requests,
+            request_id=request_id,
+            source="proxy",
+        )
 
 
 def schedule_settle_usage(

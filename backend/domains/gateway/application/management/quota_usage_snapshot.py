@@ -1,22 +1,19 @@
 """配额规则实时用量快照批量填充。
 
-- Platform 层 → BudgetService Redis 桶
-- Upstream / Downstream 层 → DB 汇总表 + 日志窗口聚合（Redis 仅服务 pre_call 限流）
+- Platform / Upstream / Downstream 展示读 → DB 汇总表 + 日志窗口聚合
+- Redis 仅服务 pre_call 预扣与限流
 """
 
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from decimal import Decimal
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from domains.gateway.application.budget_service import (
-    BudgetService,
-    BudgetUsageCoord,
-    redis_credential_segment_for_budget,
-    redis_model_segment_for_budget,
-    redis_tenant_segment_for_budget,
+from domains.gateway.application.management.budget_usage_reads import (
+    BudgetWindowLookup,
+    PlatformBudgetUsageReadService,
+    resolve_budget_window_key,
 )
 from domains.gateway.application.management.quota_plan_usage_reads import (
     QuotaPlanUsageReadService,
@@ -39,30 +36,35 @@ async def enrich_quota_rules_with_usage(
     if not rules:
         return []
 
-    budget_service = BudgetService()
     now = datetime.now(UTC)
 
-    platform_coords: list[tuple[int, BudgetUsageCoord]] = []
+    budget_lookups: list[tuple[int, BudgetWindowLookup]] = []
     plan_lookups: list[tuple[int, QuotaWindowLookup]] = []
 
     for idx, rule in enumerate(rules):
         if rule.key.layer == "platform":
-            target_id_str = str(rule.key.target_id) if rule.key.target_id else None
+            if rule.source_ref.budget_id is None:
+                continue
             target_kind = rule.key.target_kind or "tenant"
-            tenant_seg = (
-                redis_tenant_segment_for_budget(rule.key.team_id)
+            tenant_scope = (
+                rule.key.team_id
                 if target_kind == "user" and rule.key.credential_id is None
                 else None
             )
-            coord = BudgetUsageCoord(
-                target_kind=target_kind,
-                target_id=target_id_str,
-                period=rule.key.period or "total",
-                model_segment=redis_model_segment_for_budget(rule.key.model_name),
-                credential_segment=redis_credential_segment_for_budget(rule.key.credential_id),
-                tenant_segment=tenant_seg,
+            budget_lookups.append(
+                (
+                    idx,
+                    BudgetWindowLookup(
+                        budget_id=rule.source_ref.budget_id,
+                        period=rule.key.period or "total",
+                        target_kind=target_kind,
+                        target_id=rule.key.target_id,
+                        model_name=rule.key.model_name,
+                        credential_id=rule.key.credential_id,
+                        tenant_id=tenant_scope,
+                    ),
+                )
             )
-            platform_coords.append((idx, coord))
             continue
 
         if rule.source_ref.plan_id is None or rule.source_ref.quota_id is None:
@@ -83,10 +85,21 @@ async def enrich_quota_rules_with_usage(
             )
         )
 
-    platform_usage: dict[BudgetUsageCoord, tuple[Decimal, int, int]] = {}
-    if platform_coords:
-        unique_coords = list({c for _, c in platform_coords})
-        platform_usage = await budget_service.read_budget_usage_batch(unique_coords)
+    budget_usage: dict[int, QuotaRuleUsage] = {}
+    if budget_lookups:
+        read_service = PlatformBudgetUsageReadService(session)
+        lookups = [lookup for _, lookup in budget_lookups]
+        totals_by_key = await read_service.batch_usage_for_budget_windows(lookups, now=now)
+        for idx, lookup in budget_lookups:
+            key = resolve_budget_window_key(lookup, now=now)
+            totals = totals_by_key.get(key)
+            if totals is None:
+                continue
+            budget_usage[idx] = QuotaRuleUsage(
+                current_usd=totals.cost_usd,
+                current_tokens=totals.tokens,
+                current_requests=totals.requests,
+            )
 
     plan_usage: dict[int, QuotaRuleUsage] = {}
     if plan_lookups:
@@ -108,15 +121,8 @@ async def enrich_quota_rules_with_usage(
     for idx, rule in enumerate(rules):
         usage: QuotaRuleUsage | None = None
 
-        if rule.key.layer == "platform":
-            matched = [c for i, c in platform_coords if i == idx]
-            if matched:
-                used = platform_usage.get(matched[0], (Decimal("0"), 0, 0))
-                usage = QuotaRuleUsage(
-                    current_usd=used[0],
-                    current_tokens=used[1],
-                    current_requests=used[2],
-                )
+        if idx in budget_usage:
+            usage = budget_usage[idx]
         elif idx in plan_usage:
             usage = plan_usage[idx]
 

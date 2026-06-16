@@ -9,9 +9,9 @@ Gateway 把"额度/限制"分为三个互不替代的层，分别回答不同的
 
 | 层 | 回答的问题 | 数据载体 | 计数载体 |
 |----|-----------|---------|---------|
-| **平台配额** platform | "**我方/团队**在 Gateway 上能花多少" | `gateway_budgets` | Redis 计数桶 + 表内 `current_*` rollup |
-| **上游配额** upstream | "**某厂商凭据**在某 real_model 上还剩多少额度" | `provider_plans` + `provider_plan_quotas` | Redis 滚动窗口桶 |
-| **下游权益** downstream | "**某客户/虚拟 Key**买了多少权益套餐" | `entitlement_plans` + `entitlement_quotas` | Redis 滚动窗口桶 |
+| **平台配额** platform | "**我方/团队**在 Gateway 上能花多少" | `gateway_budgets` | Redis 预扣桶 + PG 展示汇总表；表内 `current_*` 为结算 rollup |
+| **上游配额** upstream | "**某厂商凭据**在某 real_model 上还剩多少额度" | `provider_plans` + `provider_plan_quotas` | Redis 预扣桶 + PG 展示汇总表 |
+| **下游权益** downstream | "**某客户/虚拟 Key**买了多少权益套餐" | `entitlement_plans` + `entitlement_quotas` | Redis 预扣桶 + PG 展示汇总表 |
 
 - **平台配额**是面向**内部消费护栏**的（团队/成员/Key 维度），本文重点。
 - **上游配额**只有"凭据 + real_model"维度，**无 user 维度**，不能替代"按成员限团队共享凭据"。**本人 BYOK**（`scope=user`）可设 upstream 厂商额度，展示归属 personal team。
@@ -154,6 +154,22 @@ sequenceDiagram
 辅助索引：`ix_gateway_budgets_target_lookup (target_kind, target_id)`（热路径主查），`ix_gateway_budgets_credential_id`，`ix_gateway_budgets_tenant_id`。
 
 ## 7. 缓存与 Redis 键
+
+### 7.1 管理面展示读（SSOT）
+
+配额中心、`GET /quota-rules?include_usage=true`、模型详情「用量限额」等**展示读**统一走 PostgreSQL，与本地/线上 Redis 无关：
+
+| 层 | 读路径 | 窗口语义 |
+|----|--------|---------|
+| platform | `gateway_quota_plan_usage_buckets`（`ns=platform`）与 `gateway_request_logs` **按维度取较大值**（避免 bucket 初建截断历史）；`system` 维度仅 bucket | `daily` = **UTC 自然日**；`monthly` = **UTC 自然月**；`total` = 累计 |
+| upstream | 同上表（`ns=provider`）→ 日志按 `provider_plan_id` 兜底 | 由 `window_seconds` + `reset_strategy` 决定（如 `rolling` + 86400 = **滚动 24h**） |
+| downstream | 同上表（`ns=entitlement`）→ 日志按 `entitlement_plan_id` 兜底 | 同 upstream |
+
+- **Redis 仅用于**：预扣（`reserve`）、限流（RPM/TPM）、结算 `commit`、幂等锁；**不**作为展示 SSOT。
+- **写路径**：proxy/callback 成功结算后异步 `UPSERT` 汇总表（`schedule_platform_budget_usage_upsert` / `schedule_quota_plan_usage_upsert`）；platform 按 `request_id` + 来源（`proxy` / `callback`）幂等，允许 defer 流式先记 token、callback 再记 cost。
+- **勿**直接读 `gateway_budgets.current_*` 作展示权威：无日/月自动 reset 任务，与 Redis 日切语义可能漂移；展示以 bucket + 日志为准。
+
+### 7.2 Redis 键一览
 
 | 用途 | 键 | 说明 |
 |------|----|------|
