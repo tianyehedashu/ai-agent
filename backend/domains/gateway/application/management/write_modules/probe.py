@@ -171,6 +171,11 @@ class ProbeWritesMixin:
                 self._models, model_id, tested_at, msg, litellm_model, **record_kw
             )
         api_base = credential.api_base
+        # rollback 会使 ORM 实例过期；LiteLLM 调用链中再读 credential.* 会触发 lazy load，
+        # 在非 async greenlet 上下文报 xd2s（此前用 commit + expire_on_commit=False 无此问题）。
+        credential_name = credential.name
+        credential_profile_id = getattr(credential, "profile_id", None)
+        credential_extra = credential.extra if isinstance(credential.extra, dict) else None
         probe_actor_id = await self._resolve_probe_actor_user_id(tenant_id, actor_user_id)
         ensure_gateway_callbacks()
         from libs.db.session_lifecycle import release_session_before_blocking_io
@@ -184,8 +189,8 @@ class ProbeWritesMixin:
                 tenant_id=tenant_id,
                 actor_user_id=probe_actor_id,
                 target=target,
-                credential_name=credential.name,
-                credential_profile_id=getattr(credential, "profile_id", None),
+                credential_name=credential_name,
+                credential_profile_id=credential_profile_id,
             )
 
         try:
@@ -220,10 +225,9 @@ class ProbeWritesMixin:
             if capability == "image":
                 img_size = image_probe_size(target.provider)
                 if target.provider == "volcengine":
-                    extra = credential.extra if isinstance(credential.extra, dict) else None
                     try:
                         image_endpoint_id = require_volcengine_image_endpoint_id(
-                            extra,
+                            credential_extra,
                             message=VOLCENGINE_IMAGE_ENDPOINT_PROBE_MESSAGE,
                         )
                     except ValidationError as exc:
@@ -239,7 +243,7 @@ class ProbeWritesMixin:
                         api_key=api_key,
                         api_base=api_base,
                         image_endpoint_id=image_endpoint_id,
-                        profile_id=getattr(credential, "profile_id", None),
+                        profile_id=credential_profile_id,
                         size=img_size,
                     )
                     img_data = await perform_volcengine_image_generation(request)

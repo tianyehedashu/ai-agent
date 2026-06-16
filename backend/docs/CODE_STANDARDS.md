@@ -363,6 +363,15 @@ class TestSessionService:
 
 `uv run pytest tests/integration/ -q --tb=short`
 
+**AsyncSession 长 I/O**（`libs/db/session_lifecycle.py`）：
+
+| Helper | 场景 | 行为 |
+|--------|------|------|
+| `release_request_db_connection` | Gateway **代理** preflight 后 | rollback + **close**，连接还 pool（高并发 504 修复） |
+| `release_session_before_blocking_io` | **管理面**探活、凭据上游列表探测 | rollback 或 commit 待写入；**不 close**，同请求后续仍写库 |
+
+共用规则：**调用任一 helper 前**把仍需使用的 ORM 字段读入局部变量（如 `credential.name`）；rollback 后 lazy load 在 LiteLLM 同步路径会 `MissingGreenlet` / `xd2s`（探活 `probe.py` 曾踩坑）。
+
 **Gateway 集成测 session 约定**（`tests/integration/conftest.py`，autouse）：
 
 - `client` / `dev_client` 将**同一条** `db_session` 注入 `get_db`；生产路径在上游前会 `release_request_db_connection()`（`close()`），集成测对该调用 noop，避免 `DetachedInstanceError` / `MissingGreenlet`。
