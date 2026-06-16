@@ -186,7 +186,7 @@ class EntitlementWritesMixin:
             credential_id, tenant_id=tenant_id, is_platform_admin=is_platform_admin
         )
         if real_model:
-            await self._assert_real_model_on_credential(credential_id, real_model)
+            real_model = await self._resolve_registered_real_model(credential_id, real_model)
         plan = await self._provider_plans.create(
             credential_id=credential_id,
             real_model=real_model,
@@ -223,7 +223,12 @@ class EntitlementWritesMixin:
         await self._assert_provider_plan_in_credential(plan_id, credential_id=credential_id)
         next_real_model = fields.get("real_model")
         if isinstance(next_real_model, str) and next_real_model:
-            await self._assert_real_model_on_credential(credential_id, next_real_model)
+            fields = {
+                **fields,
+                "real_model": await self._resolve_registered_real_model(
+                    credential_id, next_real_model
+                ),
+            }
         await self._provider_plans.update(plan_id, **fields)
         if quotas is not None:
             await self._provider_plans.replace_quotas(plan_id, quotas)

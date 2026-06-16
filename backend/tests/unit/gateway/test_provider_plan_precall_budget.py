@@ -53,13 +53,16 @@ async def test_provider_plan_runs_when_budget_allows(monkeypatch) -> None:
     data: dict[str, Any] = {
         "metadata": {},
         "litellm_params": {
-            "model_info": {"gateway_credential_id": str(cred_id), "model_real": "gpt-4"},
+            "model": "volcengine/ep-legacy",
+            "model_info": {"gateway_credential_id": str(cred_id)},
         },
     }
 
     await logger.async_pre_call_hook(None, None, data, "completion")
 
     provider_guard.check_and_reserve.assert_awaited_once()
+    assert provider_guard.check_and_reserve.await_args is not None
+    assert provider_guard.check_and_reserve.await_args.kwargs["real_model"] is None
 
 
 @pytest.mark.asyncio

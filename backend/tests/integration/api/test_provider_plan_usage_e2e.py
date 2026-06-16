@@ -9,6 +9,8 @@ import types
 from typing import Any
 import uuid
 
+from contextlib import asynccontextmanager
+
 from httpx import AsyncClient
 import pytest
 from sqlalchemy import func, select
@@ -36,6 +38,22 @@ _OPENAI_CHAT = f"{openai_compat_base()}/chat/completions"
 _PROMPT_TOKENS = 100
 _COMPLETION_TOKENS = 50
 _EXPECTED_TOTAL_TOKENS = _PROMPT_TOKENS + _COMPLETION_TOKENS
+
+
+@pytest.fixture(autouse=True)
+def _bind_plan_settlement_to_test_db_session(
+    monkeypatch: pytest.MonkeyPatch, db_session: AsyncSession
+) -> None:
+    """ProviderPlan 结算/加载与 HTTP 写入共用同一 integration session。"""
+    from domains.gateway.application import provider_plan_callback_settlement as provider_cb
+    from domains.gateway.application import provider_plan_guard as provider_guard_mod
+
+    @asynccontextmanager
+    async def _ctx():
+        yield db_session
+
+    for mod in (provider_guard_mod, provider_cb):
+        monkeypatch.setattr(mod, "get_session_context", _ctx)
 
 
 def _fake_openai_chat_response(*, model: str) -> Any:
@@ -76,7 +94,11 @@ async def _merge_router_deployment(router: Any, kw: dict[str, Any]) -> None:
             if key not in target:
                 target[key] = value
         if isinstance(model_info, dict):
-            target["model_info"] = model_info
+            existing_mi = target.get("model_info")
+            if isinstance(existing_mi, dict):
+                target["model_info"] = {**existing_mi, **model_info}
+            else:
+                target["model_info"] = dict(model_info)
         return
 
 
@@ -108,6 +130,11 @@ async def _setup_team_model_plan_vkey(
     test_user: User,
 ) -> tuple[uuid.UUID, str, str, str, uuid.UUID]:
     """返回 (team_id, credential_id, model_name, vkey_plain, plan_id)。"""
+    from domains.gateway.application.gateway_cache_invalidation import (
+        clear_all_gateway_read_caches_for_tests,
+    )
+
+    clear_all_gateway_read_caches_for_tests()
     team = await TeamService(db_session).ensure_personal_team(test_user.id)
     await db_session.commit()
     now = datetime.now(UTC).replace(microsecond=0)

@@ -475,12 +475,14 @@ class QuotaRuleWritesMixin:
             await self._assert_real_model_on_credential(cmd.credential_id, cmd.model_name)
 
         label = cmd.quota_label or "default"
-
         window_seconds = cmd.window_seconds if cmd.window_seconds is not None else 0
-
         reset_strategy = cmd.reset_strategy or "rolling"
 
-        real_model = cmd.model_name
+        real_model = (
+            await self._resolve_registered_real_model(cmd.credential_id, cmd.model_name)
+            if cmd.model_name
+            else None
+        )
 
         plan = await self._provider_plans.get_active_for_credential_model(
             cmd.credential_id,

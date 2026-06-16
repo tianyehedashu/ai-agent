@@ -26,8 +26,22 @@ def test_fallback_to_kwargs_model_when_no_route_name() -> None:
     assert result[1] == "gw/t/team-id/some-model"
 
 
-def test_prefers_response_model_for_real_model() -> None:
-    """上游响应 model 存在时，real_model 优先取响应值。"""
+def test_prefers_deployment_real_model_over_response() -> None:
+    """Router deployment 存在时，real_model 与套餐匹配键一致（不用上游响应 echo）。"""
+    metadata = {"gateway_capability": "chat"}
+    kwargs = {
+        "model": "gw/t/team-id/kimi-for-coding",
+        "litellm_params": {
+            "model_info": {"gateway_real_model": "kimi-for-coding"},
+        },
+    }
+    response = SimpleNamespace(model="moonshot/kimi-for-coding")
+    result = _normalize_route_model(metadata, kwargs, response)
+    assert result[2] == "kimi-for-coding"
+
+
+def test_uses_response_model_when_no_deployment_attribution() -> None:
+    """无 deployment 归因时，real_model 取上游响应。"""
     metadata = {"gateway_capability": "chat"}
     kwargs = {"model": "gw/t/team-id/kimi-for-coding"}
     response = SimpleNamespace(model="moonshot/kimi-for-coding")

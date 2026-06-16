@@ -30,6 +30,7 @@ from domains.gateway.infrastructure.callbacks.cost_calculation import (
 from domains.gateway.infrastructure.callbacks.cost_calculation import (
     extract_gateway_metadata as _extract_gateway_metadata,
 )
+from domains.gateway.domain.litellm_deployment_attribution import gateway_deployment_real_model
 from domains.gateway.infrastructure.callbacks.request_log_persist_helpers import (
     gateway_provider_for_persist,
     model_info_from_kwargs,
@@ -554,10 +555,9 @@ def _normalize_route_model(
         if isinstance(response_model_raw, str) and response_model_raw.strip()
         else None
     )
-    # real_model: 上游响应 > Router model_info.gateway_real_model > kwargs["model"]
-    model_info = model_info_from_kwargs(kwargs)
-    deployment_real_model = model_info.get("gateway_real_model") if model_info else None
-    real_model = response_model or deployment_real_model or kwargs.get("model")
+    # real_model: deployment SSOT（gateway_real_model）> 上游响应 > kwargs["model"]
+    deployment_real_model = gateway_deployment_real_model(kwargs)
+    real_model = deployment_real_model or response_model or kwargs.get("model")
     real_model_str = (
         str(real_model).strip() if isinstance(real_model, str) and real_model.strip() else None
     )

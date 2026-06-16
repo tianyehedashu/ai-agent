@@ -9,7 +9,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, case, or_, select
 
 from domains.gateway.infrastructure.models.provider_plan import (
     ProviderPlan,
@@ -63,16 +63,15 @@ class ProviderPlanRepository:
                     ProviderPlan.real_model.is_(None),
                 )
             )
+            rank = case((ProviderPlan.real_model == real_model, 0), else_=1)
+            order_by = (rank.asc(), ProviderPlan.valid_from.desc())
         else:
             clauses.append(ProviderPlan.real_model.is_(None))
+            order_by = (ProviderPlan.valid_from.desc(),)
         stmt = (
             select(ProviderPlan)
             .where(and_(*clauses))
-            .order_by(
-                # 精确匹配优先（real_model 不为 NULL 时，real_model 等于 ``real_model`` 优先）
-                ProviderPlan.real_model.is_(None).asc(),
-                ProviderPlan.valid_from.desc(),
-            )
+            .order_by(*order_by)
         )
         result = await self._session.execute(stmt)
         return result.scalars().first()

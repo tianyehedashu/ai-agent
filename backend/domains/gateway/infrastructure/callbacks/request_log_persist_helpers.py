@@ -4,7 +4,12 @@ from __future__ import annotations
 
 from typing import Any
 
+from domains.gateway.domain.litellm_deployment_attribution import litellm_model_info_from_kwargs
 from domains.gateway.domain.request_log_provider import resolve_request_log_provider
+
+
+def model_info_from_kwargs(kwargs: dict[str, Any]) -> dict[str, Any] | None:
+    return litellm_model_info_from_kwargs(kwargs)
 
 
 def litellm_upstream_model_from_kwargs(kwargs: dict[str, Any]) -> str | None:
@@ -16,17 +21,6 @@ def litellm_upstream_model_from_kwargs(kwargs: dict[str, Any]) -> str | None:
         model = container.get("model")
         if isinstance(model, str) and model.strip():
             return model.strip()
-    return None
-
-
-def model_info_from_kwargs(kwargs: dict[str, Any]) -> dict[str, Any] | None:
-    for container_key in ("litellm_params", "standard_logging_object"):
-        container = kwargs.get(container_key)
-        if not isinstance(container, dict):
-            continue
-        mi = container.get("model_info")
-        if isinstance(mi, dict):
-            return mi
     return None
 
 

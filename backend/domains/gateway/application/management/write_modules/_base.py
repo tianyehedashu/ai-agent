@@ -221,13 +221,25 @@ class GatewayManagementWriteBaseMixin:
                 f"模型别名 {model_name!r} 未注册在该凭据下；多凭据路由请使用「别名--凭据」具体别名"
             )
 
+    async def _resolve_registered_real_model(
+        self, credential_id: uuid.UUID, model_ref: str
+    ) -> str:
+        """将别名或 ``GatewayModel.real_model`` 归一为落库用的 canonical real_model。"""
+        ref = model_ref.strip()
+        pairs = await self._models.list_name_real_model_pairs_for_credential(credential_id)
+        by_alias = dict(pairs)
+        registered = {rm for _, rm in pairs}
+        if ref in registered:
+            return ref
+        if ref in by_alias:
+            return by_alias[ref]
+        raise ValidationError(f"上游模型 {ref!r} 未注册在该凭据下")
+
     async def _assert_real_model_on_credential(
         self, credential_id: uuid.UUID, real_model: str
     ) -> None:
-        """上游配额的 ``real_model`` 须为该凭据下已注册模型的上游 id。"""
-        pairs = await self._models.list_name_real_model_pairs_for_credential(credential_id)
-        if real_model not in {rm for _, rm in pairs}:
-            raise ValidationError(f"上游模型 {real_model!r} 未注册在该凭据下")
+        """上游配额的 ``real_model`` 须为该凭据下已注册模型的 canonical id。"""
+        await self._resolve_registered_real_model(credential_id, real_model)
 
     async def _assert_provider_plan_in_credential(
         self, plan_id: uuid.UUID, *, credential_id: uuid.UUID

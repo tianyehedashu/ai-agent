@@ -1,7 +1,7 @@
 """ProviderPlanGuard - 上游厂商套餐 pre-call 校验
 
 在 LiteLLM Router 选中某个 deployment 后、真正打上游前，根据 ``model_info`` 中
-携带的 ``gateway_credential_id`` + ``litellm_params.model`` 解析活跃 ProviderPlan
+携带的 ``gateway_credential_id`` + ``gateway_real_model`` 解析活跃 ProviderPlan
 并对其下所有 quota 桶做检查 + 预扣。任一桶耗尽抛 ``ProviderPlanExhaustedError``
 让 Router 触发自带 cooldown / fallback；调用方一般不会直接看到该错误。
 
@@ -11,7 +11,6 @@
 
 from __future__ import annotations
 
-from contextlib import suppress
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any
@@ -24,6 +23,10 @@ from domains.gateway.application.provider_plan_config_cache import (
     provider_plan_config_from_orm,
 )
 from domains.gateway.domain.errors import ProviderPlanExhaustedError
+from domains.gateway.domain.litellm_deployment_attribution import (
+    gateway_deployment_credential_id,
+    gateway_deployment_real_model,
+)
 from domains.gateway.domain.quota_plan import (
     PROVIDER_NS,
     PlanQuotaSpec,
@@ -208,32 +211,9 @@ def get_provider_plan_guard() -> ProviderPlanGuard:
     return _provider_plan_guard_singleton
 
 
-def _extract_credential_and_model(kwargs: dict[str, Any]) -> tuple[uuid.UUID | None, str | None]:
-    """从 LiteLLM Router 调用 kwargs 中读出 deployment 的凭据与厂商模型字符串。"""
-    cred_id: uuid.UUID | None = None
-    real_model: str | None = None
-    for container_key in ("litellm_params", "standard_logging_object"):
-        container = kwargs.get(container_key)
-        if not isinstance(container, dict):
-            continue
-        mi = container.get("model_info")
-        if isinstance(mi, dict):
-            raw_cid = mi.get("gateway_credential_id")
-            if raw_cid:
-                with suppress(ValueError, TypeError):
-                    cred_id = uuid.UUID(str(raw_cid))
-            raw_real = (
-                mi.get("gateway_real_model")
-                or mi.get("model_real")
-                or container.get("model")
-            )
-            if isinstance(raw_real, str) and raw_real:
-                real_model = raw_real
-    if real_model is None:
-        rm = kwargs.get("model")
-        if isinstance(rm, str) and rm:
-            real_model = rm
-    return cred_id, real_model
+def _extract_credential_and_model(data: dict[str, Any]) -> tuple[uuid.UUID | None, str | None]:
+    """从 Router deployment ``model_info`` 读取套餐匹配键（与落库 ``real_model`` 同源）。"""
+    return gateway_deployment_credential_id(data), gateway_deployment_real_model(data)
 
 
 def _metadata_dicts_on_call(data: dict[str, Any]) -> list[dict[str, Any]]:

@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from decimal import Decimal
 from typing import TYPE_CHECKING
-import uuid
 
 from sqlalchemy import delete
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -15,6 +13,9 @@ from domains.gateway.infrastructure.models.quota_plan_usage_bucket import (
 )
 
 if TYPE_CHECKING:
+    from decimal import Decimal
+    import uuid
+
     from sqlalchemy.ext.asyncio import AsyncSession
 
     from domains.gateway.domain.quota_plan import QuotaPlanNamespace
