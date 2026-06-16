@@ -15,6 +15,55 @@ import {
   resolveQuotaRulePlanManagementLink,
 } from './quota-rule-utils'
 
+function tokenLimits(tokens: number): QuotaRule['limits'] {
+  return {
+    limit_usd: null,
+    soft_limit_usd: null,
+    limit_tokens: tokens,
+    limit_requests: null,
+    unit_price_usd_per_token: null,
+    unit_price_usd_per_request: null,
+  }
+}
+
+function platformRule(modelName: string, overrides: Partial<QuotaRule> = {}): QuotaRule {
+  return {
+    key: {
+      team_id: 'team-1',
+      layer: 'platform',
+      user_id: null,
+      credential_id: 'cred-a',
+      model_name: modelName,
+      period: 'monthly',
+      window_seconds: null,
+      reset_strategy: null,
+      access_kind: 'none',
+      access_id: null,
+      quota_label: null,
+      target_kind: 'tenant',
+      target_id: null,
+    },
+    source_ref: {
+      layer: 'platform',
+      budget_id: 'b1',
+      plan_id: null,
+      quota_id: null,
+    },
+    limits: {
+      limit_usd: 100,
+      soft_limit_usd: null,
+      limit_tokens: null,
+      limit_requests: null,
+      unit_price_usd_per_token: null,
+      unit_price_usd_per_request: null,
+    },
+    usage: null,
+    plan_label: null,
+    is_active: true,
+    ...overrides,
+  }
+}
+
 function upstreamRule(
   credentialId: string,
   modelName: string | null,
@@ -89,32 +138,9 @@ describe('matchQuotaRulesForContext credential upstream', () => {
 describe('matchQuotaRulesForContext team_model', () => {
   it('matches platform by alias and upstream by real_model', () => {
     const rules = [
-      upstreamRule('cred-a', 'ep-abc', {
-        limits: {
-          limit_usd: null,
-          soft_limit_usd: null,
-          limit_tokens: 4_000_000,
-          limit_requests: null,
-        },
-      }),
-      upstreamRule('cred-a', null, {
-        limits: {
-          limit_usd: null,
-          soft_limit_usd: null,
-          limit_tokens: 1_000_000,
-          limit_requests: null,
-        },
-      }),
-      {
-        ...upstreamRule('cred-a', 'Doubao-Seed-Code-online'),
-        key: {
-          ...upstreamRule('cred-a', 'Doubao-Seed-Code-online').key,
-          layer: 'platform',
-          target_kind: 'tenant',
-          target_id: null,
-        },
-        source_ref: { layer: 'platform', budget_id: 'b1' },
-      },
+      upstreamRule('cred-a', 'ep-abc', { limits: tokenLimits(4_000_000) }),
+      upstreamRule('cred-a', null, { limits: tokenLimits(1_000_000) }),
+      platformRule('Doubao-Seed-Code-online'),
     ]
     const matched = matchQuotaRulesForContext(rules, {
       kind: 'team_model',
@@ -345,14 +371,7 @@ describe('describeUpstreamQuotaRuleScope', () => {
 describe('matchQuotaRulesForContext personal upstream', () => {
   it('includes upstream rules for BYOK real_model', () => {
     const rules = [
-      upstreamRule('cred-byok', 'ep-personal', {
-        limits: {
-          limit_usd: null,
-          soft_limit_usd: null,
-          limit_tokens: 4_000_000,
-          limit_requests: null,
-        },
-      }),
+      upstreamRule('cred-byok', 'ep-personal', { limits: tokenLimits(4_000_000) }),
       upstreamRule('cred-other', 'ep-x'),
     ]
     const matched = matchQuotaRulesForContext(rules, {
