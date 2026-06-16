@@ -24,6 +24,7 @@ from domains.gateway.application.management.write_modules.probe_recording import
 )
 from domains.gateway.application.management.write_modules.probe_target import (
     EncryptedCredentialSnapshot,
+    ProbeCredentialSnapshot,
     ProbeTarget,
 )
 from domains.gateway.application.management.write_modules.probe_video_preview import (
@@ -170,12 +171,15 @@ class ProbeWritesMixin:
             return await record_gateway_model_test_failure(
                 self._models, model_id, tested_at, msg, litellm_model, **record_kw
             )
-        api_base = credential.api_base
-        # rollback 会使 ORM 实例过期；LiteLLM 调用链中再读 credential.* 会触发 lazy load，
-        # 在非 async greenlet 上下文报 xd2s（此前用 commit + expire_on_commit=False 无此问题）。
-        credential_name = credential.name
-        credential_profile_id = getattr(credential, "profile_id", None)
-        credential_extra = credential.extra if isinstance(credential.extra, dict) else None
+        cred = ProbeCredentialSnapshot.from_encrypted(credential, api_key=api_key)
+        probe_chat_temperature = (
+            resolve_probe_chat_temperature(
+                credential_profile_id=cred.profile_id,
+                provider=target.provider,
+            )
+            if capability == "chat"
+            else None
+        )
         probe_actor_id = await self._resolve_probe_actor_user_id(tenant_id, actor_user_id)
         ensure_gateway_callbacks()
         from libs.db.session_lifecycle import release_session_before_blocking_io
@@ -189,25 +193,21 @@ class ProbeWritesMixin:
                 tenant_id=tenant_id,
                 actor_user_id=probe_actor_id,
                 target=target,
-                credential_name=credential_name,
-                credential_profile_id=credential_profile_id,
+                credential_name=cred.name,
+                credential_profile_id=cred.profile_id,
             )
 
         try:
             if capability == "chat":
-                probe_temperature = resolve_probe_chat_temperature(
-                    credential_profile_id=getattr(credential, "profile_id", None),
-                    provider=target.provider,
-                )
                 response = await acompletion(
                     **_litellm_kw(
                         {
                             "model": litellm_model,
                             "messages": [{"role": "user", "content": "Hi"}],
                             "max_tokens": 10,
-                            "temperature": probe_temperature,
-                            "api_key": api_key,
-                            "api_base": api_base,
+                            "temperature": probe_chat_temperature,
+                            "api_key": cred.api_key,
+                            "api_base": cred.api_base,
                         }
                     )
                 )
@@ -227,7 +227,7 @@ class ProbeWritesMixin:
                 if target.provider == "volcengine":
                     try:
                         image_endpoint_id = require_volcengine_image_endpoint_id(
-                            credential_extra,
+                            cred.extra,
                             message=VOLCENGINE_IMAGE_ENDPOINT_PROBE_MESSAGE,
                         )
                     except ValidationError as exc:
@@ -240,10 +240,10 @@ class ProbeWritesMixin:
                             **record_kw,
                         )
                     request = build_volcengine_image_probe_request(
-                        api_key=api_key,
-                        api_base=api_base,
+                        api_key=cred.api_key,
+                        api_base=cred.api_base,
                         image_endpoint_id=image_endpoint_id,
-                        profile_id=credential_profile_id,
+                        profile_id=cred.profile_id,
                         size=img_size,
                     )
                     img_data = await perform_volcengine_image_generation(request)
@@ -256,8 +256,8 @@ class ProbeWritesMixin:
                                 "prompt": "ping",
                                 "n": 1,
                                 "size": img_size,
-                                "api_key": api_key,
-                                "api_base": api_base,
+                                "api_key": cred.api_key,
+                                "api_base": cred.api_base,
                                 "timeout": 60,
                             }
                         )
@@ -274,8 +274,8 @@ class ProbeWritesMixin:
             if capability == "embedding":
                 if should_use_dashscope_direct_embedding(target.provider):
                     embed_req = build_dashscope_embedding_request(
-                        api_key=api_key,
-                        api_base=api_base,
+                        api_key=cred.api_key,
+                        api_base=cred.api_base,
                         model_id=target.real_model,
                         input_payload=["ping"],
                     )
@@ -286,8 +286,8 @@ class ProbeWritesMixin:
                             {
                                 "model": litellm_model,
                                 "input": ["ping"],
-                                "api_key": api_key,
-                                "api_base": api_base,
+                                "api_key": cred.api_key,
+                                "api_base": cred.api_base,
                             }
                         )
                     )
@@ -297,8 +297,8 @@ class ProbeWritesMixin:
             if capability == "video_generation":
                 if should_use_volcengine_direct_video(target.provider):
                     request = build_volcengine_video_create_request(
-                        api_key=api_key,
-                        api_base=api_base,
+                        api_key=cred.api_key,
+                        api_base=cred.api_base,
                         model_id=target.real_model,
                         prompt="ping",
                         seconds="5",
@@ -318,8 +318,8 @@ class ProbeWritesMixin:
                                 "model": litellm_model,
                                 "prompt": "ping",
                                 "seconds": "5",
-                                "api_key": api_key,
-                                "api_base": api_base,
+                                "api_key": cred.api_key,
+                                "api_base": cred.api_base,
                                 "timeout": VIDEO_PROBE_TIMEOUT,
                             }
                         )

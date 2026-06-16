@@ -11,7 +11,10 @@ from domains.gateway.application.management.writes import GatewayManagementWrite
 from domains.gateway.domain.errors import ManagementEntityNotFoundError
 from domains.gateway.infrastructure.repositories.model_repository import GatewayModelRepository
 from domains.tenancy.application.team_service import TeamService
-from tests.unit.gateway.credential_test_helpers import create_tenant_test_credential, team_owner_actor_kw
+from tests.unit.gateway.credential_test_helpers import (
+    create_tenant_test_credential,
+    team_owner_actor_kw,
+)
 
 
 async def _seed_team_credential_and_model(
@@ -443,3 +446,51 @@ async def test_system_model_from_merged_list_can_be_probed(db_session, test_user
     assert refreshed is not None
     assert refreshed.last_test_status == "success"
     assert refreshed.last_tested_at is not None
+
+
+@pytest.mark.asyncio
+async def test_chat_probe_resolves_temperature_before_session_release(
+    db_session, test_user, monkeypatch
+) -> None:
+    """rollback 后不得再读 credential ORM；温度须在 release_session_before_blocking_io 前解析。"""
+    team_id, model_id = await _seed_team_credential_and_model(
+        db_session,
+        test_user,
+        capability="chat",
+        provider="moonshot",
+        real_model="moonshot/kimi-k2",
+    )
+    writes = GatewayManagementWriteService(db_session)
+    order: list[str] = []
+
+    from domains.gateway.application.management.write_modules import probe as probe_module
+    from libs.db import session_lifecycle
+
+    orig_resolve = probe_module.resolve_probe_chat_temperature
+    orig_release = session_lifecycle.release_session_before_blocking_io
+
+    def tracked_resolve(**kwargs: object) -> float:
+        order.append("resolve_temperature")
+        return orig_resolve(**kwargs)  # type: ignore[arg-type]
+
+    async def tracked_release(session: object) -> bool:
+        order.append("release")
+        return await orig_release(session)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(probe_module, "resolve_probe_chat_temperature", tracked_resolve)
+    monkeypatch.setattr(
+        session_lifecycle, "release_session_before_blocking_io", tracked_release
+    )
+
+    fake = type(
+        "Resp",
+        (),
+        {"choices": [type("C", (), {"message": type("M", (), {"content": "Hi"})()})()]},
+    )()
+    with patch("litellm.acompletion", new=AsyncMock(return_value=fake)):
+        result = await writes.test_gateway_model(
+            model_id, tenant_id=team_id, **team_owner_actor_kw(test_user)
+        )
+
+    assert result["success"] is True
+    assert order.index("resolve_temperature") < order.index("release")
