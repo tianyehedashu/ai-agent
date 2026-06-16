@@ -32,7 +32,7 @@ export function actorOwnsTeamCredential(
 export function canEditGatewayCredential(
   c: ProviderCredential,
   viewerUserId: string | null | undefined,
-  canWrite: boolean,
+  _canWrite: boolean,
   isPlatformAdmin: boolean
 ): boolean {
   if (c.management_access === 'metadata') return false
@@ -45,7 +45,7 @@ export function canEditGatewayCredential(
 export function canLinkToCredentialDetail(
   summary: CredentialLinkScope | undefined,
   viewerUserId: string | null | undefined,
-  canWrite: boolean,
+  _canWrite: boolean,
   isPlatformAdmin: boolean
 ): boolean {
   if (!summary) return false

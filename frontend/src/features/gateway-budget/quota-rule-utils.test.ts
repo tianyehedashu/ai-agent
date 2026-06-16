@@ -36,6 +36,8 @@ function upstreamRule(
       soft_limit_usd: null,
       limit_tokens: null,
       limit_requests: null,
+      unit_price_usd_per_token: null,
+      unit_price_usd_per_request: null,
     },
     usage: null,
     plan_label: 'test-plan',

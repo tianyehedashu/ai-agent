@@ -119,7 +119,7 @@ export function canBatchImportGatewayModel(
   model: GatewayModel,
   viewerUserId: string | null | undefined,
   _canWrite: boolean,
-  isPlatformAdmin: boolean,
+  _isPlatformAdmin: boolean,
   context?: GatewayModelPermissionContext
 ): boolean {
   if (resolveGatewayModelRegistryKind(model, context) === 'system') {
