@@ -30,6 +30,16 @@ def test_gateway_deployment_real_model_ignores_litellm_model_param() -> None:
     assert gateway_deployment_real_model(kwargs) == "ep-abc"
 
 
+def test_gateway_deployment_real_model_from_top_level_model_info() -> None:
+    """Router ``_update_kwargs_with_deployment`` 将 model_info 置于 kwargs 顶层。"""
+    kwargs = {
+        "model": "gw/t/team/Doubao-Lite",
+        "model_info": {"gateway_real_model": "ep-20260410150612-9pncb"},
+        "litellm_params": {"model": "ep-20260410150612-9pncb"},
+    }
+    assert gateway_deployment_real_model(kwargs) == "ep-20260410150612-9pncb"
+
+
 def test_gateway_deployment_credential_id() -> None:
     cred_id = uuid.uuid4()
     kwargs = {

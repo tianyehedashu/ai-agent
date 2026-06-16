@@ -22,6 +22,7 @@ from domains.gateway.application.provider_plan_config_cache import (
     plan_quota_specs_from_config,
     provider_plan_config_from_orm,
 )
+from domains.gateway.application.quota_plan_service import QuotaPlanService
 from domains.gateway.domain.errors import ProviderPlanExhaustedError
 from domains.gateway.domain.litellm_deployment_attribution import (
     gateway_deployment_credential_id,
@@ -38,8 +39,6 @@ from domains.gateway.infrastructure.repositories.provider_plan_repository import
 )
 from libs.db.database import get_session_context
 from utils.logging import get_logger
-
-from domains.gateway.application.quota_plan_service import QuotaPlanService
 
 if TYPE_CHECKING:
     from domains.gateway.infrastructure.models.provider_plan import (
@@ -259,11 +258,29 @@ def _stamp_provider_plan_on_call(
             meta["user_api_key_auth_metadata"] = dict(gateway_fields)
 
 
+async def _apply_provider_plan_pre_call(data: dict[str, Any]) -> None:
+    """Router deployment 选定后：平台预算预扣 + ProviderPlan 预扣/打标。"""
+    from domains.gateway.application.budget_deployment_check import (
+        maybe_reserve_user_credential_budget,
+    )
+
+    await maybe_reserve_user_credential_budget(data)
+
+    guard = get_provider_plan_guard()
+    cred_id, real_model = _extract_credential_and_model(data)
+    if cred_id is None:
+        return
+    plan_id, _specs, reservations = await guard.check_and_reserve(
+        credential_id=cred_id,
+        real_model=real_model,
+    )
+    if plan_id is not None:
+        _stamp_provider_plan_on_call(data, plan_id=plan_id, reservations=reservations)
+
+
 def build_provider_plan_pre_call_logger() -> Any:
     """构建 LiteLLM CustomLogger 实例，注册到 ``litellm.callbacks`` 实现 pre-call 配额校验。"""
     from litellm.integrations.custom_logger import CustomLogger  # type: ignore[import-not-found]
-
-    guard = get_provider_plan_guard()
 
     class _Impl(CustomLogger):  # type: ignore[misc, valid-type]
         async def async_pre_call_hook(
@@ -273,24 +290,17 @@ def build_provider_plan_pre_call_logger() -> Any:
             data: dict[str, Any],
             call_type: str,
         ) -> dict[str, Any] | None:
-            # Phase2：成员+凭据+模型平台预算（部署已选）。耗尽抛 BudgetExceededError，
-            # 直接 hard fail（HTTP 429），不进入 ProviderPlan / Router fallback。
-            from domains.gateway.application.budget_deployment_check import (
-                maybe_reserve_user_credential_budget,
-            )
-
-            await maybe_reserve_user_credential_budget(data)
-
-            cred_id, real_model = _extract_credential_and_model(data)
-            if cred_id is None:
-                return None
-            plan_id, _specs, reservations = await guard.check_and_reserve(
-                credential_id=cred_id,
-                real_model=real_model,
-            )
-            if plan_id is not None:
-                _stamp_provider_plan_on_call(data, plan_id=plan_id, reservations=reservations)
+            await _apply_provider_plan_pre_call(data)
             return None
+
+        async def async_pre_call_deployment_hook(
+            self,
+            kwargs: dict[str, Any],
+            call_type: Any,
+        ) -> dict[str, Any] | None:
+            """Router ``acompletion`` 在 deployment 合并后调用（生产热路径）。"""
+            await _apply_provider_plan_pre_call(kwargs)
+            return kwargs
 
     return _Impl()
 

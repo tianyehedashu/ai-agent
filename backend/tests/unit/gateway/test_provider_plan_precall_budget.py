@@ -139,3 +139,35 @@ async def test_provider_plan_stamps_metadata_for_callback(monkeypatch) -> None:
     inner_meta = data["litellm_params"]["metadata"]
     assert inner_meta["gateway_provider_plan_id"] == str(plan_id)
     assert inner_meta["gateway_provider_plan_reservations"][0]["quota_id"] == str(quota_id)
+
+
+@pytest.mark.asyncio
+async def test_provider_plan_deployment_hook_reads_top_level_model_info(monkeypatch) -> None:
+    """生产 Router 路径：``async_pre_call_deployment_hook`` + 顶层 ``model_info``。"""
+    cred_id = uuid.uuid4()
+    captured: dict[str, object] = {}
+
+    async def _capture(**kwargs: object) -> tuple[None, list[object], list[object]]:
+        captured.update(kwargs)
+        return None, [], []
+
+    provider_guard = ppg.get_provider_plan_guard()
+    provider_guard.check_and_reserve = AsyncMock(side_effect=_capture)  # type: ignore[method-assign]
+    monkeypatch.setattr(
+        budget_mod, "maybe_reserve_user_credential_budget", AsyncMock(return_value=None)
+    )
+
+    logger = ppg.build_provider_plan_pre_call_logger()
+    data: dict[str, Any] = {
+        "metadata": {"gateway_request_id": "req-router"},
+        "model_info": {
+            "gateway_credential_id": str(cred_id),
+            "gateway_real_model": "ep-20260410150612-9pncb",
+        },
+        "litellm_params": {"model": "ep-20260410150612-9pncb"},
+    }
+
+    await logger.async_pre_call_deployment_hook(data, "acompletion")
+
+    assert captured["credential_id"] == cred_id
+    assert captured["real_model"] == "ep-20260410150612-9pncb"

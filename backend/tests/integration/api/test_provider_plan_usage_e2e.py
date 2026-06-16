@@ -9,8 +9,6 @@ import types
 from typing import Any
 import uuid
 
-from contextlib import asynccontextmanager
-
 from httpx import AsyncClient
 import pytest
 from sqlalchemy import func, select
@@ -94,11 +92,9 @@ async def _merge_router_deployment(router: Any, kw: dict[str, Any]) -> None:
             if key not in target:
                 target[key] = value
         if isinstance(model_info, dict):
-            existing_mi = target.get("model_info")
-            if isinstance(existing_mi, dict):
-                target["model_info"] = {**existing_mi, **model_info}
-            else:
-                target["model_info"] = dict(model_info)
+            mi = dict(model_info)
+            kw["model_info"] = mi
+            target["model_info"] = mi
         return
 
 
@@ -114,9 +110,9 @@ async def _run_router_hooks(router: Any, kw: dict[str, Any], response_obj: Any) 
     kw.setdefault("litellm_call_id", request_id)
     now = time.time()
     for cb in list(litellm.callbacks or []):
-        pre_call = getattr(cb, "async_pre_call_hook", None)
-        if pre_call is not None:
-            await pre_call(None, None, kw, "completion")
+        deployment_hook = getattr(cb, "async_pre_call_deployment_hook", None)
+        if deployment_hook is not None:
+            await deployment_hook(kw, "acompletion")
     for cb in list(litellm.callbacks or []):
         on_success = getattr(cb, "async_log_success_event", None)
         if on_success is not None:
@@ -427,9 +423,9 @@ async def test_provider_plan_precall_stamps_metadata_seen_by_callback(
 
         await _merge_router_deployment(router_self, kw)
         for cb in list(litellm.callbacks or []):
-            pre_call = getattr(cb, "async_pre_call_hook", None)
-            if pre_call is not None:
-                await pre_call(None, None, kw, "completion")
+            deployment_hook = getattr(cb, "async_pre_call_deployment_hook", None)
+            if deployment_hook is not None:
+                await deployment_hook(kw, "acompletion")
         from domains.gateway.infrastructure.callbacks.cost_calculation import (
             extract_gateway_metadata,
         )
