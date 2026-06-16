@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: backend
-          image: giimall-acr-registry-vpc.cn-hangzhou.cr.aliyuncs.com/prod/ai-agent-backend:v1.0.0
+          image: giimall-acr-registry-vpc.cn-hangzhou.cr.aliyuncs.com/test/ai-agent-backend:v1.0.0
           imagePullPolicy: Always
           ports:
             - containerPort: 8000
