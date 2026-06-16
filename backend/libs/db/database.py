@@ -132,6 +132,30 @@ async def _commit_or_raise(session: AsyncSession) -> None:
         raise
 
 
+def session_has_pending_writes(session: AsyncSession) -> bool:
+    """请求级 session 是否存在待提交的 ORM 写入。"""
+    return _session_has_writes(session)
+
+
+def clear_session_write_marker(session: AsyncSession) -> None:
+    """清除 mid-request 写入标记（已在业务层显式 commit 后调用）。"""
+    session.sync_session.info.pop(_SESSION_HAS_WRITES_KEY, None)
+
+
+async def commit_pending_writes(session: AsyncSession) -> bool:
+    """仅提交待写入行并释放行锁/唯一索引锁；不结束只读事务。
+
+    用于凭据/模型注册后 Router 热重载等场景：统计、日志、只读查询无需与此写入同事务。
+    返回 ``True`` 表示执行了 commit。
+    """
+    if not _session_has_writes(session):
+        return False
+    await session.flush()
+    await _commit_or_raise(session)
+    clear_session_write_marker(session)
+    return True
+
+
 async def _finalize_dependency_session(session: AsyncSession) -> None:
     """FastAPI 依赖退出处理：写事务提交，纯读事务回滚释放连接。"""
     if _session_has_writes(session):

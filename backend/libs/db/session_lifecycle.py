@@ -4,6 +4,13 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from libs.db.database import (
+    _commit_or_raise,
+    clear_session_write_marker,
+    commit_pending_writes,
+    session_has_pending_writes,
+)
+
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -12,6 +19,25 @@ async def rollback_open_transaction(session: AsyncSession) -> None:
     """Rollback an open transaction when no later work depends on it."""
     if session.in_transaction():
         await session.rollback()
+
+
+async def release_session_before_blocking_io(session: AsyncSession) -> bool:
+    """在长耗时外部 I/O（上游探测、LLM/厂商 API）前结束当前 DB 事务。
+
+    - 有待提交写入：``flush`` + ``commit``，释放行锁。
+    - 只读未提交事务：``rollback``，避免 ``idle in transaction`` 占连接。
+
+    Router 热重载等 **仅读库** 的场景请用 ``commit_pending_writes``，不必 rollback 只读段。
+    """
+    if not session.in_transaction():
+        return False
+    if session_has_pending_writes(session):
+        await session.flush()
+        await _commit_or_raise(session)
+        clear_session_write_marker(session)
+        return True
+    await session.rollback()
+    return False
 
 
 async def release_request_db_connection(session: AsyncSession) -> None:
@@ -24,4 +50,9 @@ async def release_request_db_connection(session: AsyncSession) -> None:
     await session.close()
 
 
-__all__ = ["release_request_db_connection", "rollback_open_transaction"]
+__all__ = [
+    "commit_pending_writes",
+    "release_request_db_connection",
+    "release_session_before_blocking_io",
+    "rollback_open_transaction",
+]

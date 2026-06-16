@@ -113,7 +113,6 @@ async def reload_gateway_catalog_from_config(
     """平台管理员：从 gateway-catalog.seed.json 重新同步全局模型目录并重载 LiteLLM Router。"""
     report = await run_gateway_catalog_maintenance(db, settings=settings)
     log_gateway_catalog_maintenance_report(report)
-    await db.commit()
     await writes.reload_litellm_router()
     return {"ok": True, **report.to_api_dict()}
 

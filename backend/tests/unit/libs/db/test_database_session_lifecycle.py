@@ -9,10 +9,89 @@ from libs.db.database import (
     _finalize_dependency_session,
     _is_dirty_connection_error,
     _rollback_for_cleanup,
+    commit_pending_writes,
 )
+from libs.db.session_lifecycle import release_session_before_blocking_io
 
 
-def _fake_session(*, has_writes: bool = False) -> SimpleNamespace:
+def _fake_session(*, has_writes: bool = False, in_transaction: bool = True) -> SimpleNamespace:
+    sync_session = SimpleNamespace(
+        info={"_ai_agent_has_writes": True} if has_writes else {},
+        new=[],
+        dirty=[],
+        deleted=[],
+    )
+    return SimpleNamespace(
+        sync_session=sync_session,
+        in_transaction=lambda: in_transaction,
+        flush=AsyncMock(),
+        commit=AsyncMock(),
+        rollback=AsyncMock(),
+        invalidate=AsyncMock(),
+    )
+
+
+@pytest.mark.asyncio
+async def test_commit_pending_writes_skips_read_only_transaction() -> None:
+    session = _fake_session(has_writes=False)
+
+    committed = await commit_pending_writes(session)  # type: ignore[arg-type]
+
+    assert committed is False
+    session.flush.assert_not_awaited()
+    session.commit.assert_not_awaited()
+    session.rollback.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_commit_pending_writes_commits_and_clears_marker() -> None:
+    session = _fake_session(has_writes=True)
+
+    committed = await commit_pending_writes(session)  # type: ignore[arg-type]
+
+    assert committed is True
+    session.flush.assert_awaited_once()
+    session.commit.assert_awaited_once()
+    assert "_ai_agent_has_writes" not in session.sync_session.info
+
+
+@pytest.mark.asyncio
+async def test_release_session_before_blocking_io_commits_pending_writes() -> None:
+    session = _fake_session(has_writes=True)
+
+    committed = await release_session_before_blocking_io(session)  # type: ignore[arg-type]
+
+    assert committed is True
+    session.flush.assert_awaited_once()
+    session.commit.assert_awaited_once()
+    session.rollback.assert_not_awaited()
+    assert "_ai_agent_has_writes" not in session.sync_session.info
+
+
+@pytest.mark.asyncio
+async def test_release_session_before_blocking_io_rolls_back_read_only_txn() -> None:
+    session = _fake_session(has_writes=False)
+
+    committed = await release_session_before_blocking_io(session)  # type: ignore[arg-type]
+
+    assert committed is False
+    session.flush.assert_not_awaited()
+    session.commit.assert_not_awaited()
+    session.rollback.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_dependency_session_rolls_back_after_mid_request_write_commit() -> None:
+    session = _fake_session(has_writes=True)
+    await commit_pending_writes(session)  # type: ignore[arg-type]
+
+    await _finalize_dependency_session(session)  # type: ignore[arg-type]
+
+    session.rollback.assert_awaited_once()
+    session.commit.assert_awaited_once()
+
+
+def _fake_session_legacy(*, has_writes: bool = False) -> SimpleNamespace:
     sync_session = SimpleNamespace(
         info={"_ai_agent_has_writes": True} if has_writes else {},
         new=[],
@@ -29,7 +108,7 @@ def _fake_session(*, has_writes: bool = False) -> SimpleNamespace:
 
 @pytest.mark.asyncio
 async def test_dependency_session_rolls_back_read_only_request() -> None:
-    session = _fake_session(has_writes=False)
+    session = _fake_session_legacy(has_writes=False)
 
     await _finalize_dependency_session(session)  # type: ignore[arg-type]
 
@@ -40,7 +119,7 @@ async def test_dependency_session_rolls_back_read_only_request() -> None:
 
 @pytest.mark.asyncio
 async def test_dependency_session_commits_when_request_has_writes() -> None:
-    session = _fake_session(has_writes=True)
+    session = _fake_session_legacy(has_writes=True)
 
     await _finalize_dependency_session(session)  # type: ignore[arg-type]
 
@@ -50,7 +129,7 @@ async def test_dependency_session_commits_when_request_has_writes() -> None:
 
 @pytest.mark.asyncio
 async def test_dirty_connection_is_invalidated_on_cleanup_rollback_failure() -> None:
-    session = _fake_session()
+    session = _fake_session_legacy()
     session.rollback.side_effect = RuntimeError(
         "cannot perform operation: another operation is in progress"
     )

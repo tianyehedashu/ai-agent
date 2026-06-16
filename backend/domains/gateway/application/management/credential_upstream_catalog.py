@@ -242,8 +242,9 @@ class CredentialUpstreamCatalogService:
                 http_status=None,
         )
         profile = get_upstream_profile(row.profile_id, provider=row.provider)
-        if self._session.in_transaction():
-            await self._session.commit()
+        from libs.db.session_lifecycle import release_session_before_blocking_io
+
+        await release_session_before_blocking_io(self._session)
         raw = await self._port.fetch_models(
             list_url=url,
             api_key=api_key,

@@ -396,6 +396,10 @@ class GatewayManagementWriteBaseMixin:
         from domains.gateway.application.route_snapshot_cache import (
             clear_route_snapshot_cache_for_tests,
         )
+        from libs.db.database import commit_pending_writes
+
+        # 只提交凭据/模型等写入以释放唯一索引锁；Router 重载为只读，不必 rollback 只读事务。
+        await commit_pending_writes(self._session)
 
         if tenant_id is not None:
             invalidate_gateway_read_caches_for_tenant(tenant_id)

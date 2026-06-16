@@ -173,8 +173,9 @@ class ProbeWritesMixin:
         api_base = credential.api_base
         probe_actor_id = await self._resolve_probe_actor_user_id(tenant_id, actor_user_id)
         ensure_gateway_callbacks()
-        if self._session.in_transaction():
-            await self._session.commit()
+        from libs.db.session_lifecycle import release_session_before_blocking_io
+
+        await release_session_before_blocking_io(self._session)
         from litellm import acompletion, aembedding, aimage_generation, avideo_generation
 
         def _litellm_kw(base: dict[str, Any]) -> dict[str, Any]:
