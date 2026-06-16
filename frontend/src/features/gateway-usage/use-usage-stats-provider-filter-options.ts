@@ -12,6 +12,7 @@ import {
   providerFilterOptionsFromProfiles,
   providerFilterOptionsFromUsageItems,
 } from '@/features/gateway-usage/usage-stats-filter-catalog'
+import { GATEWAY_USAGE_STATS_STALE_MS } from '@/features/gateway-usage/usage-stats-query'
 import { MAX_PAGE_SIZE } from '@/lib/pagination'
 
 export type UsageStatsProviderDiscoveryFilters = Omit<
@@ -26,6 +27,8 @@ export interface UseUsageStatsProviderFilterOptionsParams {
   baseFilters: UsageStatsProviderDiscoveryFilters
   registryProviders: readonly GatewayFilterOption[]
   enabled: boolean
+  /** 为 true 时拉取 statistics(provider) 与 profiles；否则仅用凭据/模型注册表。 */
+  discoverFromUsage: boolean
 }
 
 export interface UsageStatsProviderFilterOptionsResult {
@@ -40,11 +43,14 @@ export function useUsageStatsProviderFilterOptions({
   baseFilters,
   registryProviders,
   enabled,
+  discoverFromUsage,
 }: UseUsageStatsProviderFilterOptionsParams): UsageStatsProviderFilterOptionsResult {
+  const discoveryEnabled = enabled && discoverFromUsage && teamId.length > 0
+
   const profilesQuery = useQuery({
     queryKey: ['gateway', 'provider-profiles'],
     queryFn: () => providerProfilesApi.listProviderProfiles(),
-    enabled,
+    enabled: discoveryEnabled,
     staleTime: 300_000,
   })
 
@@ -67,21 +73,32 @@ export function useUsageStatsProviderFilterOptions({
         page_size: MAX_PAGE_SIZE,
         ...baseFilters,
       }),
-    enabled: enabled && teamId.length > 0,
-    staleTime: 60_000,
+    enabled: discoveryEnabled,
+    staleTime: GATEWAY_USAGE_STATS_STALE_MS,
   })
 
   const options = useMemo(
     () =>
       mergeProviderFilterOptions(
-        providerFilterOptionsFromUsageItems(usageProvidersQuery.data?.items ?? []),
+        discoverFromUsage
+          ? providerFilterOptionsFromUsageItems(usageProvidersQuery.data?.items ?? [])
+          : [],
         registryProviders,
-        providerFilterOptionsFromProfiles(profilesQuery.data?.profiles ?? [])
+        discoverFromUsage
+          ? providerFilterOptionsFromProfiles(profilesQuery.data?.profiles ?? [])
+          : []
       ),
-    [usageProvidersQuery.data?.items, registryProviders, profilesQuery.data?.profiles]
+    [
+      discoverFromUsage,
+      usageProvidersQuery.data?.items,
+      registryProviders,
+      profilesQuery.data?.profiles,
+    ]
   )
 
-  const loading = usageProvidersQuery.isLoading || (profilesQuery.isLoading && options.length === 0)
+  const loading =
+    discoveryEnabled &&
+    (usageProvidersQuery.isLoading || (profilesQuery.isLoading && options.length === 0))
 
   return { options, loading }
 }

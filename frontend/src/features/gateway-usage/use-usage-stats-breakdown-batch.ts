@@ -9,6 +9,7 @@ import {
   type GatewayUsageStatsItem,
   type UsageStatisticsBreakdownResponse,
 } from '@/api/gateway/stats'
+import { GATEWAY_USAGE_STATS_STALE_MS } from '@/features/gateway-usage/usage-stats-query'
 import { buildFilterKey } from '@/lib/pagination'
 
 export const TABLE_MODEL_TOP_N = 1
@@ -166,7 +167,7 @@ export function useUsageStatsBreakdownBatch({
         queryKey: def.queryKey,
         queryFn: def.queryFn,
         enabled: enabled && queryDefs.length > 0,
-        staleTime: 60_000,
+        staleTime: GATEWAY_USAGE_STATS_STALE_MS,
         placeholderData: keepPreviousData,
       })),
     [queryDefs, enabled]

@@ -68,6 +68,7 @@ import {
   getUsageStatsIdentityColumnHeaders,
   USAGE_STATS_GROUP_OPTIONS,
 } from '@/features/gateway-usage/usage-stats-group-options'
+import { GATEWAY_USAGE_STATS_STALE_MS } from '@/features/gateway-usage/usage-stats-query'
 import { UsageStatsRankingTable } from '@/features/gateway-usage/usage-stats-ranking-table'
 import { usePlatformUserStatsFilterSearch } from '@/features/gateway-usage/use-platform-user-stats-filter-search'
 import {
@@ -258,6 +259,7 @@ export default function GatewayStatsPage(): React.JSX.Element {
   const [drillSegments, setDrillSegments] = useState<UsageStatsDrillSegment[]>([])
   const [detailItem, setDetailItem] = useState<GatewayUsageStatsItem | null>(null)
   const [detailOpen, setDetailOpen] = useState(false)
+  const [providerDiscoveryRequested, setProviderDiscoveryRequested] = useState(false)
 
   const crossTeamStatsEnabled = isCrossTeamUsageStatsEnabled(usageAggregation)
   const dateRangeQuery = useMemo(() => usageStatsDateRangeToQuery(dateRange), [dateRange])
@@ -375,6 +377,9 @@ export default function GatewayStatsPage(): React.JSX.Element {
     return rest
   }, [filterQueryFields])
 
+  const providerDiscoverFromUsage =
+    providerDiscoveryRequested || filterState.provider !== GATEWAY_FILTER_ALL
+
   const { options: providerOptions, loading: providerOptionsLoading } =
     useUsageStatsProviderFilterOptions({
       teamId,
@@ -383,6 +388,7 @@ export default function GatewayStatsPage(): React.JSX.Element {
       baseFilters: providerDiscoveryFilters,
       registryProviders: registryProviderOptions,
       enabled: !!teamId,
+      discoverFromUsage: providerDiscoverFromUsage,
     })
 
   const queryParams = useMemo((): GatewayUsageStatsQuery => {
@@ -416,6 +422,7 @@ export default function GatewayStatsPage(): React.JSX.Element {
     ),
     queryFn: () => statsApi.usageStats(teamId, queryParams),
     enabled: !!teamId,
+    staleTime: GATEWAY_USAGE_STATS_STALE_MS,
   })
 
   const showBreakdownCols = shouldShowBreakdownColumns(groupBy)
@@ -858,6 +865,9 @@ export default function GatewayStatsPage(): React.JSX.Element {
                 placeholder="提供商"
                 searchPlaceholder="搜索提供商…"
                 loading={providerOptionsLoading}
+                onOpenChange={(open) => {
+                  if (open) setProviderDiscoveryRequested(true)
+                }}
                 active={filterState.provider !== GATEWAY_FILTER_ALL}
                 className={STATS_FILTER_TRIGGER}
               />

@@ -65,7 +65,7 @@ export function usageStatsPresetDateRange(
 }
 
 export function usageStatsDefaultDateRange(): UsageStatsDateRangeSelection {
-  return usageStatsPresetDateRange(7)
+  return usageStatsPresetDateRange(1)
 }
 
 export function usageStatsCustomDateRange(
@@ -90,7 +90,7 @@ export function usageStatsDateRangeToQuery(
   const start = parseDateInputValue(selection.startDate)
   const end = dateAtEndOfDay(selection.endDate)
   if (start === null || end === null) {
-    return { days: 7 }
+    return { days: 1 }
   }
   return {
     start: start.toISOString(),
