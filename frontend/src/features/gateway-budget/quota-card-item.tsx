@@ -8,7 +8,6 @@ import type { QuotaRule } from '@/api/gateway/quota-rules'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
-import { credentialsListHref } from '@/features/gateway-models/paths'
 import { Pencil, Trash2 } from '@/lib/lucide-icons'
 import { cn } from '@/lib/utils'
 
@@ -17,6 +16,7 @@ import {
   formatQuotaRulePeriod,
   LAYER_LABELS,
   parseQuotaNumeric,
+  resolveQuotaRulePlanManagementLink,
   type QuotaRuleLabelContext,
 } from './quota-rule-utils'
 
@@ -63,6 +63,15 @@ export function QuotaCardItem({
           : rule.key.access_id
             ? (labelContext.keyLabels.get(rule.key.access_id) ?? 'Key')
             : '—'
+
+  const planManagementLink = isPlanRule
+    ? resolveQuotaRulePlanManagementLink(rule, labelContext)
+    : null
+  const planManagementPending =
+    isPlanRule &&
+    rule.key.layer === 'upstream' &&
+    Boolean(rule.key.model_name) &&
+    labelContext.planRuleModelLookupLoading
 
   return (
     <Card
@@ -154,21 +163,19 @@ export function QuotaCardItem({
             <span className="inline-flex items-center rounded-md bg-blue-50 px-1.5 py-0.5 text-[11px] font-medium text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
               {rule.plan_label ?? '计划'}
             </span>
-            <Link
-              to={
-                rule.key.layer === 'upstream'
-                  ? credentialsListHref(rule.key.team_id, {
-                      credentialId: rule.key.credential_id ?? undefined,
-                    })
-                  : `/gateway/virtual-keys${rule.key.access_id ? `?id=${rule.key.access_id}` : ''}`
-              }
-              className="text-[11px] text-primary hover:underline"
-              onClick={(e) => {
-                e.stopPropagation()
-              }}
-            >
-              去{rule.key.layer === 'upstream' ? '凭据' : 'Key'}页管理
-            </Link>
+            {planManagementPending ? (
+              <span className="text-[11px] text-muted-foreground">加载模型…</span>
+            ) : planManagementLink ? (
+              <Link
+                to={planManagementLink.href}
+                className="text-[11px] text-primary hover:underline"
+                onClick={(e) => {
+                  e.stopPropagation()
+                }}
+              >
+                {planManagementLink.label}
+              </Link>
+            ) : null}
           </div>
         ) : (
           <div>

@@ -5,6 +5,7 @@ import { useSearchParams } from 'react-router-dom'
 
 import {
   gatewayApi,
+  fetchAllGatewayModelPages,
   fetchAllManagedTeamModelPages,
   fetchAllPersonalGatewayModels,
   type QuotaRule,
@@ -50,7 +51,12 @@ import {
   type RealModelsByCredential,
 } from './quota-batch-rules'
 import { executeQuotaBatchUpsert } from './quota-batch-upsert'
-import { quotaRuleRowId, type QuotaRuleLabelContext } from './quota-rule-utils'
+import {
+  buildQuotaRuleModelLookupFromCatalog,
+  hasUpstreamPlanRules,
+  quotaRuleRowId,
+  type QuotaRuleLabelContext,
+} from './quota-rule-utils'
 import { gatewayBudgetsBaseQueryKey } from './use-gateway-budgets'
 import {
   GATEWAY_QUOTA_META_STALE_MS,
@@ -160,10 +166,11 @@ function useQuotaCenterImpl(): QuotaCenterState {
   )
 
   const rulesQuery = useGatewayQuotaRules(teamId, listParams)
+  const quotaRules = useMemo(() => rulesQuery.data ?? [], [rulesQuery.data])
 
   const needsPickerData = batchOpen || modelFilter.trim() !== ''
-  const needsLabelData =
-    batchOpen || (rulesQuery.data?.length ?? 0) > 0 || credentialPrefill !== null || isAdmin
+  const needsUpstreamPlanModelLookup = useMemo(() => hasUpstreamPlanRules(quotaRules), [quotaRules])
+  const needsLabelData = batchOpen || quotaRules.length > 0 || credentialPrefill !== null || isAdmin
 
   const keysQuery = useGatewayVirtualKeys(teamId, {
     enabled: teamId.length > 0 && needsLabelData,
@@ -183,15 +190,42 @@ function useQuotaCenterImpl(): QuotaCenterState {
     { enabled: needsPickerData, prefetchMode: 'open' }
   )
 
+  const planRuleModelLookupQuery = useQuery({
+    queryKey: [
+      'gateway',
+      'quota-center',
+      'plan-rule-model-lookup',
+      teamId,
+      isPlatformAdmin ? 'managed' : 'callable',
+    ],
+    queryFn: async () => {
+      const [callableModels, managedModels, personalModels] = await Promise.all([
+        fetchAllGatewayModelPages(teamId, { registry_scope: 'callable' }),
+        isPlatformAdmin || adminTeamIds.size > 1
+          ? fetchAllManagedTeamModelPages()
+          : Promise.resolve([] as GatewayModel[]),
+        fetchAllPersonalGatewayModels(),
+      ])
+      const teamModels = [...callableModels]
+      const seenIds = new Set(callableModels.map((m) => m.id))
+      for (const model of managedModels) {
+        if (!seenIds.has(model.id)) {
+          seenIds.add(model.id)
+          teamModels.push(model)
+        }
+      }
+      return buildQuotaRuleModelLookupFromCatalog({ teamModels, personalModels })
+    },
+    enabled: needsUpstreamPlanModelLookup && teamId.length > 0,
+    staleTime: GATEWAY_MODELS_STALE_MS,
+  })
+
   const routesQuery = useGatewayRoutes(teamId, {
     enabled: teamId.length > 0 && needsPickerData,
     staleTime: GATEWAY_MODELS_STALE_MS,
   })
 
-  const existingModelNames = useMemo(
-    () => (rulesQuery.data ?? []).map((r) => r.key.model_name),
-    [rulesQuery.data]
-  )
+  const existingModelNames = useMemo(() => quotaRules.map((r) => r.key.model_name), [quotaRules])
 
   const modelOptions = useMemo(
     () =>
@@ -216,8 +250,24 @@ function useQuotaCenterImpl(): QuotaCenterState {
     for (const c of actorCredentials.list) {
       credentialLabels.set(c.id, c.name)
     }
-    return { memberLabels, keyLabels, credentialLabels }
-  }, [membersQuery.data, keysQuery.data, actorCredentials.list])
+    return {
+      memberLabels,
+      keyLabels,
+      credentialLabels,
+      modelRefByCredentialRealModel: planRuleModelLookupQuery.data,
+      planRuleModelLookupLoading:
+        needsUpstreamPlanModelLookup &&
+        (planRuleModelLookupQuery.isLoading || planRuleModelLookupQuery.isFetching),
+    }
+  }, [
+    membersQuery.data,
+    keysQuery.data,
+    actorCredentials.list,
+    planRuleModelLookupQuery.data,
+    planRuleModelLookupQuery.isLoading,
+    planRuleModelLookupQuery.isFetching,
+    needsUpstreamPlanModelLookup,
+  ])
 
   // 周期等筛选由后端 list 参数完成（滚动窗口型 upstream/downstream 规则的保留规则在服务端），
   // 此处不再二次过滤，避免与服务端语义不一致导致规则"消失"。
@@ -559,7 +609,7 @@ function useQuotaCenterImpl(): QuotaCenterState {
     (rule: QuotaRule) => {
       const budgetId = rule.source_ref.budget_id
       if (!budgetId) {
-        toast({ title: '计划类配额请至凭据/Key 页管理', variant: 'destructive' })
+        toast({ title: '计划类配额请至模型详情或 Key 页管理', variant: 'destructive' })
         return
       }
       // P11: 删除确认 — 直接执行删除，由调用方展示确认对话框
@@ -584,7 +634,7 @@ function useQuotaCenterImpl(): QuotaCenterState {
       const deletable = rules.filter((r) => r.source_ref.budget_id !== null)
       if (deletable.length === 0) {
         toast({
-          title: '所选规则均不可删除（计划类配额请至凭据/Key 页管理）',
+          title: '所选规则均不可删除（计划类配额请至模型详情或 Key 页管理）',
           variant: 'destructive',
         })
         return
@@ -697,7 +747,7 @@ function useQuotaCenterImpl(): QuotaCenterState {
       if (!parsed) {
         toast({
           title: '暂不支持编辑此规则',
-          description: '上游/下游配额及计划类规则请在凭据/Key 页管理。',
+          description: '上游/下游配额及计划类规则请在模型详情或 Key 页管理。',
           variant: 'destructive',
         })
         return

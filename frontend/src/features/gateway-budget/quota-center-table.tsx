@@ -10,7 +10,6 @@ import type { QuotaRule } from '@/api/gateway/quota-rules'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
-import { credentialsListHref } from '@/features/gateway-models/paths'
 import { ArrowDown, ArrowUp, Loader2, Pencil, Trash2 } from '@/lib/lucide-icons'
 import { cn } from '@/lib/utils'
 
@@ -20,36 +19,38 @@ import {
   LAYER_LABELS,
   LAYER_ORDER,
   quotaRuleRowId,
+  resolveQuotaRulePlanManagementLink,
   resolveQuotaRuleCredentialLabel,
   resolveQuotaRuleSubjectLabel,
   type QuotaRuleLabelContext,
 } from './quota-rule-utils'
 
-/** upstream/downstream 规则的管理页路由提示（P16: 带 ID 参数直接定位） */
+/** 计划类 upstream/downstream 规则的管理页跳转 */
 function PlanRuleManagementHint({
-  layer,
-  id,
-  contextTeamId,
+  rule,
+  labelContext,
 }: {
-  layer: 'upstream' | 'downstream'
-  id?: string
-  /** 规则所属团队（跨团队 upstream 时与 URL teamId 可能不同） */
-  contextTeamId: string
-}): React.JSX.Element {
-  const label = layer === 'upstream' ? '凭据' : 'Key'
-  const path =
-    layer === 'upstream'
-      ? credentialsListHref(contextTeamId, { credentialId: id })
-      : `/gateway/virtual-keys${id ? `?id=${id}` : ''}`
+  rule: QuotaRule
+  labelContext: QuotaRuleLabelContext
+}): React.JSX.Element | null {
+  if (
+    rule.key.layer === 'upstream' &&
+    rule.key.model_name &&
+    labelContext.planRuleModelLookupLoading
+  ) {
+    return <span className="text-xs text-muted-foreground">加载模型…</span>
+  }
+  const link = resolveQuotaRulePlanManagementLink(rule, labelContext)
+  if (!link) return null
   return (
     <Link
-      to={path}
+      to={link.href}
       className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
       onClick={(e) => {
         e.stopPropagation()
       }}
     >
-      去{label}页管理
+      {link.label}
     </Link>
   )
 }
@@ -293,11 +294,7 @@ const QuotaCenterTableRow = memo(function QuotaCenterTableRow({
             </Button>
           ) : null}
           {isPlanRule && planLayer ? (
-            <PlanRuleManagementHint
-              layer={planLayer}
-              id={rule.key.credential_id ?? rule.key.access_id ?? undefined}
-              contextTeamId={rule.key.team_id}
-            />
+            <PlanRuleManagementHint rule={rule} labelContext={labelContext} />
           ) : null}
         </div>
       </td>

@@ -1,4 +1,13 @@
+import type { GatewayModel } from '@/api/gateway/models'
+import type { PersonalGatewayModel } from '@/api/gateway/my-models'
 import type { ListQuotaRulesParams, QuotaRule, QuotaRuleLayer } from '@/api/gateway/quota-rules'
+import {
+  modelsIndexHref,
+  personalModelDetailHref,
+  systemModelDetailHref,
+  teamModelDetailHref,
+  teamModelsFilteredHref,
+} from '@/features/gateway-models/paths'
 
 import type { BudgetViewContext } from './budget-match'
 
@@ -42,10 +51,118 @@ export function formatQuotaRulePeriod(rule: QuotaRule): string {
   return '—'
 }
 
+export interface QuotaRuleModelRef {
+  modelId: string
+  registryKind: 'team' | 'system' | 'personal'
+}
+
 export interface QuotaRuleLabelContext {
   memberLabels: Map<string, string>
   keyLabels: Map<string, string>
   credentialLabels: Map<string, string>
+  /** upstream 计划配额：`credentialId:realModel` → 模型详情 */
+  modelRefByCredentialRealModel?: Map<string, QuotaRuleModelRef>
+  /** 全量模型目录加载中（避免链接在 lookup 完成前误降级为列表页） */
+  planRuleModelLookupLoading?: boolean
+}
+
+/** 是否存在需跳转模型详情的 upstream 计划类规则（``budget_id IS NULL``）。 */
+export function hasUpstreamPlanRules(rules: readonly QuotaRule[]): boolean {
+  return rules.some((rule) => rule.source_ref.budget_id === null && rule.key.layer === 'upstream')
+}
+
+export function quotaRuleCredentialRealModelKey(credentialId: string, realModel: string): string {
+  return `${credentialId}:${realModel}`
+}
+
+export function buildQuotaRuleModelLookup(
+  models: readonly Pick<GatewayModel, 'id' | 'credential_id' | 'real_model' | 'registry_kind'>[]
+): Map<string, QuotaRuleModelRef> {
+  const map = new Map<string, QuotaRuleModelRef>()
+  for (const model of models) {
+    const realModel = model.real_model.trim()
+    if (!realModel) continue
+    const key = quotaRuleCredentialRealModelKey(model.credential_id, realModel)
+    if (map.has(key)) continue
+    map.set(key, {
+      modelId: model.id,
+      registryKind: model.registry_kind === 'system' ? 'system' : 'team',
+    })
+  }
+  return map
+}
+
+/** 合并团队/系统 callable 与个人 BYOK 模型，供 upstream 计划配额深链解析。 */
+export function buildQuotaRuleModelLookupFromCatalog(input: {
+  teamModels?: readonly Pick<
+    GatewayModel,
+    'id' | 'credential_id' | 'real_model' | 'registry_kind'
+  >[]
+  personalModels?: readonly Pick<PersonalGatewayModel, 'id' | 'credential_id' | 'model_id'>[]
+}): Map<string, QuotaRuleModelRef> {
+  const map = buildQuotaRuleModelLookup(input.teamModels ?? [])
+  for (const model of input.personalModels ?? []) {
+    const realModel = model.model_id.trim()
+    if (!realModel) continue
+    const key = quotaRuleCredentialRealModelKey(model.credential_id, realModel)
+    if (map.has(key)) continue
+    map.set(key, { modelId: model.id, registryKind: 'personal' })
+  }
+  return map
+}
+
+export interface QuotaRulePlanManagementLink {
+  href: string
+  label: string
+}
+
+/** 计划类 upstream/downstream 规则的操作列跳转（upstream → 模型详情/列表）。 */
+export function resolveQuotaRulePlanManagementLink(
+  rule: QuotaRule,
+  ctx: QuotaRuleLabelContext
+): QuotaRulePlanManagementLink | null {
+  if (rule.key.layer === 'downstream') {
+    const id = rule.key.access_id ?? undefined
+    return {
+      href: `/gateway/virtual-keys${id ? `?id=${id}` : ''}`,
+      label: '去 Key 页管理',
+    }
+  }
+  if (rule.key.layer !== 'upstream') return null
+
+  const teamId = rule.key.team_id
+  const credentialId = rule.key.credential_id ?? undefined
+  const realModel = rule.key.model_name?.trim()
+
+  if (realModel && credentialId && ctx.modelRefByCredentialRealModel) {
+    const ref = ctx.modelRefByCredentialRealModel.get(
+      quotaRuleCredentialRealModelKey(credentialId, realModel)
+    )
+    if (ref) {
+      const href =
+        ref.registryKind === 'personal'
+          ? personalModelDetailHref(teamId, ref.modelId)
+          : ref.registryKind === 'system'
+            ? systemModelDetailHref(teamId, ref.modelId, credentialId)
+            : teamModelDetailHref(teamId, ref.modelId, { credentialId })
+      return { href, label: '去模型详情管理' }
+    }
+    if (ctx.planRuleModelLookupLoading) {
+      return null
+    }
+  }
+
+  if (credentialId) {
+    return {
+      href: teamModelsFilteredHref(teamId, credentialId),
+      label: realModel ? '去模型列表' : '查看关联模型',
+    }
+  }
+
+  return {
+    href: modelsIndexHref(teamId),
+    label: '去模型列表',
+  }
 }
 
 export function resolveQuotaRuleSubjectLabel(rule: QuotaRule, ctx: QuotaRuleLabelContext): string {
