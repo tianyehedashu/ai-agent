@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: frontend
-          image: giimall-acr-registry-vpc.cn-hangzhou.cr.aliyuncs.com/prod/ai-agent-frontend:v1.0.0
+          image: giimall-acr-registry-vpc.cn-hangzhou.cr.aliyuncs.com/test/ai-agent-frontend:v1.0.0
           imagePullPolicy: Always
           ports:
             - containerPort: 80
