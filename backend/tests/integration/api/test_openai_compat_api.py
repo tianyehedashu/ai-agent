@@ -73,9 +73,10 @@ async def _setup_team_model_vkey(
     test_user: User,
 ) -> tuple[str, str]:
     team = await TeamService(db_session).ensure_personal_team(test_user.id)
+    team_id = team.id
     await db_session.commit()
     cred = await dev_client.post(
-        f"/api/v1/gateway/teams/{team.id}/credentials",
+        f"/api/v1/gateway/teams/{team_id}/credentials",
         headers=auth_headers,
         json={
             "provider": "openai",
@@ -88,7 +89,7 @@ async def _setup_team_model_vkey(
     cid = cred.json()["id"]
     model_name = f"timing-{uuid.uuid4().hex[:6]}"
     model = await dev_client.post(
-        f"/api/v1/gateway/teams/{team.id}/models",
+        f"/api/v1/gateway/teams/{team_id}/models",
         headers=auth_headers,
         json={
             "name": model_name,
@@ -101,7 +102,7 @@ async def _setup_team_model_vkey(
     assert model.status_code == 201, model.text
     await reload_router(db_session)
     key = await dev_client.post(
-        f"/api/v1/gateway/teams/{team.id}/keys",
+        f"/api/v1/gateway/teams/{team_id}/keys",
         headers=auth_headers,
         json={"name": f"timing-vkey-{uuid.uuid4().hex[:8]}"},
     )

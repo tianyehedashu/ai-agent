@@ -144,7 +144,11 @@ async def test_probe_managed_openai_uses_port(db_session, test_user: User) -> No
     )
     team = await TeamService(db_session).ensure_personal_team(test_user.id)
     row = await create_tenant_test_credential(
-        db_session, team.id, name="team-openai", provider="openai"
+        db_session,
+        team.id,
+        name="team-openai",
+        provider="openai",
+        created_by_user_id=test_user.id,
     )
     await db_session.commit()
 
@@ -165,7 +169,11 @@ async def test_batch_import_team_duplicate_fails(db_session, test_user: User) ->
     port = AsyncMock()
     team = await TeamService(db_session).ensure_personal_team(test_user.id)
     cred = await create_tenant_test_credential(
-        db_session, team.id, name="import-cred", provider="openai"
+        db_session,
+        team.id,
+        name="import-cred",
+        provider="openai",
+        created_by_user_id=test_user.id,
     )
     from domains.gateway.application.management.writes import GatewayManagementWriteService
 
@@ -213,7 +221,11 @@ async def test_batch_import_team_success(db_session, test_user: User) -> None:
     port = AsyncMock()
     team = await TeamService(db_session).ensure_personal_team(test_user.id)
     cred = await create_tenant_test_credential(
-        db_session, team.id, name="import-cred-2", provider="openai"
+        db_session,
+        team.id,
+        name="import-cred-2",
+        provider="openai",
+        created_by_user_id=test_user.id,
     )
     await db_session.commit()
 
@@ -400,10 +412,18 @@ async def test_batch_import_cross_credential_same_upstream_id_succeeds(
     port = AsyncMock()
     team = await TeamService(db_session).ensure_personal_team(test_user.id)
     cred_a = await create_tenant_test_credential(
-        db_session, team.id, name="import-cred-a", provider="openai"
+        db_session,
+        team.id,
+        name="import-cred-a",
+        provider="openai",
+        created_by_user_id=test_user.id,
     )
     cred_b = await create_tenant_test_credential(
-        db_session, team.id, name="import-cred-b", provider="openai"
+        db_session,
+        team.id,
+        name="import-cred-b",
+        provider="openai",
+        created_by_user_id=test_user.id,
     )
     from domains.gateway.application.management.writes import GatewayManagementWriteService
 

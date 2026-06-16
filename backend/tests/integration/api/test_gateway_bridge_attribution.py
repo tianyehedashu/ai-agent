@@ -141,6 +141,24 @@ def _patched_acompletion_raising():
 
 
 @pytest.fixture(autouse=True)
+def _disable_gateway_resolve_model_cache(monkeypatch: pytest.MonkeyPatch) -> None:
+    """避免进程内 resolve 缓存在多用例间留下负缓存。"""
+    from bootstrap.config import settings
+
+    monkeypatch.setattr(settings, "gateway_resolve_model_cache_enabled", False)
+
+
+@pytest.fixture(autouse=True)
+def _clear_resolve_model_cache() -> None:
+    """避免进程内负缓存让同 worker 后续用例误判模型未注册。"""
+    from domains.gateway.application.resolve_model_cache import (
+        clear_resolve_model_cache_for_tests,
+    )
+
+    clear_resolve_model_cache_for_tests()
+
+
+@pytest.fixture(autouse=True)
 def _disable_redis_counters(monkeypatch: pytest.MonkeyPatch) -> None:
     """跳过 Redis 计数（测试不引入 redis）。"""
 
@@ -222,6 +240,7 @@ async def test_chat_writes_gateway_request_log_with_full_attribution(
     必须能按 ``team_id`` 聚合到 dashboard。
     """
     team = await TeamService(db_session).ensure_personal_team(test_user.id)
+    team_id = team.id
     await db_session.commit()
 
     monkeypatch.setattr(
@@ -236,10 +255,10 @@ async def test_chat_writes_gateway_request_log_with_full_attribution(
     )
     await shutdown_proxy_deferred_tasks()
 
-    rows = await _read_logs(db_session, team.id)
+    rows = await _read_logs(db_session, team_id)
     assert len(rows) == 1, f"expected one request log row, got {len(rows)}"
     row = rows[0]
-    assert row.tenant_id == team.id
+    assert row.tenant_id == team_id
     assert row.user_id == test_user.id
     assert row.vkey_id is not None, "system vkey id must be persisted as attribution"
     assert row.input_tokens == 11
@@ -251,7 +270,7 @@ async def test_chat_writes_gateway_request_log_with_full_attribution(
         (
             await db_session.execute(
                 select(GatewayVirtualKey).where(
-                    GatewayVirtualKey.tenant_id == team.id,
+                    GatewayVirtualKey.tenant_id == team_id,
                     GatewayVirtualKey.is_system.is_(True),
                     GatewayVirtualKey.is_active.is_(True),
                 )
@@ -285,6 +304,7 @@ async def test_repeated_chat_always_reuses_same_system_vkey(
     并发状态机噪声。
     """
     team = await TeamService(db_session).ensure_personal_team(test_user.id)
+    team_id = team.id
     await db_session.commit()
 
     monkeypatch.setattr(
@@ -300,10 +320,10 @@ async def test_repeated_chat_always_reuses_same_system_vkey(
         )
         await shutdown_proxy_deferred_tasks()
 
-    rows = await _read_logs(db_session, team.id)
+    rows = await _read_logs(db_session, team_id)
     assert len(rows) == 4
     for row in rows:
-        assert row.tenant_id == team.id
+        assert row.tenant_id == team_id
         assert row.user_id == test_user.id
         assert row.vkey_id is not None
 
@@ -314,7 +334,7 @@ async def test_repeated_chat_always_reuses_same_system_vkey(
         (
             await db_session.execute(
                 select(GatewayVirtualKey).where(
-                    GatewayVirtualKey.tenant_id == team.id,
+                    GatewayVirtualKey.tenant_id == team_id,
                     GatewayVirtualKey.is_system.is_(True),
                     GatewayVirtualKey.is_active.is_(True),
                 )
@@ -375,6 +395,7 @@ async def test_verbose_internal_override_persists_prompt_and_long_response_previ
     )
 
     team = await TeamService(db_session).ensure_personal_team(test_user.id)
+    team_id = team.id
     await db_session.commit()
 
     long_content = "R" * 800
@@ -400,7 +421,7 @@ async def test_verbose_internal_override_persists_prompt_and_long_response_previ
     finally:
         reset_internal_store_full_override(token)
 
-    rows = await _read_logs(db_session, team.id)
+    rows = await _read_logs(db_session, team_id)
     assert len(rows) == 1
     row = rows[0]
     assert row.prompt_redacted is not None

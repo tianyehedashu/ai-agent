@@ -30,6 +30,7 @@ async def create_tenant_test_credential(
     name: str,
     api_base: str | None = None,
     extra: dict[str, Any] | None = None,
+    created_by_user_id: uuid.UUID | None = None,
 ) -> ProviderCredential:
     encryption_key = derive_encryption_key(settings.secret_key.get_secret_value())
     return await ProviderCredentialRepository(db_session).create_for_tenant(
@@ -39,4 +40,5 @@ async def create_tenant_test_credential(
         api_key_encrypted=encrypt_value("sk-fake", encryption_key),
         api_base=api_base,
         extra=extra,
+        created_by_user_id=created_by_user_id,
     )

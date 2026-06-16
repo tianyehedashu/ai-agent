@@ -14,6 +14,7 @@ _PRESENTATION_IMPORT_ALLOWLIST = frozenset(
         "domains/agent/presentation/system_router.py",
         "domains/agent/presentation/tools_router.py",
         "domains/gateway/presentation/routers/pricing.py",
+        "domains/gateway/presentation/routers/virtual_key_grants.py",
         "domains/identity/presentation/middleware.py",
         "domains/identity/presentation/router.py",
         "domains/session/presentation/session_router.py",

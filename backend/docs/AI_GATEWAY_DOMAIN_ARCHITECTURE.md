@@ -494,12 +494,16 @@ Gateway 支持两层互相解耦的套餐额度，二者共享 ``QuotaPlanServic
 | 单元 | `tests/unit/agent/test_agent_llm_facade.py` 等 | 桥接门面、Embedding、消息格式化 |
 | 集成 | `tests/integration/api/test_gateway_bridge_attribution.py` | 内部桥归因、并发 vkey、桥接失败不静默回退 |
 | 集成 | `tests/integration/api/test_gateway_management_api.py` | JWT、`GET /teams`、`X-Team-Id` |
+| 集成 | `tests/integration/api/test_openai_compat_api.py` | OpenAI 兼容 `/v1/*`、timing headers、vkey 鉴权 |
+
+**测试基建**：`tests/integration/conftest.py` 统一处理共享 `db_session`（`release_request_db_connection` noop、请求结束仅 flush）；`tests/unit/gateway/conftest.py` 为 Gateway 单测打 `xdist_group("gateway_db")` 降低共享 PostgreSQL 上的 catalog 死锁。详见 [CODE_STANDARDS.md](./CODE_STANDARDS.md) 测试节。
 
 CI：`.github/workflows/backend-architecture.yml` 强制跑架构守门 + 核心 gateway 单测。测试基线快照见 [archive/refactor-baseline.md](./archive/refactor-baseline.md)。
 
 ```bash
 uv run pytest tests/architecture/ tests/unit/gateway/domain/ -q --noconftest
 uv run pytest tests/unit/gateway/ tests/integration/api/test_gateway_management_api.py -q
+uv run pytest tests/integration/api/test_gateway_bridge_attribution.py tests/integration/api/test_openai_compat_api.py -q
 ```
 
 ### 6.2 配置（与 `bootstrap/config.py` 字段一致）

@@ -359,9 +359,16 @@ class TestSessionService:
 @pytest.mark.e2e
 ```
 
-**集成测试**：需要 DB/Redis 等外部依赖时，在 `tests/integration/` 运行；与 Gateway 管理面、OpenAI 兼容相关的用例见 `tests/integration/api/test_gateway_management_api.py` 等。全量集成建议：
+**集成测试**：需要 DB/Redis 等外部依赖时，在 `tests/integration/` 运行；与 Gateway 管理面、OpenAI 兼容相关的用例见 `tests/integration/api/test_gateway_management_api.py`、`test_openai_compat_api.py`、`test_gateway_bridge_attribution.py` 等。全量集成建议：
 
 `uv run pytest tests/integration/ -q --tb=short`
+
+**Gateway 集成测 session 约定**（`tests/integration/conftest.py`，autouse）：
+
+- `client` / `dev_client` 将**同一条** `db_session` 注入 `get_db`；生产路径在上游前会 `release_request_db_connection()`（`close()`），集成测对该调用 noop，避免 `DetachedInstanceError` / `MissingGreenlet`。
+- 多 HTTP 请求串行时，`_finalize_dependency_session` 改为**仅 flush** 待写入行（不 commit），否则后续请求的 JWT `read_token` 会 401（`TOKEN_ERROR`）；回滚由 `db_session` fixture 收尾。
+
+**Gateway 单元测 xdist**（`tests/unit/gateway/conftest.py`）：`pytestmark = xdist_group("gateway_db")`，配合 Makefile `--dist=loadgroup`，避免多 worker 并发写 `system_provider_credentials` 等全局表时死锁。团队凭据单测种子须带 `created_by_user_id`（见 `credential_test_helpers.create_tenant_test_credential`），与 `can_create_model_on_team_credential` 策略一致。
 
 ---
 
