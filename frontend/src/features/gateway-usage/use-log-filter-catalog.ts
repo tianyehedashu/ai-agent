@@ -12,6 +12,10 @@ import { useGatewayVirtualKeys } from '@/features/gateway-keys/use-gateway-virtu
 import { useInfiniteGatewayModelPages } from '@/features/gateway-models/hooks/use-infinite-gateway-model-pages'
 import type { GatewayFilterOption } from '@/features/gateway-usage/gateway-filter-combobox'
 import {
+  buildLogModelCatalogIndex,
+  type LogModelCatalogIndex,
+} from '@/features/gateway-usage/log-model-identity'
+import {
   credentialFilterOptions,
   keyFilterOptions,
   modelFilterOptionsForStats,
@@ -25,6 +29,8 @@ export interface LogFilterCatalogResult {
   credentialOptions: GatewayFilterOption[]
   keyOptions: GatewayFilterOption[]
   modelOptions: GatewayFilterOption[]
+  /** deployment_gateway_model_id → 显示名 / 注册别名 / 上游（日志三列解析） */
+  modelCatalogIndex: LogModelCatalogIndex
   credentialsLoading: boolean
   keysLoading: boolean
   modelsLoading: boolean
@@ -53,10 +59,16 @@ export function useLogFilterCatalog({ teamId }: UseLogFilterCatalogParams): LogF
     [teamModels.items]
   )
 
+  const modelCatalogIndex = useMemo(
+    () => buildLogModelCatalogIndex(teamModels.items),
+    [teamModels.items]
+  )
+
   return {
     credentialOptions,
     keyOptions,
     modelOptions,
+    modelCatalogIndex,
     credentialsLoading: actorCredentials.isLoading,
     keysLoading: teamKeysQuery.isLoading,
     modelsLoading: teamModels.isLoading,

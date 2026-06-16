@@ -15,7 +15,7 @@ function tagDisplayName(tags: Record<string, unknown> | null | undefined): strin
 }
 
 /** 团队 / 系统注册行：tags.display_name，缺省回退注册别名 name（与后端 selector 一致） */
-export function gatewayModelDisplayName(model: GatewayModel): string | null {
+export function gatewayModelDisplayName(model: Pick<GatewayModel, 'name' | 'tags'>): string | null {
   const fromTags = tagDisplayName(model.tags)
   if (fromTags) return fromTags
   const name = model.name.trim()

@@ -44,6 +44,13 @@ import {
   GATEWAY_FILTER_ALL,
   GatewayFilterCombobox,
 } from '@/features/gateway-usage/gateway-filter-combobox'
+import {
+  logModelIdentityTitle,
+  logModelIdentityTooltip,
+  resolveLogModelIdentity,
+  type LogModelCatalogIndex,
+  type LogModelIdentity,
+} from '@/features/gateway-usage/log-model-identity'
 import { LogPricingBreakdown } from '@/features/gateway-usage/log-pricing-breakdown'
 import {
   gatewayUsageAggregationOptions,
@@ -104,9 +111,9 @@ const DATE_RANGE_FILTERS: readonly { value: DateRangeValue; label: string }[] = 
   { value: '30d', label: '最近30天' },
 ]
 
-/** 表头与行共用，避免列宽漂移 */
+/** 表头与行共用，避免列宽漂移（调用名 / 显示名 / 上游 与模型列表对齐） */
 const LOG_GRID_COLS =
-  'grid grid-cols-[156px_178px_142px_104px_108px_104px_92px_92px_88px_minmax(200px,1fr)]'
+  'grid grid-cols-[152px_132px_100px_128px_120px_96px_96px_88px_80px_76px_72px_minmax(160px,1fr)]'
 
 interface LogsLocationState {
   usageStatsFilters?: {
@@ -177,7 +184,7 @@ export default function GatewayLogsPage(): React.JSX.Element {
   })
 
   // 筛选目录数据
-  const { credentialOptions, keyOptions, modelOptions } = useLogFilterCatalog({
+  const { credentialOptions, keyOptions, modelOptions, modelCatalogIndex } = useLogFilterCatalog({
     teamId,
   })
 
@@ -408,6 +415,11 @@ export default function GatewayLogsPage(): React.JSX.Element {
   })
 
   const activeLog = detail ?? selectedItem
+
+  const activeLogIdentity = useMemo(
+    () => (activeLog ? resolveLogModelIdentity(activeLog, modelCatalogIndex) : null),
+    [activeLog, modelCatalogIndex]
+  )
 
   const clearFilters = (): void => {
     setStatusFilter('all')
@@ -641,12 +653,14 @@ export default function GatewayLogsPage(): React.JSX.Element {
 
       <Card className="overflow-hidden">
         <div className="overflow-x-auto">
-          <div className="min-w-[1320px]">
+          <div className="min-w-[1480px]">
             <div
               className={`${LOG_GRID_COLS} border-b bg-muted/30 px-3 py-2 text-xs font-medium text-muted-foreground`}
             >
               <div>时间</div>
-              <div>模型</div>
+              <div>调用名</div>
+              <div>显示名</div>
+              <div>上游</div>
               <div>凭据</div>
               <div>能力</div>
               <div>状态</div>
@@ -689,6 +703,7 @@ export default function GatewayLogsPage(): React.JSX.Element {
                         key={row.key}
                         row={row}
                         item={item}
+                        modelCatalogIndex={modelCatalogIndex}
                         selected={item.id === selectedId}
                         onSelect={handleRowSelect}
                       />
@@ -756,7 +771,7 @@ export default function GatewayLogsPage(): React.JSX.Element {
             <div className="flex min-w-0 flex-wrap items-center gap-2 pr-8">
               {activeLog ? <StatusBadge status={activeLog.status} /> : null}
               <SheetTitle className="min-w-0 truncate text-base">
-                {activeLog?.real_model ?? activeLog?.route_name ?? '请求详情'}
+                {activeLogIdentity ? logModelIdentityTitle(activeLogIdentity) : '请求详情'}
               </SheetTitle>
             </div>
             <SheetDescription className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 font-mono text-xs">
@@ -805,17 +820,9 @@ export default function GatewayLogsPage(): React.JSX.Element {
 
                 <DetailSection title="调用路径" icon={<Route className="h-4 w-4" />}>
                   <dl className="grid grid-cols-[92px_1fr] gap-x-3 gap-y-2 text-xs">
-                    <DetailField label="客户端模型" mono>
-                      {activeLog.route_name ?? '—'}
-                    </DetailField>
-                    <DetailField label="部署模型" mono>
-                      <span>{activeLog.deployment_model_name ?? activeLog.real_model ?? '—'}</span>
-                      {activeLog.deployment_gateway_model_id ? (
-                        <span className="mt-0.5 block text-muted-foreground">
-                          {activeLog.deployment_gateway_model_id}
-                        </span>
-                      ) : null}
-                    </DetailField>
+                    {activeLogIdentity ? (
+                      <LogModelIdentityFields identity={activeLogIdentity} />
+                    ) : null}
                     <DetailField label="提供商">{activeLog.provider ?? '—'}</DetailField>
                     <DetailField label="能力">{capabilityLabel(activeLog.capability)}</DetailField>
                     <DetailField label="回退链" mono>
@@ -871,14 +878,19 @@ export default function GatewayLogsPage(): React.JSX.Element {
 const LogRow = memo(function LogRow({
   row,
   item,
+  modelCatalogIndex,
   selected,
   onSelect,
 }: Readonly<{
   row: VirtualItem
   item: GatewayLogItem
+  modelCatalogIndex: LogModelCatalogIndex
   selected: boolean
   onSelect: (id: string) => void
 }>): React.JSX.Element {
+  const identity = resolveLogModelIdentity(item, modelCatalogIndex)
+  const modelTooltip = logModelIdentityTooltip(identity)
+
   return (
     <button
       style={{
@@ -900,8 +912,17 @@ const LogRow = memo(function LogRow({
       }}
     >
       <div className="truncate text-muted-foreground">{formatDateTime(item.created_at)}</div>
-      <div className="truncate font-mono" title={item.real_model ?? item.route_name ?? undefined}>
-        {item.real_model ?? item.route_name ?? '—'}
+      <div className="truncate font-mono" title={modelTooltip}>
+        {identity.invokeName ?? '—'}
+      </div>
+      <div className="truncate" title={identity.displayName ?? undefined}>
+        {identity.displayName ?? '—'}
+      </div>
+      <div
+        className="truncate font-mono text-muted-foreground"
+        title={identity.upstreamName ?? undefined}
+      >
+        {identity.upstreamName ?? '—'}
       </div>
       <div className="truncate" title={credentialDisplayTitle(item)}>
         {credentialDisplayText(item)}
@@ -1045,6 +1066,30 @@ function DetailField({
     <>
       <dt className="text-muted-foreground">{label}</dt>
       <dd className={cn('min-w-0 break-words', mono ? 'font-mono text-[11px]' : '')}>{children}</dd>
+    </>
+  )
+}
+
+function LogModelIdentityFields({
+  identity,
+}: Readonly<{ identity: LogModelIdentity }>): React.JSX.Element {
+  return (
+    <>
+      <DetailField label="调用名" mono>
+        {identity.invokeName ?? '—'}
+      </DetailField>
+      <DetailField label="显示名">{identity.displayName ?? '—'}</DetailField>
+      <DetailField label="上游" mono>
+        {identity.upstreamName ?? '—'}
+      </DetailField>
+      {identity.registrationName && identity.registrationName !== identity.invokeName ? (
+        <DetailField label="注册别名" mono>
+          {identity.registrationName}
+        </DetailField>
+      ) : null}
+      <DetailField label="模型 ID" mono>
+        {identity.gatewayModelId ?? '—'}
+      </DetailField>
     </>
   )
 }
