@@ -1,0 +1,30 @@
+# AI Agent — Higress API 路由（线上 ai-agent-api）
+#
+# 公网 gateway.giimallai.com/ai-agent/api/* → Higress → backend:8000（不经 frontend Pod）
+# WasmPlugin giikin-auth-bridge 匹配本路由名 ai-agent-api
+#
+# 必配：higress.io/timeout（缺省约 60s，非流式 chat 高并发会 504）
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ai-agent-api
+  namespace: test
+  annotations:
+    higress.io/destination: ai-agent-backend.dns:8000
+    higress.io/enable-rewrite: "true"
+    higress.io/rewrite-target: /$1
+    higress.io/use-regex: "true"
+    higress.io/timeout: "3600"
+spec:
+  ingressClassName: higress
+  rules:
+    - http:
+        paths:
+          - path: /ai-agent/api/(.*)
+            pathType: Prefix
+            backend:
+              resource:
+                apiGroup: networking.higress.io
+                kind: McpBridge
+                name: default

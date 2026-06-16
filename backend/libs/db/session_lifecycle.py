@@ -14,4 +14,14 @@ async def rollback_open_transaction(session: AsyncSession) -> None:
         await session.rollback()
 
 
-__all__ = ["rollback_open_transaction"]
+async def release_request_db_connection(session: AsyncSession) -> None:
+    """结束请求级 DB 占用：回滚未提交事务并将连接归还连接池。
+
+    Gateway 代理在 preflight 完成后进入长耗时上游调用；若仅 rollback 而不 close，
+    FastAPI ``get_db`` 仍占住 pool 槽位直至整包响应结束，高并发下会排队并触发 504。
+    """
+    await rollback_open_transaction(session)
+    await session.close()
+
+
+__all__ = ["release_request_db_connection", "rollback_open_transaction"]

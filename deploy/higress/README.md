@@ -9,14 +9,14 @@
 ## 流量路径
 
 ```
-gateway.giimallai.com/ai-agent/
+gateway.giimallai.com
     │
-    ├─ /ai-agent/assets/*     → frontend Nginx 静态资源
-    ├─ /ai-agent/api/*        → frontend Nginx 反代 → backend:8000
-    │                              ↑
-    │                         HiGress giikin-auth-bridge（WasmPlugin）
-    │                         在到达 frontend 前注入 X-Giikin-* Header
-    └─ /ai-agent/*            → frontend SPA (index.html)
+    ├─ ALB (higress-gateway-ingress) → higress-gateway-cluster
+    │
+    ├─ /ai-agent/api/*   → Ingress ai-agent-api → backend:8000（rewrite，不经 frontend）
+    │                         ↑ giikin-auth-bridge WasmPlugin（SSO Header）
+    │
+    └─ /ai-agent/*       → Ingress ai-agent-spa → frontend:80（SPA + 静态资源）
 ```
 
 | 检查项 | 期望 |
@@ -32,12 +32,23 @@ gateway.giimallai.com/ai-agent/
 
 ### 1. Ingress 路由
 
-[`ai-agent-ingress.example.yaml`](ai-agent-ingress.example.yaml)
+**API（Gateway / OpenAI 兼容面）** — [`ai-agent-api-ingress.example.yaml`](ai-agent-api-ingress.example.yaml)
+
+- 路由名 **`ai-agent-api`**，`path: /ai-agent/api/(.*)` → `ai-agent-backend.dns:8000`
+- **必须** `higress.io/timeout: "3600"`（缺省约 **60s**，非流式 chat 高并发会 **504**）
+- 线上补丁（已验证）：
+
+```bash
+scp deploy/higress/patch-ai-agent-api-timeout.json wuhan-ali:/tmp/
+ssh wuhan-ali "kubectl -n test patch ingress ai-agent-api --type=merge --patch-file /tmp/patch-ai-agent-api-timeout.json"
+ssh wuhan-ali "kubectl -n test get ingress ai-agent-api -o jsonpath='{.metadata.annotations.higress\.io/timeout}' && echo"
+# 期望输出: 3600
+```
+
+**SPA** — [`ai-agent-ingress.example.yaml`](ai-agent-ingress.example.yaml)（历史整站示例；线上为 `ai-agent-spa`）
 
 - `path: /ai-agent`，`pathType: Prefix` → `frontend:80`
 - **禁止** rewrite `/ai-agent` → `/`
-- Chat SSE：`higress.io/timeout: "3600"`
-- 请求体：`nginx.ingress.kubernetes.io/proxy-body-size: "50m"`
 
 ### 2. giikin-auth-bridge WasmPlugin
 

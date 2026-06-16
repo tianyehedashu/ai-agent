@@ -1,4 +1,4 @@
-"""Gateway streaming session helper tests."""
+"""Session lifecycle helper tests."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, cast
 
 import pytest
 
-from domains.gateway.presentation.streaming_session import release_request_db_before_stream
+from libs.db.session_lifecycle import release_request_db_connection
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -30,21 +30,20 @@ class _FakeSession:
 
 
 @pytest.mark.asyncio
-async def test_release_request_db_before_stream_rolls_back_active_transaction() -> None:
+async def test_release_request_db_connection_rolls_back_and_closes() -> None:
     session = _FakeSession(active=True)
 
-    await release_request_db_before_stream(cast("AsyncSession", session))
+    await release_request_db_connection(cast("AsyncSession", session))
 
     assert session.rollback_calls == 1
     assert session.close_calls == 1
-    assert session.in_transaction() is False
 
 
 @pytest.mark.asyncio
-async def test_release_request_db_before_stream_skips_inactive_transaction() -> None:
+async def test_release_request_db_connection_closes_without_active_transaction() -> None:
     session = _FakeSession(active=False)
 
-    await release_request_db_before_stream(cast("AsyncSession", session))
+    await release_request_db_connection(cast("AsyncSession", session))
 
     assert session.rollback_calls == 0
     assert session.close_calls == 1

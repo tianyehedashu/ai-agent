@@ -1,6 +1,6 @@
 # Gateway 生产部署清单（第三方客户端 / 长连接）
 
-## 反向代理（nginx）
+## 反向代理（nginx / Higress）
 
 ```nginx
 client_max_body_size 50m;
@@ -11,6 +11,16 @@ proxy_http_version 1.1;
 proxy_set_header Connection "";
 keepalive_timeout 75s;
 ```
+
+Higress Ingress 须显式加长超时（含**非流式** chat/completions，否则外层默认 ~60s 会 504）：
+
+```yaml
+metadata:
+  annotations:
+    higress.io/timeout: "3600"
+```
+
+若仍见 `504` 且耗时恰好 ~60000ms，检查 SLB / 外层 Nginx 是否仍有 60s 默认读超时。
 
 ## uvicorn
 

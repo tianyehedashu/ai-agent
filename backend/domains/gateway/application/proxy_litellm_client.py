@@ -47,7 +47,7 @@ from domains.gateway.infrastructure.upstream.volcengine_image_client import (
 from domains.gateway.infrastructure.upstream.volcengine_video_client import (
     perform_volcengine_video_create,
 )
-from libs.db.session_lifecycle import rollback_open_transaction
+from libs.db.session_lifecycle import release_request_db_connection
 from libs.exceptions import ValidationError
 
 if TYPE_CHECKING:
@@ -74,7 +74,7 @@ class ProxyLiteLLMClient:
         self._session = session
 
     async def _release_session_before_upstream(self) -> None:
-        await rollback_open_transaction(self._session)
+        await release_request_db_connection(self._session)
 
     async def should_use_internal_direct_litellm(
         self,

@@ -1,0 +1,7 @@
+{
+  "metadata": {
+    "annotations": {
+      "higress.io/timeout": "3600"
+    }
+  }
+}
