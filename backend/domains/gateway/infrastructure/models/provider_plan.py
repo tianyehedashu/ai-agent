@@ -131,6 +131,24 @@ class ProviderPlanQuota(BaseModel):
             " plan_anniversary（按 valid_from 切片，对齐合同日）"
         ),
     )
+    reset_timezone: Mapped[str] = mapped_column(
+        String(64),
+        nullable=False,
+        server_default="UTC",
+        default="UTC",
+    )
+    reset_time_minutes: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        server_default="0",
+        default=0,
+    )
+    reset_day_of_month: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        server_default="1",
+        default=1,
+    )
     limit_usd: Mapped[Decimal | None] = mapped_column(Numeric(12, 4), nullable=True)
     limit_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
     limit_requests: Mapped[int | None] = mapped_column(Integer, nullable=True)

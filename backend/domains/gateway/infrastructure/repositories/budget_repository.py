@@ -18,6 +18,15 @@ if TYPE_CHECKING:
     from domains.gateway.domain.proxy_policy import BudgetCheckQuery
 
 
+def _apply_period_reset_fields(row: GatewayBudget, item: dict[str, object]) -> None:
+    if "period_timezone" in item and item["period_timezone"] is not None:
+        row.period_timezone = str(item["period_timezone"])
+    if "period_reset_minutes" in item and item["period_reset_minutes"] is not None:
+        row.period_reset_minutes = int(item["period_reset_minutes"])  # type: ignore[arg-type]
+    if "period_reset_day" in item and item["period_reset_day"] is not None:
+        row.period_reset_day = int(item["period_reset_day"])  # type: ignore[arg-type]
+
+
 class BudgetRepository:
     def __init__(self, session: AsyncSession):
         self._session = session
@@ -163,7 +172,15 @@ class BudgetRepository:
         limit_tokens: int | None = None,
         limit_requests: int | None = None,
         reset_at: datetime | None = None,
+        period_timezone: str | None = None,
+        period_reset_minutes: int | None = None,
+        period_reset_day: int | None = None,
     ) -> GatewayBudget:
+        period_reset_item: dict[str, object] = {
+            "period_timezone": period_timezone,
+            "period_reset_minutes": period_reset_minutes,
+            "period_reset_day": period_reset_day,
+        }
         existing = await self.get_for(
             target_kind,
             target_id,
@@ -186,6 +203,7 @@ class BudgetRepository:
                 limit_requests=limit_requests,
                 reset_at=reset_at,
             )
+            _apply_period_reset_fields(budget, period_reset_item)
             self._session.add(budget)
             await self._session.flush()
             return budget
@@ -195,6 +213,7 @@ class BudgetRepository:
         existing.limit_requests = limit_requests
         if reset_at is not None:
             existing.reset_at = reset_at
+        _apply_period_reset_fields(existing, period_reset_item)
         await self._session.flush()
         return existing
 
@@ -286,6 +305,7 @@ class BudgetRepository:
                 reset_at = item.get("reset_at")
                 if reset_at is not None:
                     existing.reset_at = reset_at
+                _apply_period_reset_fields(existing, item)
                 results.append(existing)
             else:
                 budget = GatewayBudget(
@@ -301,6 +321,7 @@ class BudgetRepository:
                     limit_requests=item.get("limit_requests"),
                     reset_at=item.get("reset_at"),
                 )
+                _apply_period_reset_fields(budget, item)
                 to_insert.append(budget)
                 results.append(budget)
 

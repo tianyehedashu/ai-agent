@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from decimal import Decimal
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -24,7 +25,28 @@ from domains.gateway.application.management.quota_rule_read_model import (
     QuotaRuleReadModel,
     QuotaRuleUsage,
 )
+from domains.gateway.domain.period_reset_anchor import (
+    period_reset_anchor_from_plan_quota,
+    period_reset_anchor_from_row,
+)
 from domains.gateway.domain.quota_plan import ENTITLEMENT_NS, PROVIDER_NS
+
+
+def _usage_with_reset_at(
+    rule: QuotaRuleReadModel,
+    *,
+    current_usd: Decimal,
+    current_tokens: int,
+    current_requests: int,
+) -> QuotaRuleUsage:
+    prior = rule.usage
+    return QuotaRuleUsage(
+        current_usd=current_usd,
+        current_tokens=current_tokens,
+        current_requests=current_requests,
+        reset_at=prior.reset_at if prior is not None else None,
+        budget_reset_at=prior.budget_reset_at if prior is not None else None,
+    )
 
 
 async def enrich_quota_rules_with_usage(
@@ -62,6 +84,11 @@ async def enrich_quota_rules_with_usage(
                         model_name=rule.key.model_name,
                         credential_id=rule.key.credential_id,
                         tenant_id=tenant_scope,
+                        period_reset_anchor=period_reset_anchor_from_row(
+                            timezone=rule.key.period_timezone,
+                            time_minutes=rule.key.period_reset_minutes,
+                            day_of_month=rule.key.period_reset_day,
+                        ),
                     ),
                 )
             )
@@ -81,6 +108,11 @@ async def enrich_quota_rules_with_usage(
                     window_seconds=rule.key.window_seconds or 0,
                     reset_strategy=rule.key.reset_strategy or "rolling",
                     plan_valid_from=rule.plan_valid_from,
+                    period_reset_anchor=period_reset_anchor_from_plan_quota(
+                        reset_timezone=rule.key.period_timezone,
+                        reset_time_minutes=rule.key.period_reset_minutes,
+                        reset_day_of_month=rule.key.period_reset_day,
+                    ),
                 ),
             )
         )
@@ -95,7 +127,8 @@ async def enrich_quota_rules_with_usage(
             totals = totals_by_key.get(key)
             if totals is None:
                 continue
-            budget_usage[idx] = QuotaRuleUsage(
+            budget_usage[idx] = _usage_with_reset_at(
+                rules[idx],
                 current_usd=totals.cost_usd,
                 current_tokens=totals.tokens,
                 current_requests=totals.requests,
@@ -111,7 +144,8 @@ async def enrich_quota_rules_with_usage(
             totals = totals_by_key.get(key)
             if totals is None:
                 continue
-            plan_usage[idx] = QuotaRuleUsage(
+            plan_usage[idx] = _usage_with_reset_at(
+                rules[idx],
                 current_usd=totals.cost_usd,
                 current_tokens=totals.tokens,
                 current_requests=totals.requests,

@@ -188,12 +188,18 @@ class ProviderPlanRepository:
         limit_tokens: int | None = None,
         limit_requests: int | None = None,
         reset_strategy: str = "rolling",
+        reset_timezone: str = "UTC",
+        reset_time_minutes: int = 0,
+        reset_day_of_month: int = 1,
     ) -> ProviderPlanQuota:
         quota = ProviderPlanQuota(
             plan_id=plan_id,
             label=label,
             window_seconds=window_seconds,
             reset_strategy=reset_strategy,
+            reset_timezone=reset_timezone,
+            reset_time_minutes=reset_time_minutes,
+            reset_day_of_month=reset_day_of_month,
             limit_usd=limit_usd,
             limit_tokens=limit_tokens,
             limit_requests=limit_requests,

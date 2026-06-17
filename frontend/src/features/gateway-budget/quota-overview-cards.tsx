@@ -6,7 +6,12 @@ import type { QuotaRule } from '@/api/gateway/quota-rules'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
 
-import { computeQuotaRuleUsageRatio, LAYER_LABELS, parseQuotaNumeric } from './quota-rule-utils'
+import {
+  computeQuotaRuleUsageRatio,
+  LAYER_LABELS,
+  parseQuotaNumeric,
+  quotaUsageHasMetrics,
+} from './quota-rule-utils'
 
 interface QuotaOverviewCardsProps {
   rules: QuotaRule[]
@@ -68,7 +73,7 @@ export function QuotaOverviewCards({
   for (const rule of rules) {
     layerCounts[rule.key.layer]++
 
-    if (rule.usage) {
+    if (rule.usage && quotaUsageHasMetrics(rule.usage)) {
       totalUsd += parseQuotaNumeric(rule.usage.current_usd)
       totalTokens += parseQuotaNumeric(rule.usage.current_tokens)
       totalRequests += parseQuotaNumeric(rule.usage.current_requests)

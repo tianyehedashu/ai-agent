@@ -11,7 +11,11 @@ from typing import Literal
 import uuid
 
 from domains.gateway.application.proxy_deferred_tasks import register_proxy_deferred_task
-from domains.gateway.domain.platform_budget_window import compute_platform_budget_window_start
+from domains.gateway.domain.period_reset_anchor import (
+    DEFAULT_PERIOD_RESET_ANCHOR,
+    PeriodResetAnchor,
+    compute_period_window_start,
+)
 from domains.gateway.domain.quota_plan import PLATFORM_NS, UsageBucketNamespace
 from domains.gateway.infrastructure.repositories.quota_plan_usage_bucket_repository import (
     QuotaPlanUsageBucketRepository,
@@ -32,6 +36,7 @@ _BUCKET_UPSERTED_TTL_SECONDS = 86400
 class PlatformBudgetUpsertItem:
     budget_id: uuid.UUID
     period: str
+    period_reset_anchor: PeriodResetAnchor = DEFAULT_PERIOD_RESET_ANCHOR
 
 
 def _bucket_upserted_key(
@@ -84,7 +89,11 @@ async def _upsert_platform_budget_usage(
         async with get_session_context() as session:
             repo = QuotaPlanUsageBucketRepository(session)
             for item in items:
-                window_start = compute_platform_budget_window_start(settled_at, item.period)
+                window_start = compute_period_window_start(
+                    settled_at,
+                    item.period,
+                    item.period_reset_anchor,
+                )
                 await repo.increment_bucket(
                     PLATFORM_NS,
                     item.budget_id,

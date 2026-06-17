@@ -108,6 +108,7 @@ async def test_delete_managed_credential_cascades_linked_models(db_session, test
         name="del-cascade",
         api_key_encrypted=encrypt_value("sk-fake", encryption_key),
         api_base=None,
+        created_by_user_id=test_user.id,
     )
     model_name = f"vm-{uuid.uuid4().hex[:6]}"
     model = await model_repo.create(
@@ -204,6 +205,7 @@ async def test_deactivate_managed_credential_cascades_model_enabled(db_session, 
         name="inactive-cascade",
         api_key_encrypted=encrypt_value("sk-fake", encryption_key),
         api_base=None,
+        created_by_user_id=test_user.id,
     )
     model = await model_repo.create(
         tenant_id=team.id,

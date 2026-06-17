@@ -922,6 +922,9 @@ class BudgetUpsert(BaseModel):
     soft_limit_usd: Decimal | None = None
     limit_tokens: int | None = None
     limit_requests: int | None = None
+    period_timezone: str | None = None
+    period_reset_minutes: int | None = Field(default=None, ge=0, le=1439)
+    period_reset_day: int | None = Field(default=None, ge=1, le=31)
 
 
 class BudgetResponse(BaseModel):
@@ -941,6 +944,9 @@ class BudgetResponse(BaseModel):
     current_requests: int = 0
     reset_at: datetime | None = None
     budget_reset_at: datetime | None = None
+    period_timezone: str = "UTC"
+    period_reset_minutes: int = 0
+    period_reset_day: int = 1
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -959,6 +965,9 @@ class QuotaRuleKeyResponse(BaseModel):
     period: str | None = None
     window_seconds: int | None = None
     reset_strategy: str | None = None
+    period_timezone: str | None = None
+    period_reset_minutes: int | None = None
+    period_reset_day: int | None = None
     access_kind: Literal["none", "vkey", "apikey_grant"] = "none"
     access_id: uuid.UUID | None = None
     quota_label: str | None = None
@@ -983,9 +992,9 @@ class QuotaRuleLimitsResponse(BaseModel):
 
 
 class QuotaRuleUsageResponse(BaseModel):
-    current_usd: Decimal = Decimal("0")
-    current_tokens: int = 0
-    current_requests: int = 0
+    current_usd: Decimal | None = None
+    current_tokens: int | None = None
+    current_requests: int | None = None
     reset_at: datetime | None = None
     budget_reset_at: datetime | None = None
 
@@ -1012,6 +1021,12 @@ class QuotaRuleUpsert(BaseModel):
     period: str | None = Field(default=None, pattern="^(daily|monthly|total)$")
     window_seconds: int | None = Field(default=None, ge=0)
     reset_strategy: str | None = None
+    period_timezone: str | None = None
+    period_reset_minutes: int | None = Field(default=None, ge=0, le=1439)
+    period_reset_day: int | None = Field(default=None, ge=1, le=31)
+    reset_timezone: str | None = None
+    reset_time_minutes: int | None = Field(default=None, ge=0, le=1439)
+    reset_day_of_month: int | None = Field(default=None, ge=1, le=31)
     quota_label: str | None = Field(default=None, max_length=40)
     access_kind: Literal["none", "vkey", "apikey_grant"] = "none"
     access_id: uuid.UUID | None = None
@@ -1267,6 +1282,9 @@ class PlanQuotaUpsert(BaseModel):
     limit_usd: Decimal | None = None
     limit_tokens: int | None = None
     limit_requests: int | None = None
+    reset_timezone: str | None = None
+    reset_time_minutes: int | None = Field(default=None, ge=0, le=1439)
+    reset_day_of_month: int | None = Field(default=None, ge=1, le=31)
 
 
 class EntitlementPlanQuotaUpsert(PlanQuotaUpsert):
@@ -1306,6 +1324,9 @@ class PlanQuotaResponse(BaseModel):
     limit_usd: Decimal | None = None
     limit_tokens: int | None = None
     limit_requests: int | None = None
+    reset_timezone: str = "UTC"
+    reset_time_minutes: int = 0
+    reset_day_of_month: int = 1
 
     model_config = ConfigDict(from_attributes=True)
 

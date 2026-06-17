@@ -18,6 +18,9 @@ export interface QuotaRuleKey {
   period: string | null
   window_seconds: number | null
   reset_strategy: string | null
+  period_timezone?: string | null
+  period_reset_minutes?: number | null
+  period_reset_day?: number | null
   access_kind: QuotaRuleAccessKind
   access_id: string | null
   quota_label: string | null
@@ -42,9 +45,9 @@ export interface QuotaRuleLimits {
 }
 
 export interface QuotaRuleUsage {
-  current_usd: number
-  current_tokens: number
-  current_requests: number
+  current_usd: number | null
+  current_tokens: number | null
+  current_requests: number | null
   reset_at: string | null
   budget_reset_at: string | null
 }
@@ -68,6 +71,12 @@ export interface QuotaRuleUpsertBody {
   period?: 'daily' | 'monthly' | 'total' | null
   window_seconds?: number | null
   reset_strategy?: string | null
+  period_timezone?: string | null
+  period_reset_minutes?: number | null
+  period_reset_day?: number | null
+  reset_timezone?: string | null
+  reset_time_minutes?: number | null
+  reset_day_of_month?: number | null
   quota_label?: string | null
   access_kind?: QuotaRuleAccessKind
   access_id?: string | null

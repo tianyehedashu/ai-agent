@@ -14,8 +14,10 @@ import { cn } from '@/lib/utils'
 import {
   computeQuotaRuleUsageRatio,
   formatQuotaRulePeriod,
+  formatQuotaRuleResetAt,
   LAYER_LABELS,
   parseQuotaNumeric,
+  quotaUsageHasMetrics,
   resolveQuotaRuleModelLabel,
   resolveQuotaRulePlanManagementLink,
   type QuotaRuleLabelContext,
@@ -144,7 +146,11 @@ export function QuotaCardItem({
         <div className="grid grid-cols-2 gap-2 text-xs tabular-nums">
           <div>
             <span className="text-muted-foreground">USD</span>{' '}
-            <span>{usage ? parseQuotaNumeric(usage.current_usd).toFixed(2) : '—'}</span>
+            <span>
+              {usage && quotaUsageHasMetrics(usage)
+                ? parseQuotaNumeric(usage.current_usd).toFixed(2)
+                : '—'}
+            </span>
             <span className="text-muted-foreground">
               {' '}
               / {limitUsd !== null ? `$${parseQuotaNumeric(limitUsd).toFixed(2)}` : '∞'}
@@ -152,13 +158,22 @@ export function QuotaCardItem({
           </div>
           <div>
             <span className="text-muted-foreground">Token</span>{' '}
-            <span>{usage ? parseQuotaNumeric(usage.current_tokens).toLocaleString() : '—'}</span>
+            <span>
+              {usage && quotaUsageHasMetrics(usage)
+                ? parseQuotaNumeric(usage.current_tokens).toLocaleString()
+                : '—'}
+            </span>
             <span className="text-muted-foreground">
               {' '}
               / {limitTok !== null ? parseQuotaNumeric(limitTok).toLocaleString() : '∞'}
             </span>
           </div>
         </div>
+        {formatQuotaRuleResetAt(rule) ? (
+          <p className="text-[11px] text-muted-foreground">
+            下次重置 {formatQuotaRuleResetAt(rule)}
+          </p>
+        ) : null}
         {isPlanRule ? (
           <div className="flex items-center justify-between">
             <span className="inline-flex items-center rounded-md bg-blue-50 px-1.5 py-0.5 text-[11px] font-medium text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">

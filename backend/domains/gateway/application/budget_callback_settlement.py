@@ -7,16 +7,19 @@ from decimal import Decimal
 from typing import Any
 import uuid
 
-from domains.gateway.application.budget_service import (
-    PERIOD_DAILY,
-    PERIOD_MONTHLY,
-    PERIOD_TOTAL,
-    BudgetService,
+from domains.gateway.application.budget_platform_settlement import (
+    DEFAULT_PLATFORM_PERIODS,
+    commit_cached_platform_budgets,
+    deserialize_budget_anchor_pins,
+    resolve_budget_commit_anchor,
 )
+from domains.gateway.application.budget_service import BudgetService
 from domains.gateway.application.budget_usage_persist import (
     PlatformBudgetUpsertItem,
     schedule_platform_budget_usage_upsert,
 )
+from domains.gateway.application.proxy_context import BudgetAnchorCoord
+from domains.gateway.domain.period_reset_anchor import period_reset_anchor_from_row
 from domains.gateway.domain.proxy_policy import budget_model_keys, budget_targets
 from domains.gateway.infrastructure.repositories.budget_repository import BudgetRepository
 from libs.db.database import get_session_context
@@ -128,27 +131,26 @@ async def commit_budget_from_callback(
 
     budget = BudgetService()
     target_items = budget_targets(tenant_id=team_id, user_id=user_id, vkey_id=vkey_id)
-    periods = (PERIOD_DAILY, PERIOD_MONTHLY, PERIOD_TOTAL)
-    model_keys = budget_model_keys(budget_model)
+    periods = DEFAULT_PLATFORM_PERIODS
+    pinned_anchors = deserialize_budget_anchor_pins(
+        metadata.get("gateway_platform_budget_anchor_pins")
+    )
 
-    for target_kind, target_id in target_items:
-        if target_id is None:
-            continue
-        target_id_str = str(target_id)
-        # 成员总量/模型护栏按团队隔离：user 维度结算到含 tenant 段的桶。
-        tenant_scope = team_id if target_kind == "user" else None
-        for period in periods:
-            for mk in model_keys:
-                with suppress(Exception):
-                    await budget.commit(
-                        target_kind=target_kind,
-                        target_id=target_id_str,
-                        period=period,
-                        delta_cost=delta,
-                        delta_tokens=delta_tokens,
-                        budget_model_name=mk,
-                        tenant_id=tenant_scope,
-                    )
+    async def _load_plan(plan: object) -> dict:
+        async with get_session_context() as session:
+            return await BudgetRepository(session).get_many_by_plan(plan)  # type: ignore[arg-type]
+
+    await commit_cached_platform_budgets(
+        budget,
+        scope_items=list(target_items),
+        periods=periods,
+        budget_model=budget_model,
+        billing_team_id=team_id,
+        delta_cost=delta,
+        delta_tokens=delta_tokens,
+        loader=_load_plan,
+        pinned_anchors=pinned_anchors or None,
+    )
 
     if defer and (delta > 0 or delta_tokens > 0):
         platform_upsert_items: list[PlatformBudgetUpsertItem] = []
@@ -160,7 +162,7 @@ async def commit_budget_from_callback(
                         continue
                     tenant_scope = team_id if target_kind == "user" else None
                     for period in periods:
-                        for mk in model_keys:
+                        for mk in budget_model_keys(budget_model):
                             record = await repo.get_for(
                                 target_kind,
                                 target_id,
@@ -176,8 +178,30 @@ async def commit_budget_from_callback(
                                 delta_tokens=delta_tokens,
                                 delta_requests=0,
                             )
+                            anchor = period_reset_anchor_from_row(
+                                timezone=record.period_timezone,
+                                time_minutes=record.period_reset_minutes,
+                                day_of_month=record.period_reset_day,
+                            )
+                            coord: BudgetAnchorCoord = (
+                                target_kind,
+                                target_id,
+                                period,
+                                mk,
+                                record.credential_id,
+                                tenant_scope,
+                            )
+                            anchor = resolve_budget_commit_anchor(
+                                coord,
+                                config_anchor=anchor,
+                                pinned_anchors=pinned_anchors or None,
+                            )
                             platform_upsert_items.append(
-                                PlatformBudgetUpsertItem(budget_id=record.id, period=period)
+                                PlatformBudgetUpsertItem(
+                                    budget_id=record.id,
+                                    period=period,
+                                    period_reset_anchor=anchor,
+                                )
                             )
 
         if request_id and platform_upsert_items:

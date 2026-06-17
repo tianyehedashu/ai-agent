@@ -31,6 +31,12 @@ export interface GatewayBudget {
   reset_at: string | null
   /** 下一次重置时间（含 rolling / calendar 策略） */
   budget_reset_at?: string | null
+  /** IANA 时区；日/月切本地时刻 */
+  period_timezone?: string
+  /** 本地日切时刻：自 00:00 起的分钟数 */
+  period_reset_minutes?: number
+  /** 月切日；daily/total 使用默认值 1 */
+  period_reset_day?: number
 }
 
 /** PUT /budgets 请求体（与后端 BudgetUpsert 一致） */
@@ -43,6 +49,9 @@ export interface BudgetUpsertBody {
   soft_limit_usd?: number | null
   limit_tokens?: number | null
   limit_requests?: number | null
+  period_timezone?: string | null
+  period_reset_minutes?: number | null
+  period_reset_day?: number | null
 }
 
 /** Budgets 资源 API */

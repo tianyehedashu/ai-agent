@@ -27,6 +27,9 @@ class QuotaRuleKey:
     quota_label: str | None
     target_kind: str | None
     target_id: UUID | None
+    period_timezone: str | None = None
+    period_reset_minutes: int | None = None
+    period_reset_day: int | None = None
 
 
 @dataclass(frozen=True)
@@ -49,9 +52,9 @@ class QuotaRuleLimits:
 
 @dataclass(frozen=True)
 class QuotaRuleUsage:
-    current_usd: Decimal
-    current_tokens: int
-    current_requests: int
+    current_usd: Decimal | None = None
+    current_tokens: int | None = None
+    current_requests: int | None = None
     reset_at: datetime | None = None
     budget_reset_at: datetime | None = None
 

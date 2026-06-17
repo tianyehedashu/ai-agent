@@ -19,6 +19,9 @@ from domains.gateway.application.proxy_router_team_metadata import (
     ensure_litellm_router_team_metadata,
 )
 from domains.gateway.application.proxy_timing import ProxyPrepareTimings
+from domains.gateway.application.budget_platform_settlement import (
+    serialize_budget_anchor_pins,
+)
 from domains.gateway.application.route_snapshot_cache import get_route_snapshot_metadata
 from domains.gateway.application.router_model_name import router_model_name_for_client
 from domains.gateway.domain.guardrail_policy import effective_guardrail_enabled
@@ -166,6 +169,10 @@ class ProxyMetadataBuilder:
                 }
                 for r in ctx.entitlement_state.reservations
             ]
+        if ctx.platform_budget_preflight is not None and ctx.platform_budget_preflight.anchor_pins:
+            meta["gateway_platform_budget_anchor_pins"] = serialize_budget_anchor_pins(
+                ctx.platform_budget_preflight.anchor_pins
+            )
         if ctx.vkey is not None:
             meta["gateway_vkey_owner_team_id"] = str(ctx.vkey.team_id)
         gateway_snapshot = {

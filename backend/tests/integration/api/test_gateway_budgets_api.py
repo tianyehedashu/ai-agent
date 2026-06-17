@@ -122,6 +122,9 @@ class TestGatewayBudgetsApi:
                 "target_kind": "tenant",
                 "period": "daily",
                 "limit_usd": 25,
+                "period_timezone": "Asia/Shanghai",
+                "period_reset_minutes": 540,
+                "period_reset_day": 15,
             },
         )
         assert r.status_code == 200, r.text
@@ -129,6 +132,9 @@ class TestGatewayBudgetsApi:
         assert body["target_kind"] == "tenant"
         assert body["target_id"] == str(team.id)
         assert body["period"] == "daily"
+        assert body["period_timezone"] == "Asia/Shanghai"
+        assert body["period_reset_minutes"] == 540
+        assert body["period_reset_day"] == 1
 
     @pytest.mark.asyncio
     async def test_admin_lists_user_budgets_filtered_by_model_name(

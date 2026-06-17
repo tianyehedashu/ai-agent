@@ -1,6 +1,11 @@
 import type { GatewayModel } from '@/api/gateway/models'
 import type { PersonalGatewayModel } from '@/api/gateway/my-models'
-import type { ListQuotaRulesParams, QuotaRule, QuotaRuleLayer } from '@/api/gateway/quota-rules'
+import type {
+  ListQuotaRulesParams,
+  QuotaRule,
+  QuotaRuleLayer,
+  QuotaRuleUsage,
+} from '@/api/gateway/quota-rules'
 import {
   modelsIndexHref,
   personalModelDetailHref,
@@ -8,6 +13,8 @@ import {
   teamModelDetailHref,
   teamModelsFilteredHref,
 } from '@/features/gateway-models/paths'
+
+import { formatPeriodResetLabel, isCalendarPeriodResetVisible } from './period-reset-utils'
 
 import type { BudgetViewContext } from './budget-match'
 
@@ -31,23 +38,43 @@ export function quotaRuleRowId(rule: QuotaRule): string {
 
 export function formatQuotaRulePeriod(rule: QuotaRule): string {
   if (rule.key.period) {
-    switch (rule.key.period) {
-      case 'daily':
-        return '每日 (UTC 自然日)'
-      case 'monthly':
-        return '每月 (UTC 自然月)'
-      case 'total':
-        return '总额'
-      default:
-        return rule.key.period
+    if (rule.key.period === 'total') return '总额'
+    if (rule.key.period === 'daily' || rule.key.period === 'monthly') {
+      return formatPeriodResetLabel(
+        {
+          period_timezone: rule.key.period_timezone,
+          period_reset_minutes: rule.key.period_reset_minutes,
+          period_reset_day: rule.key.period_reset_day,
+        },
+        rule.key.period
+      )
     }
+    return rule.key.period
   }
   if (rule.key.window_seconds !== null) {
     if (rule.key.window_seconds === 0) return '套餐周期'
-    if (rule.key.reset_strategy === 'calendar_daily_utc') return 'UTC 自然日'
-    if (rule.key.reset_strategy === 'calendar_monthly_utc') return 'UTC 自然月'
     if (rule.key.reset_strategy === 'rolling' && rule.key.window_seconds === 86400) {
       return '滚动 24h'
+    }
+    if (
+      isCalendarPeriodResetVisible({
+        layer: rule.key.layer,
+        windowSeconds: String(rule.key.window_seconds),
+        resetStrategy: rule.key.reset_strategy,
+      })
+    ) {
+      const period =
+        rule.key.window_seconds === 2592000 || rule.key.reset_strategy === 'calendar_monthly_utc'
+          ? 'monthly'
+          : 'daily'
+      return formatPeriodResetLabel(
+        {
+          period_timezone: rule.key.period_timezone,
+          period_reset_minutes: rule.key.period_reset_minutes,
+          period_reset_day: rule.key.period_reset_day,
+        },
+        period
+      )
     }
     const hours = rule.key.window_seconds / 3600
     if (hours >= 1 && Number.isInteger(hours)) return `${String(hours)}h`
@@ -423,6 +450,18 @@ export function parseQuotaNumeric(value: unknown): number {
   return Number.isFinite(parsed) ? parsed : 0
 }
 
+export function quotaUsageHasMetrics(usage: QuotaRuleUsage): boolean {
+  return (
+    usage.current_usd !== null || usage.current_tokens !== null || usage.current_requests !== null
+  )
+}
+
+export function formatQuotaRuleResetAt(rule: QuotaRule): string | null {
+  const at = rule.usage?.reset_at ?? rule.usage?.budget_reset_at
+  if (!at) return null
+  return new Date(at).toLocaleString()
+}
+
 export function computeQuotaRuleUsageRatio(rule: QuotaRule): {
   ratio: number
   barColor: string
@@ -430,15 +469,15 @@ export function computeQuotaRuleUsageRatio(rule: QuotaRule): {
   const usage = rule.usage
   const limitUsd = rule.limits.limit_usd
   const limitTok = rule.limits.limit_tokens
-  if (!usage || (limitUsd === null && limitTok === null)) {
+  if (!usage || !quotaUsageHasMetrics(usage) || (limitUsd === null && limitTok === null)) {
     return { ratio: 0, barColor: 'bg-muted' }
   }
   const usdRatio =
-    limitUsd !== null && limitUsd > 0
+    limitUsd !== null && limitUsd > 0 && usage.current_usd !== null
       ? parseQuotaNumeric(usage.current_usd) / parseQuotaNumeric(limitUsd)
       : 0
   const tokRatio =
-    limitTok !== null && limitTok > 0
+    limitTok !== null && limitTok > 0 && usage.current_tokens !== null
       ? parseQuotaNumeric(usage.current_tokens) / parseQuotaNumeric(limitTok)
       : 0
   const ratio = Math.max(usdRatio, tokRatio)

@@ -10,6 +10,7 @@ import time
 from typing import TYPE_CHECKING
 import uuid
 
+from domains.gateway.domain.period_reset_anchor import period_reset_anchor_from_plan_quota
 from domains.gateway.domain.quota_plan import PlanQuotaSpec, normalize_reset_strategy
 from utils.logging import get_logger
 
@@ -46,6 +47,9 @@ class ProviderPlanQuotaConfigRow:
     limit_usd: Decimal | None
     limit_tokens: int | None
     limit_requests: int | None
+    reset_timezone: str = "UTC"
+    reset_time_minutes: int = 0
+    reset_day_of_month: int = 1
 
 
 @dataclass(frozen=True)
@@ -70,6 +74,11 @@ def plan_quota_specs_from_config(config: ProviderPlanConfigSnapshot) -> list[Pla
             limit_requests=row.limit_requests,
             reset_strategy=normalize_reset_strategy(row.reset_strategy),
             plan_valid_from=config.valid_from,
+            period_reset_anchor=period_reset_anchor_from_plan_quota(
+                reset_timezone=row.reset_timezone,
+                reset_time_minutes=row.reset_time_minutes,
+                reset_day_of_month=row.reset_day_of_month,
+            ),
         )
         for row in config.quotas
     ]
@@ -89,6 +98,9 @@ def provider_plan_config_from_orm(
                 label=q.label,
                 window_seconds=q.window_seconds,
                 reset_strategy=q.reset_strategy,
+                reset_timezone=q.reset_timezone,
+                reset_time_minutes=q.reset_time_minutes,
+                reset_day_of_month=q.reset_day_of_month,
                 limit_usd=q.limit_usd,
                 limit_tokens=q.limit_tokens,
                 limit_requests=q.limit_requests,
@@ -279,6 +291,9 @@ def _encode_snapshot(row: ProviderPlanConfigSnapshot) -> dict[str, object]:
                 "label": q.label,
                 "window_seconds": q.window_seconds,
                 "reset_strategy": q.reset_strategy,
+                "reset_timezone": q.reset_timezone,
+                "reset_time_minutes": q.reset_time_minutes,
+                "reset_day_of_month": q.reset_day_of_month,
                 "limit_usd": str(q.limit_usd) if q.limit_usd is not None else None,
                 "limit_tokens": q.limit_tokens,
                 "limit_requests": q.limit_requests,
@@ -301,6 +316,9 @@ def _decode_snapshot(payload: dict[str, object]) -> ProviderPlanConfigSnapshot:
                     label=str(item["label"]),
                     window_seconds=int(item["window_seconds"]),
                     reset_strategy=str(item.get("reset_strategy") or "rolling"),
+                    reset_timezone=str(item.get("reset_timezone") or "UTC"),
+                    reset_time_minutes=int(item.get("reset_time_minutes") or 0),
+                    reset_day_of_month=int(item.get("reset_day_of_month") or 1),
                     limit_usd=Decimal(str(item["limit_usd"]))
                     if item.get("limit_usd") is not None
                     else None,

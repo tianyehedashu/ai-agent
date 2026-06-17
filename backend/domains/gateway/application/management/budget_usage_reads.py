@@ -16,7 +16,11 @@ from domains.gateway.domain.platform_budget_display import (
     PlatformBudgetLogScope,
     platform_log_fallback_supported,
 )
-from domains.gateway.domain.platform_budget_window import compute_platform_budget_window_start
+from domains.gateway.domain.period_reset_anchor import (
+    DEFAULT_PERIOD_RESET_ANCHOR,
+    PeriodResetAnchor,
+    compute_period_window_start,
+)
 from domains.gateway.domain.quota_plan import PLATFORM_NS
 from domains.gateway.infrastructure.models.quota_plan_usage_bucket import (
     GatewayQuotaPlanUsageBucket,
@@ -38,6 +42,7 @@ class BudgetWindowLookup:
     model_name: str | None
     credential_id: uuid.UUID | None
     tenant_id: uuid.UUID | None
+    period_reset_anchor: PeriodResetAnchor = DEFAULT_PERIOD_RESET_ANCHOR
 
     def log_scope(self) -> PlatformBudgetLogScope:
         return PlatformBudgetLogScope(
@@ -71,7 +76,7 @@ def merge_platform_display_totals(
 
 
 def resolve_budget_window_key(lookup: BudgetWindowLookup, *, now: datetime) -> BudgetWindowKey:
-    window_start = compute_platform_budget_window_start(now, lookup.period)
+    window_start = compute_period_window_start(now, lookup.period, lookup.period_reset_anchor)
     return BudgetWindowKey(budget_id=lookup.budget_id, window_start=window_start)
 
 

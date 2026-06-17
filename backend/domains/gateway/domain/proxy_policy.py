@@ -10,6 +10,10 @@ import re
 from typing import TYPE_CHECKING
 import uuid
 
+from domains.gateway.domain.period_reset_anchor import (
+    DEFAULT_PERIOD_RESET_ANCHOR,
+    PeriodResetAnchor,
+)
 from domains.gateway.domain.errors import (
     CapabilityNotAllowedError,
     ModelNotAllowedError,
@@ -36,6 +40,7 @@ class BudgetReservation:
     reserved_tokens: int = 0
     credential_id: uuid.UUID | None = None
     tenant_id: uuid.UUID | None = None
+    period_reset_anchor: PeriodResetAnchor = DEFAULT_PERIOD_RESET_ANCHOR
 
 
 @dataclass(frozen=True)

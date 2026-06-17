@@ -22,6 +22,11 @@ from domains.gateway.domain.errors import (
     BudgetExceededError,
     RateLimitExceededError,
 )
+from domains.gateway.domain.period_reset_anchor import (
+    DEFAULT_PERIOD_RESET_ANCHOR,
+    PeriodResetAnchor,
+    compute_platform_redis_period_suffix,
+)
 from libs.db.redis import get_redis_client
 from utils.logging import get_logger
 
@@ -110,15 +115,17 @@ def _bucket_key(
     model_segment: str | None = None,
     credential_segment: str | None = None,
     tenant_segment: str | None = None,
+    period_reset_anchor: PeriodResetAnchor | None = None,
+    now: datetime | None = None,
 ) -> str:
     """Redis key for budget current values"""
     sid = target_id or "system"
-    if period == PERIOD_DAILY:
-        suffix = datetime.now(UTC).strftime("%Y%m%d")
-    elif period == PERIOD_MONTHLY:
-        suffix = datetime.now(UTC).strftime("%Y%m")
-    else:
-        suffix = "total"
+    when = now or datetime.now(UTC)
+    suffix = compute_platform_redis_period_suffix(
+        when,
+        period,
+        period_reset_anchor or DEFAULT_PERIOD_RESET_ANCHOR,
+    )
     base = f"gateway:budget:{target_kind}:{sid}:{period}:{suffix}"
     if tenant_segment:
         base = f"{base}:t:{tenant_segment}"
@@ -137,6 +144,8 @@ def _legacy_team_bucket_key(
     model_segment: str | None = None,
     credential_segment: str | None = None,
     tenant_segment: str | None = None,
+    period_reset_anchor: PeriodResetAnchor | None = None,
+    now: datetime | None = None,
 ) -> str | None:
     """迁移期：``tenant`` 预算曾以 ``team`` 写入 Redis，读时合并旧 key。"""
     if target_kind != "tenant":
@@ -148,6 +157,8 @@ def _legacy_team_bucket_key(
         model_segment=model_segment,
         credential_segment=credential_segment,
         tenant_segment=tenant_segment,
+        period_reset_anchor=period_reset_anchor,
+        now=now,
     )
 
 
@@ -167,6 +178,7 @@ class BudgetUsageCoord:
     model_segment: str | None
     credential_segment: str | None = None
     tenant_segment: str | None = None
+    period_reset_anchor: PeriodResetAnchor = DEFAULT_PERIOD_RESET_ANCHOR
 
 
 @dataclass
@@ -262,6 +274,7 @@ class BudgetService:
         model_segment: str | None,
         credential_segment: str | None = None,
         tenant_segment: str | None = None,
+        period_reset_anchor: PeriodResetAnchor | None = None,
     ) -> tuple[Decimal, int, int]:
         coord = BudgetUsageCoord(
             target_kind=target_kind,
@@ -270,6 +283,7 @@ class BudgetService:
             model_segment=model_segment,
             credential_segment=credential_segment,
             tenant_segment=tenant_segment,
+            period_reset_anchor=period_reset_anchor or DEFAULT_PERIOD_RESET_ANCHOR,
         )
         batch = await self.read_budget_usage_batch([coord])
         return batch.get(coord, (Decimal("0"), 0, 0))
@@ -293,6 +307,7 @@ class BudgetService:
                 model_segment=coord.model_segment,
                 credential_segment=coord.credential_segment,
                 tenant_segment=coord.tenant_segment,
+                period_reset_anchor=coord.period_reset_anchor,
             )
             key_entries.append((coord, primary, False))
             legacy = _legacy_team_bucket_key(
@@ -302,6 +317,7 @@ class BudgetService:
                 model_segment=coord.model_segment,
                 credential_segment=coord.credential_segment,
                 tenant_segment=coord.tenant_segment,
+                period_reset_anchor=coord.period_reset_anchor,
             )
             if legacy is not None:
                 key_entries.append((coord, legacy, True))
@@ -319,18 +335,12 @@ class BudgetService:
             cost_raw = values[0]
             tokens_raw = values[1]
             requests_raw = values[2]
-            used_cost = max(
-                used_cost,
-                Decimal(cost_raw.decode() if cost_raw else "0"),
-            )
-            used_tokens = max(
-                used_tokens,
-                int(tokens_raw.decode() if tokens_raw else "0"),
-            )
-            used_requests = max(
-                used_requests,
-                int(requests_raw.decode() if requests_raw else "0"),
-            )
+            # ``tenant`` Redis keys used to be written as ``team``. During the
+            # migration window a single budget period can legitimately have
+            # usage in both keys, so the effective usage is their sum.
+            used_cost += Decimal(cost_raw.decode() if cost_raw else "0")
+            used_tokens += int(tokens_raw.decode() if tokens_raw else "0")
+            used_requests += int(requests_raw.decode() if requests_raw else "0")
             out[coord] = (used_cost, used_tokens, used_requests)
         return out
 
@@ -347,6 +357,7 @@ class BudgetService:
         credential_id: uuid.UUID | str | None = None,
         tenant_id: uuid.UUID | str | None = None,
         prefetched_usage: tuple[Decimal, int, int] | None = None,
+        period_reset_anchor: PeriodResetAnchor | None = None,
     ) -> BudgetCheckResult:
         """读取当前 budget 状态；超限返回 allowed=False
 
@@ -355,6 +366,7 @@ class BudgetService:
         seg = _redis_model_segment(budget_model_name)
         cred_seg = _redis_credential_segment(credential_id)
         tenant_seg = redis_tenant_segment_for_budget(tenant_id)
+        anchor = period_reset_anchor or DEFAULT_PERIOD_RESET_ANCHOR
         if prefetched_usage is not None:
             used_cost, used_tokens, used_requests = prefetched_usage
         else:
@@ -365,6 +377,7 @@ class BudgetService:
                 model_segment=seg,
                 credential_segment=cred_seg,
                 tenant_segment=tenant_seg,
+                period_reset_anchor=anchor,
             )
 
         if limit_usd is not None and 0 < limit_usd <= used_cost:
@@ -410,6 +423,7 @@ class BudgetService:
         budget_model_name: str | None = None,
         credential_id: uuid.UUID | str | None = None,
         tenant_id: uuid.UUID | str | None = None,
+        period_reset_anchor: PeriodResetAnchor | None = None,
     ) -> tuple[int, int]:
         """预扣请求名额与/或 token 估算（Lua 原子化，防止并发穿透）。
 
@@ -431,8 +445,8 @@ class BudgetService:
             model_segment=seg,
             credential_segment=cred_seg,
             tenant_segment=tenant_seg,
+            period_reset_anchor=period_reset_anchor,
         )
-
         expire = 90000 if period == PERIOD_DAILY else (86400 * 35 if period == PERIOD_MONTHLY else 0)
         do_incr_requests = 1 if reserve_requests else 0
 
@@ -479,6 +493,7 @@ class BudgetService:
         tenant_id: uuid.UUID | str | None = None,
         reserved_requests: int = 1,
         reserved_tokens: int = 0,
+        period_reset_anchor: PeriodResetAnchor | None = None,
     ) -> None:
         """请求失败时回滚预扣的请求数 / token 估算。"""
         if reserved_requests <= 0 and reserved_tokens <= 0:
@@ -494,6 +509,7 @@ class BudgetService:
             model_segment=seg,
             credential_segment=cred_seg,
             tenant_segment=tenant_seg,
+            period_reset_anchor=period_reset_anchor,
         )
         if reserved_requests > 0:
             await client.hincrby(key, "requests", -reserved_requests)
@@ -511,6 +527,7 @@ class BudgetService:
         budget_model_name: str | None = None,
         credential_id: uuid.UUID | str | None = None,
         tenant_id: uuid.UUID | str | None = None,
+        period_reset_anchor: PeriodResetAnchor | None = None,
     ) -> None:
         """结算：在 Redis 中累加真实 cost/token；DB 由 rollup 任务异步同步"""
         client = await get_redis_client()
@@ -524,6 +541,7 @@ class BudgetService:
             model_segment=seg,
             credential_segment=cred_seg,
             tenant_segment=tenant_seg,
+            period_reset_anchor=period_reset_anchor,
         )
         pipe = client.pipeline()
         pipe.hincrbyfloat(key, "cost", float(delta_cost))

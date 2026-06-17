@@ -490,15 +490,24 @@ describe('matchQuotaRulesForContext personal upstream', () => {
 })
 
 describe('formatQuotaRulePeriod', () => {
-  it('labels platform daily/monthly as UTC calendar windows', () => {
+  it('labels platform daily/monthly with period reset anchor', () => {
     const daily = platformRule('m1', {
       key: { ...platformRule('m1').key, period: 'daily' },
     })
-    expect(formatQuotaRulePeriod(daily)).toBe('每日 (UTC 自然日)')
+    expect(formatQuotaRulePeriod(daily)).toBe('每日 00:00 (UTC)')
     const monthly = platformRule('m1', {
       key: { ...platformRule('m1').key, period: 'monthly' },
     })
-    expect(formatQuotaRulePeriod(monthly)).toBe('每月 (UTC 自然月)')
+    expect(formatQuotaRulePeriod(monthly)).toBe('每月 1 日 00:00 (UTC)')
+    const shanghai = platformRule('m1', {
+      key: {
+        ...platformRule('m1').key,
+        period: 'daily',
+        period_timezone: 'Asia/Shanghai',
+        period_reset_minutes: 9 * 60,
+      },
+    })
+    expect(formatQuotaRulePeriod(shanghai)).toBe('每日 09:00 (Asia/Shanghai)')
   })
 
   it('distinguishes upstream rolling 24h from calendar daily', () => {
@@ -520,8 +529,10 @@ describe('formatQuotaRulePeriod', () => {
         window_seconds: 86400,
         reset_strategy: 'calendar_daily_utc',
         quota_label: 'daily',
+        period_timezone: 'UTC',
+        period_reset_minutes: 0,
       },
     })
-    expect(formatQuotaRulePeriod(calendar)).toBe('UTC 自然日')
+    expect(formatQuotaRulePeriod(calendar)).toBe('每日 00:00 (UTC)')
   })
 })

@@ -27,8 +27,8 @@ from domains.gateway.application.budget_service import (
 )
 from domains.gateway.application.user_credential_budget_index import has_user_credential
 from domains.gateway.domain.errors import BudgetExceededError
+from domains.gateway.domain.period_reset_anchor import period_reset_anchor_from_row
 from domains.gateway.domain.proxy_policy import (
-    budget_model_keys,
     build_user_credential_budget_plan,
     first_present_limit,
 )
@@ -140,6 +140,7 @@ async def maybe_reserve_user_credential_budget(
             period=query.period,
             model_segment=redis_model_segment_for_budget(config.model_name),
             credential_segment=cred_seg,
+            period_reset_anchor=config.period_reset_anchor,
         )
         check_items.append((query, config, coord))
         usage_coords.append(coord)
@@ -161,6 +162,7 @@ async def maybe_reserve_user_credential_budget(
             budget_model_name=config.model_name,
             credential_id=credential_id,
             prefetched_usage=usage_by_coord.get(coord),
+            period_reset_anchor=config.period_reset_anchor,
         )
         if not check.allowed:
             await _release(reservations)
@@ -194,6 +196,7 @@ async def maybe_reserve_user_credential_budget(
                 estimate_tokens=estimate_tokens,
                 budget_model_name=config.model_name,
                 credential_id=credential_id,
+                period_reset_anchor=config.period_reset_anchor,
             )
         except Exception:
             await _release(reservations)
@@ -207,6 +210,9 @@ async def maybe_reserve_user_credential_budget(
                     "credential_id": str(credential_id),
                     "reserved_requests": reserved_requests,
                     "reserved_tokens": reserved_tokens,
+                    "period_timezone": config.period_reset_anchor.timezone,
+                    "period_reset_minutes": config.period_reset_anchor.time_minutes,
+                    "period_reset_day": config.period_reset_anchor.day_of_month,
                 }
             )
 
@@ -218,20 +224,35 @@ async def maybe_reserve_user_credential_budget(
         meta[_RESERVATIONS_META_KEY] = reservations
 
 
-async def _release(reservations: list[dict[str, Any]]) -> None:
+async def _release(
+    reservations: list[dict[str, Any]],
+    *,
+    release_requests: bool = True,
+    release_tokens: bool = True,
+) -> None:
     if not reservations:
         return
     budget = BudgetService()
     for r in reservations:
+        reserved_requests = int(r.get("reserved_requests") or 0) if release_requests else 0
+        reserved_tokens = int(r.get("reserved_tokens") or 0) if release_tokens else 0
+        if reserved_requests <= 0 and reserved_tokens <= 0:
+            continue
         with suppress(Exception):
+            anchor = period_reset_anchor_from_row(
+                timezone=r.get("period_timezone"),
+                time_minutes=r.get("period_reset_minutes"),
+                day_of_month=r.get("period_reset_day"),
+            )
             await budget.release(
                 target_kind="user",
                 target_id=r.get("target_id"),
                 period=r["period"],
                 budget_model_name=r.get("budget_model_name"),
                 credential_id=_to_uuid(r.get("credential_id")),
-                reserved_requests=int(r.get("reserved_requests") or 0),
-                reserved_tokens=int(r.get("reserved_tokens") or 0),
+                reserved_requests=reserved_requests,
+                reserved_tokens=reserved_tokens,
+                period_reset_anchor=anchor,
             )
 
 
@@ -242,7 +263,36 @@ async def release_user_credential_budget_from_metadata(metadata: dict[str, Any])
         await _release([r for r in raw if isinstance(r, dict)])
 
 
+async def release_user_credential_budget_token_reservations_from_metadata(
+    metadata: dict[str, Any],
+    *,
+    request_id: str | None = None,
+) -> None:
+    """成功回调：释放 token 估算预扣，保留 request 预扣作为请求计数。"""
+    raw = metadata.get(_RESERVATIONS_META_KEY)
+    if not isinstance(raw, list):
+        return
+    if request_id:
+        from libs.db.redis import get_redis_client
+
+        client = await get_redis_client()
+        acquired = await client.set(
+            f"{_PHASE2_TOKEN_RELEASED_PREFIX}{request_id}",
+            "1",
+            nx=True,
+            ex=_PHASE2_SETTLED_TTL,
+        )
+        if not acquired:
+            return
+    await _release(
+        [r for r in raw if isinstance(r, dict)],
+        release_requests=False,
+        release_tokens=True,
+    )
+
+
 _PHASE2_SETTLED_PREFIX = "gateway:budget:uc_settled:"
+_PHASE2_TOKEN_RELEASED_PREFIX = "gateway:budget:uc_token_released:"
 _PHASE2_SETTLED_TTL = 86400
 
 
@@ -273,24 +323,58 @@ async def commit_user_credential_budget(
         )
         if not acquired:
             return
+
+    plan = build_user_credential_budget_plan(
+        user_id=user_id,
+        credential_id=credential_id,
+        gateway_model_name=gateway_model_name,
+        periods=_PHASE2_PERIODS,
+    )
+
+    async def _loader() -> dict[Any, GatewayBudget]:
+        from domains.gateway.infrastructure.repositories.budget_repository import (
+            BudgetRepository,
+        )
+        from libs.db.database import get_session_context
+
+        async with get_session_context() as session:
+            return await BudgetRepository(session).get_many_by_plan(plan)
+
+    budget_by_coord = await get_cached_budget_by_plan(plan, _loader)
+    if not budget_by_coord:
+        return
+
     budget = BudgetService()
     user_id_str = str(user_id)
-    for period in _PHASE2_PERIODS:
-        for model_key in budget_model_keys(gateway_model_name):
-            with suppress(Exception):
-                await budget.commit(
-                    target_kind="user",
-                    target_id=user_id_str,
-                    period=period,
-                    delta_cost=cost_usd,
-                    delta_tokens=total_tokens,
-                    budget_model_name=model_key,
-                    credential_id=credential_id,
-                )
+    for query in plan:
+        config = budget_by_coord.get(
+            (
+                query.target_kind,
+                query.target_id,
+                query.period,
+                query.model_name,
+                credential_id,
+                query.tenant_id,
+            )
+        )
+        if config is None:
+            continue
+        with suppress(Exception):
+            await budget.commit(
+                target_kind="user",
+                target_id=user_id_str,
+                period=query.period,
+                delta_cost=cost_usd,
+                delta_tokens=total_tokens,
+                budget_model_name=config.model_name,
+                credential_id=credential_id,
+                period_reset_anchor=config.period_reset_anchor,
+            )
 
 
 __all__ = [
     "commit_user_credential_budget",
     "maybe_reserve_user_credential_budget",
     "release_user_credential_budget_from_metadata",
+    "release_user_credential_budget_token_reservations_from_metadata",
 ]

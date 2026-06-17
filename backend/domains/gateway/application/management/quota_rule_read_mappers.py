@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Literal
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 from uuid import UUID
 
 from domains.gateway.application.management.quota_rule_read_model import (
@@ -13,8 +14,16 @@ from domains.gateway.application.management.quota_rule_read_model import (
     QuotaRuleSourceRef,
     QuotaRuleUsage,
 )
+from domains.gateway.domain.period_reset_anchor import (
+    compute_period_reset_at,
+    period_reset_anchor_from_plan_quota,
+    period_reset_anchor_from_row,
+)
+from domains.gateway.domain.quota_plan import compute_reset_at, normalize_reset_strategy
 
 if TYPE_CHECKING:
+    from typing import Literal
+
     from domains.gateway.application.management.plan_read_models import (
         EntitlementPlanReadModel,
         PlanQuotaReadModel,
@@ -42,6 +51,14 @@ def budget_to_quota_rule(
     elif budget.target_kind in ("tenant", "system"):
         user_id = None
 
+    anchor = period_reset_anchor_from_row(
+        timezone=budget.period_timezone,
+        time_minutes=budget.period_reset_minutes,
+        day_of_month=budget.period_reset_day,
+    )
+    now = datetime.now(UTC)
+    reset_at = compute_period_reset_at(now, budget.period, anchor)
+
     key = QuotaRuleKey(
         team_id=team_id,
         layer="platform",
@@ -51,6 +68,9 @@ def budget_to_quota_rule(
         period=budget.period,
         window_seconds=None,
         reset_strategy=None,
+        period_timezone=anchor.timezone,
+        period_reset_minutes=anchor.time_minutes,
+        period_reset_day=anchor.day_of_month,
         access_kind=access_kind,
         access_id=access_id,
         quota_label=None,
@@ -67,11 +87,8 @@ def budget_to_quota_rule(
             limit_requests=budget.limit_requests,
         ),
         usage=QuotaRuleUsage(
-            current_usd=budget.current_usd,
-            current_tokens=budget.current_tokens,
-            current_requests=budget.current_requests,
-            reset_at=budget.reset_at,
-            budget_reset_at=budget.budget_reset_at,
+            reset_at=reset_at,
+            budget_reset_at=reset_at,
         ),
         plan_label=None,
         is_active=True,
@@ -86,6 +103,55 @@ def _plan_quota_limits(quota: PlanQuotaReadModel) -> QuotaRuleLimits:
         limit_requests=quota.limit_requests,
         unit_price_usd_per_token=quota.unit_price_usd_per_token,
         unit_price_usd_per_request=quota.unit_price_usd_per_request,
+    )
+
+
+def _plan_quota_key_fields(quota: PlanQuotaReadModel) -> dict[str, object]:
+    return {
+        "period_timezone": quota.reset_timezone,
+        "period_reset_minutes": quota.reset_time_minutes,
+        "period_reset_day": quota.reset_day_of_month,
+    }
+
+
+def _plan_quota_reset_at(
+    quota: PlanQuotaReadModel,
+    *,
+    plan_valid_from: datetime | None,
+    now: datetime | None = None,
+) -> datetime | None:
+    strategy = normalize_reset_strategy(quota.reset_strategy)
+    if strategy not in ("calendar_daily_utc", "calendar_monthly_utc"):
+        return None
+    when = now or datetime.now(UTC)
+    anchor = period_reset_anchor_from_plan_quota(
+        reset_timezone=quota.reset_timezone,
+        reset_time_minutes=quota.reset_time_minutes,
+        reset_day_of_month=quota.reset_day_of_month,
+    )
+    return compute_reset_at(
+        strategy=strategy,
+        window_seconds=quota.window_seconds,
+        now=when,
+        plan_valid_from=plan_valid_from,
+        period_reset_anchor=anchor,
+    )
+
+
+def _plan_quota_usage_hint(
+    quota: PlanQuotaReadModel,
+    *,
+    plan_valid_from: datetime | None,
+) -> QuotaRuleUsage | None:
+    reset_at = _plan_quota_reset_at(quota, plan_valid_from=plan_valid_from)
+    if reset_at is None:
+        return None
+    return QuotaRuleUsage(
+        current_tokens=None,
+        current_requests=None,
+        current_usd=None,
+        reset_at=reset_at,
+        budget_reset_at=reset_at,
     )
 
 
@@ -105,6 +171,7 @@ def flatten_provider_plan(
             period=None,
             window_seconds=quota.window_seconds,
             reset_strategy=quota.reset_strategy,
+            **_plan_quota_key_fields(quota),
             access_kind="none",
             access_id=None,
             quota_label=quota.label,
@@ -120,7 +187,7 @@ def flatten_provider_plan(
                     quota_id=quota.id,
                 ),
                 limits=_plan_quota_limits(quota),
-                usage=None,
+                usage=_plan_quota_usage_hint(quota, plan_valid_from=plan.valid_from),
                 plan_label=plan.label,
                 is_active=plan.is_active,
                 plan_valid_from=plan.valid_from,
@@ -160,6 +227,7 @@ def flatten_entitlement_plan(
             period=None,
             window_seconds=quota.window_seconds,
             reset_strategy=quota.reset_strategy,
+            **_plan_quota_key_fields(quota),
             access_kind=access_kind,
             access_id=plan.scope_id,
             quota_label=quota.label,
@@ -175,7 +243,7 @@ def flatten_entitlement_plan(
                     quota_id=quota.id,
                 ),
                 limits=_plan_quota_limits(quota),
-                usage=None,
+                usage=_plan_quota_usage_hint(quota, plan_valid_from=plan.valid_from),
                 plan_label=plan.label,
                 is_active=plan.is_active,
                 plan_valid_from=plan.valid_from,

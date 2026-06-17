@@ -9,6 +9,11 @@ import time
 from typing import TYPE_CHECKING
 import uuid
 
+from domains.gateway.domain.period_reset_anchor import (
+    DEFAULT_PERIOD_RESET_ANCHOR,
+    PeriodResetAnchor,
+    period_reset_anchor_from_row,
+)
 from utils.logging import get_logger
 
 if TYPE_CHECKING:
@@ -52,6 +57,7 @@ class BudgetConfigRow:
     limit_requests: int | None
     credential_id: uuid.UUID | None = None
     tenant_id: uuid.UUID | None = None
+    period_reset_anchor: PeriodResetAnchor = DEFAULT_PERIOD_RESET_ANCHOR
 
 
 def budget_config_row_from_orm(row: GatewayBudget) -> BudgetConfigRow:
@@ -65,6 +71,11 @@ def budget_config_row_from_orm(row: GatewayBudget) -> BudgetConfigRow:
         limit_requests=row.limit_requests,
         credential_id=row.credential_id,
         tenant_id=row.tenant_id,
+        period_reset_anchor=period_reset_anchor_from_row(
+            timezone=getattr(row, "period_timezone", None),
+            time_minutes=getattr(row, "period_reset_minutes", None),
+            day_of_month=getattr(row, "period_reset_day", None),
+        ),
     )
 
 
@@ -254,6 +265,11 @@ async def _get_redis_by_coord(version: str, coord: _Coord) -> BudgetConfigRow | 
             limit_requests=payload.get("limit_requests"),
             credential_id=cid,
             tenant_id=ten,
+            period_reset_anchor=period_reset_anchor_from_row(
+                timezone=payload.get("period_timezone"),
+                time_minutes=payload.get("period_reset_minutes"),
+                day_of_month=payload.get("period_reset_day"),
+            ),
         )
     except (TypeError, ValueError, json.JSONDecodeError, KeyError):
         return _MISS
@@ -273,6 +289,9 @@ async def _put_redis_by_coord(version: str, coord: _Coord, row: BudgetConfigRow)
         "limit_requests": row.limit_requests,
         "credential_id": str(row.credential_id) if row.credential_id is not None else None,
         "tenant_id": str(row.tenant_id) if row.tenant_id is not None else None,
+        "period_timezone": row.period_reset_anchor.timezone,
+        "period_reset_minutes": row.period_reset_anchor.time_minutes,
+        "period_reset_day": row.period_reset_anchor.day_of_month,
     }
     try:
         await redis.set(

@@ -72,6 +72,9 @@ def _quota_rule_to_dict(rule: QuotaRuleReadModel) -> dict:
             "period": key.period,
             "window_seconds": key.window_seconds,
             "reset_strategy": key.reset_strategy,
+            "period_timezone": key.period_timezone,
+            "period_reset_minutes": key.period_reset_minutes,
+            "period_reset_day": key.period_reset_day,
             "access_kind": key.access_kind,
             "access_id": str(key.access_id) if key.access_id else None,
             "quota_label": key.quota_label,
@@ -104,7 +107,7 @@ def _quota_rule_to_dict(rule: QuotaRuleReadModel) -> dict:
 
     if usage is not None:
         result["usage"] = {
-            "current_usd": str(usage.current_usd),
+            "current_usd": str(usage.current_usd) if usage.current_usd is not None else None,
             "current_tokens": usage.current_tokens,
             "current_requests": usage.current_requests,
             "reset_at": usage.reset_at.isoformat() if usage.reset_at else None,
@@ -141,6 +144,9 @@ def _dict_to_quota_rule(data: dict) -> QuotaRuleReadModel:
         period=key_data.get("period"),
         window_seconds=key_data.get("window_seconds"),
         reset_strategy=key_data.get("reset_strategy"),
+        period_timezone=key_data.get("period_timezone"),
+        period_reset_minutes=key_data.get("period_reset_minutes"),
+        period_reset_day=key_data.get("period_reset_day"),
         access_kind=key_data["access_kind"],
         access_id=uuid.UUID(key_data["access_id"]) if key_data.get("access_id") else None,
         quota_label=key_data.get("quota_label"),
@@ -180,9 +186,13 @@ def _dict_to_quota_rule(data: dict) -> QuotaRuleReadModel:
         usage = QuotaRuleUsage(
             current_usd=Decimal(usage_data["current_usd"])
             if usage_data.get("current_usd") is not None
-            else Decimal("0"),
-            current_tokens=usage_data.get("current_tokens") or 0,
-            current_requests=usage_data.get("current_requests") or 0,
+            else None,
+            current_tokens=usage_data["current_tokens"]
+            if usage_data.get("current_tokens") is not None
+            else None,
+            current_requests=usage_data["current_requests"]
+            if usage_data.get("current_requests") is not None
+            else None,
             reset_at=datetime.fromisoformat(usage_data["reset_at"])
             if usage_data.get("reset_at")
             else None,

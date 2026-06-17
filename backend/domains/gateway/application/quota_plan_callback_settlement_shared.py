@@ -8,6 +8,7 @@ from decimal import Decimal
 from typing import Protocol
 import uuid
 
+from domains.gateway.domain.period_reset_anchor import period_reset_anchor_from_plan_quota
 from domains.gateway.domain.quota_plan import (
     PlanQuotaSpec,
     QuotaPlanReservation,
@@ -26,6 +27,9 @@ class _PlanQuotaRow(Protocol):
     limit_tokens: int | None
     limit_requests: int | None
     reset_strategy: str
+    reset_timezone: str
+    reset_time_minutes: int
+    reset_day_of_month: int
 
 
 def to_plan_uuid(value: object) -> uuid.UUID | None:
@@ -89,6 +93,11 @@ def build_specs_by_quota_id(
             limit_requests=row.limit_requests,
             reset_strategy=normalize_reset_strategy(row.reset_strategy),
             plan_valid_from=plan_valid_from,
+            period_reset_anchor=period_reset_anchor_from_plan_quota(
+                reset_timezone=row.reset_timezone,
+                reset_time_minutes=row.reset_time_minutes,
+                reset_day_of_month=row.reset_day_of_month,
+            ),
         )
         for row in quotas
     }

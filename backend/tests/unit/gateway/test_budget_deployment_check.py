@@ -9,8 +9,8 @@ import uuid
 
 import pytest
 
-import domains.gateway.application.budget_deployment_check as mod
 from domains.gateway.application.budget_config_cache import BudgetConfigRow
+import domains.gateway.application.budget_deployment_check as mod
 from domains.gateway.application.budget_service import BudgetCheckResult
 from domains.gateway.domain.errors import BudgetExceededError
 
@@ -136,3 +136,28 @@ async def test_exhausted_raises_and_releases(monkeypatch) -> None:
     assert exc.value.scope == "user_credential"
     svc.reserve.assert_not_awaited()
     assert mod._RESERVATIONS_META_KEY not in data["metadata"]
+
+
+@pytest.mark.asyncio
+async def test_success_callback_releases_only_token_reservations(monkeypatch) -> None:
+    _patch_service(monkeypatch, check_result=BudgetCheckResult(allowed=True))
+    svc = mod.BudgetService()
+    metadata = {
+        mod._RESERVATIONS_META_KEY: [
+            {
+                "target_id": str(uuid.uuid4()),
+                "period": "monthly",
+                "budget_model_name": _MODEL,
+                "credential_id": str(uuid.uuid4()),
+                "reserved_requests": 1,
+                "reserved_tokens": 35,
+            }
+        ]
+    }
+
+    await mod.release_user_credential_budget_token_reservations_from_metadata(metadata)
+
+    svc.release.assert_awaited_once()
+    kwargs = svc.release.await_args.kwargs
+    assert kwargs["reserved_requests"] == 0
+    assert kwargs["reserved_tokens"] == 35

@@ -403,3 +403,36 @@ async def test_upsert_budget_allows_tenant_target() -> None:
     assert result is saved
     writes._budgets.upsert.assert_awaited_once()
     writes._teams.list_team_members.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_upsert_budget_persists_period_reset_anchor() -> None:
+    session = MagicMock()
+    writes = GatewayManagementWriteService(session)
+    tenant_id = uuid.uuid4()
+    saved = SimpleNamespace(id=uuid.uuid4())
+
+    writes._teams.list_team_members = AsyncMock(return_value=[])
+    writes._budgets.upsert = AsyncMock(return_value=saved)
+
+    result = await writes.upsert_budget(
+        target_kind="tenant",
+        target_id=tenant_id,
+        period="monthly",
+        model_name=None,
+        limit_usd=Decimal("10"),
+        soft_limit_usd=None,
+        limit_tokens=None,
+        limit_requests=None,
+        period_timezone="Asia/Shanghai",
+        period_reset_minutes=540,
+        period_reset_day=15,
+        tenant_id=tenant_id,
+        is_platform_admin=False,
+    )
+
+    assert result is saved
+    kwargs = writes._budgets.upsert.await_args.kwargs
+    assert kwargs["period_timezone"] == "Asia/Shanghai"
+    assert kwargs["period_reset_minutes"] == 540
+    assert kwargs["period_reset_day"] == 15

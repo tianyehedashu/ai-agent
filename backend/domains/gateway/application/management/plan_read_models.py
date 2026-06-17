@@ -18,6 +18,9 @@ class PlanQuotaReadModel:
     limit_usd: Decimal | None
     limit_tokens: int | None
     limit_requests: int | None
+    reset_timezone: str = "UTC"
+    reset_time_minutes: int = 0
+    reset_day_of_month: int = 1
     unit_price_usd_per_token: Decimal | None = None
     unit_price_usd_per_request: Decimal | None = None
 

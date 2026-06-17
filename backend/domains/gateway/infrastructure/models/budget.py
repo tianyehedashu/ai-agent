@@ -99,6 +99,27 @@ class GatewayBudget(BaseModel):
         nullable=True,
         comment="下次预算重置时刻（显式，便于 UI 展示）",
     )
+    period_timezone: Mapped[str] = mapped_column(
+        String(64),
+        nullable=False,
+        server_default="UTC",
+        default="UTC",
+        comment="IANA 时区；日历日/月切本地时刻",
+    )
+    period_reset_minutes: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        server_default="0",
+        default=0,
+        comment="本地日切时刻：自 00:00 起的分钟数 0..1439",
+    )
+    period_reset_day: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        server_default="1",
+        default=1,
+        comment="月切日 1..31；短月按月末 clamp",
+    )
 
     __table_args__ = (
         # 成员总量/模型护栏行（credential_id IS NULL）按 tenant 隔离：

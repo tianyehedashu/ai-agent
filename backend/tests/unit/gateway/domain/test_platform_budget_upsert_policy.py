@@ -7,7 +7,9 @@ import uuid
 
 import pytest
 
+from domains.gateway.domain.period_reset_anchor import DEFAULT_PERIOD_RESET_ANCHOR
 from domains.gateway.domain.policies.platform_budget_upsert_policy import (
+    resolve_platform_period_reset_anchor,
     validate_platform_budget_upsert,
 )
 from libs.exceptions import ValidationError
@@ -58,3 +60,24 @@ def test_requires_at_least_one_limit() -> None:
 
 def test_tenant_total_without_credential_is_valid() -> None:
     _ok(target_kind="tenant", credential_id=None, model_name=None)
+
+
+def test_total_rejects_non_default_anchor() -> None:
+    with pytest.raises(ValidationError):
+        _ok(
+            period="total",
+            period_timezone="Asia/Shanghai",
+            period_reset_minutes=540,
+        )
+
+
+def test_resolve_anchor_ignores_day_for_daily() -> None:
+    anchor = resolve_platform_period_reset_anchor(
+        period="daily",
+        period_timezone="Asia/Shanghai",
+        period_reset_minutes=540,
+        period_reset_day=29,
+    )
+    assert anchor.timezone == "Asia/Shanghai"
+    assert anchor.time_minutes == 540
+    assert anchor.day_of_month == DEFAULT_PERIOD_RESET_ANCHOR.day_of_month

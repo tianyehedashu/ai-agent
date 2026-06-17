@@ -28,6 +28,9 @@ export interface PlanQuotaInput {
   limit_usd?: number | string | null
   limit_tokens?: number | null
   limit_requests?: number | null
+  reset_timezone?: string | null
+  reset_time_minutes?: number | null
+  reset_day_of_month?: number | null
 }
 
 /** Entitlement Plan 配额输入（额外携带单价信息） */
@@ -45,6 +48,9 @@ export interface PlanQuota {
   limit_usd: number | string | null
   limit_tokens: number | null
   limit_requests: number | null
+  reset_timezone: string
+  reset_time_minutes: number
+  reset_day_of_month: number
 }
 
 /** Entitlement Plan 配额读模型（含单价） */

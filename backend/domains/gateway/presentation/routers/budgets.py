@@ -89,6 +89,9 @@ async def upsert_budget(
         soft_limit_usd=body.soft_limit_usd,
         limit_tokens=body.limit_tokens,
         limit_requests=body.limit_requests,
+        period_timezone=body.period_timezone,
+        period_reset_minutes=body.period_reset_minutes,
+        period_reset_day=body.period_reset_day,
         tenant_id=team.team_id,
         is_platform_admin=team.is_platform_admin,
     )

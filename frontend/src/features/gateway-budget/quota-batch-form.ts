@@ -10,6 +10,9 @@ export interface QuotaBatchFormValues {
   allModels: boolean
   allCredentials: boolean
   period: 'daily' | 'monthly' | 'total'
+  periodTimezone: string
+  periodResetTime: string
+  periodResetDay: number
   windowSeconds: string
   quotaLabel: string
   limit_usd: string
@@ -27,6 +30,9 @@ export const DEFAULT_BATCH_FORM: QuotaBatchFormValues = {
   allModels: true,
   allCredentials: true,
   period: 'monthly',
+  periodTimezone: 'UTC',
+  periodResetTime: '00:00',
+  periodResetDay: 1,
   windowSeconds: '0',
   quotaLabel: 'default',
   limit_usd: '',

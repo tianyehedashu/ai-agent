@@ -30,7 +30,12 @@ async def test_commit_entitlement_plan_on_success(monkeypatch) -> None:
     mock_client = AsyncMock()
     mock_client.get = AsyncMock(return_value=None)
     mock_client.set = AsyncMock(return_value=True)
-    monkeypatch.setattr(mod, "get_redis_client", AsyncMock(return_value=mock_client))
+    redis_mock = AsyncMock(return_value=mock_client)
+    monkeypatch.setattr(mod, "get_redis_client", redis_mock)
+    monkeypatch.setattr(
+        "domains.gateway.application.quota_plan_callback_settlement_shared.get_redis_client",
+        redis_mock,
+    )
 
     metadata: dict[str, Any] = {
         "gateway_entitlement_plan_id": str(plan_id),

@@ -69,6 +69,7 @@ async def _upsert_quota_plan_usage(
                     spec.window_seconds,
                     strategy=spec.reset_strategy,
                     plan_valid_from=spec.plan_valid_from,
+                    period_reset_anchor=spec.period_reset_anchor,
                 )
                 await repo.increment_bucket(
                     ns,

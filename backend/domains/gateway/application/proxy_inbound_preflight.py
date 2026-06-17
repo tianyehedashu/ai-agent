@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 
 from domains.gateway.application.model_or_route_resolution import ResolvedModelName
 from domains.gateway.domain.errors import EntitlementPlanExhaustedError
+from domains.gateway.application.proxy_context import PlatformBudgetPreflightState
 from domains.gateway.domain.proxy_policy import BudgetReservation
 from domains.gateway.domain.types import GatewayCapability
 
@@ -56,6 +57,7 @@ async def run_proxy_inbound_preflight(
     # Phase2（pre_call hook）因无成员+凭据规则自然跳过。
     if await guard.is_platform_budget_exempt(ctx, resolved):
         reservations: list[BudgetReservation] = []
+        ctx.platform_budget_preflight = PlatformBudgetPreflightState()
     else:
         reservations = await guard.check_budget(ctx, estimate_tokens=estimate_tokens)
     try:

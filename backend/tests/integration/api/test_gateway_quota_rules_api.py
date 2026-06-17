@@ -84,6 +84,44 @@ class TestGatewayQuotaRulesApi:
         assert any(row["key"]["period"] == "daily" for row in listed.json())
 
     @pytest.mark.asyncio
+    async def test_batch_upsert_platform_daily_custom_anchor_fields(
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict[str, str],
+        db_session,
+        test_user: User,
+    ) -> None:
+        team = await TeamService(db_session).ensure_personal_team(test_user.id)
+        r = await dev_client.put(
+            f"/api/v1/gateway/teams/{team.id}/quota-rules/batch",
+            headers=auth_headers,
+            json={
+                "rules": [
+                    {
+                        "layer": "platform",
+                        "target_kind": "tenant",
+                        "period": "daily",
+                        "limit_usd": "10.00",
+                        "period_timezone": "Asia/Shanghai",
+                        "period_reset_minutes": 540,
+                    }
+                ]
+            },
+        )
+        assert r.status_code == 200, r.text
+        listed = await dev_client.get(
+            f"/api/v1/gateway/teams/{team.id}/quota-rules?layer=platform&include_usage=true",
+            headers=auth_headers,
+        )
+        assert listed.status_code == 200
+        rows = listed.json()
+        row = next(r for r in rows if r["key"]["period"] == "daily")
+        assert row["key"]["period_timezone"] == "Asia/Shanghai"
+        assert row["key"]["period_reset_minutes"] == 540
+        assert row["usage"] is not None
+        assert row["usage"]["reset_at"] is not None
+
+    @pytest.mark.asyncio
     async def test_batch_upsert_upstream_quota_appears_in_list(
         self,
         dev_client: AsyncClient,

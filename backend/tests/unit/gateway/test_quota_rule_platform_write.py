@@ -42,7 +42,7 @@ async def test_user_credential_model_runs_full_assert_chain() -> None:
         limit_usd=Decimal("50"),
     )
 
-    kind, target_id, budget_tenant, period = await svc._resolve_platform_target(
+    kind, target_id, budget_tenant, period, _anchor = await svc._resolve_platform_target(
         cmd, tenant_id=tenant_id, is_platform_admin=False
     )
 
@@ -69,7 +69,7 @@ async def test_member_total_guardrail_scoped_to_team() -> None:
         limit_usd=Decimal("200"),
     )
 
-    kind, target_id, budget_tenant, period = await svc._resolve_platform_target(
+    kind, target_id, budget_tenant, period, _anchor = await svc._resolve_platform_target(
         cmd, tenant_id=tenant_id, is_platform_admin=False
     )
 
@@ -132,7 +132,7 @@ async def test_self_service_owned_credential_uses_ownership_assert() -> None:
         limit_usd=Decimal("30"),
     )
 
-    kind, target_id, budget_tenant, period = await svc._resolve_platform_target(
+    kind, target_id, budget_tenant, period, _anchor = await svc._resolve_platform_target(
         cmd,
         tenant_id=tenant_id,
         is_platform_admin=False,
@@ -254,7 +254,7 @@ async def test_admin_batch_with_actor_user_id_allows_tenant_target() -> None:
         limit_usd=Decimal("25"),
     )
 
-    kind, target_id, budget_tenant, period = await svc._resolve_platform_target(
+    kind, target_id, budget_tenant, period, _anchor = await svc._resolve_platform_target(
         cmd,
         tenant_id=tenant_id,
         is_platform_admin=False,

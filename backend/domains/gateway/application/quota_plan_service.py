@@ -363,6 +363,7 @@ class QuotaPlanService:
                 spec.window_seconds,
                 strategy=spec.reset_strategy,
                 plan_valid_from=spec.plan_valid_from,
+                period_reset_anchor=spec.period_reset_anchor,
             )
             try:
                 await client.zremrangebyscore(ikey, 0, window_start_minute - 1)

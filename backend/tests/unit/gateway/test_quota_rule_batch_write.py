@@ -241,6 +241,7 @@ async def test_upsert_upstream_validates_real_model_on_credential() -> None:
 
     svc._assert_upstream_credential_writable = AsyncMock(return_value=tenant_id)  # type: ignore[method-assign]
     svc._assert_real_model_on_credential = AsyncMock()  # type: ignore[method-assign]
+    svc._resolve_registered_real_model = AsyncMock(return_value="gpt-4o")  # type: ignore[method-assign]
     svc._provider_plans.get_active_for_credential_model = AsyncMock(return_value=None)  # type: ignore[method-assign]
     svc._provider_plans.create = AsyncMock()  # type: ignore[method-assign]
     svc._provider_plans.list_quotas = AsyncMock(return_value=[])  # type: ignore[method-assign]
@@ -273,6 +274,7 @@ async def test_create_provider_plan_validates_real_model_on_credential() -> None
 
     svc._assert_credential_in_team = AsyncMock()  # type: ignore[method-assign]
     svc._assert_real_model_on_credential = AsyncMock()  # type: ignore[method-assign]
+    svc._resolve_registered_real_model = AsyncMock(return_value="openai/gpt-4o-mini")  # type: ignore[method-assign]
     svc._provider_plans.create = AsyncMock(return_value=MagicMock(id=uuid.uuid4()))  # type: ignore[method-assign]
     svc._invalidate_upstream_quota_rule_list_cache = AsyncMock()  # type: ignore[method-assign]
 
@@ -286,4 +288,48 @@ async def test_create_provider_plan_validates_real_model_on_credential() -> None
         valid_until=now + timedelta(days=30),
     )
 
-    svc._assert_real_model_on_credential.assert_awaited_once_with(cred_id, "openai/gpt-4o-mini")
+    svc._resolve_registered_real_model.assert_awaited_once_with(cred_id, "openai/gpt-4o-mini")
+
+
+@pytest.mark.asyncio
+async def test_create_provider_plan_normalizes_quota_reset_anchor() -> None:
+    """凭据 API 直接创建 ProviderPlan 时同样写入归一化后的周期锚点。"""
+    from datetime import UTC, datetime, timedelta
+
+    svc = _writes()
+    tenant_id = uuid.uuid4()
+    cred_id = uuid.uuid4()
+    plan_id = uuid.uuid4()
+    now = datetime.now(UTC)
+
+    svc._assert_credential_in_team = AsyncMock()  # type: ignore[method-assign]
+    svc._provider_plans.create = AsyncMock(return_value=MagicMock(id=plan_id))  # type: ignore[method-assign]
+    svc._provider_plans.add_quota = AsyncMock()  # type: ignore[method-assign]
+    svc._invalidate_upstream_quota_rule_list_cache = AsyncMock()  # type: ignore[method-assign]
+
+    await svc.create_provider_plan(
+        credential_id=cred_id,
+        tenant_id=tenant_id,
+        is_platform_admin=False,
+        real_model=None,
+        label="pack",
+        valid_from=now,
+        valid_until=now + timedelta(days=30),
+        quotas=[
+            {
+                "label": "daily",
+                "window_seconds": 86400,
+                "reset_strategy": "calendar_daily_utc",
+                "limit_requests": 100,
+                "reset_timezone": "Asia/Shanghai",
+                "reset_time_minutes": 540,
+                "reset_day_of_month": 15,
+            }
+        ],
+    )
+
+    kwargs = svc._provider_plans.add_quota.await_args.kwargs
+    assert kwargs["plan_id"] == plan_id
+    assert kwargs["reset_timezone"] == "Asia/Shanghai"
+    assert kwargs["reset_time_minutes"] == 540
+    assert kwargs["reset_day_of_month"] == 1

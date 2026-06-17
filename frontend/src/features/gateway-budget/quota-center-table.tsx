@@ -16,7 +16,9 @@ import { cn } from '@/lib/utils'
 import {
   computeQuotaRuleUsageRatio,
   formatQuotaRulePeriod,
+  formatQuotaRuleResetAt,
   LAYER_LABELS,
+  quotaUsageHasMetrics,
   LAYER_ORDER,
   quotaRuleRowId,
   resolveQuotaRuleModelLabel,
@@ -219,9 +221,16 @@ const QuotaCenterTableRow = memo(function QuotaCenterTableRow({
       <td className="max-w-[140px] truncate px-4 py-2 text-xs">
         {resolveQuotaRuleModelLabel(rule, labelContext)}
       </td>
-      <td className="px-4 py-2 text-xs">{formatQuotaRulePeriod(rule)}</td>
+      <td className="px-4 py-2 text-xs">
+        <div>{formatQuotaRulePeriod(rule)}</div>
+        {formatQuotaRuleResetAt(rule) ? (
+          <div className="mt-0.5 text-[10px] text-muted-foreground">
+            重置 {formatQuotaRuleResetAt(rule)}
+          </div>
+        ) : null}
+      </td>
       <td className="px-4 py-2 text-xs tabular-nums">
-        {usage ? (
+        {usage && quotaUsageHasMetrics(usage) ? (
           <>
             USD {Number.parseFloat(String(usage.current_usd)).toFixed(4)} /{' '}
             {limitUsd !== null ? `$${Number.parseFloat(String(limitUsd)).toFixed(2)}` : '∞'}
@@ -233,7 +242,7 @@ const QuotaCenterTableRow = memo(function QuotaCenterTableRow({
         )}
       </td>
       <td className="px-4 py-2">
-        {usage ? (
+        {usage && quotaUsageHasMetrics(usage) ? (
           <div className="flex items-center gap-2">
             <div className="h-2 w-24 overflow-hidden rounded bg-muted">
               <div

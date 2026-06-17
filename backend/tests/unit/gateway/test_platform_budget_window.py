@@ -34,3 +34,19 @@ def test_naive_datetime_treated_as_utc() -> None:
     assert compute_platform_budget_window_start(now, "daily") == datetime(
         2026, 6, 16, 0, 0, tzinfo=UTC
     )
+
+
+def test_custom_anchor_shanghai_daily_cutover() -> None:
+    from domains.gateway.domain.period_reset_anchor import PeriodResetAnchor
+
+    anchor = PeriodResetAnchor(timezone="Asia/Shanghai", time_minutes=9 * 60, day_of_month=1)
+    # 2026-06-15 08:30 UTC = 16:30 CST → window started 2026-06-15 01:00 UTC (09:00 CST same day)
+    before_cut = datetime(2026, 6, 15, 8, 30, tzinfo=UTC)
+    assert compute_platform_budget_window_start(before_cut, "daily", anchor=anchor) == datetime(
+        2026, 6, 15, 1, 0, tzinfo=UTC
+    )
+    # 2026-06-15 00:30 UTC = 08:30 CST → still previous window (09:00 CST Jun 14)
+    after_midnight_utc = datetime(2026, 6, 15, 0, 30, tzinfo=UTC)
+    assert compute_platform_budget_window_start(after_midnight_utc, "daily", anchor=anchor) == datetime(
+        2026, 6, 14, 1, 0, tzinfo=UTC
+    )

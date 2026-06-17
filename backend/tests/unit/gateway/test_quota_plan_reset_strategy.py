@@ -65,6 +65,26 @@ class TestQuotaPlanResetStrategy:
             now=now,
         ) == datetime(2027, 1, 1, tzinfo=UTC)
 
+    def test_calendar_daily_with_custom_anchor(self) -> None:
+        from domains.gateway.domain.period_reset_anchor import PeriodResetAnchor
+
+        anchor = PeriodResetAnchor(timezone="Asia/Shanghai", time_minutes=9 * 60, day_of_month=1)
+        now = datetime(2026, 6, 15, 8, 30, tzinfo=UTC)  # 16:30 CST
+        spec = PlanQuotaSpec(
+            quota_id=uuid.uuid4(),
+            label="daily",
+            window_seconds=86400,
+            reset_strategy="calendar_daily_utc",
+            period_reset_anchor=anchor,
+            limit_usd=Decimal("10"),
+        )
+        assert compute_window_start_datetime(
+            now,
+            spec.window_seconds,
+            strategy=spec.reset_strategy,
+            period_reset_anchor=anchor,
+        ) == datetime(2026, 6, 15, 1, 0, tzinfo=UTC)
+
     def test_plan_anniversary_uses_valid_from_as_anchor(self) -> None:
         valid_from = datetime(2026, 5, 15, 10, 0, tzinfo=UTC)
         now = valid_from + timedelta(days=10, hours=2)

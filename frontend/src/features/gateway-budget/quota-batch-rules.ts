@@ -1,10 +1,33 @@
 import type { QuotaRuleUpsertBody } from '@/api/gateway'
 
 import { parseOptionalInt, parseOptionalUsd } from './budget-form-utils'
+import { periodResetMinutesFromTime } from './period-reset-fields'
 
 import type { QuotaBatchFormValues } from './quota-batch-form'
 
 export type RealModelsByCredential = ReadonlyMap<string, readonly string[]>
+
+function applyPeriodResetToBody(body: QuotaRuleUpsertBody, values: QuotaBatchFormValues): void {
+  const minutes = periodResetMinutesFromTime(values.periodResetTime)
+  if (values.layer === 'platform') {
+    body.period_timezone = values.periodTimezone
+    body.period_reset_minutes = minutes
+    if (values.period === 'monthly') {
+      body.period_reset_day = values.periodResetDay
+    }
+    return
+  }
+  body.reset_timezone = values.periodTimezone
+  body.reset_time_minutes = minutes
+  if (values.windowSeconds === '2592000') {
+    body.reset_day_of_month = values.periodResetDay
+  }
+  if (values.windowSeconds === '86400') {
+    body.reset_strategy = 'calendar_daily_utc'
+  } else if (values.windowSeconds === '2592000') {
+    body.reset_strategy = 'calendar_monthly_utc'
+  }
+}
 
 export interface BuildBatchRulesOptions {
   /** 上游层：凭据 id → 已注册 real_model 列表；用于过滤非法笛卡尔积 */
@@ -99,6 +122,7 @@ export function buildBatchRules(
           if (lu !== null) body.limit_usd = lu
           if (lt !== null) body.limit_tokens = lt
           if (lr !== null) body.limit_requests = lr
+          applyPeriodResetToBody(body, values)
           rules.push(body)
         }
       }
@@ -128,6 +152,7 @@ export function buildBatchRules(
         if (lu !== null) body.limit_usd = lu
         if (lt !== null) body.limit_tokens = lt
         if (lr !== null) body.limit_requests = lr
+        applyPeriodResetToBody(body, values)
         rules.push(body)
       }
     }
@@ -149,6 +174,7 @@ export function buildBatchRules(
       if (lu !== null) body.limit_usd = lu
       if (lt !== null) body.limit_tokens = lt
       if (lr !== null) body.limit_requests = lr
+      applyPeriodResetToBody(body, values)
       rules.push(body)
     }
   }

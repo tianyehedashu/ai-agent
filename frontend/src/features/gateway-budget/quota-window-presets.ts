@@ -22,3 +22,13 @@ export function applyQuotaWindowPreset(
   if (preset === 'custom') return currentWindowSeconds.trim() || ''
   return preset
 }
+
+/** 每日/每月预设对应上游 reset_strategy（写路径透传） */
+export function resetStrategyForWindowPreset(
+  windowSeconds: string
+): 'calendar_daily_utc' | 'calendar_monthly_utc' | null {
+  const v = windowSeconds.trim()
+  if (v === '86400') return 'calendar_daily_utc'
+  if (v === '2592000') return 'calendar_monthly_utc'
+  return null
+}

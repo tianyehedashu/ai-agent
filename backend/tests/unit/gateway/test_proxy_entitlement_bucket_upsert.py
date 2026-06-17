@@ -100,6 +100,9 @@ class _FakeEmptyRepo:
     def __init__(self, _session: object) -> None:
         pass
 
+    async def get_many_by_plan(self, _plan: object) -> dict[object, object]:
+        return {}
+
     async def get_for(self, *args: object, **kwargs: object) -> None:
         _ = args, kwargs
         return None

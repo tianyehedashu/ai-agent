@@ -8,9 +8,13 @@ from typing import TYPE_CHECKING, Literal
 import uuid
 
 from domains.gateway.application.management.plan_quota_merge import merge_plan_quotas_by_label
+from domains.gateway.domain.policies.plan_quota_reset_anchor_policy import (
+    resolve_plan_quota_reset_anchor,
+)
 from domains.gateway.domain.policies.platform_budget_upsert_policy import (
     validate_platform_budget_upsert,
 )
+from domains.gateway.domain.period_reset_anchor import PeriodResetAnchor
 from domains.gateway.infrastructure.models.budget import GatewayBudget
 from domains.gateway.infrastructure.models.entitlement_plan import EntitlementPlan
 from domains.gateway.infrastructure.models.provider_plan import ProviderPlan
@@ -24,6 +28,30 @@ if TYPE_CHECKING:
 
 
 logger = get_logger(__name__)
+
+
+def _plan_reset_fields_from_cmd(
+    cmd: QuotaRuleUpsertCommand,
+    *,
+    window_seconds: int,
+    reset_strategy: str,
+) -> dict[str, object]:
+    anchor = resolve_plan_quota_reset_anchor(
+        window_seconds=window_seconds,
+        reset_strategy=reset_strategy,
+        reset_timezone=cmd.reset_timezone or cmd.period_timezone,
+        reset_time_minutes=cmd.reset_time_minutes
+        if cmd.reset_time_minutes is not None
+        else cmd.period_reset_minutes,
+        reset_day_of_month=cmd.reset_day_of_month
+        if cmd.reset_day_of_month is not None
+        else cmd.period_reset_day,
+    )
+    return {
+        "reset_timezone": anchor.timezone,
+        "reset_time_minutes": anchor.time_minutes,
+        "reset_day_of_month": anchor.day_of_month,
+    }
 
 
 QuotaRuleLayer = Literal["platform", "upstream", "downstream"]
@@ -76,6 +104,13 @@ class QuotaRuleUpsertCommand:
     valid_from: datetime | None = None
 
     valid_until: datetime | None = None
+
+    period_timezone: str | None = None
+    period_reset_minutes: int | None = None
+    period_reset_day: int | None = None
+    reset_timezone: str | None = None
+    reset_time_minutes: int | None = None
+    reset_day_of_month: int | None = None
 
 
 @dataclass(frozen=True)
@@ -294,7 +329,7 @@ class QuotaRuleWritesMixin:
         is_platform_admin: bool,
         actor_user_id: uuid.UUID | None = None,
         member_self_service: bool = False,
-    ) -> tuple[str, uuid.UUID | None, uuid.UUID | None, str]:
+    ) -> tuple[str, uuid.UUID | None, uuid.UUID | None, str, PeriodResetAnchor]:
         """归一化 platform target_kind/target_id/budget_tenant/period 并完成校验链。
 
         返回的 ``budget_tenant`` 仅在「成员总量/模型护栏」（``target_kind=user`` 且无
@@ -336,7 +371,7 @@ class QuotaRuleWritesMixin:
             raise ValidationError("仅平台管理员可设置 system 配额")
 
         period = cmd.period or "monthly"
-        validate_platform_budget_upsert(
+        anchor = validate_platform_budget_upsert(
             target_kind=target_kind,
             credential_id=cmd.credential_id,
             model_name=cmd.model_name,
@@ -344,6 +379,13 @@ class QuotaRuleWritesMixin:
             limit_usd=cmd.limit_usd,
             limit_tokens=cmd.limit_tokens,
             limit_requests=cmd.limit_requests,
+            period_timezone=cmd.period_timezone or cmd.reset_timezone,
+            period_reset_minutes=cmd.period_reset_minutes
+            if cmd.period_reset_minutes is not None
+            else cmd.reset_time_minutes,
+            period_reset_day=cmd.period_reset_day
+            if cmd.period_reset_day is not None
+            else cmd.reset_day_of_month,
         )
 
         if member_self_service:
@@ -376,7 +418,7 @@ class QuotaRuleWritesMixin:
 
         # 成员总量/模型护栏按团队隔离；成员+凭据行由 credential 绑定团队，tenant 维度留空。
         budget_tenant = tenant_id if (target_kind == "user" and cmd.credential_id is None) else None
-        return target_kind, target_id, budget_tenant, period
+        return target_kind, target_id, budget_tenant, period, anchor
 
     async def _prepare_platform_upsert_item(
         self,
@@ -388,7 +430,7 @@ class QuotaRuleWritesMixin:
         member_self_service: bool = False,
     ) -> dict[str, object]:
         """将 platform 命令解析为 batch_upsert 所需字典；校验失败会抛异常。"""
-        target_kind, target_id, budget_tenant, period = await self._resolve_platform_target(
+        target_kind, target_id, budget_tenant, period, anchor = await self._resolve_platform_target(
             cmd,
             tenant_id=tenant_id,
             is_platform_admin=is_platform_admin,
@@ -406,6 +448,9 @@ class QuotaRuleWritesMixin:
             "soft_limit_usd": None,
             "limit_tokens": cmd.limit_tokens,
             "limit_requests": cmd.limit_requests,
+            "period_timezone": anchor.timezone,
+            "period_reset_minutes": anchor.time_minutes,
+            "period_reset_day": anchor.day_of_month,
         }
 
     async def _upsert_platform_quota_rule(
@@ -415,22 +460,31 @@ class QuotaRuleWritesMixin:
         tenant_id: uuid.UUID,
         is_platform_admin: bool,
     ) -> GatewayBudget:
-        target_kind, target_id, budget_tenant, period = await self._resolve_platform_target(
+        target_kind, target_id, budget_tenant, period, anchor = await self._resolve_platform_target(
             cmd, tenant_id=tenant_id, is_platform_admin=is_platform_admin
         )
 
-        budget = await self._budgets.upsert(
-            target_kind=target_kind,
-            target_id=target_id,
-            period=period,
-            model_name=cmd.model_name,
-            credential_id=cmd.credential_id,
-            tenant_id=budget_tenant,
-            limit_usd=cmd.limit_usd,
-            soft_limit_usd=None,
-            limit_tokens=cmd.limit_tokens,
-            limit_requests=cmd.limit_requests,
-        )
+        budget = (
+            await self._budgets.batch_upsert(
+                [
+                    {
+                        "target_kind": target_kind,
+                        "target_id": target_id,
+                        "tenant_id": budget_tenant,
+                        "period": period,
+                        "model_name": cmd.model_name,
+                        "credential_id": cmd.credential_id,
+                        "limit_usd": cmd.limit_usd,
+                        "soft_limit_usd": None,
+                        "limit_tokens": cmd.limit_tokens,
+                        "limit_requests": cmd.limit_requests,
+                        "period_timezone": anchor.timezone,
+                        "period_reset_minutes": anchor.time_minutes,
+                        "period_reset_day": anchor.day_of_month,
+                    }
+                ]
+            )
+        )[0]
         await self._maybe_index_user_credential_budget(budget)
         from domains.gateway.application.gateway_cache_invalidation import (
             invalidate_gateway_budget_config_cache,
@@ -509,6 +563,9 @@ class QuotaRuleWritesMixin:
             "limit_usd": cmd.limit_usd,
             "limit_tokens": cmd.limit_tokens,
             "limit_requests": cmd.limit_requests,
+            **_plan_reset_fields_from_cmd(
+                cmd, window_seconds=window_seconds, reset_strategy=reset_strategy
+            ),
         }
 
         merged = merge_plan_quotas_by_label(existing_quotas, label, quota_payload)
@@ -586,6 +643,9 @@ class QuotaRuleWritesMixin:
             "limit_usd": cmd.limit_usd,
             "limit_tokens": cmd.limit_tokens,
             "limit_requests": cmd.limit_requests,
+            **_plan_reset_fields_from_cmd(
+                cmd, window_seconds=window_seconds, reset_strategy=reset_strategy
+            ),
         }
 
         if cmd.unit_price_usd_per_token is not None:

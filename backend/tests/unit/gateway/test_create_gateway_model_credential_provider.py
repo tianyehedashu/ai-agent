@@ -35,6 +35,7 @@ async def test_create_gateway_model_rejects_cred_provider_mismatch(
         name="mismatch-cred",
         api_key_encrypted=encrypt_value("sk-fake", encryption_key),
         api_base=None,
+        created_by_user_id=test_user.id,
     )
     await db_session.flush()
 

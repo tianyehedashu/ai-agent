@@ -15,6 +15,13 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import TYPE_CHECKING, Final, Literal, cast
 
+from domains.gateway.domain.period_reset_anchor import (
+    DEFAULT_PERIOD_RESET_ANCHOR,
+    PeriodResetAnchor,
+    compute_period_reset_at as _compute_platform_period_reset_at,
+    compute_period_window_start,
+)
+
 if TYPE_CHECKING:
     import uuid
 
@@ -84,6 +91,7 @@ class PlanQuotaSpec:
     limit_requests: int | None = None
     reset_strategy: ResetStrategy = RESET_STRATEGY_DEFAULT
     plan_valid_from: datetime | None = None
+    period_reset_anchor: PeriodResetAnchor = DEFAULT_PERIOD_RESET_ANCHOR
 
     def has_any_limit(self) -> bool:
         return any(
@@ -123,6 +131,7 @@ class PlanQuotaSnapshot:
             now=when,
             earliest_minute_in_window=self.earliest_minute_in_window,
             plan_valid_from=self.spec.plan_valid_from,
+            period_reset_anchor=self.spec.period_reset_anchor,
         )
 
 
@@ -193,12 +202,37 @@ def _anniversary_segment_bounds(
     return seg_start, seg_end
 
 
+def _calendar_daily_start(now: datetime, anchor: PeriodResetAnchor) -> datetime:
+    if anchor.is_default():
+        return _calendar_daily_utc_start(now)
+    return compute_period_window_start(now, "daily", anchor)
+
+
+def _calendar_monthly_start(now: datetime, anchor: PeriodResetAnchor) -> datetime:
+    if anchor.is_default():
+        return _calendar_monthly_utc_start(now)
+    return compute_period_window_start(now, "monthly", anchor)
+
+
+def _calendar_daily_end(now: datetime, anchor: PeriodResetAnchor) -> datetime:
+    if anchor.is_default():
+        return _calendar_daily_utc_end(now)
+    return _compute_platform_period_reset_at(now, "daily", anchor) or _as_utc(now)
+
+
+def _calendar_monthly_end(now: datetime, anchor: PeriodResetAnchor) -> datetime:
+    if anchor.is_default():
+        return _calendar_monthly_utc_end(now)
+    return _compute_platform_period_reset_at(now, "monthly", anchor) or _as_utc(now)
+
+
 def compute_window_start_minute(
     now: datetime,
     window_seconds: int,
     *,
     strategy: ResetStrategy = RESET_STRATEGY_DEFAULT,
     plan_valid_from: datetime | None = None,
+    period_reset_anchor: PeriodResetAnchor | None = None,
 ) -> int:
     """根据策略返回当前窗口的"最早有效分钟索引"（含）。
 
@@ -209,10 +243,11 @@ def compute_window_start_minute(
     """
     if window_seconds <= 0:
         return 0
+    anchor = period_reset_anchor or DEFAULT_PERIOD_RESET_ANCHOR
     if strategy == "calendar_daily_utc":
-        return compute_minute_index(_calendar_daily_utc_start(now))
+        return compute_minute_index(_calendar_daily_start(now, anchor))
     if strategy == "calendar_monthly_utc":
-        return compute_minute_index(_calendar_monthly_utc_start(now))
+        return compute_minute_index(_calendar_monthly_start(now, anchor))
     if strategy == "plan_anniversary":
         if plan_valid_from is None:
             return compute_minute_index(now - timedelta(seconds=window_seconds))
@@ -229,6 +264,7 @@ def compute_window_start_datetime(
     *,
     strategy: ResetStrategy = RESET_STRATEGY_DEFAULT,
     plan_valid_from: datetime | None = None,
+    period_reset_anchor: PeriodResetAnchor | None = None,
 ) -> datetime:
     """当前配额窗口起点（datetime），与 ``compute_window_start_minute`` 对偶。"""
     if window_seconds <= 0 and plan_valid_from is not None:
@@ -238,6 +274,7 @@ def compute_window_start_datetime(
         window_seconds,
         strategy=strategy,
         plan_valid_from=plan_valid_from,
+        period_reset_anchor=period_reset_anchor,
     )
     return datetime.fromtimestamp(minute_idx * 60, tz=UTC)
 
@@ -249,14 +286,16 @@ def compute_reset_at(
     now: datetime,
     earliest_minute_in_window: int | None = None,
     plan_valid_from: datetime | None = None,
+    period_reset_anchor: PeriodResetAnchor | None = None,
 ) -> datetime | None:
     """统一的下次重置时刻计算；与 ``compute_window_start_minute`` 对偶。"""
     if window_seconds <= 0:
         return None
+    anchor = period_reset_anchor or DEFAULT_PERIOD_RESET_ANCHOR
     if strategy == "calendar_daily_utc":
-        return _calendar_daily_utc_end(now)
+        return _calendar_daily_end(now, anchor)
     if strategy == "calendar_monthly_utc":
-        return _calendar_monthly_utc_end(now)
+        return _calendar_monthly_end(now, anchor)
     if strategy == "plan_anniversary" and plan_valid_from is not None:
         _, seg_end = _anniversary_segment_bounds(
             now, valid_from=plan_valid_from, window_seconds=window_seconds
@@ -269,7 +308,9 @@ def compute_reset_at(
 
 
 __all__ = [
+    "DEFAULT_PERIOD_RESET_ANCHOR",
     "ENTITLEMENT_NS",
+    "PeriodResetAnchor",
     "PLATFORM_NS",
     "PROVIDER_NS",
     "RESET_STRATEGY_DEFAULT",

@@ -161,13 +161,14 @@ sequenceDiagram
 
 | 层 | 读路径 | 窗口语义 |
 |----|--------|---------|
-| platform | `gateway_quota_plan_usage_buckets`（`ns=platform`）与 `gateway_request_logs` **按维度取较大值**（避免 bucket 初建截断历史）；`system` 维度仅 bucket | `daily` = **UTC 自然日**；`monthly` = **UTC 自然月**；`total` = 累计 |
-| upstream | 同上表（`ns=provider`）→ 日志按 `provider_plan_id` 兜底 | 由 `window_seconds` + `reset_strategy` 决定（如 `rolling` + 86400 = **滚动 24h**） |
+| platform | `gateway_quota_plan_usage_buckets`（`ns=platform`）与 `gateway_request_logs` **按维度取较大值**（避免 bucket 初建截断历史）；`system` 维度仅 bucket | `daily` / `monthly` 由行内 **周期锚点**（`period_timezone` + `period_reset_minutes` + `period_reset_day`）经 domain `compute_period_window_start` 计算；默认 `UTC/00:00/1` 等同 **UTC 自然日/月**；`total` = 累计（忽略锚点） |
+| upstream | 同上表（`ns=provider`）→ 日志按 `provider_plan_id` 兜底 | `window_seconds` + `reset_strategy`；`calendar_daily_utc` / `calendar_monthly_utc` 读 `reset_timezone` / `reset_time_minutes` / `reset_day_of_month`（月切日 1–31，短月按月末 clamp，与 Stripe 一致）；`rolling` + 86400 = **滚动 24h**；`plan_anniversary` 以 `valid_from` 为锚 |
 | downstream | 同上表（`ns=entitlement`）→ 日志按 `entitlement_plan_id` 兜底 | 同 upstream |
 
 - **Redis 仅用于**：预扣（`reserve`）、限流（RPM/TPM）、结算 `commit`、幂等锁；**不**作为展示 SSOT。
 - **写路径**：proxy/callback 成功结算后异步 `UPSERT` 汇总表（`schedule_platform_budget_usage_upsert` / `schedule_quota_plan_usage_upsert`）；platform 按 `request_id` + 来源（`proxy` / `callback`）幂等，允许 defer 流式先记 token、callback 再记 cost。
 - **勿**直接读 `gateway_budgets.current_*` 作展示权威：无日/月自动 reset 任务，与 Redis 日切语义可能漂移；展示以 bucket + 日志为准。
+- **preflight 锚点 pin**：`check_budget` 将当时各坐标周期锚点写入 `ctx.platform_budget_preflight` 并序列化到 `gateway_platform_budget_anchor_pins`；同一次请求的 `reserve` / `commit`（含 callback）优先使用 pin，避免管理面 mid-flight 改锚点导致 Redis 分桶不一致。改锚点后旧 `ws:*` / `%Y%m%d` 桶自然 TTL 过期，不自动迁移历史用量。
 
 ### 7.2 Redis 键一览
 
@@ -179,7 +180,7 @@ sequenceDiagram
 | 上游 ProviderPlan 配置缓存 | `gw:provider_plan_cfg:entry:{ver}:{credential_id}:{model\|_}` | 按 `(credential_id, real_model)` 缓存活跃套餐 + quotas 快照（L1 + Redis），TTL 60s |
 | 上游 ProviderPlan 负缓存（墓碑） | 同上键，值 = `\x00empty` | 无活跃 plan 时写墓碑，避免每请求查 `provider_plans`；TTL 30s |
 | 上游 ProviderPlan 配置版本号 | `gw:provider_plan_cfg:ver` | upstream 规则 / ProviderPlan 写路径 `INCR` → O(1) 失效全部上游配置缓存 |
-| 用量计数桶 | `gateway:budget:{kind}:{sid}:{period}:{suffix}[:t:{tenantseg}][:c:{credseg}][:m:{modelseg}]` | 实时预扣/结算计数；`tenantseg`/`credseg`/`modelseg` 为 sha256 前 16 位。`tenantseg` 仅 `kind=user` 的成员总量/模型护栏行带（按团队隔离），`credseg` 仅 Phase2 成员+凭据行带 |
+| 用量计数桶 | `gateway:budget:{kind}:{sid}:{period}:{suffix}[:t:{tenantseg}][:c:{credseg}][:m:{modelseg}]` | 实时预扣/结算计数；`suffix` 默认锚点为 `%Y%m%d`（日）/ `%Y%m`（月），自定义锚点为 `ws:{window_start_unix}`；`tenantseg`/`credseg`/`modelseg` 为 sha256 前 16 位。`tenantseg` 仅 `kind=user` 的成员总量/模型护栏行带（按团队隔离），`credseg` 仅 Phase2 成员+凭据行带 |
 | 成员凭据存在性索引 | `gw:budget_uc:{user_id}` | SET of `credential_id`，Phase2 快路径；TTL 35 天 |
 | Phase2 结算幂等 | `gateway:budget:uc_settled:{request_id}` | `SET NX`，防流式/多回调重复累加；TTL 1 天 |
 
@@ -199,7 +200,7 @@ sequenceDiagram
 ## 9. 转发效率要点
 
 - **DB**：Phase1/Phase2 主查走 `ix_gateway_budgets_target_lookup`，`OR` 批量拉取（`get_many_by_plan`），单请求 ≤1 次查库且仅在缓存未命中时。
-- **配置缓存**：命中 L1（进程内）即零 IO；跨副本经 Redis + 版本号。
+- **配置缓存**：命中 L1（进程内）即零 IO；跨副本经 Redis + 版本号。配置行含 **周期锚点**（3 标量），热路径 `reserve`/`commit`/`release` 经 `compute_platform_redis_period_suffix` O(1) 推导 Redis 后缀，**不新增 DB 查询**。
 - **上游 ProviderPlan 配置缓存**：`ProviderPlanGuard.check_and_reserve` 经 `provider_plan_config_cache` 读活跃套餐；命中后不再查 `provider_plans` / `provider_plan_quotas`；写 upstream 规则或 entitlement 写 ProviderPlan 时 `invalidate_gateway_provider_plan_config_cache`（`upstream_changed` 写路径统一触发）。
 - **负缓存（墓碑）**：查无预算的坐标写墓碑（L1 + Redis，TTL 30s），无平台配额的租户/成员后续请求**不再每请求查库**；写规则 `INCR` 版本号即令旧墓碑不可达，正确性不受影响。
 - **Phase2 无规则零开销**：`gw:budget_uc` 存在性索引先判定，绝大多数无 cred 规则的用户在 1 次 `SISMEMBER` 后即返回，**不查库、不进配置缓存**。

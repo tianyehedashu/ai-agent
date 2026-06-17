@@ -3,6 +3,8 @@ import {
   computeQuotaRuleUsageRatio,
   describeUpstreamQuotaRuleScope,
   formatQuotaRulePeriod,
+  formatQuotaRuleResetAt,
+  quotaUsageHasMetrics,
 } from '@/features/gateway-budget/quota-rule-utils'
 import { formatQuotaTokens } from '@/features/gateway-budget/quota-token-display'
 import { Cloud, Shield } from '@/lib/lucide-icons'
@@ -71,7 +73,7 @@ export function ModelDetailQuotaRuleRow({
         {actions}
       </div>
 
-      {usage ? (
+      {usage && quotaUsageHasMetrics(usage) ? (
         <div className="mt-3 space-y-2">
           <div className="grid gap-2 text-xs tabular-nums sm:grid-cols-2">
             <div className="rounded bg-background/60 px-2 py-1.5">
@@ -103,6 +105,11 @@ export function ModelDetailQuotaRuleRow({
       ) : (
         <p className="mt-2 text-xs text-muted-foreground">上限 {primaryMetric}</p>
       )}
+      {formatQuotaRuleResetAt(rule) ? (
+        <p className="mt-2 text-[11px] text-muted-foreground">
+          下次重置 {formatQuotaRuleResetAt(rule)}
+        </p>
+      ) : null}
     </div>
   )
 }

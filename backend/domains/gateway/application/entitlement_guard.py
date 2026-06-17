@@ -25,6 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from domains.gateway.application.entitlement_model_status import ENTITLEMENT_RESETTING_SOON_SECONDS
 from domains.gateway.domain.errors import EntitlementPlanExhaustedError
+from domains.gateway.domain.period_reset_anchor import period_reset_anchor_from_plan_quota
 from domains.gateway.domain.quota_plan import (
     ENTITLEMENT_NS,
     PlanQuotaSnapshot,
@@ -99,6 +100,11 @@ def _quota_to_spec(row: EntitlementPlanQuota, *, plan: EntitlementPlan) -> PlanQ
         limit_requests=row.limit_requests,
         reset_strategy=normalize_reset_strategy(row.reset_strategy),
         plan_valid_from=plan.valid_from,
+        period_reset_anchor=period_reset_anchor_from_plan_quota(
+            reset_timezone=row.reset_timezone,
+            reset_time_minutes=row.reset_time_minutes,
+            reset_day_of_month=row.reset_day_of_month,
+        ),
     )
 
 

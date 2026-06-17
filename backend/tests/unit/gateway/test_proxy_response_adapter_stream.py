@@ -7,6 +7,8 @@ from decimal import Decimal
 from typing import Any
 import uuid
 
+from unittest.mock import AsyncMock
+
 import pytest
 
 from domains.gateway.application.proxy_response_adapter import adapt_stream
@@ -57,6 +59,10 @@ async def test_adapt_stream_sets_cache_hit_on_last_usage(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """OpenAI 兼容流式：最后一个 chunk 含 usage 时 metadata 应标记 gateway_cache_hit。"""
+    monkeypatch.setattr(
+        "domains.gateway.application.proxy_response_adapter.commit_cached_platform_budgets",
+        AsyncMock(),
+    )
     monkeypatch.setattr(
         "domains.gateway.application.proxy_response_adapter.schedule_settle_usage",
         lambda *args, **kwargs: None,
@@ -109,6 +115,10 @@ async def test_adapt_stream_no_cache_hit_when_usage_empty(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """OpenAI 兼容流式：chunk 不含缓存 usage 时 gateway_cache_hit 不应为 True。"""
+    monkeypatch.setattr(
+        "domains.gateway.application.proxy_response_adapter.commit_cached_platform_budgets",
+        AsyncMock(),
+    )
     monkeypatch.setattr(
         "domains.gateway.application.proxy_response_adapter.schedule_settle_usage",
         lambda *args, **kwargs: None,

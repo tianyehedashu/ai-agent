@@ -2,12 +2,27 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import uuid
 
 from domains.gateway.application.proxy_timing import GatewayProxyTiming
+from domains.gateway.domain.period_reset_anchor import PeriodResetAnchor
+from domains.gateway.domain.proxy_policy import BudgetReservation
 from domains.gateway.domain.quota_plan import PlanQuotaSpec, QuotaPlanReservation
 from domains.gateway.domain.types import GatewayCapability, GatewayInboundVia, VirtualKeyPrincipal
+
+BudgetAnchorCoord = tuple[
+    str, uuid.UUID | None, str, str | None, uuid.UUID | None, uuid.UUID | None
+]
+
+
+@dataclass
+class PlatformBudgetPreflightState:
+    """preflight 时刻锁定的平台预算周期锚点（reserve / commit 共用同一窗口）。"""
+
+    anchor_pins: dict[BudgetAnchorCoord, PeriodResetAnchor] = field(default_factory=dict)
+    reservations: list[BudgetReservation] = field(default_factory=list)
+    token_reservations_released: bool = False
 
 
 @dataclass
@@ -57,6 +72,7 @@ class ProxyContext:
     rpm_limit: int | None = None
     tpm_limit: int | None = None
     entitlement_state: EntitlementReservationState | None = None
+    platform_budget_preflight: PlatformBudgetPreflightState | None = None
     client_ua: str | None = None
     client_type: str = "unknown"
     user_display_snapshot: str | None = None
@@ -72,4 +88,9 @@ class ProxyContext:
     """本次调用是否通过 ``<team-slug>/<model>`` 前缀派发（写到日志 ``gateway_dispatched_via_prefix``）。"""
 
 
-__all__ = ["EntitlementReservationState", "ProxyContext"]
+__all__ = [
+    "BudgetAnchorCoord",
+    "EntitlementReservationState",
+    "PlatformBudgetPreflightState",
+    "ProxyContext",
+]

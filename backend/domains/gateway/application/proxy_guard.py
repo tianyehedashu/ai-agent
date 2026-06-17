@@ -34,8 +34,13 @@ from domains.gateway.application.budget_service import (
     PERIOD_TOTAL,
     BudgetService,
     BudgetUsageCoord,
+    redis_credential_segment_for_budget,
     redis_model_segment_for_budget,
     redis_tenant_segment_for_budget,
+)
+from domains.gateway.application.proxy_context import (
+    BudgetAnchorCoord,
+    PlatformBudgetPreflightState,
 )
 from domains.gateway.application.entitlement_guard import (
     EntitlementContext,
@@ -45,6 +50,7 @@ from domains.gateway.application.model_or_route_resolution import (
     ResolvedModelName,
     resolve_model_or_route,
 )
+from domains.gateway.domain.period_reset_anchor import PeriodResetAnchor
 from domains.gateway.domain.errors import BudgetExceededError, GatewayModelNotFoundError
 from domains.gateway.domain.policies.budget_exemption_policy import (
     should_skip_platform_budget_preflight,
@@ -280,29 +286,32 @@ class ProxyGuard:
 
         budget_by_coord = await get_cached_budget_by_plan(plan, load_budget_rows)
 
+        anchor_pins: dict[BudgetAnchorCoord, PeriodResetAnchor] = {}
         check_items: list[
             tuple[BudgetCheckQuery, BudgetConfigRow, BudgetUsageCoord, str]
         ] = []
         for query in plan:
-            budget = budget_by_coord.get(
-                (
-                    query.target_kind,
-                    query.target_id,
-                    query.period,
-                    query.model_name,
-                    query.credential_id,
-                    query.tenant_id,
-                )
+            coord: BudgetAnchorCoord = (
+                query.target_kind,
+                query.target_id,
+                query.period,
+                query.model_name,
+                query.credential_id,
+                query.tenant_id,
             )
+            budget = budget_by_coord.get(coord)
             if budget is None:
                 continue
+            anchor_pins[coord] = budget.period_reset_anchor
             target_id_str = str(query.target_id) if query.target_id is not None else None
             usage_coord = BudgetUsageCoord(
                 target_kind=query.target_kind,
                 target_id=target_id_str,
                 period=query.period,
                 model_segment=redis_model_segment_for_budget(budget.model_name),
+                credential_segment=redis_credential_segment_for_budget(query.credential_id),
                 tenant_segment=redis_tenant_segment_for_budget(query.tenant_id),
+                period_reset_anchor=budget.period_reset_anchor,
             )
             check_items.append((query, budget, usage_coord, target_id_str))
 
@@ -322,6 +331,7 @@ class ProxyGuard:
                 budget_model_name=budget.model_name,
                 tenant_id=query.tenant_id,
                 prefetched_usage=prefetched,
+                period_reset_anchor=budget.period_reset_anchor,
             )
             if not check.allowed:
                 await self.release_budget_reservations(reservations)
@@ -359,7 +369,9 @@ class ProxyGuard:
                     limit_tokens=budget.limit_tokens,
                     estimate_tokens=estimate_tokens,
                     budget_model_name=budget.model_name,
+                    credential_id=query.credential_id,
                     tenant_id=query.tenant_id,
+                    period_reset_anchor=budget.period_reset_anchor,
                 )
             except Exception:
                 await self.release_budget_reservations(reservations)
@@ -373,9 +385,15 @@ class ProxyGuard:
                         budget_model_name=budget.model_name,
                         reserved_requests=reserved_requests,
                         reserved_tokens=reserved_tokens,
+                        credential_id=query.credential_id,
                         tenant_id=query.tenant_id,
+                        period_reset_anchor=budget.period_reset_anchor,
                     )
                 )
+        ctx.platform_budget_preflight = PlatformBudgetPreflightState(
+            anchor_pins=anchor_pins,
+            reservations=reservations,
+        )
         return reservations
 
     async def release_budget_reservations(self, reservations: list[BudgetReservation]) -> None:
@@ -386,9 +404,11 @@ class ProxyGuard:
                     target_id=reservation.target_id,
                     period=reservation.period,
                     budget_model_name=reservation.budget_model_name,
+                    credential_id=reservation.credential_id,
                     reserved_requests=reservation.reserved_requests,
                     reserved_tokens=reservation.reserved_tokens,
                     tenant_id=reservation.tenant_id,
+                    period_reset_anchor=reservation.period_reset_anchor,
                 )
 
     # ---------------------------------------------------------------------

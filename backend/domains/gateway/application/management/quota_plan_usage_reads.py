@@ -11,6 +11,10 @@ import uuid
 from sqlalchemy import DateTime, and_, func, literal, select, tuple_, union_all
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 
+from domains.gateway.domain.period_reset_anchor import (
+    DEFAULT_PERIOD_RESET_ANCHOR,
+    PeriodResetAnchor,
+)
 from domains.gateway.domain.quota_plan import (
     PROVIDER_NS,
     QuotaPlanNamespace,
@@ -36,6 +40,7 @@ class QuotaWindowLookup:
     window_seconds: int
     reset_strategy: str
     plan_valid_from: datetime | None
+    period_reset_anchor: PeriodResetAnchor = DEFAULT_PERIOD_RESET_ANCHOR
 
 
 @dataclass(frozen=True)
@@ -69,6 +74,7 @@ def resolve_quota_window_key(lookup: QuotaWindowLookup, *, now: datetime) -> Quo
         lookup.window_seconds,
         strategy=normalize_reset_strategy(lookup.reset_strategy),
         plan_valid_from=lookup.plan_valid_from,
+        period_reset_anchor=lookup.period_reset_anchor,
     )
     return QuotaWindowKey(
         ns=lookup.ns,
@@ -94,20 +100,7 @@ class QuotaPlanUsageReadService:
         when = now or datetime.now(UTC)
         keys: list[QuotaWindowKey] = []
         for item in items:
-            window_start = compute_window_start_datetime(
-                when,
-                item.window_seconds,
-                strategy=normalize_reset_strategy(item.reset_strategy),
-                plan_valid_from=item.plan_valid_from,
-            )
-            keys.append(
-                QuotaWindowKey(
-                    ns=item.ns,
-                    plan_id=item.plan_id,
-                    quota_id=item.quota_id,
-                    window_start=window_start,
-                )
-            )
+            keys.append(resolve_quota_window_key(item, now=when))
 
         bucket_rows = await self._load_buckets(keys)
         result: dict[QuotaWindowKey, QuotaUsageTotals] = {}

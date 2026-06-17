@@ -4,7 +4,9 @@ import { cn } from '@/lib/utils'
 import {
   computeQuotaRuleUsageRatio,
   formatQuotaRulePeriod,
+  formatQuotaRuleResetAt,
   LAYER_LABELS,
+  quotaUsageHasMetrics,
   resolveQuotaRuleModelLabel,
   type QuotaRuleLabelContext,
 } from './quota-rule-utils'
@@ -47,7 +49,7 @@ export function QuotaUsageRow({
           {actions}
         </div>
       </div>
-      {usage ? (
+      {usage && quotaUsageHasMetrics(usage) ? (
         <>
           <div className="space-y-0.5 text-xs tabular-nums">
             <div>
@@ -73,6 +75,9 @@ export function QuotaUsageRow({
           限额 USD {limitUsd ?? '∞'} · Token {formatQuotaTokens(limitTok)}
         </div>
       )}
+      {formatQuotaRuleResetAt(rule) ? (
+        <p className="text-[11px] text-muted-foreground">下次重置 {formatQuotaRuleResetAt(rule)}</p>
+      ) : null}
     </div>
   )
 }

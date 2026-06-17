@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from decimal import Decimal
-import uuid
 from unittest.mock import AsyncMock, MagicMock
+import uuid
 
 import pytest
 
@@ -16,6 +16,7 @@ from domains.gateway.application.management.quota_plan_usage_reads import (
     QuotaWindowLookup,
     resolve_quota_window_key,
 )
+from domains.gateway.domain.period_reset_anchor import PeriodResetAnchor
 from domains.gateway.domain.quota_plan import PROVIDER_NS
 from domains.gateway.infrastructure.models.quota_plan_usage_bucket import (
     GatewayQuotaPlanUsageBucket,
@@ -118,3 +119,39 @@ async def test_batch_usage_falls_back_to_request_logs() -> None:
 
     totals = await service.batch_usage_for_quota_windows([lookup], now=now)
     assert totals[key] == QuotaUsageTotals(Decimal("0.2"), 50, 1)
+
+
+@pytest.mark.asyncio
+async def test_batch_usage_uses_custom_period_reset_anchor() -> None:
+    """自定义锚点下 bucket 键与 resolve_quota_window_key 一致。"""
+    plan_id = uuid.uuid4()
+    quota_id = uuid.uuid4()
+    anchor = PeriodResetAnchor(timezone="Asia/Shanghai", time_minutes=9 * 60, day_of_month=1)
+    lookup = QuotaWindowLookup(
+        ns=PROVIDER_NS,
+        plan_id=plan_id,
+        quota_id=quota_id,
+        window_seconds=86400,
+        reset_strategy="calendar_daily_utc",
+        plan_valid_from=None,
+        period_reset_anchor=anchor,
+    )
+    now = datetime(2026, 6, 20, 12, 0, tzinfo=UTC)
+    key = resolve_quota_window_key(lookup, now=now)
+    assert key.window_start == datetime(2026, 6, 20, 1, 0, tzinfo=UTC)
+
+    bucket_row = GatewayQuotaPlanUsageBucket(
+        ns=PROVIDER_NS,
+        plan_id=plan_id,
+        quota_id=quota_id,
+        window_start=key.window_start,
+        tokens=10,
+        requests=1,
+        cost_usd=Decimal("0.1"),
+    )
+    service = QuotaPlanUsageReadService(MagicMock())
+    service._load_buckets = AsyncMock(return_value={key: bucket_row})  # type: ignore[method-assign]
+    service._aggregate_logs = AsyncMock()  # type: ignore[method-assign]
+
+    totals = await service.batch_usage_for_quota_windows([lookup], now=now)
+    assert totals[key] == QuotaUsageTotals(Decimal("0.1"), 10, 1)

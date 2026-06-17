@@ -35,6 +35,8 @@ import { ArrowLeft, Check, ChevronRight, Loader2, Pencil, Trash2, X } from '@/li
 import { cn } from '@/lib/utils'
 
 import { BudgetModelCombobox } from './budget-model-combobox'
+import { PeriodResetFields, periodResetMinutesFromTime } from './period-reset-fields'
+import { formatPeriodResetLabel } from './period-reset-utils'
 import {
   expandBatchFormValues,
   patchQuotaBatchFormForLayer,
@@ -134,19 +136,22 @@ function expandPreviewRules(
     values.layer === 'upstream' && options?.credentialIds
       ? expandBatchFormValues(values, options.credentialIds)
       : values
+  const periodAnchor = {
+    period_timezone: values.periodTimezone,
+    period_reset_minutes: periodResetMinutesFromTime(values.periodResetTime),
+    period_reset_day: values.periodResetDay,
+  }
   const periodLabel =
     values.layer === 'platform'
-      ? values.period === 'daily'
-        ? '每日'
-        : values.period === 'monthly'
-          ? '每月'
-          : '总额'
+      ? values.period === 'total'
+        ? '总额'
+        : formatPeriodResetLabel(periodAnchor, values.period)
       : values.windowSeconds === '0'
         ? '套餐周期'
         : values.windowSeconds === '86400'
-          ? '每日'
+          ? formatPeriodResetLabel(periodAnchor, 'daily')
           : values.windowSeconds === '2592000'
-            ? '每月'
+            ? formatPeriodResetLabel(periodAnchor, 'monthly')
             : `${values.windowSeconds}s`
 
   const rows: ReturnType<typeof expandPreviewRules> = []
@@ -896,6 +901,23 @@ function StepLimits({
               <SelectItem value="total">总额</SelectItem>
             </SelectContent>
           </Select>
+          <PeriodResetFields
+            layer="platform"
+            period={values.period}
+            periodTimezone={values.periodTimezone}
+            periodResetTime={values.periodResetTime}
+            periodResetDay={values.periodResetDay}
+            onPeriodTimezoneChange={(periodTimezone) => {
+              onChange({ ...values, periodTimezone })
+            }}
+            onPeriodResetTimeChange={(periodResetTime) => {
+              onChange({ ...values, periodResetTime })
+            }}
+            onPeriodResetDayChange={(periodResetDay) => {
+              onChange({ ...values, periodResetDay })
+            }}
+            disabled={disabled}
+          />
         </div>
       ) : (
         /* P6: 上游/下游时间窗口改为下拉选项 */
@@ -922,6 +944,23 @@ function StepLimits({
               套餐周期 = 跟随上游/下游套餐定义的计费周期；每日 = 86400 秒；每月 = 2592000 秒。
             </p>
           </div>
+          <PeriodResetFields
+            layer={values.layer}
+            windowSeconds={values.windowSeconds}
+            periodTimezone={values.periodTimezone}
+            periodResetTime={values.periodResetTime}
+            periodResetDay={values.periodResetDay}
+            onPeriodTimezoneChange={(periodTimezone) => {
+              onChange({ ...values, periodTimezone })
+            }}
+            onPeriodResetTimeChange={(periodResetTime) => {
+              onChange({ ...values, periodResetTime })
+            }}
+            onPeriodResetDayChange={(periodResetDay) => {
+              onChange({ ...values, periodResetDay })
+            }}
+            disabled={disabled}
+          />
           {windowPresetValue === 'custom' ? (
             <div className="space-y-1">
               <Label htmlFor="qbw-window-custom" className="text-xs text-muted-foreground">

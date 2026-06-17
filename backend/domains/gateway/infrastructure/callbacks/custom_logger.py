@@ -23,6 +23,7 @@ import uuid
 
 from bootstrap.config import settings
 from domains.gateway.domain.cache_hit_flag import coerce_cache_hit_flag
+from domains.gateway.domain.litellm_deployment_attribution import gateway_deployment_real_model
 from domains.gateway.domain.normalized_usage import extract_normalized_usage
 from domains.gateway.infrastructure.callbacks.cost_calculation import (
     _calc_cost,
@@ -30,10 +31,8 @@ from domains.gateway.infrastructure.callbacks.cost_calculation import (
 from domains.gateway.infrastructure.callbacks.cost_calculation import (
     extract_gateway_metadata as _extract_gateway_metadata,
 )
-from domains.gateway.domain.litellm_deployment_attribution import gateway_deployment_real_model
 from domains.gateway.infrastructure.callbacks.request_log_persist_helpers import (
     gateway_provider_for_persist,
-    model_info_from_kwargs,
 )
 from domains.gateway.infrastructure.gateway_log_sampling import (
     should_persist_request_log_row,
@@ -815,6 +814,7 @@ async def _settle_budgets(
         with suppress(Exception):
             from domains.gateway.application.budget_deployment_check import (
                 commit_user_credential_budget,
+                release_user_credential_budget_token_reservations_from_metadata,
             )
 
             await commit_user_credential_budget(
@@ -823,6 +823,10 @@ async def _settle_budgets(
                 gateway_model_name=str(deploy_name) if deploy_name else None,
                 cost_usd=cost_usd,
                 total_tokens=total_tokens,
+                request_id=request_id_str,
+            )
+            await release_user_credential_budget_token_reservations_from_metadata(
+                metadata,
                 request_id=request_id_str,
             )
     elif status == "failed":

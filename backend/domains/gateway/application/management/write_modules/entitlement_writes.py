@@ -9,6 +9,12 @@ import uuid
 from domains.gateway.domain.errors import (
     ManagementEntityNotFoundError,
 )
+from domains.gateway.domain.policies.plan_quota_reset_anchor_policy import (
+    resolve_plan_quota_reset_anchor,
+)
+from domains.gateway.domain.policies.platform_budget_upsert_policy import (
+    validate_platform_budget_upsert,
+)
 from domains.gateway.infrastructure.models.entitlement_plan import EntitlementPlan
 from domains.gateway.infrastructure.models.provider_plan import ProviderPlan
 from libs.exceptions import ValidationError
@@ -21,6 +27,36 @@ if TYPE_CHECKING:
 
 
 logger = get_logger(__name__)
+
+
+def _normalize_plan_quota_items(quotas: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    for quota in quotas or []:
+        window_seconds = int(quota.get("window_seconds") or 0)
+        reset_strategy = str(quota.get("reset_strategy") or "rolling")
+        reset_time_raw = quota.get("reset_time_minutes")
+        reset_day_raw = quota.get("reset_day_of_month")
+        anchor = resolve_plan_quota_reset_anchor(
+            window_seconds=window_seconds,
+            reset_strategy=reset_strategy,
+            reset_timezone=(
+                str(quota["reset_timezone"])
+                if quota.get("reset_timezone") is not None
+                else None
+            ),
+            reset_time_minutes=int(reset_time_raw) if reset_time_raw is not None else None,
+            reset_day_of_month=int(reset_day_raw) if reset_day_raw is not None else None,
+        )
+        out.append(
+            {
+                **quota,
+                "reset_strategy": reset_strategy,
+                "reset_timezone": anchor.timezone,
+                "reset_time_minutes": anchor.time_minutes,
+                "reset_day_of_month": anchor.day_of_month,
+            }
+        )
+    return out
 
 
 class EntitlementWritesMixin:
@@ -37,6 +73,9 @@ class EntitlementWritesMixin:
         soft_limit_usd: Decimal | None = None,
         limit_tokens: int | None,
         limit_requests: int | None,
+        period_timezone: str | None = None,
+        period_reset_minutes: int | None = None,
+        period_reset_day: int | None = None,
         tenant_id: uuid.UUID,
         is_platform_admin: bool,
     ) -> Any:
@@ -46,6 +85,18 @@ class EntitlementWritesMixin:
             target_id,
             tenant_id=tenant_id,
             is_platform_admin=is_platform_admin,
+        )
+        anchor = validate_platform_budget_upsert(
+            target_kind=target_kind,
+            credential_id=None,
+            model_name=model_name,
+            period=period,
+            limit_usd=limit_usd,
+            limit_tokens=limit_tokens,
+            limit_requests=limit_requests,
+            period_timezone=period_timezone,
+            period_reset_minutes=period_reset_minutes,
+            period_reset_day=period_reset_day,
         )
         # 成员总量/模型护栏按团队隔离（user 维度，无凭据）。
         budget_tenant = tenant_id if target_kind == "user" else None
@@ -59,6 +110,9 @@ class EntitlementWritesMixin:
             soft_limit_usd=None,
             limit_tokens=limit_tokens,
             limit_requests=limit_requests,
+            period_timezone=anchor.timezone,
+            period_reset_minutes=anchor.time_minutes,
+            period_reset_day=anchor.day_of_month,
         )
         from domains.gateway.application.gateway_cache_invalidation import (
             invalidate_gateway_budget_config_cache,
@@ -198,7 +252,7 @@ class EntitlementWritesMixin:
             notes=notes,
             extra=extra,
         )
-        for q in quotas or []:
+        for q in _normalize_plan_quota_items(quotas):
             await self._provider_plans.add_quota(plan_id=plan.id, **q)
         await self._invalidate_upstream_quota_rule_list_cache(
             tenant_id=tenant_id,
@@ -231,7 +285,10 @@ class EntitlementWritesMixin:
             }
         await self._provider_plans.update(plan_id, **fields)
         if quotas is not None:
-            await self._provider_plans.replace_quotas(plan_id, quotas)
+            await self._provider_plans.replace_quotas(
+                plan_id,
+                _normalize_plan_quota_items(quotas),
+            )
         result = await self._provider_plans.get(plan_id)
         if result is None:
             raise ManagementEntityNotFoundError("provider_plan", str(plan_id))
@@ -303,7 +360,7 @@ class EntitlementWritesMixin:
             notes=notes,
             extra=extra,
         )
-        for q in quotas or []:
+        for q in _normalize_plan_quota_items(quotas):
             await self._entitlement_plans.add_quota(plan_id=plan.id, **q)
         from domains.gateway.application.gateway_cache_invalidation import (
             invalidate_gateway_quota_rule_cache_for_team,
@@ -326,7 +383,10 @@ class EntitlementWritesMixin:
         )
         await self._entitlement_plans.update(plan_id, **fields)
         if quotas is not None:
-            await self._entitlement_plans.replace_quotas(plan_id, quotas)
+            await self._entitlement_plans.replace_quotas(
+                plan_id,
+                _normalize_plan_quota_items(quotas),
+            )
         result = await self._entitlement_plans.get(plan_id)
         if result is None:
             raise ManagementEntityNotFoundError("entitlement_plan", str(plan_id))

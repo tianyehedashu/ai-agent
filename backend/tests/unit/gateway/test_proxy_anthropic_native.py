@@ -9,6 +9,8 @@ from types import SimpleNamespace
 from typing import Any
 import uuid
 
+from unittest.mock import AsyncMock
+
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -307,6 +309,10 @@ async def test_anthropic_messages_stream_yields_sse_bytes(
         return None
 
     monkeypatch.setattr(use_case.guard, "check_entitlement", noop_entitlement)
+    monkeypatch.setattr(
+        "domains.gateway.application.proxy_response_adapter.commit_cached_platform_budgets",
+        AsyncMock(),
+    )
 
     stream = await use_case.anthropic_messages(
         ctx,
@@ -605,6 +611,10 @@ async def test_adapt_anthropic_stream_sets_cache_hit(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Anthropic 流式响应：message_delta 含 usage 时 metadata 应标记 gateway_cache_hit。"""
+    monkeypatch.setattr(
+        "domains.gateway.application.proxy_response_adapter.commit_cached_platform_budgets",
+        AsyncMock(),
+    )
     monkeypatch.setattr(
         "domains.gateway.application.proxy_response_adapter.schedule_settle_usage",
         lambda *args, **kwargs: None,

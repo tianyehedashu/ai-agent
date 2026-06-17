@@ -113,6 +113,10 @@ async def test_build_proxy_models_list_uses_guard(monkeypatch: pytest.MonkeyPatc
         "domains.gateway.application.entitlement_guard.build_entitlement_guard_for_session",
         mock_build,
     )
+    monkeypatch.setattr(
+        "domains.gateway.application.model_credential_enrichment.build_credential_profile_map_for_models",
+        AsyncMock(return_value={}),
+    )
     session = MagicMock()
     items = await build_proxy_models_list(
         session,

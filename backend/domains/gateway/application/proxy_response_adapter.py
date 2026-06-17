@@ -7,7 +7,8 @@ from collections.abc import AsyncGenerator, AsyncIterator
 from contextlib import suppress
 from datetime import UTC, datetime
 from decimal import Decimal
-from typing import TYPE_CHECKING, Any
+from typing import Any
+import uuid
 
 from domains.gateway.application.anthropic_native_adapt import (
     anthropic_response_to_dict,
@@ -15,11 +16,15 @@ from domains.gateway.application.anthropic_native_adapt import (
     anthropic_usage_total_tokens,
     extract_usage_from_anthropic_stream_event,
 )
-from domains.gateway.application.budget_service import (
-    PERIOD_DAILY,
-    PERIOD_MONTHLY,
-    PERIOD_TOTAL,
-    BudgetService,
+from domains.gateway.application.budget_platform_settlement import (
+    DEFAULT_PLATFORM_PERIODS,
+    commit_cached_platform_budgets,
+    resolve_budget_commit_anchor,
+)
+from domains.gateway.application.budget_service import BudgetService
+from domains.gateway.application.budget_usage_persist import (
+    PlatformBudgetUpsertItem,
+    schedule_platform_budget_usage_upsert,
 )
 from domains.gateway.application.entitlement_guard import EntitlementGuard
 from domains.gateway.application.pricing.pricing_proxy_metadata import (
@@ -29,25 +34,24 @@ from domains.gateway.application.pricing.pricing_proxy_metadata import (
 from domains.gateway.application.prompt_cache_middleware import (
     apply_gateway_cache_hit_to_metadata,
 )
+from domains.gateway.application.proxy_context import BudgetAnchorCoord, ProxyContext
 from domains.gateway.application.proxy_deferred_tasks import register_proxy_deferred_task
 from domains.gateway.application.proxy_stream_settlement import (
     finalize_deferred_stream_settlement,
 )
-from domains.gateway.application.budget_usage_persist import (
-    PlatformBudgetUpsertItem,
-    schedule_platform_budget_usage_upsert,
-)
 from domains.gateway.application.quota_plan_usage_persist import schedule_quota_plan_usage_upsert
-from domains.gateway.domain.proxy_policy import budget_model_keys, budget_targets
+from domains.gateway.domain.period_reset_anchor import period_reset_anchor_from_row
+from domains.gateway.domain.proxy_policy import (
+    BudgetReservation,
+    budget_model_keys,
+    budget_targets,
+)
 from domains.gateway.domain.quota_plan import ENTITLEMENT_NS
 from domains.gateway.infrastructure.repositories.budget_repository import BudgetRepository
 from libs.db.database import get_session_context
 from utils.logging import get_logger
 
 logger = get_logger(__name__)
-
-if TYPE_CHECKING:
-    from domains.gateway.application.proxy_context import ProxyContext
 
 
 def to_response_dict(obj: Any) -> dict[str, Any]:
@@ -263,27 +267,34 @@ async def settle_usage(
         user_id=ctx.user_id,
         vkey_id=ctx.vkey.vkey_id if ctx.vkey else None,
     )
-    periods = (PERIOD_DAILY, PERIOD_MONTHLY, PERIOD_TOTAL)
-    model_keys = budget_model_keys(ctx.budget_model)
+    periods = DEFAULT_PLATFORM_PERIODS
+    pinned_anchors = (
+        ctx.platform_budget_preflight.anchor_pins
+        if ctx.platform_budget_preflight is not None
+        else None
+    )
 
-    for target_kind, target_id in scope_items:
-        if target_id is None:
-            continue
-        target_id_str = str(target_id)
-        # 成员总量/模型护栏按团队隔离：user 维度结算到含 tenant 段的桶。
-        tenant_scope = ctx.team_id if target_kind == "user" else None
-        for period in periods:
-            for model_key in model_keys:
-                with suppress(Exception):
-                    await budget.commit(
-                        target_kind=target_kind,
-                        target_id=target_id_str,
-                        period=period,
-                        delta_cost=cost,
-                        delta_tokens=tokens,
-                        budget_model_name=model_key,
-                        tenant_id=tenant_scope,
-                    )
+    async def _load_plan(plan: object) -> dict:
+        async with get_session_context() as session:
+            return await BudgetRepository(session).get_many_by_plan(plan)  # type: ignore[arg-type]
+
+    raw_committed_coords = await commit_cached_platform_budgets(
+        budget,
+        scope_items=list(scope_items),
+        periods=periods,
+        budget_model=ctx.budget_model,
+        billing_team_id=ctx.team_id,
+        delta_cost=cost,
+        delta_tokens=tokens,
+        loader=_load_plan,
+        pinned_anchors=pinned_anchors,
+    )
+    committed_coords = raw_committed_coords if isinstance(raw_committed_coords, set) else None
+    await release_platform_budget_token_reservations(
+        ctx,
+        budget,
+        committed_coords=committed_coords,
+    )
 
     state = ctx.entitlement_state
     entitlement_committed = False
@@ -341,7 +352,7 @@ async def settle_usage(
                     continue
                 tenant_scope = ctx.team_id if target_kind == "user" else None
                 for period in periods:
-                    for model_key in model_keys:
+                    for model_key in budget_model_keys(ctx.budget_model):
                         record = await repo.get_for(
                             target_kind,
                             target_id,
@@ -357,8 +368,30 @@ async def settle_usage(
                             delta_tokens=tokens,
                             delta_requests=requests,
                         )
+                        anchor = period_reset_anchor_from_row(
+                            timezone=record.period_timezone,
+                            time_minutes=record.period_reset_minutes,
+                            day_of_month=record.period_reset_day,
+                        )
+                        coord: BudgetAnchorCoord = (
+                            target_kind,
+                            target_id,
+                            period,
+                            model_key,
+                            record.credential_id,
+                            tenant_scope,
+                        )
+                        anchor = resolve_budget_commit_anchor(
+                            coord,
+                            config_anchor=anchor,
+                            pinned_anchors=pinned_anchors,
+                        )
                         platform_upsert_items.append(
-                            PlatformBudgetUpsertItem(budget_id=record.id, period=period)
+                            PlatformBudgetUpsertItem(
+                                budget_id=record.id,
+                                period=period,
+                                period_reset_anchor=anchor,
+                            )
                         )
     except Exception:
         logger.exception(
@@ -376,6 +409,62 @@ async def settle_usage(
             request_id=request_id,
             source="proxy",
         )
+
+
+async def release_platform_budget_token_reservations(
+    ctx: ProxyContext,
+    budget: BudgetService,
+    *,
+    committed_coords: set[BudgetAnchorCoord] | None = None,
+) -> None:
+    """成功结算后释放 token 估算预扣，保留 request 预扣作为请求计数。"""
+    state = ctx.platform_budget_preflight
+    if state is None or state.token_reservations_released:
+        return
+    token_reservations = [r for r in state.reservations if r.reserved_tokens > 0]
+    if not token_reservations:
+        state.token_reservations_released = True
+        return
+    for reservation in token_reservations:
+        if committed_coords is not None:
+            coord = _budget_reservation_coord(reservation)
+            if coord not in committed_coords:
+                continue
+        with suppress(Exception):
+            await budget.release(
+                target_kind=reservation.target_kind,
+                target_id=reservation.target_id,
+                period=reservation.period,
+                budget_model_name=reservation.budget_model_name,
+                credential_id=reservation.credential_id,
+                tenant_id=reservation.tenant_id,
+                reserved_requests=0,
+                reserved_tokens=reservation.reserved_tokens,
+                period_reset_anchor=reservation.period_reset_anchor,
+            )
+    state.token_reservations_released = True
+
+
+def _budget_reservation_coord(reservation: BudgetReservation) -> BudgetAnchorCoord:
+    return (
+        reservation.target_kind,
+        _uuid_or_none(reservation.target_id),
+        reservation.period,
+        reservation.budget_model_name,
+        reservation.credential_id,
+        reservation.tenant_id,
+    )
+
+
+def _uuid_or_none(value: object) -> uuid.UUID | None:
+    if value is None:
+        return None
+    if isinstance(value, uuid.UUID):
+        return value
+    try:
+        return uuid.UUID(str(value))
+    except (TypeError, ValueError):
+        return None
 
 
 def schedule_settle_usage(
@@ -503,6 +592,7 @@ __all__ = [
     "enrich_anthropic_response_cost",
     "enrich_openai_compat_response_cost",
     "pricing_kwargs_from_litellm",
+    "release_platform_budget_token_reservations",
     "schedule_settle_usage",
     "settle_usage",
     "to_response_dict",

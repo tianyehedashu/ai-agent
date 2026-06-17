@@ -260,6 +260,9 @@ class _FakeEntitlementQuota:
     unit_price_usd_per_token: Decimal | None = None
     unit_price_usd_per_request: Decimal | None = None
     reset_strategy: str = "rolling"
+    reset_timezone: str = "UTC"
+    reset_time_minutes: int = 0
+    reset_day_of_month: int = 1
 
 
 class _FakeEntitlementRepo:
@@ -424,6 +427,9 @@ class _FakeProviderQuota:
     limit_tokens: int | None = None
     limit_requests: int | None = None
     reset_strategy: str = "rolling"
+    reset_timezone: str = "UTC"
+    reset_time_minutes: int = 0
+    reset_day_of_month: int = 1
 
 
 class _FakeSessionCM:

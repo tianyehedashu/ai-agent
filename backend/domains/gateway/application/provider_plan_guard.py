@@ -28,6 +28,7 @@ from domains.gateway.domain.litellm_deployment_attribution import (
     gateway_deployment_credential_id,
     gateway_deployment_real_model,
 )
+from domains.gateway.domain.period_reset_anchor import period_reset_anchor_from_plan_quota
 from domains.gateway.domain.quota_plan import (
     PROVIDER_NS,
     PlanQuotaSpec,
@@ -59,6 +60,11 @@ def _quota_to_spec(row: ProviderPlanQuota, *, plan: ProviderPlan) -> PlanQuotaSp
         limit_requests=row.limit_requests,
         reset_strategy=normalize_reset_strategy(row.reset_strategy),
         plan_valid_from=plan.valid_from,
+        period_reset_anchor=period_reset_anchor_from_plan_quota(
+            reset_timezone=row.reset_timezone,
+            reset_time_minutes=row.reset_time_minutes,
+            reset_day_of_month=row.reset_day_of_month,
+        ),
     )
 
 

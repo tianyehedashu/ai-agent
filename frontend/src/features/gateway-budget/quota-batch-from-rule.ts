@@ -1,5 +1,6 @@
 import type { QuotaRule } from '@/api/gateway/quota-rules'
 
+import { minutesToTimeString } from './period-reset-utils'
 import {
   DEFAULT_BATCH_FORM,
   patchQuotaBatchFormForLayer,
@@ -32,33 +33,6 @@ export function quotaRuleToBatchFormValues(
   const budgetId = rule.source_ref.budget_id
   if (!budgetId) return null
 
-  if (layer === 'upstream') {
-    const credId = rule.key.credential_id
-    if (!credId) return null
-    const values: QuotaBatchFormValues = {
-      ...DEFAULT_BATCH_FORM,
-      layer: 'upstream',
-      allModels: rule.key.model_name === null,
-      modelNames: rule.key.model_name ? [rule.key.model_name] : [],
-      allCredentials: false,
-      credentialIds: [credId],
-      windowSeconds: String(rule.key.window_seconds ?? 0),
-      quotaLabel: rule.key.quota_label ?? 'default',
-      limit_usd: numberToStr(rule.limits.limit_usd),
-      limit_tokens: numberToStr(rule.limits.limit_tokens),
-      limit_requests: numberToStr(rule.limits.limit_requests),
-    }
-    return {
-      values: patchQuotaBatchFormForLayer(values, 'upstream'),
-      info: {
-        rule,
-        budgetId,
-        layer,
-        originalTargetId: rule.key.target_id ?? null,
-      },
-    }
-  }
-
   if (layer !== 'platform') return null
 
   const period = rule.key.period
@@ -71,6 +45,9 @@ export function quotaRuleToBatchFormValues(
     ...DEFAULT_BATCH_FORM,
     layer: 'platform',
     period,
+    periodTimezone: rule.key.period_timezone ?? 'UTC',
+    periodResetTime: minutesToTimeString(rule.key.period_reset_minutes ?? 0),
+    periodResetDay: rule.key.period_reset_day ?? 1,
     allModels: rule.key.model_name === null,
     modelNames: rule.key.model_name ? [rule.key.model_name] : [],
     limit_usd: numberToStr(rule.limits.limit_usd),

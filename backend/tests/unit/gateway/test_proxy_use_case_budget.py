@@ -12,9 +12,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from domains.gateway.application import proxy_guard, proxy_response_adapter
 from domains.gateway.application.budget_service import BudgetCheckResult, BudgetService
+from domains.gateway.application.proxy_context import PlatformBudgetPreflightState
 from domains.gateway.application.proxy_metadata_builder import PreparedLitellmKwargs
 from domains.gateway.application.proxy_response_adapter import settle_usage
 from domains.gateway.application.proxy_use_case import ProxyContext, ProxyUseCase
+from domains.gateway.domain.proxy_policy import BudgetReservation
 from domains.gateway.domain.types import GatewayCapability
 
 
@@ -29,6 +31,9 @@ class FakeBudget:
     model_name: str | None = None
     credential_id: uuid.UUID | None = None
     tenant_id: uuid.UUID | None = None
+    period_timezone: str = "UTC"
+    period_reset_minutes: int = 0
+    period_reset_day: int = 1
 
 
 class RecordingBudgetService(BudgetService):
@@ -58,7 +63,9 @@ class RecordingBudgetService(BudgetService):
         budget_model_name: str | None = None,
         credential_id: uuid.UUID | str | None = None,
         tenant_id: uuid.UUID | str | None = None,
+        **_kwargs: object,
     ) -> tuple[int, int]:
+        _ = _kwargs
         _ = limit_tokens, estimate_tokens, credential_id, tenant_id
         self.reserved.append((target_kind, target_id, period, budget_model_name))
         return (1 if limit_requests else 0, 0)
@@ -74,7 +81,9 @@ class RecordingBudgetService(BudgetService):
         tenant_id: uuid.UUID | str | None = None,
         reserved_requests: int = 1,
         reserved_tokens: int = 0,
+        **_kwargs: object,
     ) -> None:
+        _ = _kwargs
         _ = reserved_requests, reserved_tokens, credential_id, tenant_id
         self.released.append((target_kind, target_id, period, budget_model_name))
 
@@ -88,6 +97,7 @@ class CommitRecordingBudgetService(BudgetService):
     def __init__(self) -> None:
         super().__init__()
         self.commits: list[tuple[str, str | None, str, str | None, int, Decimal]] = []
+        self.releases: list[tuple[str, str | None, str, str | None, int, int]] = []
 
     async def check_rate_limit(self, **_kwargs: object) -> None:
         return None
@@ -98,8 +108,27 @@ class CommitRecordingBudgetService(BudgetService):
     async def reserve(self, **_kwargs: object) -> None:
         return None
 
-    async def release(self, **_kwargs: object) -> None:
-        return None
+    async def release(
+        self,
+        *,
+        target_kind: str,
+        target_id: str | None,
+        period: str,
+        budget_model_name: str | None = None,
+        reserved_requests: int = 1,
+        reserved_tokens: int = 0,
+        **_kwargs: object,
+    ) -> None:
+        self.releases.append(
+            (
+                target_kind,
+                target_id,
+                period,
+                budget_model_name,
+                reserved_requests,
+                reserved_tokens,
+            )
+        )
 
     async def commit(
         self,
@@ -112,11 +141,17 @@ class CommitRecordingBudgetService(BudgetService):
         budget_model_name: str | None = None,
         credential_id: uuid.UUID | str | None = None,
         tenant_id: uuid.UUID | str | None = None,
+        **_kwargs: object,
     ) -> None:
-        _ = credential_id, tenant_id
+        _ = _kwargs
         self.commits.append(
             (target_kind, target_id, period, budget_model_name, delta_tokens, delta_cost)
         )
+
+
+class FailingCommitBudgetService(CommitRecordingBudgetService):
+    async def commit(self, **_kwargs: object) -> None:
+        raise RuntimeError("redis commit failed")
 
 
 class FakeBudgetRepository:
@@ -309,45 +344,9 @@ async def test_settle_usage_commits_aggregate_and_model_redis_buckets(
         budget_model="gpt-4o-mini",
     )
     budget = CommitRecordingBudgetService()
-    fixed_id = uuid.uuid4()
 
-    class _Row:
-        id = fixed_id
-
-    class _FakeSettleRepo:
-        def __init__(self, _session: object) -> None:
-            pass
-
-        async def get_for(
-            self,
-            target_kind: str,
-            target_uuid: uuid.UUID,
-            period: str,
-            *,
-            model_name: str | None = None,
-            credential_id: uuid.UUID | None = None,
-            tenant_id: uuid.UUID | None = None,
-        ) -> _Row | None:
-            _ = credential_id, tenant_id
-            if target_kind != "tenant" or target_uuid != team_id:
-                return None
-            if period not in {"daily", "monthly", "total"}:
-                return None
-            if model_name is None or model_name == "gpt-4o-mini":
-                return _Row()
-            return None
-
-        async def settle_usage(
-            self,
-            _budget_id: uuid.UUID,
-            *,
-            delta_usd: Decimal,
-            delta_tokens: int,
-            delta_requests: int,
-        ) -> None:
-            _ = delta_usd
-            _ = delta_tokens
-            _ = delta_requests
+    class _FakeSettleRepo(FakeBudgetRepository):
+        pass
 
     monkeypatch.setattr(proxy_response_adapter, "get_session_context", lambda: _DummySessionCM())
     monkeypatch.setattr(proxy_response_adapter, "BudgetRepository", _FakeSettleRepo)
@@ -369,3 +368,101 @@ async def test_settle_usage_commits_aggregate_and_model_redis_buckets(
     for row in want:
         assert row in budget.commits
     assert len(budget.commits) == len(want)
+    assert budget.releases == []
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_settle_usage_releases_token_estimate_without_releasing_request_count(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    team_id = uuid.uuid4()
+    ctx = ProxyContext(
+        team_id=team_id,
+        user_id=None,
+        vkey=None,
+        capability=GatewayCapability.CHAT,
+        request_id=str(uuid.uuid4()),
+        store_full_messages=False,
+        guardrail_enabled=True,
+        budget_model="gpt-4o-mini",
+        platform_budget_preflight=PlatformBudgetPreflightState(
+            reservations=[
+                BudgetReservation(
+                    target_kind="tenant",
+                    target_id=str(team_id),
+                    period="monthly",
+                    budget_model_name="gpt-4o-mini",
+                    reserved_requests=1,
+                    reserved_tokens=50,
+                )
+            ]
+        ),
+    )
+    budget = CommitRecordingBudgetService()
+
+    monkeypatch.setattr(proxy_response_adapter, "get_session_context", lambda: _DummySessionCM())
+    monkeypatch.setattr(proxy_response_adapter, "BudgetRepository", FakeBudgetRepository)
+
+    await settle_usage(
+        ctx,
+        budget,
+        tokens=7,
+        cost=Decimal("0.02"),
+        requests=1,
+    )
+
+    assert (
+        "tenant",
+        str(team_id),
+        "monthly",
+        "gpt-4o-mini",
+        0,
+        50,
+    ) in budget.releases
+    assert ctx.platform_budget_preflight is not None
+    assert ctx.platform_budget_preflight.token_reservations_released is True
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_settle_usage_keeps_token_estimate_when_commit_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    team_id = uuid.uuid4()
+    ctx = ProxyContext(
+        team_id=team_id,
+        user_id=None,
+        vkey=None,
+        capability=GatewayCapability.CHAT,
+        request_id=str(uuid.uuid4()),
+        store_full_messages=False,
+        guardrail_enabled=True,
+        budget_model="gpt-4o-mini",
+        platform_budget_preflight=PlatformBudgetPreflightState(
+            reservations=[
+                BudgetReservation(
+                    target_kind="tenant",
+                    target_id=str(team_id),
+                    period="monthly",
+                    budget_model_name="gpt-4o-mini",
+                    reserved_requests=1,
+                    reserved_tokens=50,
+                )
+            ]
+        ),
+    )
+    budget = FailingCommitBudgetService()
+
+    monkeypatch.setattr(proxy_response_adapter, "get_session_context", lambda: _DummySessionCM())
+    monkeypatch.setattr(proxy_response_adapter, "BudgetRepository", FakeBudgetRepository)
+
+    await settle_usage(
+        ctx,
+        budget,
+        tokens=7,
+        cost=Decimal("0.02"),
+        requests=1,
+    )
+
+    assert budget.releases == []
