@@ -16,10 +16,16 @@ from domains.gateway.application.management.quota_rule_read_model import (
 )
 from domains.gateway.domain.period_reset_anchor import (
     compute_period_reset_at,
+    compute_period_window_start,
     period_reset_anchor_from_plan_quota,
     period_reset_anchor_from_row,
 )
-from domains.gateway.domain.quota_plan import compute_reset_at, normalize_reset_strategy
+from domains.gateway.domain.quota_plan import (
+    compute_reset_at,
+    compute_window_start_datetime,
+    compute_window_start_minute,
+    normalize_reset_strategy,
+)
 
 if TYPE_CHECKING:
     from typing import Literal
@@ -57,6 +63,7 @@ def budget_to_quota_rule(
         day_of_month=budget.period_reset_day,
     )
     now = datetime.now(UTC)
+    window_start = compute_period_window_start(now, budget.period, anchor)
     reset_at = compute_period_reset_at(now, budget.period, anchor)
 
     key = QuotaRuleKey(
@@ -87,6 +94,7 @@ def budget_to_quota_rule(
             limit_requests=budget.limit_requests,
         ),
         usage=QuotaRuleUsage(
+            window_start=window_start,
             reset_at=reset_at,
             budget_reset_at=reset_at,
         ),
@@ -114,28 +122,53 @@ def _plan_quota_key_fields(quota: PlanQuotaReadModel) -> dict[str, object]:
     }
 
 
-def _plan_quota_reset_at(
+def _plan_quota_period_bounds(
     quota: PlanQuotaReadModel,
     *,
     plan_valid_from: datetime | None,
     now: datetime | None = None,
-) -> datetime | None:
-    strategy = normalize_reset_strategy(quota.reset_strategy)
-    if strategy not in ("calendar_daily_utc", "calendar_monthly_utc"):
-        return None
+) -> tuple[datetime | None, datetime | None]:
+    """当前窗口起点与下次重置时刻（只读展示）。"""
     when = now or datetime.now(UTC)
+    window_seconds = quota.window_seconds
+    strategy = normalize_reset_strategy(quota.reset_strategy)
     anchor = period_reset_anchor_from_plan_quota(
         reset_timezone=quota.reset_timezone,
         reset_time_minutes=quota.reset_time_minutes,
         reset_day_of_month=quota.reset_day_of_month,
     )
-    return compute_reset_at(
+    if window_seconds <= 0:
+        window_start = compute_window_start_datetime(
+            when,
+            window_seconds,
+            strategy=strategy,
+            plan_valid_from=plan_valid_from,
+            period_reset_anchor=anchor,
+        )
+        return window_start, None
+    minute_idx = compute_window_start_minute(
+        when,
+        window_seconds,
         strategy=strategy,
-        window_seconds=quota.window_seconds,
-        now=when,
         plan_valid_from=plan_valid_from,
         period_reset_anchor=anchor,
     )
+    window_start = compute_window_start_datetime(
+        when,
+        window_seconds,
+        strategy=strategy,
+        plan_valid_from=plan_valid_from,
+        period_reset_anchor=anchor,
+    )
+    reset_at = compute_reset_at(
+        strategy=strategy,
+        window_seconds=window_seconds,
+        now=when,
+        earliest_minute_in_window=minute_idx,
+        plan_valid_from=plan_valid_from,
+        period_reset_anchor=anchor,
+    )
+    return window_start, reset_at
 
 
 def _plan_quota_usage_hint(
@@ -143,13 +176,14 @@ def _plan_quota_usage_hint(
     *,
     plan_valid_from: datetime | None,
 ) -> QuotaRuleUsage | None:
-    reset_at = _plan_quota_reset_at(quota, plan_valid_from=plan_valid_from)
-    if reset_at is None:
+    window_start, reset_at = _plan_quota_period_bounds(quota, plan_valid_from=plan_valid_from)
+    if window_start is None and reset_at is None:
         return None
     return QuotaRuleUsage(
         current_tokens=None,
         current_requests=None,
         current_usd=None,
+        window_start=window_start,
         reset_at=reset_at,
         budget_reset_at=reset_at,
     )

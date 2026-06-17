@@ -18,6 +18,7 @@
 
 import { memo, useMemo, useState } from 'react'
 
+import type { QuotaRule } from '@/api/gateway/quota-rules'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -35,6 +36,7 @@ import { ArrowLeft, Check, ChevronRight, Loader2, Pencil, Trash2, X } from '@/li
 import { cn } from '@/lib/utils'
 
 import { BudgetModelCombobox } from './budget-model-combobox'
+import { formatUpstreamQuotaModelTagLabel, type BudgetModelOption } from './budget-model-options'
 import { PeriodResetFields, periodResetMinutesFromTime } from './period-reset-fields'
 import { formatPeriodResetLabel } from './period-reset-utils'
 import {
@@ -46,6 +48,7 @@ import {
 import { upstreamModelAllowedOnCredential } from './quota-batch-rules'
 import { QUOTA_TEMPLATES, applyQuotaTemplate } from './quota-batch-templates'
 import { QuotaLimitValueFields } from './quota-limit-fields'
+import { QuotaRuleEditScopePanel } from './quota-rule-edit-scope-panel'
 import { LAYER_LABELS } from './quota-rule-utils'
 import {
   applyQuotaWindowPreset,
@@ -54,8 +57,8 @@ import {
   type QuotaWindowPresetValue,
 } from './quota-window-presets'
 
-import type { BudgetModelOption } from './budget-model-options'
 import type { RealModelsByCredential } from './quota-batch-rules'
+import type { QuotaRuleLabelContext } from './quota-rule-utils'
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -89,6 +92,11 @@ export interface QuotaBatchWizardProps {
   onModelPickerOpenChange?: (open: boolean) => void
   /** 编辑模式：锁定维度字段不可改，标题显示「编辑配额」 */
   editingRuleId?: string | null
+  editingRule?: QuotaRule | null
+  teamId?: string
+  labelContext?: QuotaRuleLabelContext
+  /** 上游 real_model → Gateway 调用名，用于标签展示 */
+  upstreamModelAliasByReal?: ReadonlyMap<string, string>
   /** 上游层：凭据→real_model，用于预览/计数过滤非法组合 */
   upstreamRealModelsByCredential?: RealModelsByCredential
 }
@@ -468,32 +476,51 @@ const SelectableList = memo(function SelectableList({
 /** 已选模型标签列表 */
 function ModelTagList({
   modelNames,
+  layer,
+  aliasByRealModel,
+  credentialId,
   onRemove,
   disabled,
 }: {
   modelNames: string[]
+  layer: QuotaBatchFormValues['layer']
+  aliasByRealModel?: ReadonlyMap<string, string>
+  credentialId?: string
   onRemove: (name: string) => void
   disabled: boolean
 }): React.JSX.Element | null {
   if (modelNames.length === 0) return null
   return (
     <div className="flex flex-wrap gap-1.5">
-      {modelNames.map((name) => (
-        <Badge key={name} variant="secondary" className="gap-1 text-xs">
-          {name}
-          {!disabled ? (
-            <button
-              type="button"
-              className="ml-0.5 rounded-full p-0.5 hover:bg-muted"
-              onClick={() => {
-                onRemove(name)
-              }}
-            >
-              <X className="h-3 w-3" />
-            </button>
-          ) : null}
-        </Badge>
-      ))}
+      {modelNames.map((name) => {
+        const tag =
+          layer === 'upstream'
+            ? formatUpstreamQuotaModelTagLabel(name, aliasByRealModel, credentialId)
+            : { primary: name, secondary: null as string | null }
+        return (
+          <Badge key={name} variant="secondary" className="gap-1 text-xs">
+            <span className="max-w-[240px] truncate" title={tag.secondary ?? tag.primary}>
+              {tag.primary}
+              {tag.secondary ? (
+                <span className="ml-1 font-mono text-[10px] font-normal text-muted-foreground">
+                  {tag.secondary}
+                </span>
+              ) : null}
+            </span>
+            {!disabled ? (
+              <button
+                type="button"
+                className="ml-0.5 rounded-full p-0.5 hover:bg-muted"
+                onClick={() => {
+                  onRemove(name)
+                }}
+              >
+                <X className="h-3 w-3" />
+              </button>
+            ) : null}
+          </Badge>
+        )
+      })}
     </div>
   )
 }
@@ -793,6 +820,10 @@ function StepLimits({
   modelOptionMetaLabel,
   onModelPickerOpenChange,
   editingRuleId,
+  editingRule,
+  teamId,
+  labelContext,
+  upstreamModelAliasByReal,
 }: QuotaBatchWizardProps): React.JSX.Element {
   const isEditing = !!editingRuleId
   const isMember = mode === 'member'
@@ -811,75 +842,98 @@ function StepLimits({
 
   return (
     <div className="space-y-5">
-      {/* 模型选择 */}
-      <div className="space-y-2">
-        <Label>模型范围</Label>
-        {isUpstream ? (
-          <p className="text-xs text-muted-foreground">
-            上游配额按凭据上的 upstream 模型（real_model）计；仅展示步骤 1 所选凭据已注册的模型。
-          </p>
-        ) : null}
-        <div className="flex items-center gap-3">
-          <label className="flex cursor-pointer items-center gap-2 text-sm">
-            <Checkbox
-              checked={values.allModels}
-              disabled={disabled}
-              onCheckedChange={(checked) => {
-                onChange({ ...values, allModels: checked === true, modelNames: [] })
-              }}
-            />
-            全模型
-          </label>
-        </div>
-        {!values.allModels ? (
-          <div className="space-y-2">
-            <div className="flex items-end gap-2">
-              <div className="flex-1">
-                <BudgetModelCombobox
-                  value=""
-                  onChange={(name) => {
-                    if (name && !values.modelNames.includes(name)) {
-                      onChange({ ...values, modelNames: [...values.modelNames, name] })
-                    }
-                  }}
-                  options={modelOptions}
-                  disabled={disabled}
-                  loading={modelsLoading}
-                  placeholder="添加模型…"
-                  getOptionMetaLabel={modelOptionMetaLabel}
-                  onPopoverOpenChange={onModelPickerOpenChange}
-                />
-              </div>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="h-9 text-xs"
-                disabled={disabled || values.modelNames.length === 0}
-                onClick={() => {
-                  onChange({ ...values, modelNames: [] })
+      {isEditing && editingRule && teamId && labelContext ? (
+        <QuotaRuleEditScopePanel
+          rule={editingRule}
+          teamId={teamId}
+          mode={mode ?? 'admin'}
+          labelContext={labelContext}
+          canAdjustUsage={!disabled}
+        />
+      ) : null}
+
+      {/* 模型选择 — 编辑模式锁定，仅批量新建可选 */}
+      {!isEditing ? (
+        <div className="space-y-2">
+          <Label>模型范围</Label>
+          {isUpstream ? (
+            <p className="text-xs text-muted-foreground">
+              上游配额按凭据上的 upstream 模型（real_model）计；仅展示步骤 1 所选凭据已注册的模型。
+            </p>
+          ) : null}
+          <div className="flex items-center gap-3">
+            <label className="flex cursor-pointer items-center gap-2 text-sm">
+              <Checkbox
+                checked={values.allModels}
+                disabled={disabled}
+                onCheckedChange={(checked) => {
+                  onChange({ ...values, allModels: checked === true, modelNames: [] })
                 }}
-              >
-                清空
-              </Button>
-            </div>
-            <ModelTagList
-              modelNames={values.modelNames}
-              onRemove={(name) => {
-                onChange({ ...values, modelNames: values.modelNames.filter((n) => n !== name) })
-              }}
-              disabled={disabled}
-            />
-            {values.modelNames.length === 0 ? (
-              <p className="text-xs text-amber-600">
-                {isUpstream
-                  ? '请至少选择一个 upstream 模型，或勾选「全模型」。若列表为空，请确认步骤 1 已选凭据且已注册模型。'
-                  : '请至少选择一个模型，或勾选「全模型」。'}
-              </p>
-            ) : null}
+              />
+              全模型
+            </label>
           </div>
-        ) : null}
-      </div>
+          {!values.allModels ? (
+            <div className="space-y-2">
+              <div className="flex items-end gap-2">
+                <div className="flex-1">
+                  <BudgetModelCombobox
+                    value=""
+                    onChange={(name) => {
+                      if (name && !values.modelNames.includes(name)) {
+                        onChange({ ...values, modelNames: [...values.modelNames, name] })
+                      }
+                    }}
+                    options={modelOptions}
+                    disabled={disabled}
+                    loading={modelsLoading}
+                    placeholder="添加模型…"
+                    getOptionMetaLabel={modelOptionMetaLabel}
+                    onPopoverOpenChange={onModelPickerOpenChange}
+                  />
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-9 text-xs"
+                  disabled={disabled || values.modelNames.length === 0}
+                  onClick={() => {
+                    onChange({ ...values, modelNames: [] })
+                  }}
+                >
+                  清空
+                </Button>
+              </div>
+              <ModelTagList
+                modelNames={values.modelNames}
+                layer={values.layer}
+                aliasByRealModel={
+                  values.layer === 'upstream' ? upstreamModelAliasByReal : undefined
+                }
+                credentialId={
+                  values.layer === 'upstream'
+                    ? values.credentialIds.length === 1
+                      ? values.credentialIds[0]
+                      : (editingRule?.key.credential_id ?? undefined)
+                    : undefined
+                }
+                onRemove={(name) => {
+                  onChange({ ...values, modelNames: values.modelNames.filter((n) => n !== name) })
+                }}
+                disabled={disabled}
+              />
+              {values.modelNames.length === 0 ? (
+                <p className="text-xs text-amber-600">
+                  {isUpstream
+                    ? '请至少选择一个 upstream 模型，或勾选「全模型」。若列表为空，请确认步骤 1 已选凭据且已注册模型。'
+                    : '请至少选择一个模型，或勾选「全模型」。'}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
 
       {/* 周期 — Platform / 成员 */}
       {values.layer === 'platform' || isMember ? (
@@ -1206,12 +1260,15 @@ export function QuotaBatchWizard(props: QuotaBatchWizardProps): React.JSX.Elemen
   const [step, setStep] = useState<Step>(isEditing ? 2 : 1)
 
   const STEPS = useMemo(
-    () => [
-      { label: isMember ? '选择凭据' : '选择对象' },
-      { label: '设置限额' },
-      { label: '预览确认' },
-    ],
-    [isMember]
+    () =>
+      isEditing
+        ? [{ label: '编辑限额' }]
+        : [
+            { label: isMember ? '选择凭据' : '选择对象' },
+            { label: '设置限额' },
+            { label: '预览确认' },
+          ],
+    [isEditing, isMember]
   )
 
   const canGoNext = (): boolean => {
@@ -1294,7 +1351,7 @@ export function QuotaBatchWizard(props: QuotaBatchWizardProps): React.JSX.Elemen
             </Button>
           ) : null}
         </div>
-        <StepIndicator current={step} steps={STEPS} />
+        <StepIndicator current={isEditing ? 1 : step} steps={STEPS} />
       </div>
 
       {/* Step content */}
@@ -1314,17 +1371,33 @@ export function QuotaBatchWizard(props: QuotaBatchWizardProps): React.JSX.Elemen
           ) : null}
         </div>
         <div className="flex items-center gap-2">
-          {step > 1 ? (
+          {step > 1 && !isEditing ? (
             <Button type="button" variant="outline" onClick={handlePrev} disabled={pending}>
               上一步
             </Button>
           ) : null}
-          {step < 3 ? (
+          {step < 3 && !(isEditing && step === 2) ? (
             <Button type="button" onClick={handleNext} disabled={disabled || !canGoNext()}>
               下一步
             </Button>
           ) : null}
-          {step === 3 ? (
+          {isEditing && step === 2 ? (
+            <Button
+              type="button"
+              onClick={handleSubmit}
+              disabled={disabled || pending || !canGoNext()}
+            >
+              {pending ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  保存中…
+                </>
+              ) : (
+                '保存限额'
+              )}
+            </Button>
+          ) : null}
+          {step === 3 && !isEditing ? (
             <Button
               type="button"
               onClick={handleSubmit}

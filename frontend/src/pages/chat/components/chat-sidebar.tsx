@@ -27,6 +27,7 @@ import { useToast } from '@/hooks/use-toast'
 import { groupSessionsByDate } from '@/lib/session-utils'
 import { cn, formatRelativeTime } from '@/lib/utils'
 import { useChatStore } from '@/stores/chat'
+import { useIsAuthenticated } from '@/stores/user'
 import type { Session } from '@/types'
 
 export default function ChatSidebar(): React.JSX.Element {
@@ -34,10 +35,12 @@ export default function ChatSidebar(): React.JSX.Element {
   const navigate = useNavigate()
   const location = useLocation()
   const [isCollapsed, setIsCollapsed] = useState(false)
+  const isAuthenticated = useIsAuthenticated()
 
   const { data: sessionsData, isLoading } = useQuery({
     queryKey: ['sessions'],
     queryFn: () => sessionApi.list(1, 50),
+    enabled: isAuthenticated,
   })
 
   const sessions = useMemo(() => sessionsData?.items ?? [], [sessionsData?.items])

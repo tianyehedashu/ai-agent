@@ -19,7 +19,7 @@ interface ModelDetailQuotaSectionProps {
   teamId: string
   userId: string | null
   isAdmin: boolean
-  canSelfManage: boolean
+  canManageQuota: boolean
 }
 
 type ActiveLayer = 'platform' | 'upstream'
@@ -44,15 +44,17 @@ export function ModelDetailQuotaSection({
   teamId,
   userId,
   isAdmin,
-  canSelfManage,
+  canManageQuota,
 }: ModelDetailQuotaSectionProps): React.JSX.Element | null {
   const isPersonal = scope === 'personal'
   const modelName = isPersonal ? model.real_model : model.name
-  const canWrite = Boolean(userId) && (isAdmin || canSelfManage)
+  const gatewayAliasName = isPersonal ? model.name.trim() || model.real_model : model.name
+  const canWrite = Boolean(userId) && canManageQuota
   const mode = isAdmin ? 'admin' : 'member'
 
   const { byId: credentialSummariesById } = useGatewayCredentialDirectory()
   const credentialSummary = credentialSummariesById.get(model.credential_id)
+  const credentialOwnerId = credentialSummary?.created_by_user_id ?? null
   const credentialLabel = credentialSummaryLabel(credentialSummary, model.credential_id)
 
   const { platformRules, upstreamRules, isLoading } = useModelDetailQuotaRules({
@@ -108,6 +110,9 @@ export function ModelDetailQuotaSection({
         <CardTitle className="text-base">用量限额</CardTitle>
         <p className="text-xs text-muted-foreground">
           两层独立管控：网关护栏管平台计费，凭据额度管厂商 API；互不替代。
+          {!canWrite
+            ? ' 仅团队管理员可改团队护栏；成员可设「我的护栏」或本人凭据上的厂商额度。'
+            : null}
         </p>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -121,7 +126,10 @@ export function ModelDetailQuotaSection({
         <ModelDetailQuotaLayerPanel
           layer="platform"
           rules={platformRules}
+          teamId={teamId}
           canWrite={canWrite}
+          isAdmin={isAdmin}
+          credentialOwnerId={credentialOwnerId}
           formMode={layerFormMode(formMode, 'platform')}
           onOpenCreate={() => {
             setFormMode({ kind: 'create', layer: 'platform' })
@@ -138,6 +146,7 @@ export function ModelDetailQuotaSection({
           pending={batchPending}
           deletePending={deletePending}
           modelName={modelName}
+          gatewayAliasName={gatewayAliasName}
           credentialId={model.credential_id}
           mode={mode}
           selfUserId={userId}
@@ -148,7 +157,10 @@ export function ModelDetailQuotaSection({
           <ModelDetailQuotaLayerPanel
             layer="upstream"
             rules={upstreamRules}
+            teamId={teamId}
             canWrite={canWrite}
+            isAdmin={isAdmin}
+            credentialOwnerId={credentialOwnerId}
             formMode={layerFormMode(formMode, 'upstream')}
             onOpenCreate={() => {
               setFormMode({ kind: 'create', layer: 'upstream' })
@@ -165,6 +177,7 @@ export function ModelDetailQuotaSection({
             pending={batchPending}
             deletePending={deletePending}
             modelName={modelName}
+            gatewayAliasName={gatewayAliasName}
             credentialId={model.credential_id}
             credentialLabel={credentialLabel}
             upstreamModelId={model.real_model}

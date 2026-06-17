@@ -1,48 +1,55 @@
 import type { QuotaRule } from '@/api/gateway/quota-rules'
 import {
-  computeQuotaRuleUsageRatio,
-  describeUpstreamQuotaRuleScope,
   formatQuotaRulePeriod,
-  formatQuotaRuleResetAt,
-  quotaUsageHasMetrics,
+  formatQuotaRulePeriodWindow,
 } from '@/features/gateway-budget/quota-rule-utils'
 import { formatQuotaTokens } from '@/features/gateway-budget/quota-token-display'
+import { QuotaUsageInlineEditor } from '@/features/gateway-budget/quota-usage-inline-editor'
+import type { QuotaCenterMode } from '@/features/gateway-budget/use-quota-center'
+import { isQuotaRuleUsageAdjustable } from '@/features/gateway-budget/use-quota-usage-adjust'
 import { Cloud, Shield } from '@/lib/lucide-icons'
 import { cn } from '@/lib/utils'
 
 interface ModelDetailQuotaRuleRowProps {
   rule: QuotaRule
   layer: 'platform' | 'upstream'
+  teamId: string
+  mode: QuotaCenterMode
+  canAdjustUsage: boolean
   credentialLabel?: string | null
   /** 当前模型 upstream endpoint，用于区分「本 endpoint / 整凭据」 */
   upstreamModelId?: string
+  gatewayAliasName?: string
   actions?: React.ReactNode
 }
 
 export function ModelDetailQuotaRuleRow({
   rule,
   layer,
-  credentialLabel,
+  teamId,
+  mode,
+  canAdjustUsage,
   upstreamModelId,
+  gatewayAliasName,
   actions,
 }: ModelDetailQuotaRuleRowProps): React.JSX.Element {
-  const { ratio, barColor } = computeQuotaRuleUsageRatio(rule)
   const limitUsd = rule.limits.limit_usd
   const limitTok = rule.limits.limit_tokens
-  const usage = rule.usage
   const isPlatform = layer === 'platform'
-  const upstreamScope = !isPlatform ? describeUpstreamQuotaRuleScope(rule, upstreamModelId) : null
+  const canEditUsage = canAdjustUsage && isQuotaRuleUsageAdjustable(rule)
 
   const subtitleParts = [formatQuotaRulePeriod(rule)]
-  if (!isPlatform && credentialLabel) subtitleParts.push(credentialLabel)
-  if (upstreamScope) subtitleParts.push(upstreamScope)
+  if (gatewayAliasName) subtitleParts.push(`调用 ${gatewayAliasName}`)
+  if (!isPlatform && upstreamModelId) subtitleParts.push(`上游 ${upstreamModelId}`)
 
   const primaryMetric =
     limitUsd !== null
-      ? `$${parseFloat(String(limitUsd)).toFixed(2)}`
+      ? `$${Number.parseFloat(String(limitUsd)).toFixed(2)}`
       : limitTok !== null
         ? formatQuotaTokens(limitTok)
         : '未设上限'
+
+  const periodWindow = formatQuotaRulePeriodWindow(rule)
 
   return (
     <div
@@ -68,48 +75,28 @@ export function ModelDetailQuotaRuleRow({
           <div className="min-w-0 space-y-0.5">
             <p className="text-sm font-medium">{isPlatform ? '网关侧' : '厂商侧'}</p>
             <p className="text-xs text-muted-foreground">{subtitleParts.join(' · ')}</p>
+            {periodWindow ? (
+              <p className="text-[11px] text-muted-foreground">{periodWindow}</p>
+            ) : null}
           </div>
         </div>
-        {actions}
+        {actions ? (
+          <span className="inline-flex flex-wrap items-center gap-1">{actions}</span>
+        ) : null}
       </div>
 
-      {usage && quotaUsageHasMetrics(usage) ? (
-        <div className="mt-3 space-y-2">
-          <div className="grid gap-2 text-xs tabular-nums sm:grid-cols-2">
-            <div className="rounded bg-background/60 px-2 py-1.5">
-              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">费用</p>
-              <p className="mt-0.5 font-medium">
-                ${parseFloat(String(usage.current_usd)).toFixed(2)} /{' '}
-                {limitUsd !== null ? `$${parseFloat(String(limitUsd)).toFixed(2)}` : '∞'}
-              </p>
-            </div>
-            <div className="rounded bg-background/60 px-2 py-1.5">
-              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Token</p>
-              <p className="mt-0.5 font-medium">
-                {formatQuotaTokens(usage.current_tokens)} / {formatQuotaTokens(limitTok)}
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
-              <div
-                className={`h-full ${barColor}`}
-                style={{ width: `${Math.min(100, Math.max(0, ratio * 100)).toFixed(1)}%` }}
-              />
-            </div>
-            <span className="text-[11px] tabular-nums text-muted-foreground">
-              {(ratio * 100).toFixed(0)}%
-            </span>
-          </div>
-        </div>
+      {canEditUsage || rule.usage ? (
+        <QuotaUsageInlineEditor
+          rule={rule}
+          teamId={teamId}
+          mode={mode}
+          canEdit={canEditUsage}
+          limitUsd={limitUsd}
+          limitTok={limitTok}
+        />
       ) : (
         <p className="mt-2 text-xs text-muted-foreground">上限 {primaryMetric}</p>
       )}
-      {formatQuotaRuleResetAt(rule) ? (
-        <p className="mt-2 text-[11px] text-muted-foreground">
-          下次重置 {formatQuotaRuleResetAt(rule)}
-        </p>
-      ) : null}
     </div>
   )
 }

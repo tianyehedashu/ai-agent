@@ -14,7 +14,7 @@ import { cn } from '@/lib/utils'
 import {
   computeQuotaRuleUsageRatio,
   formatQuotaRulePeriod,
-  formatQuotaRuleResetAt,
+  formatQuotaRulePeriodWindow,
   LAYER_LABELS,
   parseQuotaNumeric,
   quotaUsageHasMetrics,
@@ -169,10 +169,8 @@ export function QuotaCardItem({
             </span>
           </div>
         </div>
-        {formatQuotaRuleResetAt(rule) ? (
-          <p className="text-[11px] text-muted-foreground">
-            下次重置 {formatQuotaRuleResetAt(rule)}
-          </p>
+        {formatQuotaRulePeriodWindow(rule) ? (
+          <p className="text-[11px] text-muted-foreground">{formatQuotaRulePeriodWindow(rule)}</p>
         ) : null}
         {isPlanRule ? (
           <div className="flex items-center justify-between">

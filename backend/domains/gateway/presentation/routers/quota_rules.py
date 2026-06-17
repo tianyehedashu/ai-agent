@@ -11,6 +11,9 @@ from domains.gateway.application.management.quota_rule_read_model import (
     QuotaRuleLayer,
     QuotaRuleListFilters,
 )
+from domains.gateway.application.management.quota_usage_adjustment import (
+    QuotaUsageAdjustmentCommand,
+)
 from domains.gateway.application.management.write_modules.quota_rule_writes import (
     QuotaRuleUpsertCommand,
 )
@@ -22,6 +25,7 @@ from domains.gateway.presentation.schemas.common import (
     QuotaRuleBatchUpsertResponse,
     QuotaRuleResponse,
     QuotaRuleUpsert,
+    QuotaUsageAdjustmentRequest,
 )
 from domains.tenancy.domain.policies.team_role import is_team_admin_or_platform
 
@@ -116,6 +120,54 @@ async def delete_self_quota_rule(
         budget_id,
         tenant_id=team.team_id,
         actor_user_id=team.user_id,
+    )
+
+
+@router.post("/quota-rules/usage-adjustments", response_model=QuotaRuleResponse)
+async def adjust_quota_rule_usage(
+    body: QuotaUsageAdjustmentRequest,
+    team: RequiredTeamAdmin,
+    writes: MgmtWrites,
+) -> QuotaRuleResponse:
+    """团队管理员：手工设置当前周期已用额度或清零本窗口。"""
+    row = await writes.adjust_quota_rule_usage(
+        _adjustment_to_command(body),
+        tenant_id=team.team_id,
+        actor_user_id=team.user_id,
+        is_platform_admin=team.is_platform_admin,
+        is_team_admin=is_team_admin_or_platform(team),
+    )
+    return quota_rule_to_response(row)
+
+
+@router.post("/quota-rules/self/usage-adjustments", response_model=QuotaRuleResponse)
+async def adjust_self_quota_rule_usage(
+    body: QuotaUsageAdjustmentRequest,
+    team: CurrentTeam,
+    writes: MgmtWrites,
+) -> QuotaRuleResponse:
+    """成员自助：调整本人平台或本人凭据上游配额的已用额度。"""
+    row = await writes.adjust_quota_rule_usage(
+        _adjustment_to_command(body),
+        tenant_id=team.team_id,
+        actor_user_id=team.user_id,
+        is_platform_admin=False,
+        is_team_admin=False,
+        member_self_service=True,
+    )
+    return quota_rule_to_response(row)
+
+
+def _adjustment_to_command(body: QuotaUsageAdjustmentRequest) -> QuotaUsageAdjustmentCommand:
+    return QuotaUsageAdjustmentCommand(
+        layer=body.layer,
+        budget_id=body.budget_id,
+        plan_id=body.plan_id,
+        quota_id=body.quota_id,
+        mode=body.mode,
+        current_usd=body.current_usd,
+        current_tokens=body.current_tokens,
+        current_requests=body.current_requests,
     )
 
 

@@ -43,7 +43,7 @@ import { registerSidebarNavigate } from '@/lib/ui-overlay/overlay-nav-bridge'
 import { cn } from '@/lib/utils'
 import { useChatStore } from '@/stores/chat'
 import { useSidebarStore } from '@/stores/sidebar'
-import { useCurrentUser } from '@/stores/user'
+import { useCurrentUser, useIsAuthenticated } from '@/stores/user'
 import type { Session } from '@/types'
 import { isVideoSession } from '@/types'
 
@@ -101,7 +101,7 @@ export default function Sidebar(): React.JSX.Element {
   const { isCollapsed, toggle } = useSidebarStore()
   const [isHistoryOpen, setIsHistoryOpen] = useState(false)
   const currentUser = useCurrentUser()
-  const isAuthenticated = currentUser !== null
+  const isAuthenticated = useIsAuthenticated()
   const isAdmin = currentUser?.role === 'admin'
   const visibleNavigation = useMemo(
     () =>
@@ -117,6 +117,7 @@ export default function Sidebar(): React.JSX.Element {
   const { data: sessionsData, isLoading: isLoadingSessions } = useQuery({
     queryKey: ['sessions'],
     queryFn: () => sessionApi.list(1, 50),
+    enabled: isAuthenticated,
   })
 
   const sessions = useMemo(() => sessionsData?.items ?? [], [sessionsData?.items])
@@ -129,7 +130,7 @@ export default function Sidebar(): React.JSX.Element {
   const { data: currentSession } = useQuery({
     queryKey: ['session', sessionId],
     queryFn: () => (sessionId ? sessionApi.get(sessionId) : Promise.resolve(null)),
-    enabled: !!sessionId && isChatActive,
+    enabled: isAuthenticated && !!sessionId && isChatActive,
   })
 
   const handleCreateChat = (): void => {

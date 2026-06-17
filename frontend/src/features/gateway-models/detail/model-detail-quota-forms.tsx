@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 
 import type { QuotaRule } from '@/api/gateway/quota-rules'
+import { PeriodResetFields } from '@/features/gateway-budget/period-reset-fields'
 import type { QuotaBatchFormValues } from '@/features/gateway-budget/quota-batch-form'
 import { quotaRuleToBatchFormValues } from '@/features/gateway-budget/quota-batch-from-rule'
 import { QuotaFormShell } from '@/features/gateway-budget/quota-form-shell'
@@ -14,8 +15,52 @@ import {
   wanInputToTokenString,
 } from '@/features/gateway-budget/quota-token-display'
 import { Cloud, Shield } from '@/lib/lucide-icons'
+import { cn } from '@/lib/utils'
 
 import { buildModelQuotaDefaultForm } from './model-detail-quota-utils'
+
+function QuotaModelScopeCard({
+  gatewayAlias,
+  upstreamName,
+  credentialLabel,
+  layer,
+}: {
+  gatewayAlias: string
+  upstreamName?: string | null
+  credentialLabel?: string | null
+  layer: 'platform' | 'upstream'
+}): React.JSX.Element {
+  const borderClass =
+    layer === 'platform' ? 'border-sky-500/20' : 'border-amber-500/20 bg-background/80'
+  return (
+    <div className={cn('rounded-md border px-3 py-2 text-xs', borderClass)}>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="min-w-0">
+          <p className="text-[10px] uppercase tracking-wide text-muted-foreground">调用名</p>
+          <p className="mt-0.5 truncate font-medium text-foreground" title={gatewayAlias}>
+            {gatewayAlias}
+          </p>
+        </div>
+        {layer === 'upstream' && upstreamName ? (
+          <div className="min-w-0">
+            <p className="text-[10px] uppercase tracking-wide text-muted-foreground">上游模型</p>
+            <p className="mt-0.5 truncate font-mono text-muted-foreground" title={upstreamName}>
+              {upstreamName}
+            </p>
+          </div>
+        ) : null}
+      </div>
+      {layer === 'upstream' && credentialLabel ? (
+        <p className="mt-2 text-muted-foreground">
+          凭据 <span className="text-foreground">{credentialLabel}</span>
+        </p>
+      ) : null}
+      {layer === 'platform' ? (
+        <p className="mt-2 text-muted-foreground">平台护栏按网关调用名计量，非上游 endpoint。</p>
+      ) : null}
+    </div>
+  )
+}
 
 interface SharedFormProps {
   modelName: string
@@ -131,7 +176,8 @@ export function ModelDetailPlatformQuotaForm({
   onDelete,
   onCancel,
   memberLabel,
-}: SharedFormProps & { memberLabel?: string }): React.JSX.Element {
+  gatewayAlias,
+}: SharedFormProps & { memberLabel?: string; gatewayAlias: string }): React.JSX.Element {
   const { values, limitTokensWan, setLimitTokensWan, update, editingBudgetId, buildSubmitPayload } =
     useModelQuotaFormState(modelName, credentialId, 'platform', mode, selfUserId, editingRule)
 
@@ -142,10 +188,11 @@ export function ModelDetailPlatformQuotaForm({
           <Shield className="h-3.5 w-3.5" />
         </div>
       }
-      title={editingBudgetId ? '编辑网关护栏' : '新建网关护栏'}
+      title={editingRule ? '编辑网关护栏' : '新建网关护栏'}
       pending={pending}
       deletePending={deletePending}
       editingBudgetId={editingBudgetId}
+      isEditing={editingRule !== null}
       onCancel={onCancel}
       onDelete={onDelete}
       onSubmit={() => {
@@ -153,6 +200,7 @@ export function ModelDetailPlatformQuotaForm({
       }}
       borderClass="border-sky-500/25 bg-sky-500/[0.04]"
     >
+      <QuotaModelScopeCard gatewayAlias={gatewayAlias} layer="platform" />
       <p className="text-xs text-muted-foreground">
         {mode === 'member' && memberLabel
           ? `限制 ${memberLabel} 通过本模型的网关调用，按自然日 / 月重置。`
@@ -162,6 +210,22 @@ export function ModelDetailPlatformQuotaForm({
         value={values.period}
         onChange={(period) => {
           update('period', period)
+        }}
+      />
+      <PeriodResetFields
+        layer="platform"
+        period={values.period}
+        periodTimezone={values.periodTimezone}
+        periodResetTime={values.periodResetTime}
+        periodResetDay={values.periodResetDay}
+        onPeriodTimezoneChange={(periodTimezone) => {
+          update('periodTimezone', periodTimezone)
+        }}
+        onPeriodResetTimeChange={(periodResetTime) => {
+          update('periodResetTime', periodResetTime)
+        }}
+        onPeriodResetDayChange={(periodResetDay) => {
+          update('periodResetDay', periodResetDay)
         }}
       />
       <QuotaLimitValueFields
@@ -190,9 +254,11 @@ export function ModelDetailUpstreamQuotaForm({
   onCancel,
   credentialLabel,
   upstreamModelId,
+  gatewayAlias,
 }: SharedFormProps & {
   credentialLabel: string
   upstreamModelId: string
+  gatewayAlias: string
 }): React.JSX.Element {
   const { values, limitTokensWan, setLimitTokensWan, update, editingBudgetId, buildSubmitPayload } =
     useModelQuotaFormState(
@@ -212,10 +278,11 @@ export function ModelDetailUpstreamQuotaForm({
           <Cloud className="h-3.5 w-3.5" />
         </div>
       }
-      title={editingBudgetId ? '编辑凭据额度' : '新建凭据额度'}
+      title={editingRule ? '编辑凭据额度' : '新建凭据额度'}
       pending={pending}
       deletePending={deletePending}
       editingBudgetId={editingBudgetId}
+      isEditing={editingRule !== null}
       onCancel={onCancel}
       onDelete={onDelete}
       onSubmit={() => {
@@ -223,14 +290,32 @@ export function ModelDetailUpstreamQuotaForm({
       }}
       borderClass="border-amber-500/30 bg-amber-500/[0.06]"
     >
-      <div className="rounded-md border border-amber-500/20 bg-background/80 px-3 py-2 text-xs">
-        <p className="font-medium text-foreground">{credentialLabel}</p>
-        <p className="mt-1 font-mono text-muted-foreground">upstream · {upstreamModelId}</p>
-      </div>
+      <QuotaModelScopeCard
+        gatewayAlias={gatewayAlias}
+        upstreamName={upstreamModelId}
+        credentialLabel={credentialLabel}
+        layer="upstream"
+      />
       <QuotaWindowPresetFields
         windowSeconds={values.windowSeconds}
         onWindowSecondsChange={(v) => {
           update('windowSeconds', v)
+        }}
+      />
+      <PeriodResetFields
+        layer="upstream"
+        windowSeconds={values.windowSeconds}
+        periodTimezone={values.periodTimezone}
+        periodResetTime={values.periodResetTime}
+        periodResetDay={values.periodResetDay}
+        onPeriodTimezoneChange={(periodTimezone) => {
+          update('periodTimezone', periodTimezone)
+        }}
+        onPeriodResetTimeChange={(periodResetTime) => {
+          update('periodResetTime', periodResetTime)
+        }}
+        onPeriodResetDayChange={(periodResetDay) => {
+          update('periodResetDay', periodResetDay)
         }}
       />
       <QuotaLimitValueFields

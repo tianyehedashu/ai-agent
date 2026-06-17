@@ -142,16 +142,48 @@ export function buildUpstreamQuotaModelOptions(input: {
 
 export function upstreamQuotaModelOptionLabel(
   option: BudgetModelOption,
-  aliasByRealModel?: ReadonlyMap<string, string>
+  aliasByRealModel?: ReadonlyMap<string, string>,
+  credentialId?: string
 ): string {
   if (option.group === 'legacy') return '历史配置'
-  const alias = aliasByRealModel?.get(option.name)
+  const alias = resolveUpstreamModelAlias(option.name, aliasByRealModel, credentialId)
   const base = budgetModelOptionLabel(option)
   return alias
-    ? `${option.name} · ${alias}`
+    ? `${alias} · ${option.name}`
     : base === '注册模型'
       ? option.name
       : `${option.name} · ${base}`
+}
+
+function resolveUpstreamModelAlias(
+  realModel: string,
+  aliasByRealModel: ReadonlyMap<string, string> | undefined,
+  credentialId?: string
+): string | undefined {
+  const trimmed = realModel.trim()
+  if (!trimmed || !aliasByRealModel) return undefined
+  if (credentialId) {
+    const scoped = aliasByRealModel.get(`${credentialId}:${trimmed}`)
+    if (scoped) return scoped.trim() || undefined
+  }
+  for (const [key, alias] of aliasByRealModel) {
+    const colon = key.indexOf(':')
+    if (colon >= 0 && key.slice(colon + 1) === trimmed) return alias.trim() || undefined
+  }
+  return undefined
+}
+
+/** 上游配额已选模型标签：主文案为调用名，副文案为 upstream real_model。 */
+export function formatUpstreamQuotaModelTagLabel(
+  realModel: string,
+  aliasByRealModel?: ReadonlyMap<string, string>,
+  credentialId?: string
+): { primary: string; secondary: string | null } {
+  const alias = resolveUpstreamModelAlias(realModel, aliasByRealModel, credentialId)
+  if (alias) {
+    return { primary: alias, secondary: realModel }
+  }
+  return { primary: realModel, secondary: null }
 }
 
 export function budgetModelOptionLabel(option: BudgetModelOption): string {

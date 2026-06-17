@@ -6,7 +6,10 @@ export interface QuotaFormShellProps {
   title: string
   pending: boolean
   deletePending: boolean
+  /** 有 budget_id 时用于删除 API */
   editingBudgetId: string | null
+  /** 编辑态（含 plan 上游规则等无 budget_id 的场景） */
+  isEditing?: boolean
   onCancel: () => void
   onDelete?: (budgetId: string) => void
   onSubmit: () => void
@@ -20,13 +23,15 @@ export function QuotaFormShell({
   pending,
   deletePending,
   editingBudgetId,
+  isEditing: isEditingProp,
   onCancel,
   onDelete,
   onSubmit,
   children,
   borderClass,
 }: QuotaFormShellProps): React.JSX.Element {
-  const isEditing = editingBudgetId !== null
+  const isEditing = isEditingProp ?? editingBudgetId !== null
+  const canDelete = isEditing && editingBudgetId !== null && onDelete !== undefined
 
   return (
     <div className={`space-y-3 rounded-md border p-3 ${borderClass}`}>
@@ -47,7 +52,7 @@ export function QuotaFormShell({
       </div>
       {children}
       <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
-        {isEditing && onDelete ? (
+        {canDelete ? (
           <Button
             type="button"
             variant="ghost"

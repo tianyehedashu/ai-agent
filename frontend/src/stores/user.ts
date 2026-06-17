@@ -24,6 +24,16 @@ import { clearAuth } from '@/stores/auth'
 /** auth/me 查询的 queryKey，全局共享 */
 export const CURRENT_USER_QUERY_KEY = ['auth', 'currentUser'] as const
 
+/** AuthProvider 与 useCurrentUser 共用的 auth/me 查询配置 */
+export const currentUserQueryOptions = {
+  queryKey: CURRENT_USER_QUERY_KEY,
+  queryFn: () => userApi.getCurrentUser(),
+  staleTime: 1000 * 60 * 5,
+  retry: false,
+  /** 每次进入受保护路由重新校验，避免 stale 用户缓存 + 已失效 JWT */
+  refetchOnMount: 'always' as const,
+}
+
 /**
  * 读取当前登录用户。
  *
@@ -32,14 +42,15 @@ export const CURRENT_USER_QUERY_KEY = ['auth', 'currentUser'] as const
  * - 未 fetch 或 loading 时返回 null
  */
 export function useCurrentUser(): CurrentUser | null {
-  const { data, error } = useQuery({
-    queryKey: CURRENT_USER_QUERY_KEY,
-    queryFn: () => userApi.getCurrentUser(),
-    staleTime: 1000 * 60 * 5,
-  })
+  const { data, error } = useQuery(currentUserQueryOptions)
 
   const isSessionInvalid = error instanceof ApiError && error.status === 401
   return isSessionInvalid ? null : (data ?? null)
+}
+
+/** 是否已通过 auth/me 校验的登录用户 */
+export function useIsAuthenticated(): boolean {
+  return useCurrentUser() !== null
 }
 
 // ---------------------------------------------------------------------------

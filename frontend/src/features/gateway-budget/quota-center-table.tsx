@@ -1,5 +1,5 @@
 /**
- * 配额中心表格：支持列排序、批量选择、行删除。
+ * 配额中心表格：可调列宽、调用名/上游分列、排序、批量选择。
  */
 
 import { memo, useMemo, useState } from 'react'
@@ -10,23 +10,31 @@ import type { QuotaRule } from '@/api/gateway/quota-rules'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
-import { ArrowDown, ArrowUp, Loader2, Pencil, Trash2 } from '@/lib/lucide-icons'
+import { QuotaCenterResizableHeader } from '@/features/gateway-budget/quota-center-resizable-header'
+import { useQuotaCenterColumnWidths } from '@/features/gateway-budget/use-quota-center-column-widths'
+import { ArrowDown, ArrowUp, CircleDollarSign, Loader2, Pencil, Trash2 } from '@/lib/lucide-icons'
 import { cn } from '@/lib/utils'
 
 import {
   computeQuotaRuleUsageRatio,
+  formatQuotaRuleInvokeNameLabel,
   formatQuotaRulePeriod,
-  formatQuotaRuleResetAt,
+  formatQuotaRulePeriodWindow,
+  formatQuotaRuleUpstreamNameLabel,
   LAYER_LABELS,
   quotaUsageHasMetrics,
   LAYER_ORDER,
   quotaRuleRowId,
-  resolveQuotaRuleModelLabel,
+  resolveQuotaRuleModelDetailHref,
   resolveQuotaRulePlanManagementLink,
   resolveQuotaRuleCredentialLabel,
   resolveQuotaRuleSubjectLabel,
   type QuotaRuleLabelContext,
 } from './quota-rule-utils'
+import { QuotaUsageAdjustDialog } from './quota-usage-adjust-dialog'
+import { isQuotaRuleUsageAdjustable } from './use-quota-usage-adjust'
+
+import type { QuotaCenterMode } from './use-quota-center'
 
 /** 计划类 upstream/downstream 规则的管理页跳转 */
 function PlanRuleManagementHint({
@@ -63,6 +71,8 @@ export interface QuotaCenterTableProps {
   isLoading: boolean
   selectedId: string | null
   formDisabled: boolean
+  teamId: string
+  mode: QuotaCenterMode
   labelContext: QuotaRuleLabelContext
   onSelect: (rule: QuotaRule) => void
   onDelete: (rule: QuotaRule) => void
@@ -70,7 +80,7 @@ export interface QuotaCenterTableProps {
   onBatchDelete?: (rules: QuotaRule[]) => void
 }
 
-type SortKey = 'layer' | 'subject' | 'model' | 'period' | 'usage' | 'limit'
+type SortKey = 'layer' | 'subject' | 'invokeName' | 'upstream' | 'period' | 'usage' | 'limit'
 type SortDir = 'asc' | 'desc'
 
 interface SortState {
@@ -84,8 +94,10 @@ function getSortValue(rule: QuotaRule, key: SortKey, ctx: QuotaRuleLabelContext)
       return LAYER_ORDER[rule.key.layer]
     case 'subject':
       return resolveQuotaRuleSubjectLabel(rule, ctx)
-    case 'model':
-      return resolveQuotaRuleModelLabel(rule, ctx)
+    case 'invokeName':
+      return formatQuotaRuleInvokeNameLabel(rule, ctx)
+    case 'upstream':
+      return formatQuotaRuleUpstreamNameLabel(rule, ctx)
     case 'period':
       return formatQuotaRulePeriod(rule)
     case 'usage': {
@@ -119,41 +131,61 @@ function sortRules(rules: QuotaRule[], sort: SortState, ctx: QuotaRuleLabelConte
   return arr
 }
 
+const GRID_CELL = 'min-w-0 px-3 py-2 text-xs'
+
 const SortHeader = memo(function SortHeader({
   label,
   sortKey,
+  columnKey,
   currentSort,
   onSort,
+  startResize,
+  resetColumn,
+  className,
 }: {
   label: string
   sortKey: SortKey
+  columnKey: Parameters<typeof QuotaCenterResizableHeader>[0]['columnKey']
   currentSort: SortState | null
   onSort: (key: SortKey) => void
+  startResize: (
+    key: Parameters<typeof QuotaCenterResizableHeader>[0]['columnKey'],
+    clientX: number
+  ) => void
+  resetColumn: (key: Parameters<typeof QuotaCenterResizableHeader>[0]['columnKey']) => void
+  className?: string
 }) {
   const active = currentSort?.key === sortKey
   return (
-    <th
-      className="cursor-pointer select-none px-4 py-2 text-left font-medium"
-      onClick={() => {
-        onSort(sortKey)
-      }}
+    <QuotaCenterResizableHeader
+      columnKey={columnKey}
+      className={cn('cursor-pointer font-medium', className)}
+      startResize={startResize}
+      resetColumn={resetColumn}
     >
-      <span className="inline-flex items-center gap-1">
+      <button
+        type="button"
+        className="inline-flex w-full items-center gap-1 text-left"
+        onClick={() => {
+          onSort(sortKey)
+        }}
+      >
         {label}
         {active ? (
           currentSort.dir === 'asc' ? (
-            <ArrowUp className="h-3 w-3" />
+            <ArrowUp className="h-3 w-3 shrink-0" />
           ) : (
-            <ArrowDown className="h-3 w-3" />
+            <ArrowDown className="h-3 w-3 shrink-0" />
           )
         ) : null}
-      </span>
-    </th>
+      </button>
+    </QuotaCenterResizableHeader>
   )
 })
 
 interface QuotaCenterTableRowProps {
   rule: QuotaRule
+  gridTemplateColumns: string
   isSelected: boolean
   isChecked: boolean
   formDisabled: boolean
@@ -162,10 +194,12 @@ interface QuotaCenterTableRowProps {
   onToggleCheck: (rule: QuotaRule, checked: boolean) => void
   onEdit: (rule: QuotaRule) => void
   onDelete: (rule: QuotaRule) => void
+  onAdjustUsage: (rule: QuotaRule) => void
 }
 
 const QuotaCenterTableRow = memo(function QuotaCenterTableRow({
   rule,
+  gridTemplateColumns,
   isSelected,
   isChecked,
   formDisabled,
@@ -174,11 +208,15 @@ const QuotaCenterTableRow = memo(function QuotaCenterTableRow({
   onToggleCheck,
   onEdit,
   onDelete,
+  onAdjustUsage,
 }: QuotaCenterTableRowProps): React.JSX.Element {
   const { ratio, barColor } = computeQuotaRuleUsageRatio(rule)
   const limitUsd = rule.limits.limit_usd
   const limitTok = rule.limits.limit_tokens
   const usage = rule.usage
+  const canEdit =
+    rule.source_ref.budget_id !== null ||
+    (rule.key.layer === 'upstream' && rule.source_ref.plan_id !== null)
   const canDelete = rule.source_ref.budget_id !== null
   const isPlanRule = rule.source_ref.budget_id === null
   const planLayer =
@@ -188,19 +226,26 @@ const QuotaCenterTableRow = memo(function QuotaCenterTableRow({
         ? ('downstream' as const)
         : null
 
+  const invokeLabel = formatQuotaRuleInvokeNameLabel(rule, labelContext)
+  const upstreamLabel = formatQuotaRuleUpstreamNameLabel(rule, labelContext)
+  const modelDetailHref = resolveQuotaRuleModelDetailHref(rule, labelContext)
+
   return (
-    <tr
+    <div
+      role="row"
       className={cn(
-        'cursor-pointer border-b last:border-0 hover:bg-muted/20',
+        'grid cursor-pointer border-b last:border-0 hover:bg-muted/20',
         isSelected && 'bg-primary/5',
         !rule.is_active && 'opacity-60'
       )}
+      style={{ gridTemplateColumns }}
       onClick={() => {
         onSelect(rule)
       }}
     >
-      <td
-        className="px-4 py-2"
+      <div
+        className={cn(GRID_CELL, 'flex items-center')}
+        role="cell"
         onClick={(e) => {
           e.stopPropagation()
         }}
@@ -212,24 +257,43 @@ const QuotaCenterTableRow = memo(function QuotaCenterTableRow({
           }}
           aria-label="选择此行"
         />
-      </td>
-      <td className="px-4 py-2 text-xs">{LAYER_LABELS[rule.key.layer]}</td>
-      <td className="px-4 py-2 text-xs">{resolveQuotaRuleSubjectLabel(rule, labelContext)}</td>
-      <td className="max-w-[120px] truncate px-4 py-2 text-xs">
+      </div>
+      <div className={GRID_CELL} role="cell">
+        {LAYER_LABELS[rule.key.layer]}
+      </div>
+      <div
+        className={cn(GRID_CELL, 'truncate')}
+        role="cell"
+        title={resolveQuotaRuleSubjectLabel(rule, labelContext)}
+      >
+        {resolveQuotaRuleSubjectLabel(rule, labelContext)}
+      </div>
+      <div
+        className={cn(GRID_CELL, 'truncate')}
+        role="cell"
+        title={resolveQuotaRuleCredentialLabel(rule, labelContext)}
+      >
         {resolveQuotaRuleCredentialLabel(rule, labelContext)}
-      </td>
-      <td className="max-w-[140px] truncate px-4 py-2 text-xs">
-        {resolveQuotaRuleModelLabel(rule, labelContext)}
-      </td>
-      <td className="px-4 py-2 text-xs">
+      </div>
+      <div className={cn(GRID_CELL, 'truncate font-medium')} role="cell" title={invokeLabel}>
+        {invokeLabel}
+      </div>
+      <div
+        className={cn(GRID_CELL, 'truncate font-mono text-muted-foreground')}
+        role="cell"
+        title={upstreamLabel}
+      >
+        {upstreamLabel}
+      </div>
+      <div className={GRID_CELL} role="cell">
         <div>{formatQuotaRulePeriod(rule)}</div>
-        {formatQuotaRuleResetAt(rule) ? (
+        {formatQuotaRulePeriodWindow(rule) ? (
           <div className="mt-0.5 text-[10px] text-muted-foreground">
-            重置 {formatQuotaRuleResetAt(rule)}
+            {formatQuotaRulePeriodWindow(rule)}
           </div>
         ) : null}
-      </td>
-      <td className="px-4 py-2 text-xs tabular-nums">
+      </div>
+      <div className={cn(GRID_CELL, 'tabular-nums')} role="cell">
         {usage && quotaUsageHasMetrics(usage) ? (
           <>
             USD {Number.parseFloat(String(usage.current_usd)).toFixed(4)} /{' '}
@@ -240,11 +304,11 @@ const QuotaCenterTableRow = memo(function QuotaCenterTableRow({
         ) : (
           <span className="text-muted-foreground">—</span>
         )}
-      </td>
-      <td className="px-4 py-2">
+      </div>
+      <div className={GRID_CELL} role="cell">
         {usage && quotaUsageHasMetrics(usage) ? (
           <div className="flex items-center gap-2">
-            <div className="h-2 w-24 overflow-hidden rounded bg-muted">
+            <div className="h-2 w-full min-w-[4rem] overflow-hidden rounded bg-muted">
               <div
                 className={`h-full ${barColor}`}
                 style={{
@@ -252,30 +316,30 @@ const QuotaCenterTableRow = memo(function QuotaCenterTableRow({
                 }}
               />
             </div>
-            <span className="text-xs tabular-nums">{(ratio * 100).toFixed(1)}%</span>
+            <span className="shrink-0 text-xs tabular-nums">{(ratio * 100).toFixed(1)}%</span>
           </div>
         ) : (
-          <span className="text-xs text-muted-foreground">—</span>
+          <span className="text-muted-foreground">—</span>
         )}
-      </td>
-      {/* P12: 来源列 */}
-      <td className="px-4 py-2">
+      </div>
+      <div className={GRID_CELL} role="cell">
         {rule.plan_label ? (
           <span className="inline-flex items-center rounded-md bg-blue-50 px-1.5 py-0.5 text-xs font-medium text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
             {rule.plan_label}
           </span>
         ) : (
-          <span className="text-xs text-muted-foreground">自定义</span>
+          <span className="text-muted-foreground">自定义</span>
         )}
-      </td>
-      <td
-        className="px-4 py-2"
+      </div>
+      <div
+        className={cn(GRID_CELL, 'flex items-center')}
+        role="cell"
         onClick={(e) => {
           e.stopPropagation()
         }}
       >
-        <div className="flex items-center gap-1">
-          {rule.source_ref.budget_id !== null ? (
+        <div className="flex flex-wrap items-center gap-1">
+          {canEdit ? (
             <Button
               size="icon"
               variant="ghost"
@@ -284,9 +348,22 @@ const QuotaCenterTableRow = memo(function QuotaCenterTableRow({
               onClick={() => {
                 onEdit(rule)
               }}
-              title="编辑配额"
+              title={modelDetailHref ? '去模型详情管理配额' : '编辑配额'}
             >
               <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
+            </Button>
+          ) : null}
+          {!formDisabled && isQuotaRuleUsageAdjustable(rule) ? (
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-7 w-7"
+              onClick={() => {
+                onAdjustUsage(rule)
+              }}
+              title="设置本周期已用额度"
+            >
+              <CircleDollarSign className="h-3.5 w-3.5 text-muted-foreground" />
             </Button>
           ) : null}
           {canDelete ? (
@@ -307,8 +384,8 @@ const QuotaCenterTableRow = memo(function QuotaCenterTableRow({
             <PlanRuleManagementHint rule={rule} labelContext={labelContext} />
           ) : null}
         </div>
-      </td>
-    </tr>
+      </div>
+    </div>
   )
 })
 
@@ -317,6 +394,8 @@ export function QuotaCenterTable({
   isLoading,
   selectedId,
   formDisabled,
+  teamId,
+  mode,
   labelContext,
   onSelect,
   onDelete,
@@ -325,6 +404,9 @@ export function QuotaCenterTable({
 }: QuotaCenterTableProps): React.JSX.Element {
   const [sort, setSort] = useState<SortState | null>({ key: 'usage', dir: 'desc' })
   const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set())
+  const [adjustRule, setAdjustRule] = useState<QuotaRule | null>(null)
+  const { gridTemplateColumns, tableMinWidth, startResize, resetColumn } =
+    useQuotaCenterColumnWidths()
 
   const sortedItems = useMemo(() => {
     if (!sort) return items
@@ -381,6 +463,8 @@ export function QuotaCenterTable({
     setCheckedIds(new Set())
   }
 
+  const headerClass = 'grid border-b bg-muted/30 px-3 py-2 text-xs uppercase text-muted-foreground'
+
   return (
     <Card>
       <CardContent className="p-0">
@@ -399,47 +483,110 @@ export function QuotaCenterTable({
             </Button>
           </div>
         ) : null}
-        <table className="w-full text-sm">
-          <thead className="border-b bg-muted/30 text-xs uppercase text-muted-foreground">
-            <tr>
-              <th className="px-4 py-2 text-left">
+        <div className="overflow-x-auto">
+          <div style={{ minWidth: tableMinWidth }}>
+            <div className={headerClass} style={{ gridTemplateColumns }} role="row">
+              <div className="flex items-center px-0" role="columnheader">
                 <Checkbox
                   checked={allChecked ? true : someChecked ? 'indeterminate' : false}
                   onCheckedChange={toggleAll}
                   aria-label="全选"
                 />
-              </th>
-              <SortHeader label="层级" sortKey="layer" currentSort={sort} onSort={handleSort} />
-              <SortHeader label="主体" sortKey="subject" currentSort={sort} onSort={handleSort} />
-              <th className="px-4 py-2 text-left font-medium">凭据</th>
-              <SortHeader label="模型" sortKey="model" currentSort={sort} onSort={handleSort} />
-              <SortHeader label="周期" sortKey="period" currentSort={sort} onSort={handleSort} />
+              </div>
+              <SortHeader
+                label="层级"
+                sortKey="layer"
+                columnKey="layer"
+                currentSort={sort}
+                onSort={handleSort}
+                startResize={startResize}
+                resetColumn={resetColumn}
+              />
+              <SortHeader
+                label="主体"
+                sortKey="subject"
+                columnKey="subject"
+                currentSort={sort}
+                onSort={handleSort}
+                startResize={startResize}
+                resetColumn={resetColumn}
+              />
+              <QuotaCenterResizableHeader
+                columnKey="credential"
+                className="font-medium"
+                startResize={startResize}
+                resetColumn={resetColumn}
+              >
+                凭据
+              </QuotaCenterResizableHeader>
+              <SortHeader
+                label="调用名"
+                sortKey="invokeName"
+                columnKey="invokeName"
+                currentSort={sort}
+                onSort={handleSort}
+                startResize={startResize}
+                resetColumn={resetColumn}
+              />
+              <SortHeader
+                label="上游"
+                sortKey="upstream"
+                columnKey="upstream"
+                currentSort={sort}
+                onSort={handleSort}
+                startResize={startResize}
+                resetColumn={resetColumn}
+              />
+              <SortHeader
+                label="周期"
+                sortKey="period"
+                columnKey="period"
+                currentSort={sort}
+                onSort={handleSort}
+                startResize={startResize}
+                resetColumn={resetColumn}
+              />
               <SortHeader
                 label="已用 / 限额"
                 sortKey="limit"
+                columnKey="usage"
                 currentSort={sort}
                 onSort={handleSort}
+                startResize={startResize}
+                resetColumn={resetColumn}
               />
-              <SortHeader label="使用率" sortKey="usage" currentSort={sort} onSort={handleSort} />
-              <th className="px-4 py-2 text-left font-medium">来源</th>
-              <th className="px-4 py-2 text-left font-medium" />
-            </tr>
-          </thead>
-          <tbody>
+              <SortHeader
+                label="使用率"
+                sortKey="usage"
+                columnKey="usageRatio"
+                currentSort={sort}
+                onSort={handleSort}
+                startResize={startResize}
+                resetColumn={resetColumn}
+              />
+              <QuotaCenterResizableHeader
+                columnKey="source"
+                className="font-medium"
+                startResize={startResize}
+                resetColumn={resetColumn}
+              >
+                来源
+              </QuotaCenterResizableHeader>
+              <div className="min-w-0 font-medium" role="columnheader">
+                操作
+              </div>
+            </div>
+
             {isLoading ? (
-              <tr>
-                <td colSpan={10} className="px-4 py-8 text-center text-muted-foreground">
-                  <Loader2 className="mx-auto mb-2 h-4 w-4 animate-spin" />
-                  加载中…
-                </td>
-              </tr>
+              <div className="px-4 py-8 text-center text-sm text-muted-foreground">
+                <Loader2 className="mx-auto mb-2 h-4 w-4 animate-spin" />
+                加载中…
+              </div>
             ) : null}
             {!isLoading && items.length === 0 ? (
-              <tr>
-                <td colSpan={10} className="px-4 py-8 text-center text-muted-foreground">
-                  暂无配额规则
-                </td>
-              </tr>
+              <div className="px-4 py-8 text-center text-sm text-muted-foreground">
+                暂无配额规则
+              </div>
             ) : null}
             {sortedItems.map((rule) => {
               const rowId = quotaRuleRowId(rule)
@@ -447,6 +594,7 @@ export function QuotaCenterTable({
                 <QuotaCenterTableRow
                   key={rowId}
                   rule={rule}
+                  gridTemplateColumns={gridTemplateColumns}
                   isSelected={selectedId === rowId}
                   isChecked={checkedIds.has(rowId)}
                   formDisabled={formDisabled}
@@ -455,12 +603,22 @@ export function QuotaCenterTable({
                   onToggleCheck={toggleRow}
                   onEdit={onEdit ?? (() => {})}
                   onDelete={onDelete}
+                  onAdjustUsage={setAdjustRule}
                 />
               )
             })}
-          </tbody>
-        </table>
+          </div>
+        </div>
       </CardContent>
+      <QuotaUsageAdjustDialog
+        teamId={teamId}
+        mode={mode}
+        rule={adjustRule}
+        open={adjustRule !== null}
+        onOpenChange={(open) => {
+          if (!open) setAdjustRule(null)
+        }}
+      />
     </Card>
   )
 }

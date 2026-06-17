@@ -7,14 +7,21 @@ import {
   buildStatsQuotaLookup,
   describeUpstreamQuotaRuleScope,
   findQuotaRuleForStatsRow,
+  formatQuotaRuleInvokeNameLabel,
   formatQuotaRulePeriod,
+  formatQuotaRulePeriodWindow,
+  formatQuotaRuleUpstreamNameLabel,
   hasUpstreamPlanRules,
+  needsQuotaModelIdentityLookup,
+  resolveInvokeNameForCredentialRealModel,
+  resolveQuotaModelAlias,
   matchQuotaRulesForContext,
   mergeQuotaRules,
   quotaListParamsForContext,
   quotaListParamsForTeamModelPlatform,
   quotaListParamsForTeamModelUpstream,
   quotaRuleCredentialRealModelKey,
+  resolveQuotaRuleModelDetailHref,
   resolveQuotaRuleModelLabel,
   resolveQuotaRulePlanManagementLink,
   type QuotaRuleLabelContext,
@@ -293,6 +300,75 @@ describe('quotaRuleCredentialRealModelKey', () => {
   })
 })
 
+describe('needsQuotaModelIdentityLookup', () => {
+  it('is true for upstream and platform rules with model_name', () => {
+    expect(needsQuotaModelIdentityLookup([upstreamRule('cred-a', 'ep-abc')])).toBe(true)
+    expect(
+      needsQuotaModelIdentityLookup([
+        {
+          ...upstreamRule('cred-a', 'ep-abc'),
+          key: { ...upstreamRule('cred-a', 'ep-abc').key, layer: 'platform', model_name: 'alias' },
+          source_ref: { layer: 'platform', budget_id: 'b1', plan_id: null, quota_id: null },
+        },
+      ])
+    ).toBe(true)
+    expect(needsQuotaModelIdentityLookup([])).toBe(false)
+  })
+})
+
+describe('resolveQuotaModelAlias', () => {
+  it('resolves alias by credential-scoped key', () => {
+    const map = new Map([
+      ['cred-a:ep-abc', 'alias-a'],
+      ['cred-b:ep-abc', 'alias-b'],
+    ])
+    expect(resolveQuotaModelAlias('cred-a', 'ep-abc', map)).toBe('alias-a')
+    expect(resolveQuotaModelAlias('cred-b', 'ep-abc', map)).toBe('alias-b')
+  })
+})
+
+describe('resolveInvokeNameForCredentialRealModel', () => {
+  it('resolves alias from catalog index', () => {
+    const lookup = buildQuotaRuleModelLookupFromCatalog({
+      teamModels: [
+        {
+          id: 'm1',
+          name: 'daily-4M-Doubao-online',
+          credential_id: 'cred-a',
+          real_model: 'ep-abc',
+          registry_kind: 'team',
+        },
+      ],
+    })
+    expect(resolveInvokeNameForCredentialRealModel('cred-a', 'ep-abc', lookup)).toBe(
+      'daily-4M-Doubao-online'
+    )
+  })
+})
+
+describe('formatQuotaRuleInvokeNameLabel', () => {
+  it('uses platform model_name as invoke name directly', () => {
+    expect(
+      formatQuotaRuleInvokeNameLabel({
+        ...upstreamRule('cred-a', 'ep-abc'),
+        key: { ...upstreamRule('cred-a', 'ep-abc').key, layer: 'platform', model_name: 'my-alias' },
+        source_ref: { layer: 'platform', budget_id: 'b1', plan_id: null, quota_id: null },
+      })
+    ).toBe('my-alias')
+  })
+
+  it('shows loading while catalog is fetching', () => {
+    expect(
+      formatQuotaRuleInvokeNameLabel(upstreamRule('cred-a', 'ep-abc'), {
+        memberLabels: new Map(),
+        keyLabels: new Map(),
+        credentialLabels: new Map(),
+        planRuleModelLookupLoading: true,
+      })
+    ).toBe('加载中…')
+  })
+})
+
 describe('hasUpstreamPlanRules', () => {
   it('detects upstream plan rules only', () => {
     expect(hasUpstreamPlanRules([upstreamRule('cred-a', 'm1')])).toBe(true)
@@ -460,6 +536,83 @@ describe('resolveQuotaRuleModelLabel', () => {
   })
 })
 
+describe('quota rule model identity columns', () => {
+  const ctx: QuotaRuleLabelContext = {
+    memberLabels: new Map(),
+    keyLabels: new Map(),
+    credentialLabels: new Map(),
+    modelRefByCredentialRealModel: buildQuotaRuleModelLookupFromCatalog({
+      teamModels: [
+        {
+          id: 'm1',
+          name: 'daily-4M-Doubao-online',
+          credential_id: 'cred-a',
+          real_model: 'ep-abc',
+          registry_kind: 'team',
+        },
+      ],
+    }),
+  }
+
+  it('splits invoke and upstream labels for upstream rules', () => {
+    const rule = upstreamRule('cred-a', 'ep-abc')
+    expect(formatQuotaRuleInvokeNameLabel(rule, ctx)).toBe('daily-4M-Doubao-online')
+    expect(formatQuotaRuleUpstreamNameLabel(rule, ctx)).toBe('ep-abc')
+  })
+
+  it('shows platform alias and resolved upstream', () => {
+    const rule: QuotaRule = {
+      ...upstreamRule('cred-a', 'ep-abc'),
+      key: {
+        ...upstreamRule('cred-a', 'ep-abc').key,
+        layer: 'platform',
+        model_name: 'daily-4M-Doubao-online',
+      },
+      source_ref: { layer: 'platform', budget_id: 'b1', plan_id: null, quota_id: null },
+    }
+    expect(formatQuotaRuleInvokeNameLabel(rule, ctx)).toBe('daily-4M-Doubao-online')
+    expect(formatQuotaRuleUpstreamNameLabel(rule, ctx)).toBe('ep-abc')
+  })
+})
+
+describe('resolveQuotaRuleModelDetailHref', () => {
+  const ctx: QuotaRuleLabelContext = {
+    memberLabels: new Map(),
+    keyLabels: new Map(),
+    credentialLabels: new Map(),
+    modelRefByCredentialRealModel: buildQuotaRuleModelLookupFromCatalog({
+      teamModels: [
+        {
+          id: 'm1',
+          name: 'daily-4M-Doubao-online',
+          credential_id: 'cred-a',
+          real_model: 'ep-abc',
+          registry_kind: 'team',
+        },
+      ],
+    }),
+  }
+
+  it('links upstream rules to team model detail', () => {
+    expect(resolveQuotaRuleModelDetailHref(upstreamRule('cred-a', 'ep-abc'), ctx)).toContain(
+      '/models/'
+    )
+  })
+
+  it('links platform alias rules to model detail', () => {
+    const rule: QuotaRule = {
+      ...upstreamRule('cred-a', 'ep-abc'),
+      key: {
+        ...upstreamRule('cred-a', 'ep-abc').key,
+        layer: 'platform',
+        model_name: 'daily-4M-Doubao-online',
+      },
+      source_ref: { layer: 'platform', budget_id: 'b1', plan_id: null, quota_id: null },
+    }
+    expect(resolveQuotaRuleModelDetailHref(rule, ctx)).toContain('/models/')
+  })
+})
+
 describe('describeUpstreamQuotaRuleScope', () => {
   it('labels credential-wide and endpoint scopes', () => {
     expect(describeUpstreamQuotaRuleScope(upstreamRule('cred-a', null))).toBe('整凭据')
@@ -534,5 +687,38 @@ describe('formatQuotaRulePeriod', () => {
       },
     })
     expect(formatQuotaRulePeriod(calendar)).toBe('每日 00:00 (UTC)')
+  })
+})
+
+describe('formatQuotaRulePeriodWindow', () => {
+  it('shows period range when window_start and reset_at are present', () => {
+    const rule = platformRule('m1', {
+      usage: {
+        current_usd: null,
+        current_tokens: null,
+        current_requests: null,
+        window_start: '2026-06-16T01:00:00.000Z',
+        reset_at: '2026-07-01T00:00:00.000Z',
+        budget_reset_at: '2026-07-01T00:00:00.000Z',
+      },
+    })
+    const text = formatQuotaRulePeriodWindow(rule)
+    expect(text).toContain('本周期')
+    expect(text).toContain('—')
+  })
+
+  it('shows cumulative label for total period', () => {
+    const rule = platformRule('m1', {
+      key: { ...platformRule('m1').key, period: 'total' },
+      usage: {
+        current_usd: null,
+        current_tokens: null,
+        current_requests: null,
+        window_start: '1970-01-01T00:00:00.000Z',
+        reset_at: null,
+        budget_reset_at: null,
+      },
+    })
+    expect(formatQuotaRulePeriodWindow(rule)).toBe('累计额度（不自动重置）')
   })
 })

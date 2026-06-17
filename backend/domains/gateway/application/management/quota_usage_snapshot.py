@@ -44,6 +44,7 @@ def _usage_with_reset_at(
         current_usd=current_usd,
         current_tokens=current_tokens,
         current_requests=current_requests,
+        window_start=prior.window_start if prior is not None else None,
         reset_at=prior.reset_at if prior is not None else None,
         budget_reset_at=prior.budget_reset_at if prior is not None else None,
     )

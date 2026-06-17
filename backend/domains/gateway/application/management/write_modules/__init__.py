@@ -21,6 +21,9 @@ from domains.gateway.application.management.write_modules.probe import ProbeWrit
 from domains.gateway.application.management.write_modules.quota_rule_writes import (
     QuotaRuleWritesMixin,
 )
+from domains.gateway.application.management.write_modules.quota_usage_adjustment_writes import (
+    QuotaUsageAdjustmentWritesMixin,
+)
 from domains.gateway.application.management.write_modules.route_writes import (
     RouteWritesMixin,
 )
@@ -30,6 +33,7 @@ class GatewayManagementWriteService(
     ProbeWritesMixin,
     EntitlementWritesMixin,
     QuotaRuleWritesMixin,
+    QuotaUsageAdjustmentWritesMixin,
     PricingWritesMixin,
     RouteWritesMixin,
     ModelWritesMixin,

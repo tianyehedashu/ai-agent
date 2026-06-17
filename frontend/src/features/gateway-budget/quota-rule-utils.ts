@@ -105,6 +105,59 @@ export function hasUpstreamPlanRules(rules: readonly QuotaRule[]): boolean {
   return rules.some((rule) => rule.source_ref.budget_id === null && rule.key.layer === 'upstream')
 }
 
+/** 配额列表是否需要 Gateway 模型目录（解析调用名 / 模型详情深链）。 */
+export function needsQuotaModelIdentityLookup(rules: readonly QuotaRule[]): boolean {
+  return rules.some((rule) => {
+    const modelName = rule.key.model_name?.trim() ?? ''
+    if (!modelName) return false
+    return rule.key.layer === 'platform' || rule.key.layer === 'upstream'
+  })
+}
+
+/** 从 cred+real_model 索引提取 ``credentialId:realModel`` → 调用名（用于上游标签/下拉）。 */
+export function buildAliasByRealModelFromLookup(
+  lookup: ReadonlyMap<string, QuotaRuleModelRef> | undefined
+): Map<string, string> {
+  const map = new Map<string, string>()
+  if (!lookup) return map
+  for (const [key, ref] of lookup) {
+    if (!key || map.has(key)) continue
+    map.set(key, ref.aliasName)
+  }
+  return map
+}
+
+export function resolveQuotaModelAlias(
+  credentialId: string | undefined,
+  realModel: string,
+  aliasByCredentialRealModel: ReadonlyMap<string, string> | undefined
+): string | undefined {
+  const trimmed = realModel.trim()
+  if (!trimmed || !aliasByCredentialRealModel) return undefined
+  if (credentialId) {
+    const scoped = aliasByCredentialRealModel.get(
+      quotaRuleCredentialRealModelKey(credentialId, trimmed)
+    )
+    if (scoped) return scoped
+  }
+  for (const [key, alias] of aliasByCredentialRealModel) {
+    const colon = key.indexOf(':')
+    if (colon >= 0 && key.slice(colon + 1) === trimmed) return alias
+  }
+  return undefined
+}
+
+export function resolveInvokeNameForCredentialRealModel(
+  credentialId: string | null | undefined,
+  realModel: string,
+  lookup: ReadonlyMap<string, QuotaRuleModelRef> | undefined
+): string | null {
+  const trimmed = realModel.trim()
+  if (!trimmed || !credentialId || !lookup) return null
+  const ref = lookup.get(quotaRuleCredentialRealModelKey(credentialId, trimmed))
+  return ref?.aliasName ?? null
+}
+
 export function quotaRuleCredentialRealModelKey(credentialId: string, realModel: string): string {
   return `${credentialId}:${realModel}`
 }
@@ -208,6 +261,61 @@ export function resolveQuotaRulePlanManagementLink(
   }
 }
 
+/** 是否应在模型详情页管理配额（有明确模型绑定）。 */
+export function shouldManageQuotaOnModelDetail(rule: QuotaRule): boolean {
+  const modelName = rule.key.model_name?.trim() ?? ''
+  if (!modelName) return false
+  return rule.key.layer === 'platform' || rule.key.layer === 'upstream'
+}
+
+/** 模型级 platform / upstream 规则 → 模型详情深链（限额与用量在详情页维护）。 */
+export function resolveQuotaRuleModelDetailHref(
+  rule: QuotaRule,
+  ctx: QuotaRuleLabelContext
+): string | null {
+  if (!shouldManageQuotaOnModelDetail(rule)) return null
+
+  const teamId = rule.key.team_id
+  const credentialId = rule.key.credential_id ?? undefined
+  const map = ctx.modelRefByCredentialRealModel
+
+  if (rule.key.layer === 'upstream' && credentialId && rule.key.model_name) {
+    const realModel = rule.key.model_name.trim()
+    const ref = map?.get(quotaRuleCredentialRealModelKey(credentialId, realModel))
+    if (ref) {
+      return ref.registryKind === 'personal'
+        ? personalModelDetailHref(teamId, ref.modelId)
+        : ref.registryKind === 'system'
+          ? systemModelDetailHref(teamId, ref.modelId, credentialId)
+          : teamModelDetailHref(teamId, ref.modelId, { credentialId })
+    }
+    if (ctx.planRuleModelLookupLoading) return null
+    return teamModelsFilteredHref(teamId, credentialId)
+  }
+
+  if (rule.key.layer === 'platform' && rule.key.model_name) {
+    const alias = rule.key.model_name.trim()
+    if (map) {
+      for (const [key, ref] of map) {
+        if (ref.aliasName !== alias) continue
+        const colon = key.indexOf(':')
+        if (colon < 0) continue
+        const credFromKey = key.slice(0, colon)
+        if (credentialId && credFromKey !== credentialId) continue
+        const cid = credentialId ?? credFromKey
+        return ref.registryKind === 'personal'
+          ? personalModelDetailHref(teamId, ref.modelId)
+          : ref.registryKind === 'system'
+            ? systemModelDetailHref(teamId, ref.modelId, cid)
+            : teamModelDetailHref(teamId, ref.modelId, { credentialId: cid })
+      }
+    }
+    if (ctx.planRuleModelLookupLoading) return null
+  }
+
+  return null
+}
+
 export function resolveQuotaRuleSubjectLabel(rule: QuotaRule, ctx: QuotaRuleLabelContext): string {
   if (rule.key.layer === 'platform') {
     if (rule.key.target_kind === 'tenant') return '全团队'
@@ -240,21 +348,99 @@ export function resolveQuotaRuleCredentialLabel(
 }
 
 /**
+ * 配额规则模型身份（与模型列表 / 调用日志「调用名 · 上游」语义对齐）。
+ */
+export interface QuotaRuleModelIdentity {
+  /** Gateway 注册别名 / platform 的 model_name */
+  invokeName: string | null
+  /** 上游 real_model / endpoint */
+  upstreamName: string | null
+}
+
+function findUpstreamNameForInvokeAlias(
+  alias: string,
+  credentialId: string | null,
+  ctx?: QuotaRuleLabelContext
+): string | null {
+  if (!ctx?.modelRefByCredentialRealModel) return null
+  const trimmedAlias = alias.trim()
+  if (!trimmedAlias) return null
+  for (const [key, ref] of ctx.modelRefByCredentialRealModel) {
+    if (ref.aliasName !== trimmedAlias) continue
+    if (credentialId) {
+      const colon = key.indexOf(':')
+      if (colon < 0 || key.slice(0, colon) !== credentialId) continue
+      return key.slice(colon + 1)
+    }
+    const colon = key.indexOf(':')
+    if (colon < 0) continue
+    return key.slice(colon + 1)
+  }
+  return null
+}
+
+export function resolveQuotaRuleModelIdentity(
+  rule: QuotaRule,
+  ctx?: QuotaRuleLabelContext
+): QuotaRuleModelIdentity {
+  const rawModelName = rule.key.model_name?.trim() ?? ''
+  if (!rawModelName) {
+    return { invokeName: null, upstreamName: null }
+  }
+
+  if (rule.key.layer === 'platform') {
+    return {
+      invokeName: rawModelName,
+      upstreamName: findUpstreamNameForInvokeAlias(rawModelName, rule.key.credential_id, ctx),
+    }
+  }
+
+  if (rule.key.layer === 'upstream') {
+    const credentialId = rule.key.credential_id
+    const invokeName = resolveInvokeNameForCredentialRealModel(
+      credentialId,
+      rawModelName,
+      ctx?.modelRefByCredentialRealModel
+    )
+    return { invokeName, upstreamName: rawModelName }
+  }
+
+  return { invokeName: rawModelName, upstreamName: null }
+}
+
+export function formatQuotaRuleInvokeNameLabel(
+  rule: QuotaRule,
+  ctx?: QuotaRuleLabelContext
+): string {
+  if (!rule.key.model_name) return '（全模型）'
+  if (rule.key.layer === 'platform') {
+    return rule.key.model_name.trim()
+  }
+  const identity = resolveQuotaRuleModelIdentity(rule, ctx)
+  if (identity.invokeName) return identity.invokeName
+  if (ctx?.planRuleModelLookupLoading) return '加载中…'
+  // 上游 model_name 存 real_model；目录未命中说明模型未注册或已删除
+  return '（未注册调用名）'
+}
+
+export function formatQuotaRuleUpstreamNameLabel(
+  rule: QuotaRule,
+  ctx?: QuotaRuleLabelContext
+): string {
+  if (!rule.key.model_name) return '—'
+  const identity = resolveQuotaRuleModelIdentity(rule, ctx)
+  return identity.upstreamName ?? '—'
+}
+
+/**
  * 配额中心「模型」列：platform 用别名；upstream 用目录解析的 Gateway 别名，
  * 解析不到则回退上游 endpoint（`real_model`）。不用 `plan_label`（那是「来源」列的套餐名）。
  */
 export function resolveQuotaRuleModelLabel(rule: QuotaRule, ctx?: QuotaRuleLabelContext): string {
   if (!rule.key.model_name) return '（全模型）'
   if (rule.key.layer === 'upstream') {
-    const credentialId = rule.key.credential_id
-    const realModel = rule.key.model_name.trim()
-    if (credentialId && ctx?.modelRefByCredentialRealModel) {
-      const ref = ctx.modelRefByCredentialRealModel.get(
-        quotaRuleCredentialRealModelKey(credentialId, realModel)
-      )
-      if (ref?.aliasName) return ref.aliasName
-    }
-    return realModel
+    const identity = resolveQuotaRuleModelIdentity(rule, ctx)
+    return identity.invokeName ?? identity.upstreamName ?? rule.key.model_name
   }
   return rule.key.model_name
 }
@@ -456,10 +642,41 @@ export function quotaUsageHasMetrics(usage: QuotaRuleUsage): boolean {
   )
 }
 
+function formatQuotaTimestamp(iso: string): string {
+  return new Date(iso).toLocaleString()
+}
+
+export function quotaUsageHasPeriodWindow(usage: QuotaRuleUsage | null | undefined): boolean {
+  if (!usage) return false
+  if (usage.reset_at ?? usage.budget_reset_at) return true
+  return usage.window_start !== null
+}
+
+/** 当前配额窗口起止（或累计/下次重置说明）。 */
+export function formatQuotaRulePeriodWindow(rule: QuotaRule): string | null {
+  const usage = rule.usage
+  if (!usage) return null
+  if (rule.key.period === 'total') {
+    return '累计额度（不自动重置）'
+  }
+  const start = usage.window_start
+  const end = usage.reset_at ?? usage.budget_reset_at
+  if (start && end) {
+    return `本周期 ${formatQuotaTimestamp(start)} — ${formatQuotaTimestamp(end)}`
+  }
+  if (end) {
+    return `下次重置 ${formatQuotaTimestamp(end)}`
+  }
+  if (start) {
+    return `周期自 ${formatQuotaTimestamp(start)}`
+  }
+  return null
+}
+
 export function formatQuotaRuleResetAt(rule: QuotaRule): string | null {
   const at = rule.usage?.reset_at ?? rule.usage?.budget_reset_at
   if (!at) return null
-  return new Date(at).toLocaleString()
+  return formatQuotaTimestamp(at)
 }
 
 export function computeQuotaRuleUsageRatio(rule: QuotaRule): {

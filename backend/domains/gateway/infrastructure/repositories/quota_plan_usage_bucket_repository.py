@@ -58,6 +58,40 @@ class QuotaPlanUsageBucketRepository:
         )
         await self._session.execute(stmt)
 
+    async def set_bucket(
+        self,
+        ns: UsageBucketNamespace,
+        plan_id: uuid.UUID,
+        quota_id: uuid.UUID,
+        window_start: datetime,
+        *,
+        tokens: int,
+        requests: int,
+        cost_usd: Decimal,
+    ) -> None:
+        """覆盖写入当前窗口用量（管理面手工校正）。"""
+        now = datetime.now(UTC)
+        stmt = pg_insert(GatewayQuotaPlanUsageBucket).values(
+            ns=ns,
+            plan_id=plan_id,
+            quota_id=quota_id,
+            window_start=window_start,
+            tokens=tokens,
+            requests=requests,
+            cost_usd=cost_usd,
+            updated_at=now,
+        )
+        stmt = stmt.on_conflict_do_update(
+            index_elements=["ns", "plan_id", "quota_id", "window_start"],
+            set_={
+                "tokens": tokens,
+                "requests": requests,
+                "cost_usd": cost_usd,
+                "updated_at": now,
+            },
+        )
+        await self._session.execute(stmt)
+
     async def delete_stale_updated_before(self, updated_before: datetime) -> int:
         """删除 ``updated_at`` 早于阈值的行（活跃窗口会持续刷新 updated_at）。"""
         stmt = delete(GatewayQuotaPlanUsageBucket).where(

@@ -11,6 +11,8 @@
  * 说明：SSO 模式下身份由 HiGress 经 guard_token Cookie 注入，无需本地 token。
  */
 
+import { useEffect, useState } from 'react'
+
 import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
 
@@ -90,4 +92,21 @@ export const clearAuth = (): void => {
 }
 export const handleUnauthorized = (): void => {
   useAuthStore.getState().handleUnauthorized()
+}
+
+/** localStorage 中的 JWT 是否已从 persist 恢复（避免 rehydrate 前 auth/me 无 Bearer） */
+export function useAuthHydrated(): boolean {
+  const [hydrated, setHydrated] = useState(() => useAuthStore.persist.hasHydrated())
+
+  useEffect(() => {
+    if (useAuthStore.persist.hasHydrated()) {
+      setHydrated(true)
+      return
+    }
+    return useAuthStore.persist.onFinishHydration(() => {
+      setHydrated(true)
+    })
+  }, [])
+
+  return hydrated
 }

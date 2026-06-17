@@ -350,10 +350,29 @@ class BudgetRepository:
         )
 
     async def reset(self, budget_id: uuid.UUID) -> None:
+        await self.set_usage(
+            budget_id,
+            current_usd=Decimal("0"),
+            current_tokens=0,
+            current_requests=0,
+        )
+
+    async def set_usage(
+        self,
+        budget_id: uuid.UUID,
+        *,
+        current_usd: Decimal,
+        current_tokens: int,
+        current_requests: int,
+    ) -> None:
         await self._session.execute(
             update(GatewayBudget)
             .where(GatewayBudget.id == budget_id)
-            .values(current_usd=Decimal("0"), current_tokens=0, current_requests=0)
+            .values(
+                current_usd=current_usd,
+                current_tokens=current_tokens,
+                current_requests=current_requests,
+            )
         )
 
     async def delete(self, budget_id: uuid.UUID) -> bool:

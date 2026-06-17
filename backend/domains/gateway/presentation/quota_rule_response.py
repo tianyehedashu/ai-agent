@@ -19,6 +19,7 @@ def quota_rule_to_response(model: QuotaRuleReadModel) -> QuotaRuleResponse:
             current_usd=model.usage.current_usd,
             current_tokens=model.usage.current_tokens,
             current_requests=model.usage.current_requests,
+            window_start=model.usage.window_start,
             reset_at=model.usage.reset_at,
             budget_reset_at=model.usage.budget_reset_at,
         )

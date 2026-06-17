@@ -116,7 +116,8 @@ const ModelInspectorPanel = memo(function ModelInspectorPanel({
 }: ModelInspectorProps & { model: GatewayModel }): React.JSX.Element {
   const teamId = useGatewayTeamId()
   const [searchParams] = useSearchParams()
-  const { canWrite, isAdmin, isPlatformAdmin } = useGatewayPermission()
+  const { canWrite, canContribute, isAdmin, isPlatformAdmin, isPlatformViewer } =
+    useGatewayPermission()
   const currentUser = useCurrentUser()
   const viewerUserId = currentUser?.id ?? null
   const hasAuthSession = currentUser !== null
@@ -505,14 +506,15 @@ const ModelInspectorPanel = memo(function ModelInspectorPanel({
               teamId={teamId}
               userId={currentUser.id}
               isAdmin={isAdmin}
-              canSelfManage={
-                isPersonal
+              canManageQuota={
+                !isPlatformViewer &&
+                (isPersonal
                   ? canManagePersonalGatewayModel(
                       personalContext?.userId,
                       viewerUserId,
                       hasAuthSession
                     )
-                  : false
+                  : canWrite || canContribute)
               }
             />
           ) : null}

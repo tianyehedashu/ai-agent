@@ -552,6 +552,49 @@ class BudgetService:
             pipe.expire(key, 86400 * 35)
         await pipe.execute()
 
+    async def set_budget_usage(
+        self,
+        *,
+        target_kind: str,
+        target_id: str | None,
+        period: str,
+        cost: Decimal,
+        tokens: int,
+        requests: int,
+        budget_model_name: str | None = None,
+        credential_id: uuid.UUID | str | None = None,
+        tenant_id: uuid.UUID | str | None = None,
+        period_reset_anchor: PeriodResetAnchor | None = None,
+    ) -> None:
+        """管理面：将 Redis 预算桶设为绝对用量（与 commit 累加相对）。"""
+        client = await get_redis_client()
+        seg = _redis_model_segment(budget_model_name)
+        cred_seg = _redis_credential_segment(credential_id)
+        tenant_seg = redis_tenant_segment_for_budget(tenant_id)
+        key = _bucket_key(
+            target_kind,
+            target_id,
+            period,
+            model_segment=seg,
+            credential_segment=cred_seg,
+            tenant_segment=tenant_seg,
+            period_reset_anchor=period_reset_anchor,
+        )
+        pipe = client.pipeline()
+        pipe.hset(
+            key,
+            mapping={
+                "cost": str(cost),
+                "tokens": str(tokens),
+                "requests": str(requests),
+            },
+        )
+        if period == PERIOD_DAILY:
+            pipe.expire(key, 90000)
+        elif period == PERIOD_MONTHLY:
+            pipe.expire(key, 86400 * 35)
+        await pipe.execute()
+
 
 __all__ = [
     "PERIOD_DAILY",

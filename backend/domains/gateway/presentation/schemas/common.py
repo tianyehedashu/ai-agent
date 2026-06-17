@@ -995,6 +995,7 @@ class QuotaRuleUsageResponse(BaseModel):
     current_usd: Decimal | None = None
     current_tokens: int | None = None
     current_requests: int | None = None
+    window_start: datetime | None = None
     reset_at: datetime | None = None
     budget_reset_at: datetime | None = None
 
@@ -1054,6 +1055,17 @@ class QuotaRuleBatchFailureItem(BaseModel):
 class QuotaRuleBatchUpsertResponse(BaseModel):
     succeeded: list[QuotaRuleResponse] = Field(default_factory=list)
     failed: list[QuotaRuleBatchFailureItem] = Field(default_factory=list)
+
+
+class QuotaUsageAdjustmentRequest(BaseModel):
+    layer: Literal["platform", "upstream", "downstream"]
+    budget_id: uuid.UUID | None = None
+    plan_id: uuid.UUID | None = None
+    quota_id: uuid.UUID | None = None
+    mode: Literal["set", "reset_window"] = "set"
+    current_usd: Decimal | None = None
+    current_tokens: int | None = Field(default=None, ge=0)
+    current_requests: int | None = Field(default=None, ge=0)
 
 
 # =============================================================================
@@ -1494,6 +1506,7 @@ __all__ = [
     "QuotaRuleBatchFailureItem",
     "QuotaRuleBatchUpsertRequest",
     "QuotaRuleBatchUpsertResponse",
+    "QuotaUsageAdjustmentRequest",
     "QuotaRuleKeyResponse",
     "QuotaRuleLimitsResponse",
     "QuotaRuleResponse",

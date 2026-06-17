@@ -119,6 +119,7 @@ class TestGatewayQuotaRulesApi:
         assert row["key"]["period_timezone"] == "Asia/Shanghai"
         assert row["key"]["period_reset_minutes"] == 540
         assert row["usage"] is not None
+        assert row["usage"]["window_start"] is not None
         assert row["usage"]["reset_at"] is not None
 
     @pytest.mark.asyncio
@@ -440,3 +441,95 @@ class TestGatewayQuotaRulesApi:
             and float(row["limits"]["limit_usd"]) == 5.0
             for row in rows
         ), rows
+
+    @pytest.mark.asyncio
+    async def test_adjust_platform_quota_usage(
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict[str, str],
+        db_session,
+        test_user: User,
+    ) -> None:
+        team = await TeamService(db_session).ensure_personal_team(test_user.id)
+        r_batch = await dev_client.put(
+            f"/api/v1/gateway/teams/{team.id}/quota-rules/batch",
+            headers=auth_headers,
+            json={
+                "rules": [
+                    {
+                        "layer": "platform",
+                        "target_kind": "tenant",
+                        "period": "daily",
+                        "limit_usd": "100.00",
+                    }
+                ]
+            },
+        )
+        assert r_batch.status_code == 200, r_batch.text
+        budget_id = r_batch.json()["succeeded"][0]["source_ref"]["budget_id"]
+
+        r_adj = await dev_client.post(
+            f"/api/v1/gateway/teams/{team.id}/quota-rules/usage-adjustments",
+            headers=auth_headers,
+            json={
+                "layer": "platform",
+                "budget_id": budget_id,
+                "mode": "set",
+                "current_usd": "12.50",
+                "current_tokens": 1000,
+                "current_requests": 3,
+            },
+        )
+        assert r_adj.status_code == 200, r_adj.text
+        body = r_adj.json()
+        assert body["usage"] is not None
+        assert float(body["usage"]["current_usd"]) == 12.5
+        assert body["usage"]["current_tokens"] == 1000
+        assert body["usage"]["current_requests"] == 3
+
+    @pytest.mark.asyncio
+    async def test_adjust_usage_rejects_cross_team_budget(
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict[str, str],
+        db_session,
+        test_user: User,
+    ) -> None:
+        team_a = await TeamService(db_session).ensure_personal_team(test_user.id)
+        team_b = await TeamService(db_session).create_team(
+            name="quota-adj-other",
+            slug=f"quota-adj-{uuid.uuid4().hex[:8]}",
+            owner_user_id=test_user.id,
+        )
+        await db_session.commit()
+
+        r_batch = await dev_client.put(
+            f"/api/v1/gateway/teams/{team_a.id}/quota-rules/batch",
+            headers=auth_headers,
+            json={
+                "rules": [
+                    {
+                        "layer": "platform",
+                        "target_kind": "tenant",
+                        "period": "daily",
+                        "limit_usd": "50.00",
+                    }
+                ]
+            },
+        )
+        assert r_batch.status_code == 200, r_batch.text
+        budget_id = r_batch.json()["succeeded"][0]["source_ref"]["budget_id"]
+
+        r_adj = await dev_client.post(
+            f"/api/v1/gateway/teams/{team_b.id}/quota-rules/usage-adjustments",
+            headers=auth_headers,
+            json={
+                "layer": "platform",
+                "budget_id": budget_id,
+                "mode": "set",
+                "current_usd": "1.00",
+                "current_tokens": 1,
+                "current_requests": 1,
+            },
+        )
+        assert r_adj.status_code == 404, r_adj.text

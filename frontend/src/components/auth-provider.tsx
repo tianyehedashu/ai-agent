@@ -19,7 +19,6 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Navigate, useLocation } from 'react-router-dom'
 
 import { ApiError } from '@/api/errors'
-import { userApi } from '@/api/user'
 import {
   clearSsoAttempt,
   clearStaleGiikinSession,
@@ -32,8 +31,8 @@ import {
 } from '@/config/auth'
 import { useToast } from '@/hooks/use-toast'
 import { AlertCircle, Loader2 } from '@/lib/lucide-icons'
-import { getAuthToken } from '@/stores/auth'
-import { CURRENT_USER_QUERY_KEY } from '@/stores/user'
+import { getAuthToken, useAuthHydrated } from '@/stores/auth'
+import { CURRENT_USER_QUERY_KEY, currentUserQueryOptions } from '@/stores/user'
 
 const PUBLIC_PATHS = ['/login', '/register', '/sso-callback']
 
@@ -60,6 +59,7 @@ export function AuthProvider({ children }: Readonly<AuthProviderProps>): React.J
    * - /login、/register 不受守卫保护，无需提前校验身份（即便已登录也由各页面自行判断）
    */
   const deferAuthMe = isOnSsoCallback || isOnPublicPath
+  const authHydrated = useAuthHydrated()
 
   const {
     data: currentUser,
@@ -68,11 +68,8 @@ export function AuthProvider({ children }: Readonly<AuthProviderProps>): React.J
     error,
     refetch,
   } = useQuery({
-    queryKey: CURRENT_USER_QUERY_KEY,
-    queryFn: () => userApi.getCurrentUser(),
-    retry: false,
-    staleTime: 1000 * 60 * 5,
-    enabled: !deferAuthMe,
+    ...currentUserQueryOptions,
+    enabled: !deferAuthMe && authHydrated,
   })
 
   /** 仅 auth/me 的 401 表示会话无效；业务接口 403 不影响全局登录态 */
@@ -196,7 +193,7 @@ export function AuthProvider({ children }: Readonly<AuthProviderProps>): React.J
     })
   }, [shouldStartSso, location.pathname, toast])
 
-  if (isLoading && !deferAuthMe) {
+  if ((!authHydrated || isLoading) && !deferAuthMe) {
     return (
       <div className="flex h-screen items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-3">

@@ -4,6 +4,8 @@ import type { QuotaRule } from '@/api/gateway/quota-rules'
 import { quotaRuleToBatchFormValues } from '@/features/gateway-budget/quota-batch-from-rule'
 import {
   buildModelQuotaDefaultForm,
+  canCreateUpstreamQuotaOnModelDetail,
+  canEditQuotaRuleOnModelDetail,
   isModelDetailEditableQuotaRule,
 } from '@/features/gateway-models/detail/model-detail-quota-utils'
 
@@ -79,7 +81,22 @@ describe('isModelDetailEditableQuotaRule', () => {
     expect(isModelDetailEditableQuotaRule(upstreamRule())).toBe(true)
   })
 
-  it('rejects downstream and plan-only rules', () => {
+  it('allows upstream plan rules with plan_id and quota_id', () => {
+    expect(
+      isModelDetailEditableQuotaRule(
+        upstreamRule({
+          source_ref: {
+            layer: 'upstream',
+            budget_id: null,
+            plan_id: 'plan-1',
+            quota_id: 'quota-1',
+          },
+        })
+      )
+    ).toBe(true)
+  })
+
+  it('rejects downstream and rules without writable refs', () => {
     expect(
       isModelDetailEditableQuotaRule(
         platformRule({
@@ -95,6 +112,62 @@ describe('isModelDetailEditableQuotaRule', () => {
         })
       )
     ).toBe(false)
+  })
+})
+
+describe('canEditQuotaRuleOnModelDetail', () => {
+  it('allows admin to edit tenant platform rules', () => {
+    expect(canEditQuotaRuleOnModelDetail(platformRule(), { isAdmin: true, userId: 'user-1' })).toBe(
+      true
+    )
+  })
+
+  it('allows member to edit own user platform rules only', () => {
+    const ownRule = platformRule({
+      key: { ...platformRule().key, target_kind: 'user', user_id: 'user-1' },
+    })
+    expect(canEditQuotaRuleOnModelDetail(ownRule, { isAdmin: false, userId: 'user-1' })).toBe(true)
+    expect(
+      canEditQuotaRuleOnModelDetail(platformRule(), { isAdmin: false, userId: 'user-1' })
+    ).toBe(false)
+  })
+
+  it('allows member upstream edit only on owned credential', () => {
+    expect(
+      canEditQuotaRuleOnModelDetail(upstreamRule(), {
+        isAdmin: false,
+        userId: 'user-1',
+        credentialOwnerId: 'user-1',
+      })
+    ).toBe(true)
+    expect(
+      canEditQuotaRuleOnModelDetail(upstreamRule(), {
+        isAdmin: false,
+        userId: 'user-1',
+        credentialOwnerId: 'user-2',
+      })
+    ).toBe(false)
+  })
+})
+
+describe('canCreateUpstreamQuotaOnModelDetail', () => {
+  it('requires credential ownership for members', () => {
+    expect(
+      canCreateUpstreamQuotaOnModelDetail({
+        isAdmin: false,
+        userId: 'user-1',
+        credentialId: 'cred-1',
+        credentialOwnerId: 'user-1',
+      })
+    ).toBe(true)
+    expect(
+      canCreateUpstreamQuotaOnModelDetail({
+        isAdmin: true,
+        userId: 'user-1',
+        credentialId: 'cred-1',
+        credentialOwnerId: 'user-2',
+      })
+    ).toBe(true)
   })
 })
 

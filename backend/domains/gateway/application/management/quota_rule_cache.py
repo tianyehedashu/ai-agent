@@ -110,6 +110,7 @@ def _quota_rule_to_dict(rule: QuotaRuleReadModel) -> dict:
             "current_usd": str(usage.current_usd) if usage.current_usd is not None else None,
             "current_tokens": usage.current_tokens,
             "current_requests": usage.current_requests,
+            "window_start": usage.window_start.isoformat() if usage.window_start else None,
             "reset_at": usage.reset_at.isoformat() if usage.reset_at else None,
             "budget_reset_at": usage.budget_reset_at.isoformat() if usage.budget_reset_at else None,
         }
@@ -192,6 +193,9 @@ def _dict_to_quota_rule(data: dict) -> QuotaRuleReadModel:
             else None,
             current_requests=usage_data["current_requests"]
             if usage_data.get("current_requests") is not None
+            else None,
+            window_start=datetime.fromisoformat(usage_data["window_start"])
+            if usage_data.get("window_start")
             else None,
             reset_at=datetime.fromisoformat(usage_data["reset_at"])
             if usage_data.get("reset_at")

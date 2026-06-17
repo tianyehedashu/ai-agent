@@ -34,6 +34,7 @@ export default function Header(): React.JSX.Element {
   const { theme, setTheme } = useTheme()
   // 用户信息已由 AuthProvider 在应用启动时获取
   const currentUser = useCurrentUser()
+  const isAuthenticated = currentUser !== null
   const { logout } = useUserStore()
   const { isPlatformAdmin, isPlatformViewer } = useGatewayPermission()
 
@@ -41,7 +42,7 @@ export default function Header(): React.JSX.Element {
   const { data: session } = useQuery({
     queryKey: ['session', sessionId],
     queryFn: () => (sessionId ? sessionApi.get(sessionId) : null),
-    enabled: !!sessionId && location.pathname.startsWith('/chat'),
+    enabled: isAuthenticated && !!sessionId && location.pathname.startsWith('/chat'),
   })
 
   // 优先显示会话标题，否则显示页面标题

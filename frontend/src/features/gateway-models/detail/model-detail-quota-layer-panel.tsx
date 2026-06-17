@@ -10,14 +10,20 @@ import {
   ModelDetailUpstreamQuotaForm,
 } from './model-detail-quota-forms'
 import { ModelDetailQuotaRuleRow } from './model-detail-quota-rule-row'
-import { isModelDetailEditableQuotaRule } from './model-detail-quota-utils'
+import {
+  canCreateUpstreamQuotaOnModelDetail,
+  canEditQuotaRuleOnModelDetail,
+} from './model-detail-quota-utils'
 
 type LayerFormMode = { kind: 'closed' } | { kind: 'create' } | { kind: 'edit'; rule: QuotaRule }
 
 interface ModelDetailQuotaLayerPanelProps {
   layer: 'platform' | 'upstream'
   rules: QuotaRule[]
+  teamId: string
   canWrite: boolean
+  isAdmin: boolean
+  credentialOwnerId?: string | null
   formMode: LayerFormMode
   onOpenCreate: () => void
   onOpenEdit: (rule: QuotaRule) => void
@@ -28,6 +34,7 @@ interface ModelDetailQuotaLayerPanelProps {
   pending: boolean
   deletePending: boolean
   modelName: string
+  gatewayAliasName: string
   credentialId: string
   credentialLabel?: string
   upstreamModelId?: string
@@ -59,7 +66,10 @@ const PANEL_META = {
 export function ModelDetailQuotaLayerPanel({
   layer,
   rules,
+  teamId,
   canWrite,
+  isAdmin,
+  credentialOwnerId,
   formMode,
   onOpenCreate,
   onOpenEdit,
@@ -70,6 +80,7 @@ export function ModelDetailQuotaLayerPanel({
   pending,
   deletePending,
   modelName,
+  gatewayAliasName,
   credentialId,
   credentialLabel,
   upstreamModelId,
@@ -82,6 +93,16 @@ export function ModelDetailQuotaLayerPanel({
   const showForm = formMode.kind !== 'closed'
   const editingRule = formMode.kind === 'edit' ? formMode.rule : null
   const disabled = Boolean(unavailableReason)
+  const canCreateLayer =
+    canWrite &&
+    !disabled &&
+    (layer === 'platform' ||
+      canCreateUpstreamQuotaOnModelDetail({
+        isAdmin,
+        userId: selfUserId,
+        credentialId,
+        credentialOwnerId,
+      }))
   const panelIcon =
     layer === 'platform' ? <Shield className="h-4 w-4" /> : <Cloud className="h-4 w-4" />
 
@@ -102,7 +123,7 @@ export function ModelDetailQuotaLayerPanel({
             <p className="mt-0.5 text-xs text-muted-foreground">{meta.subtitle}</p>
           </div>
         </div>
-        {canWrite && !showForm && !disabled ? (
+        {canCreateLayer && !showForm ? (
           <Button
             type="button"
             size="sm"
@@ -132,6 +153,7 @@ export function ModelDetailQuotaLayerPanel({
             onDelete={onDelete}
             onCancel={onCloseForm}
             memberLabel={memberLabel}
+            gatewayAlias={gatewayAliasName}
           />
         ) : (
           <ModelDetailUpstreamQuotaForm
@@ -147,6 +169,7 @@ export function ModelDetailQuotaLayerPanel({
             onCancel={onCloseForm}
             credentialLabel={credentialLabel ?? '当前凭据'}
             upstreamModelId={upstreamModelId ?? modelName}
+            gatewayAlias={gatewayAliasName}
           />
         )
       ) : null}
@@ -159,14 +182,31 @@ export function ModelDetailQuotaLayerPanel({
         const isEditingThis =
           formMode.kind === 'edit' && quotaRuleRowId(formMode.rule) === quotaRuleRowId(rule)
         if (isEditingThis) return null
-        const editable = canWrite && isModelDetailEditableQuotaRule(rule)
+        const editable =
+          canWrite &&
+          canEditQuotaRuleOnModelDetail(rule, {
+            isAdmin,
+            userId: selfUserId,
+            credentialOwnerId,
+          })
+        const canDeleteRow = editable && rule.source_ref.budget_id !== null
+        const canAdjustUsage =
+          canWrite &&
+          canEditQuotaRuleOnModelDetail(rule, {
+            isAdmin,
+            userId: selfUserId,
+            credentialOwnerId,
+          })
         return (
           <ModelDetailQuotaRuleRow
             key={quotaRuleRowId(rule)}
             rule={rule}
             layer={layer}
-            credentialLabel={credentialLabel}
+            teamId={teamId}
+            mode={mode}
+            canAdjustUsage={canAdjustUsage}
             upstreamModelId={upstreamModelId}
+            gatewayAliasName={gatewayAliasName}
             actions={
               editable && !showForm ? (
                 <span className="inline-flex gap-1">
@@ -180,21 +220,23 @@ export function ModelDetailQuotaLayerPanel({
                     }}
                   >
                     <Pencil className="mr-0.5 h-3 w-3" />
-                    编辑
+                    改限额
                   </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="ghost"
-                    className="h-6 px-2 text-xs text-destructive hover:text-destructive"
-                    disabled={deletePending}
-                    onClick={() => {
-                      onDeleteFromRow(rule)
-                    }}
-                  >
-                    <Trash2 className="mr-0.5 h-3 w-3" />
-                    删除
-                  </Button>
+                  {canDeleteRow ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="h-6 px-2 text-xs text-destructive hover:text-destructive"
+                      disabled={deletePending}
+                      onClick={() => {
+                        onDeleteFromRow(rule)
+                      }}
+                    >
+                      <Trash2 className="mr-0.5 h-3 w-3" />
+                      删除
+                    </Button>
+                  ) : null}
                 </span>
               ) : null
             }

@@ -48,6 +48,7 @@ export interface QuotaRuleUsage {
   current_usd: number | null
   current_tokens: number | null
   current_requests: number | null
+  window_start: string | null
   reset_at: string | null
   budget_reset_at: string | null
 }
@@ -109,6 +110,19 @@ export interface ListQuotaRulesParams {
   include_usage?: boolean
 }
 
+export type QuotaUsageAdjustmentMode = 'set' | 'reset_window'
+
+export interface QuotaUsageAdjustmentBody {
+  layer: QuotaRuleLayer
+  budget_id?: string | null
+  plan_id?: string | null
+  quota_id?: string | null
+  mode?: QuotaUsageAdjustmentMode
+  current_usd?: number | null
+  current_tokens?: number | null
+  current_requests?: number | null
+}
+
 export const quotaRulesApi = {
   listQuotaRules: (teamId: string, params?: ListQuotaRulesParams) => {
     const search = new URLSearchParams()
@@ -135,4 +149,8 @@ export const quotaRulesApi = {
   /** 成员自助：删除本人「user + 本人凭据」的平台配额行 */
   deleteSelfQuotaRule: (teamId: string, budgetId: string) =>
     apiClient.delete<unknown>(teamGatewayPath(teamId, `/quota-rules/self/${budgetId}`)),
+  adjustQuotaRuleUsage: (teamId: string, body: QuotaUsageAdjustmentBody) =>
+    apiClient.post<QuotaRule>(teamGatewayPath(teamId, '/quota-rules/usage-adjustments'), body),
+  adjustSelfQuotaRuleUsage: (teamId: string, body: QuotaUsageAdjustmentBody) =>
+    apiClient.post<QuotaRule>(teamGatewayPath(teamId, '/quota-rules/self/usage-adjustments'), body),
 } as const

@@ -105,6 +105,10 @@ export function QuotaCenterWorkspace(): React.JSX.Element {
           modelOptionMetaLabel={ws.batchModelOptionMetaLabel}
           onModelPickerOpenChange={ws.onModelPickerOpenChange}
           editingRuleId={ws.editingRuleId}
+          editingRule={ws.editingRule}
+          teamId={ws.teamId}
+          labelContext={ws.labelContext}
+          upstreamModelAliasByReal={ws.upstreamModelAliasByReal}
           upstreamRealModelsByCredential={ws.upstreamRealModelsByCredential}
         />
       </Suspense>
@@ -244,6 +248,8 @@ export function QuotaCenterWorkspace(): React.JSX.Element {
           isLoading={ws.isLoading}
           selectedId={ws.selectedId}
           formDisabled={ws.formDisabled}
+          teamId={ws.teamId}
+          mode={ws.mode}
           labelContext={ws.labelContext}
           onSelect={ws.selectRule}
           onEdit={ws.onEditRule}

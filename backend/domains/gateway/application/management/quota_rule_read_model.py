@@ -55,6 +55,7 @@ class QuotaRuleUsage:
     current_usd: Decimal | None = None
     current_tokens: int | None = None
     current_requests: int | None = None
+    window_start: datetime | None = None
     reset_at: datetime | None = None
     budget_reset_at: datetime | None = None
 

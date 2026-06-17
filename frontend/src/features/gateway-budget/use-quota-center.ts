@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useSearchParams } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 
 import {
   gatewayApi,
@@ -53,8 +53,11 @@ import {
 import { executeQuotaBatchUpsert } from './quota-batch-upsert'
 import {
   buildQuotaRuleModelLookupFromCatalog,
-  hasUpstreamPlanRules,
+  buildAliasByRealModelFromLookup,
+  needsQuotaModelIdentityLookup,
   quotaRuleRowId,
+  resolveQuotaRuleModelDetailHref,
+  shouldManageQuotaOnModelDetail,
   type QuotaRuleLabelContext,
 } from './quota-rule-utils'
 import { gatewayBudgetsBaseQueryKey } from './use-gateway-budgets'
@@ -122,8 +125,10 @@ export interface QuotaCenterState {
   onModelPickerOpenChange?: (open: boolean) => void
   batchPreviewCount: number
   upstreamRealModelsByCredential: RealModelsByCredential
+  upstreamModelAliasByReal: ReadonlyMap<string, string>
   /** 当前处于编辑状态的规则信息；null 表示创建/批量模式 */
   editingRuleId: string | null
+  editingRule: QuotaRule | null
   onEditRule: (rule: QuotaRule) => void
   /** 编辑模式下删除当前规则并关闭向导 */
   deleteEditingRule: () => void
@@ -132,6 +137,7 @@ export interface QuotaCenterState {
 function useQuotaCenterImpl(): QuotaCenterState {
   const teamId = useGatewayTeamId()
   const teamRecord = useGatewayTeamRecord(teamId)
+  const navigate = useNavigate()
   const { toast } = useToast()
   const { isAdmin, isPlatformViewer, isPlatformAdmin } = useGatewayPermission()
   const currentUser = useCurrentUser()
@@ -153,6 +159,7 @@ function useQuotaCenterImpl(): QuotaCenterState {
   const [batchValues, setBatchValues] = useState<QuotaBatchFormValues>(DEFAULT_BATCH_FORM)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [editingRuleId, setEditingRuleId] = useState<string | null>(null)
+  const [editingRule, setEditingRule] = useState<QuotaRule | null>(null)
   const editingInfoRef = useRef<EditingRuleInfo | null>(null)
 
   const listParams = useMemo(
@@ -169,7 +176,10 @@ function useQuotaCenterImpl(): QuotaCenterState {
   const quotaRules = useMemo(() => rulesQuery.data ?? [], [rulesQuery.data])
 
   const needsPickerData = batchOpen || modelFilter.trim() !== ''
-  const needsUpstreamPlanModelLookup = useMemo(() => hasUpstreamPlanRules(quotaRules), [quotaRules])
+  const needsModelIdentityLookup = useMemo(
+    () => needsQuotaModelIdentityLookup(quotaRules) || batchOpen,
+    [quotaRules, batchOpen]
+  )
   const needsLabelData = batchOpen || quotaRules.length > 0 || credentialPrefill !== null || isAdmin
 
   const keysQuery = useGatewayVirtualKeys(teamId, {
@@ -187,10 +197,10 @@ function useQuotaCenterImpl(): QuotaCenterState {
   const modelPages = useInfiniteGatewayModelPages(
     teamId,
     { registry_scope: 'callable' },
-    { enabled: needsPickerData, prefetchMode: 'open' }
+    { enabled: needsPickerData || needsModelIdentityLookup, prefetchMode: 'open' }
   )
 
-  const planRuleModelLookupQuery = useQuery({
+  const quotaModelIdentityLookupQuery = useQuery({
     queryKey: [
       'gateway',
       'quota-center',
@@ -216,7 +226,7 @@ function useQuotaCenterImpl(): QuotaCenterState {
       }
       return buildQuotaRuleModelLookupFromCatalog({ teamModels, personalModels })
     },
-    enabled: needsUpstreamPlanModelLookup && teamId.length > 0,
+    enabled: needsModelIdentityLookup && teamId.length > 0,
     staleTime: GATEWAY_MODELS_STALE_MS,
   })
 
@@ -250,23 +260,34 @@ function useQuotaCenterImpl(): QuotaCenterState {
     for (const c of actorCredentials.list) {
       credentialLabels.set(c.id, c.name)
     }
+    const fullLookup = quotaModelIdentityLookupQuery.data
+    const fallbackLookup =
+      fullLookup ??
+      (modelPages.items.length > 0
+        ? buildQuotaRuleModelLookupFromCatalog({ teamModels: modelPages.items })
+        : undefined)
     return {
       memberLabels,
       keyLabels,
       credentialLabels,
-      modelRefByCredentialRealModel: planRuleModelLookupQuery.data,
+      modelRefByCredentialRealModel: fallbackLookup,
       planRuleModelLookupLoading:
-        needsUpstreamPlanModelLookup &&
-        (planRuleModelLookupQuery.isLoading || planRuleModelLookupQuery.isFetching),
+        needsModelIdentityLookup &&
+        !fullLookup &&
+        (quotaModelIdentityLookupQuery.isLoading ||
+          quotaModelIdentityLookupQuery.isFetching ||
+          modelPages.isLoading),
     }
   }, [
     membersQuery.data,
     keysQuery.data,
     actorCredentials.list,
-    planRuleModelLookupQuery.data,
-    planRuleModelLookupQuery.isLoading,
-    planRuleModelLookupQuery.isFetching,
-    needsUpstreamPlanModelLookup,
+    quotaModelIdentityLookupQuery.data,
+    quotaModelIdentityLookupQuery.isLoading,
+    quotaModelIdentityLookupQuery.isFetching,
+    needsModelIdentityLookup,
+    modelPages.items,
+    modelPages.isLoading,
   ])
 
   // 周期等筛选由后端 list 参数完成（滚动窗口型 upstream/downstream 规则的保留规则在服务端），
@@ -435,19 +456,37 @@ function useQuotaCenterImpl(): QuotaCenterState {
   }, [needsUpstreamPersonalModels, upstreamCredentialIds, upstreamPersonalModelsQuery.data])
 
   const upstreamModelAliasByReal = useMemo(() => {
+    const fromCatalog = buildAliasByRealModelFromLookup(quotaModelIdentityLookupQuery.data)
+    if (fromCatalog.size > 0) return fromCatalog
+    const fromPages =
+      modelPages.items.length > 0
+        ? buildAliasByRealModelFromLookup(
+            buildQuotaRuleModelLookupFromCatalog({ teamModels: modelPages.items })
+          )
+        : new Map<string, string>()
+    if (fromPages.size > 0) return fromPages
     const map = new Map<string, string>()
     for (const model of upstreamTeamModelsForSelection) {
       const realModel = model.real_model.trim()
-      if (!realModel || map.has(realModel)) continue
-      map.set(realModel, model.name)
+      if (!realModel) continue
+      const key = `${model.credential_id}:${realModel}`
+      if (map.has(key)) continue
+      map.set(key, model.name)
     }
     for (const model of upstreamPersonalModelsForSelection) {
       const realModel = model.model_id.trim()
-      if (!realModel || map.has(realModel)) continue
-      map.set(realModel, model.name)
+      if (!realModel) continue
+      const key = `${model.credential_id}:${realModel}`
+      if (map.has(key)) continue
+      map.set(key, model.name.trim() || model.display_name.trim())
     }
     return map
-  }, [upstreamPersonalModelsForSelection, upstreamTeamModelsForSelection])
+  }, [
+    quotaModelIdentityLookupQuery.data,
+    modelPages.items,
+    upstreamPersonalModelsForSelection,
+    upstreamTeamModelsForSelection,
+  ])
 
   const upstreamRealModelsByCredential = useMemo(
     () =>
@@ -491,9 +530,11 @@ function useQuotaCenterImpl(): QuotaCenterState {
     | ((option: BudgetModelOption) => string)
     | undefined => {
     if (batchValues.layer !== 'upstream') return undefined
+    const credentialId =
+      batchValues.credentialIds.length === 1 ? batchValues.credentialIds[0] : undefined
     return (option: BudgetModelOption): string =>
-      upstreamQuotaModelOptionLabel(option, upstreamModelAliasByReal)
-  }, [batchValues.layer, upstreamModelAliasByReal])
+      upstreamQuotaModelOptionLabel(option, upstreamModelAliasByReal, credentialId)
+  }, [batchValues.credentialIds, batchValues.layer, upstreamModelAliasByReal])
 
   const prevUpstreamCredentialKeyRef = useRef('')
   useEffect(() => {
@@ -590,6 +631,14 @@ function useQuotaCenterImpl(): QuotaCenterState {
       })
       return
     }
+    if (editingRuleId && rules.length !== 1) {
+      toast({
+        title: '编辑模式仅支持单条规则',
+        description: '请仅修改当前规则的限额，不要变更主体或模型范围。',
+        variant: 'destructive',
+      })
+      return
+    }
     if (rules.length > 200) {
       toast({ title: '单次最多 200 条', variant: 'destructive' })
       return
@@ -620,14 +669,18 @@ function useQuotaCenterImpl(): QuotaCenterState {
 
   /** 编辑模式下删除当前规则 */
   const deleteEditingRule = useCallback(() => {
-    if (!editingRuleId) return
-    const budgetId = editingRuleId
+    if (!editingRule) return
+    const budgetId = editingRule.source_ref.budget_id
+    if (!budgetId) {
+      toast({ title: '计划类配额请至模型详情或 Key 页管理', variant: 'destructive' })
+      return
+    }
     deleteMutation.mutate(budgetId, {
       onSuccess: () => {
         setBatchOpen(false)
       },
     })
-  }, [editingRuleId, deleteMutation])
+  }, [editingRule, deleteMutation, toast])
 
   const confirmBatchDelete = useCallback(
     async (rules: QuotaRule[]) => {
@@ -743,27 +796,50 @@ function useQuotaCenterImpl(): QuotaCenterState {
 
   const onEditRule = useCallback(
     (rule: QuotaRule) => {
+      if (shouldManageQuotaOnModelDetail(rule)) {
+        if (labelContext.planRuleModelLookupLoading) {
+          toast({
+            title: '模型信息加载中',
+            description: '请稍候再试。',
+          })
+          return
+        }
+        const modelDetailHref = resolveQuotaRuleModelDetailHref(rule, labelContext)
+        if (modelDetailHref) {
+          navigate(modelDetailHref)
+          return
+        }
+        toast({
+          title: '未找到模型详情',
+          description: '请从模型列表进入后再管理配额。',
+          variant: 'destructive',
+        })
+        return
+      }
+
       const parsed = quotaRuleToBatchFormValues(rule)
       if (!parsed) {
         toast({
-          title: '暂不支持编辑此规则',
-          description: '上游/下游配额及计划类规则请在模型详情或 Key 页管理。',
+          title: '暂不支持在此编辑',
+          description: '计划类规则请使用操作列「去模型详情管理」，下游权益请至 Key 页管理。',
           variant: 'destructive',
         })
         return
       }
       editingInfoRef.current = parsed.info
-      setEditingRuleId(parsed.info.budgetId)
+      setEditingRule(rule)
+      setEditingRuleId(parsed.info.budgetId || quotaRuleRowId(rule))
       setBatchValues(parsed.values)
       setBatchOpen(true)
     },
-    [toast]
+    [labelContext, navigate, toast]
   )
 
   const handleSetBatchOpen = useCallback((open: boolean) => {
     setBatchOpen(open)
     if (!open) {
       setEditingRuleId(null)
+      setEditingRule(null)
       editingInfoRef.current = null
     }
   }, [])
@@ -825,7 +901,9 @@ function useQuotaCenterImpl(): QuotaCenterState {
     onModelPickerOpenChange: modelPages.onPickerOpenChange,
     batchPreviewCount,
     upstreamRealModelsByCredential,
+    upstreamModelAliasByReal,
     editingRuleId,
+    editingRule,
     onEditRule,
     deleteEditingRule,
   }
