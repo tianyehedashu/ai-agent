@@ -146,6 +146,18 @@ def _plan_quota_period_bounds(
             period_reset_anchor=anchor,
         )
         return window_start, None
+    if strategy == "rolling":
+        # 滚动窗口随时间连续滑动、无固定重置时刻。窗口起点 = now - 窗口长度，
+        # reset_at 置空（旧实现误把窗口起点当作最早用量分钟，恒得出 ≈ now，
+        # 在 UI 上永远显示成「刚到期」）。
+        window_start = compute_window_start_datetime(
+            when,
+            window_seconds,
+            strategy=strategy,
+            plan_valid_from=plan_valid_from,
+            period_reset_anchor=anchor,
+        )
+        return window_start, None
     minute_idx = compute_window_start_minute(
         when,
         window_seconds,

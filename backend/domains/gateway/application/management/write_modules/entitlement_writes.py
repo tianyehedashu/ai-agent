@@ -15,6 +15,7 @@ from domains.gateway.domain.policies.plan_quota_reset_anchor_policy import (
 from domains.gateway.domain.policies.platform_budget_upsert_policy import (
     validate_platform_budget_upsert,
 )
+from domains.gateway.domain.quota_plan import default_reset_strategy_for_window
 from domains.gateway.infrastructure.models.entitlement_plan import EntitlementPlan
 from domains.gateway.infrastructure.models.provider_plan import ProviderPlan
 from libs.exceptions import ValidationError
@@ -33,7 +34,11 @@ def _normalize_plan_quota_items(quotas: list[dict[str, Any]] | None) -> list[dic
     out: list[dict[str, Any]] = []
     for quota in quotas or []:
         window_seconds = int(quota.get("window_seconds") or 0)
-        reset_strategy = str(quota.get("reset_strategy") or "rolling")
+        # 未显式指定策略时按窗口长度自动推导（与 quota_rule_writes 同一真源），
+        # 避免日/月窗口被静默落成 rolling。
+        reset_strategy = str(
+            quota.get("reset_strategy") or default_reset_strategy_for_window(window_seconds)
+        )
         reset_time_raw = quota.get("reset_time_minutes")
         reset_day_raw = quota.get("reset_day_of_month")
         anchor = resolve_plan_quota_reset_anchor(

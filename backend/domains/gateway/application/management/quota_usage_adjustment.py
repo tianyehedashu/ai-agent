@@ -26,7 +26,12 @@ from domains.gateway.domain.period_reset_anchor import (
     period_reset_anchor_from_plan_quota,
     period_reset_anchor_from_row,
 )
-from domains.gateway.domain.quota_plan import ENTITLEMENT_NS, PLATFORM_NS, PROVIDER_NS
+from domains.gateway.domain.quota_plan import (
+    ENTITLEMENT_NS,
+    PLATFORM_NS,
+    PROVIDER_NS,
+    normalize_reset_strategy,
+)
 from domains.gateway.infrastructure.repositories.budget_repository import BudgetRepository
 from domains.gateway.infrastructure.repositories.entitlement_plan_repository import (
     EntitlementPlanRepository,
@@ -173,6 +178,14 @@ async def apply_quota_usage_adjustment(
             reset_day_of_month=quota.reset_day_of_month,
         )
         plan_valid_from = plan.valid_from
+
+    # 滚动窗口用量由请求日志实时统计（展示读忽略 PG 桶），手工校正 / 清零写桶不会反映到
+    # 展示，徒增误解。直接拒绝并引导改用固定日历周期。
+    if normalize_reset_strategy(reset_strategy) == "rolling":
+        raise ValidationError(
+            "滚动窗口配额用量由请求日志实时统计，不支持手工校正 / 清零；"
+            "如需可校正 / 到点重置，请将该配额改为每日 / 每月固定周期。"
+        )
 
     lookup = QuotaWindowLookup(
         ns=ns,

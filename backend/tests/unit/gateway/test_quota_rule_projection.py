@@ -97,4 +97,5 @@ def test_flatten_provider_plan_expands_quotas() -> None:
     rolling = next(r for r in rules if r.key.quota_label == "5h")
     assert rolling.usage is not None
     assert rolling.usage.window_start is not None
-    assert rolling.usage.reset_at is not None
+    # 滚动窗口无固定重置时刻：window_start = now - 窗口，reset_at 置空。
+    assert rolling.usage.reset_at is None

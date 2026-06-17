@@ -69,10 +69,17 @@ export function QuotaUsageInlineEditor({
     return { ...rule, usage }
   }, [requests, rule, tokens, usd])
 
+  // 滚动窗口用量由请求日志实时统计，桶写入不反映到展示，故不提供手工校正/清零。
+  const isRolling =
+    rule.key.reset_strategy === 'rolling' &&
+    rule.key.window_seconds !== null &&
+    rule.key.window_seconds > 0
+  const effectiveCanEdit = canEdit && !isRolling
+
   const { ratio, barColor } = computeQuotaRuleUsageRatio(previewRule)
   const hasLimits = limitUsd !== null || limitTok !== null
   const showProgress =
-    hasLimits && (canEdit || (rule.usage !== null && quotaUsageHasMetrics(rule.usage)))
+    hasLimits && (effectiveCanEdit || (rule.usage !== null && quotaUsageHasMetrics(rule.usage)))
 
   const limitUsdLabel =
     limitUsd !== null ? `$${Number.parseFloat(String(limitUsd)).toFixed(2)}` : '∞'
@@ -97,7 +104,7 @@ export function QuotaUsageInlineEditor({
     resetWindow(rule)
   }
 
-  if (!canEdit) {
+  if (!effectiveCanEdit) {
     const usage = rule.usage
     if (!usage || !quotaUsageHasMetrics(usage)) {
       return <p className="mt-2 text-xs text-muted-foreground">暂无本周期用量数据</p>
@@ -119,6 +126,11 @@ export function QuotaUsageInlineEditor({
           </div>
         </div>
         {showProgress ? <UsageProgressBar ratio={ratio} barColor={barColor} /> : null}
+        {canEdit && isRolling ? (
+          <p className="text-[11px] text-muted-foreground">
+            滚动窗口用量按请求日志实时统计，不支持手工校正 / 清零；如需可改为每日 / 每月固定周期。
+          </p>
+        ) : null}
       </div>
     )
   }

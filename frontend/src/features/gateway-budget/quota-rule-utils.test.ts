@@ -721,4 +721,28 @@ describe('formatQuotaRulePeriodWindow', () => {
     })
     expect(formatQuotaRulePeriodWindow(rule)).toBe('累计额度（不自动重置）')
   })
+
+  it('labels rolling window as sliding without a fixed reset', () => {
+    const base = upstreamRule('cred-a', 'ep-1')
+    const rule = upstreamRule('cred-a', 'ep-1', {
+      key: {
+        ...base.key,
+        period: null,
+        window_seconds: 18000,
+        reset_strategy: 'rolling',
+      },
+      usage: {
+        current_usd: null,
+        current_tokens: null,
+        current_requests: null,
+        window_start: '2026-06-17T07:00:00.000Z',
+        reset_at: null,
+        budget_reset_at: null,
+      },
+    })
+    const text = formatQuotaRulePeriodWindow(rule)
+    expect(text).toContain('滚动窗口')
+    expect(text).toContain('5h')
+    expect(text).not.toContain('本周期')
+  })
 })

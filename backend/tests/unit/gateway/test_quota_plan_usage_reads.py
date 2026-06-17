@@ -122,6 +122,43 @@ async def test_batch_usage_falls_back_to_request_logs() -> None:
 
 
 @pytest.mark.asyncio
+async def test_rolling_skips_bucket_and_uses_logs() -> None:
+    """滚动窗口不查 PG 桶（口径错位会低估），直接按 [window_start, now] 聚合日志。"""
+    plan_id = uuid.uuid4()
+    quota_id = uuid.uuid4()
+    now = datetime(2026, 6, 20, 12, 0, tzinfo=UTC)
+    lookup = QuotaWindowLookup(
+        ns=PROVIDER_NS,
+        plan_id=plan_id,
+        quota_id=quota_id,
+        window_seconds=18000,
+        reset_strategy="rolling",
+        plan_valid_from=None,
+    )
+    key = resolve_quota_window_key(lookup, now=now)
+
+    service = QuotaPlanUsageReadService(MagicMock())
+    # 即便桶里有值（当前分钟的单条），滚动也应忽略它而走日志。
+    service._load_buckets = AsyncMock(return_value={})  # type: ignore[method-assign]
+    service._aggregate_logs = AsyncMock(  # type: ignore[method-assign]
+        return_value={
+            reads_mod._LogWindowKey(
+                ns=PROVIDER_NS,
+                plan_id=plan_id,
+                window_start=key.window_start,
+            ): QuotaUsageTotals(Decimal("3.0"), 900, 9),
+        }
+    )
+
+    totals = await service.batch_usage_for_quota_windows([lookup], now=now)
+    assert totals[key] == QuotaUsageTotals(Decimal("3.0"), 900, 9)
+    # 滚动键不进 _load_buckets 查询参数。
+    loaded_keys = service._load_buckets.call_args.args[0]
+    assert loaded_keys == []
+    service._aggregate_logs.assert_called_once()
+
+
+@pytest.mark.asyncio
 async def test_batch_usage_uses_custom_period_reset_anchor() -> None:
     """自定义锚点下 bucket 键与 resolve_quota_window_key 一致。"""
     plan_id = uuid.uuid4()

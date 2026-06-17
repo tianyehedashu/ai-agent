@@ -58,12 +58,17 @@ async def _upsert_quota_plan_usage(
     request_id: str,
     settled_at: datetime,
 ) -> None:
+    # 滚动窗口的 window_start 每分钟滑动，落桶会产生每分钟一行的垃圾且无法被读路径正确
+    # 命中（详见 quota_plan_usage_reads）。滚动一律不落 PG 桶，展示读直接聚合日志。
+    persist_specs = [spec for spec in specs if spec.reset_strategy != "rolling"]
+    if not persist_specs:
+        return
     if not await _acquire_bucket_upsert_once(ns, request_id):
         return
     try:
         async with get_session_context() as session:
             repo = QuotaPlanUsageBucketRepository(session)
-            for spec in specs:
+            for spec in persist_specs:
                 window_start = compute_window_start_datetime(
                     settled_at,
                     spec.window_seconds,

@@ -652,12 +652,26 @@ export function quotaUsageHasPeriodWindow(usage: QuotaRuleUsage | null | undefin
   return usage.window_start !== null
 }
 
+function formatRollingWindowLabel(windowSeconds: number): string {
+  const hours = windowSeconds / 3600
+  if (hours >= 1 && Number.isInteger(hours)) return `${String(hours)}h`
+  return `${String(windowSeconds)}s`
+}
+
 /** 当前配额窗口起止（或累计/下次重置说明）。 */
 export function formatQuotaRulePeriodWindow(rule: QuotaRule): string | null {
   const usage = rule.usage
   if (!usage) return null
   if (rule.key.period === 'total') {
     return '累计额度（不自动重置）'
+  }
+  // 滚动窗口随时间连续滑动、无固定重置时刻，不能渲染成「本周期 X—Y / 下次重置」。
+  if (
+    rule.key.reset_strategy === 'rolling' &&
+    rule.key.window_seconds !== null &&
+    rule.key.window_seconds > 0
+  ) {
+    return `滚动窗口 · 近 ${formatRollingWindowLabel(rule.key.window_seconds)}（随时间滚动，无固定重置）`
   }
   const start = usage.window_start
   const end = usage.reset_at ?? usage.budget_reset_at

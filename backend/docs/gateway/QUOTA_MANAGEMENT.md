@@ -162,7 +162,7 @@ sequenceDiagram
 | 层 | 读路径 | 窗口语义 |
 |----|--------|---------|
 | platform | `gateway_quota_plan_usage_buckets`（`ns=platform`）**有桶优先**：存在 bucket 即以其为准（含管理面校正/清零写入的覆盖值）；bucket 缺失时按维度回退 `gateway_request_logs`；`system` 维度无稳定日志归因，仅 bucket。与 upstream/downstream 同一口径 | `daily` / `monthly` 由行内 **周期锚点**（`period_timezone` + `period_reset_minutes` + `period_reset_day`）经 domain `compute_period_window_start` 计算；默认 `UTC/00:00/1` 等同 **UTC 自然日/月**；`total` = 累计（忽略锚点） |
-| upstream | 同上表（`ns=provider`）→ 日志按 `provider_plan_id` 兜底 | `window_seconds` + `reset_strategy`；`calendar_daily_utc` / `calendar_monthly_utc` 读 `reset_timezone` / `reset_time_minutes` / `reset_day_of_month`（月切日 1–31，短月按月末 clamp，与 Stripe 一致）；`rolling` + 86400 = **滚动 24h**；`plan_anniversary` 以 `valid_from` 为锚 |
+| upstream | **桶语义按策略分流**：`calendar_*` / `plan_anniversary` 走 `gateway_quota_plan_usage_buckets`（`ns=provider`）有桶优先、日志按 `provider_plan_id` 兜底；**`rolling` 不查/不落桶**，一律按 `[now-window, now]` 直接聚合日志（其 `window_start` 每分钟滑动，落桶会每分钟一行且读到的桶仅含当前分钟而严重低估，故绕开桶，与执法侧 Redis 分钟桶滑动求和一致） | `window_seconds` + `reset_strategy`；`calendar_daily_utc` / `calendar_monthly_utc` 读 `reset_timezone` / `reset_time_minutes` / `reset_day_of_month`（月切日 1–31，短月按月末 clamp，与 Stripe 一致），有**固定重置时刻**；`rolling` = 滑动窗口，**无固定重置**（`reset_at` 置空，展示「滚动窗口 · 近 Xh」），仅用于自定义/子日窗口；`plan_anniversary` 以 `valid_from` 为锚。**写入默认**：未显式指定策略时 `86400→calendar_daily_utc`、`2592000→calendar_monthly_utc`、其它→`rolling`（`default_reset_strategy_for_window`，与前端预设一致） |
 | downstream | 同上表（`ns=entitlement`）→ 日志按 `entitlement_plan_id` 兜底 | 同 upstream |
 
 - **Redis 仅用于**：预扣（`reserve`）、限流（RPM/TPM）、结算 `commit`、幂等锁；**不**作为展示 SSOT。

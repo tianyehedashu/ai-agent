@@ -265,7 +265,15 @@ export interface QuotaWindowPresetFieldsProps {
   disabled?: boolean
   presetSelectId?: string
   customInputId?: string
+  /** 覆盖默认说明文案；缺省时按预设给出（每日/每月=固定重置，自定义=滚动）。 */
   helperText?: string
+}
+
+const WINDOW_PRESET_HELPER: Record<QuotaWindowPresetValue, string> = {
+  '0': '按整个套餐有效期累计，不重置。',
+  '86400': '每日到下方设定的时刻重置（按所选时区）。',
+  '2592000': '每月到下方设定的日 / 时刻重置（按所选时区）。',
+  custom: '自定义秒数为滚动窗口：统计最近这段时间、随时间连续滑动，无固定重置时刻。',
 }
 
 export function QuotaWindowPresetFields({
@@ -274,9 +282,10 @@ export function QuotaWindowPresetFields({
   disabled = false,
   presetSelectId,
   customInputId,
-  helperText = '滚动窗口内累计，到期自动滑动清零。',
+  helperText,
 }: QuotaWindowPresetFieldsProps): React.JSX.Element {
   const windowPreset = resolveQuotaWindowPreset(windowSeconds)
+  const resolvedHelper = helperText ?? WINDOW_PRESET_HELPER[windowPreset]
 
   const handleWindowPresetChange = (preset: QuotaWindowPresetValue): void => {
     onWindowSecondsChange(applyQuotaWindowPreset(preset, windowSeconds))
@@ -309,9 +318,8 @@ export function QuotaWindowPresetFields({
             onWindowSecondsChange(e.target.value)
           }}
         />
-      ) : (
-        <p className="text-[11px] text-muted-foreground">{helperText}</p>
-      )}
+      ) : null}
+      <p className="text-[11px] text-muted-foreground">{resolvedHelper}</p>
     </div>
   )
 }

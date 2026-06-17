@@ -59,6 +59,9 @@ async def test_admin_batch_accepts_upstream_with_actor_user_id() -> None:
                     limit_requests=None,
                     unit_price_usd_per_token=None,
                     unit_price_usd_per_request=None,
+                    reset_timezone="UTC",
+                    reset_time_minutes=0,
+                    reset_day_of_month=1,
                 )
             ],
         )
@@ -127,6 +130,9 @@ async def test_member_self_batch_accepts_personal_upstream() -> None:
                     limit_requests=None,
                     unit_price_usd_per_token=None,
                     unit_price_usd_per_request=None,
+                    reset_timezone="UTC",
+                    reset_time_minutes=0,
+                    reset_day_of_month=1,
                 )
             ],
         )

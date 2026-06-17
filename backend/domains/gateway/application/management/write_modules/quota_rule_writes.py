@@ -8,13 +8,14 @@ from typing import TYPE_CHECKING, Literal
 import uuid
 
 from domains.gateway.application.management.plan_quota_merge import merge_plan_quotas_by_label
+from domains.gateway.domain.period_reset_anchor import PeriodResetAnchor
 from domains.gateway.domain.policies.plan_quota_reset_anchor_policy import (
     resolve_plan_quota_reset_anchor,
 )
 from domains.gateway.domain.policies.platform_budget_upsert_policy import (
     validate_platform_budget_upsert,
 )
-from domains.gateway.domain.period_reset_anchor import PeriodResetAnchor
+from domains.gateway.domain.quota_plan import default_reset_strategy_for_window
 from domains.gateway.infrastructure.models.budget import GatewayBudget
 from domains.gateway.infrastructure.models.entitlement_plan import EntitlementPlan
 from domains.gateway.infrastructure.models.provider_plan import ProviderPlan
@@ -530,7 +531,7 @@ class QuotaRuleWritesMixin:
 
         label = cmd.quota_label or "default"
         window_seconds = cmd.window_seconds if cmd.window_seconds is not None else 0
-        reset_strategy = cmd.reset_strategy or "rolling"
+        reset_strategy = cmd.reset_strategy or default_reset_strategy_for_window(window_seconds)
 
         real_model = (
             await self._resolve_registered_real_model(cmd.credential_id, cmd.model_name)
@@ -606,7 +607,7 @@ class QuotaRuleWritesMixin:
 
         window_seconds = cmd.window_seconds if cmd.window_seconds is not None else 0
 
-        reset_strategy = cmd.reset_strategy or "rolling"
+        reset_strategy = cmd.reset_strategy or default_reset_strategy_for_window(window_seconds)
 
         included_models: list[str] = list(cmd.included_models or [])
 

@@ -20,6 +20,7 @@ async def test_bucket_upsert_skipped_when_idempotency_key_exists(monkeypatch) ->
         quota_id=uuid.uuid4(),
         label="daily",
         window_seconds=86400,
+        reset_strategy="calendar_daily_utc",
         limit_tokens=1_000_000,
     )
     monkeypatch.setattr(mod, "_acquire_bucket_upsert_once", AsyncMock(return_value=False))
@@ -51,6 +52,7 @@ async def test_bucket_upsert_releases_idempotency_key_on_failure(monkeypatch) ->
         quota_id=uuid.uuid4(),
         label="daily",
         window_seconds=86400,
+        reset_strategy="calendar_daily_utc",
         limit_tokens=1_000_000,
     )
     monkeypatch.setattr(mod, "_acquire_bucket_upsert_once", AsyncMock(return_value=True))
@@ -85,6 +87,36 @@ async def test_bucket_upsert_releases_idempotency_key_on_failure(monkeypatch) ->
     release.assert_awaited_once_with(PROVIDER_NS, "req-fail")
 
 
+@pytest.mark.asyncio
+async def test_rolling_spec_skips_bucket_persist(monkeypatch) -> None:
+    """滚动窗口不落 PG 桶：连幂等键都不应获取，increment 不调用。"""
+    acquire = AsyncMock(return_value=True)
+    monkeypatch.setattr(mod, "_acquire_bucket_upsert_once", acquire)
+    increment = AsyncMock()
+    monkeypatch.setattr(mod.QuotaPlanUsageBucketRepository, "increment_bucket", increment)
+
+    spec = PlanQuotaSpec(
+        quota_id=uuid.uuid4(),
+        label="5h",
+        window_seconds=18000,
+        reset_strategy="rolling",
+        limit_tokens=1_000_000,
+    )
+    await mod._upsert_quota_plan_usage(
+        ns=PROVIDER_NS,
+        plan_id=uuid.uuid4(),
+        specs=[spec],
+        delta_tokens=100,
+        delta_cost_usd=Decimal("0"),
+        delta_requests=1,
+        request_id="req-rolling",
+        settled_at=datetime(2026, 6, 20, 12, 0, tzinfo=UTC),
+    )
+
+    acquire.assert_not_called()
+    increment.assert_not_called()
+
+
 def test_schedule_skipped_without_request_id(monkeypatch) -> None:
     create_task = MagicMock()
     monkeypatch.setattr(mod.asyncio, "create_task", create_task)
@@ -109,7 +141,7 @@ def test_schedule_skipped_without_request_id(monkeypatch) -> None:
 async def test_schedule_registers_deferred_task(monkeypatch) -> None:
     registered: list[object] = []
     monkeypatch.setattr(mod, "register_proxy_deferred_task", lambda t: registered.append(t))
-    monkeypatch.setattr(mod.asyncio, "create_task", lambda coro: MagicMock())
+    monkeypatch.setattr(mod.asyncio, "create_task", lambda _coro: MagicMock())
 
     spec = PlanQuotaSpec(
         quota_id=uuid.uuid4(),

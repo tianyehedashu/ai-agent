@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Final, cast
 import uuid
 
 from sqlalchemy import DateTime, and_, func, literal, select, tuple_, union_all
@@ -28,6 +28,11 @@ from domains.gateway.infrastructure.models.request_log import GatewayRequestLog
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
+
+# 滚动窗口的 window_start 每分钟滑动，按它落/查 PG 汇总桶必然错位（写出每分钟一行、
+# 读到的桶只含当前分钟而严重低估）。滚动一律按 [window_start, now] 直接聚合日志，
+# 与执法侧 Redis 分钟桶滑动求和口径一致。
+_ROLLING_STRATEGY: Final[str] = "rolling"
 
 
 @dataclass(frozen=True)
@@ -98,23 +103,30 @@ class QuotaPlanUsageReadService:
             return {}
 
         when = now or datetime.now(UTC)
-        keys: list[QuotaWindowKey] = []
-        for item in items:
-            keys.append(resolve_quota_window_key(item, now=when))
+        keyed_items: list[tuple[QuotaWindowKey, QuotaWindowLookup]] = [
+            (resolve_quota_window_key(item, now=when), item) for item in items
+        ]
 
-        bucket_rows = await self._load_buckets(keys)
+        # 滚动窗口不查桶（口径错位），直接进日志聚合；其余策略仍「有桶优先」。
+        bucket_keys = [
+            key
+            for key, item in keyed_items
+            if normalize_reset_strategy(item.reset_strategy) != _ROLLING_STRATEGY
+        ]
+        bucket_rows = await self._load_buckets(bucket_keys)
         result: dict[QuotaWindowKey, QuotaUsageTotals] = {}
         missing_log_windows: dict[_LogWindowKey, list[QuotaWindowKey]] = {}
 
-        for key in keys:
-            row = bucket_rows.get(key)
-            if row is not None:
-                result[key] = QuotaUsageTotals(
-                    cost_usd=Decimal(row.cost_usd or 0),
-                    tokens=int(row.tokens or 0),
-                    requests=int(row.requests or 0),
-                )
-                continue
+        for key, item in keyed_items:
+            if normalize_reset_strategy(item.reset_strategy) != _ROLLING_STRATEGY:
+                row = bucket_rows.get(key)
+                if row is not None:
+                    result[key] = QuotaUsageTotals(
+                        cost_usd=Decimal(row.cost_usd or 0),
+                        tokens=int(row.tokens or 0),
+                        requests=int(row.requests or 0),
+                    )
+                    continue
             log_key = _LogWindowKey(ns=key.ns, plan_id=key.plan_id, window_start=key.window_start)
             missing_log_windows.setdefault(log_key, []).append(key)
 

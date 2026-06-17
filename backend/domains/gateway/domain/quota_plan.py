@@ -18,8 +18,10 @@ from typing import TYPE_CHECKING, Final, Literal, cast
 from domains.gateway.domain.period_reset_anchor import (
     DEFAULT_PERIOD_RESET_ANCHOR,
     PeriodResetAnchor,
-    compute_period_reset_at as _compute_platform_period_reset_at,
     compute_period_window_start,
+)
+from domains.gateway.domain.period_reset_anchor import (
+    compute_period_reset_at as _compute_platform_period_reset_at,
 )
 
 if TYPE_CHECKING:
@@ -66,6 +68,26 @@ def normalize_reset_strategy(value: str) -> ResetStrategy:
     """将仓储/缓存中的字符串归一为合法 ``ResetStrategy``，未知值回退 ``rolling``。"""
     if value in _VALID_RESET_STRATEGIES:
         return cast("ResetStrategy", value)
+    return RESET_STRATEGY_DEFAULT
+
+
+# 与前端「统计窗口」预设一致（quota-window-presets.ts）：日/月窗口默认固定日历重置，
+# 仅自定义/子日窗口（无日历对齐语义）回退滚动。作为写入兜底的单一真源。
+_DAY_SECONDS: Final = 86400
+_MONTH_SECONDS: Final = 2592000
+
+
+def default_reset_strategy_for_window(window_seconds: int) -> ResetStrategy:
+    """未显式指定 ``reset_strategy`` 时按窗口长度推导默认策略。
+
+    - ``86400`` → ``calendar_daily_utc``（每日固定重置）。
+    - ``2592000`` → ``calendar_monthly_utc``（每月固定重置）。
+    - 其它（含自定义秒数 / ``<=0`` 套餐周期）→ ``rolling``。
+    """
+    if window_seconds == _DAY_SECONDS:
+        return "calendar_daily_utc"
+    if window_seconds == _MONTH_SECONDS:
+        return "calendar_monthly_utc"
     return RESET_STRATEGY_DEFAULT
 
 
@@ -310,21 +332,22 @@ def compute_reset_at(
 __all__ = [
     "DEFAULT_PERIOD_RESET_ANCHOR",
     "ENTITLEMENT_NS",
-    "PeriodResetAnchor",
     "PLATFORM_NS",
     "PROVIDER_NS",
     "RESET_STRATEGY_DEFAULT",
     "ExhaustedReason",
+    "PeriodResetAnchor",
     "PlanQuotaSnapshot",
     "PlanQuotaSpec",
     "QuotaPlanCheckResult",
     "QuotaPlanNamespace",
-    "UsageBucketNamespace",
     "QuotaPlanReservation",
     "ResetStrategy",
+    "UsageBucketNamespace",
     "compute_minute_index",
     "compute_reset_at",
-    "compute_window_start_minute",
     "compute_window_start_datetime",
+    "compute_window_start_minute",
+    "default_reset_strategy_for_window",
     "normalize_reset_strategy",
 ]

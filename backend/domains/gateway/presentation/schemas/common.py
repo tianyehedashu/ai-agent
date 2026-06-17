@@ -1284,10 +1284,11 @@ class PlanQuotaUpsert(BaseModel):
 
     label: str = Field(..., min_length=1, max_length=40)
     window_seconds: int = Field(..., ge=0, description="0 表示整套餐有效期作为一个累计桶")
-    reset_strategy: PlanResetStrategy = Field(
-        default="rolling",
+    reset_strategy: PlanResetStrategy | None = Field(
+        default=None,
         description=(
-            "重置策略：rolling=滚动窗口；calendar_daily_utc=每日 UTC 重置；"
+            "重置策略；缺省按窗口长度自动推导（86400=每日固定重置 / 2592000=每月固定重置 / "
+            "其它=滚动窗口）。rolling=滚动窗口；calendar_daily_utc=每日 UTC 重置；"
             "calendar_monthly_utc=自然月重置；plan_anniversary=按 valid_from 切片"
         ),
     )
@@ -1506,13 +1507,13 @@ __all__ = [
     "QuotaRuleBatchFailureItem",
     "QuotaRuleBatchUpsertRequest",
     "QuotaRuleBatchUpsertResponse",
-    "QuotaUsageAdjustmentRequest",
     "QuotaRuleKeyResponse",
     "QuotaRuleLimitsResponse",
     "QuotaRuleResponse",
     "QuotaRuleSourceRefResponse",
     "QuotaRuleUpsert",
     "QuotaRuleUsageResponse",
+    "QuotaUsageAdjustmentRequest",
     "RequestLogDetailResponse",
     "RequestLogListResponse",
     "RequestLogResponse",

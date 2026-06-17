@@ -15,6 +15,7 @@ from domains.gateway.domain.quota_plan import (
     compute_reset_at,
     compute_window_start_datetime,
     compute_window_start_minute,
+    default_reset_strategy_for_window,
     normalize_reset_strategy,
 )
 from domains.gateway.infrastructure.callbacks.custom_logger import (
@@ -27,6 +28,13 @@ class TestQuotaPlanResetStrategy:
     def test_normalize_reset_strategy_falls_back_to_rolling(self) -> None:
         assert normalize_reset_strategy("calendar_daily_utc") == "calendar_daily_utc"
         assert normalize_reset_strategy("unknown") == "rolling"
+
+    def test_default_reset_strategy_for_window(self) -> None:
+        # 日/月窗口默认固定日历重置；其它（自定义/套餐周期）回退滚动。
+        assert default_reset_strategy_for_window(86400) == "calendar_daily_utc"
+        assert default_reset_strategy_for_window(2592000) == "calendar_monthly_utc"
+        assert default_reset_strategy_for_window(18000) == "rolling"
+        assert default_reset_strategy_for_window(0) == "rolling"
 
     def test_compute_window_start_datetime_matches_minute_index(self) -> None:
         now = datetime(2026, 5, 18, 11, 20, tzinfo=UTC)
