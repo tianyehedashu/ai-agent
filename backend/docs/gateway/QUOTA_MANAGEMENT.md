@@ -161,12 +161,13 @@ sequenceDiagram
 
 | 层 | 读路径 | 窗口语义 |
 |----|--------|---------|
-| platform | `gateway_quota_plan_usage_buckets`（`ns=platform`）与 `gateway_request_logs` **按维度取较大值**（避免 bucket 初建截断历史）；`system` 维度仅 bucket | `daily` / `monthly` 由行内 **周期锚点**（`period_timezone` + `period_reset_minutes` + `period_reset_day`）经 domain `compute_period_window_start` 计算；默认 `UTC/00:00/1` 等同 **UTC 自然日/月**；`total` = 累计（忽略锚点） |
+| platform | `gateway_quota_plan_usage_buckets`（`ns=platform`）**有桶优先**：存在 bucket 即以其为准（含管理面校正/清零写入的覆盖值）；bucket 缺失时按维度回退 `gateway_request_logs`；`system` 维度无稳定日志归因，仅 bucket。与 upstream/downstream 同一口径 | `daily` / `monthly` 由行内 **周期锚点**（`period_timezone` + `period_reset_minutes` + `period_reset_day`）经 domain `compute_period_window_start` 计算；默认 `UTC/00:00/1` 等同 **UTC 自然日/月**；`total` = 累计（忽略锚点） |
 | upstream | 同上表（`ns=provider`）→ 日志按 `provider_plan_id` 兜底 | `window_seconds` + `reset_strategy`；`calendar_daily_utc` / `calendar_monthly_utc` 读 `reset_timezone` / `reset_time_minutes` / `reset_day_of_month`（月切日 1–31，短月按月末 clamp，与 Stripe 一致）；`rolling` + 86400 = **滚动 24h**；`plan_anniversary` 以 `valid_from` 为锚 |
 | downstream | 同上表（`ns=entitlement`）→ 日志按 `entitlement_plan_id` 兜底 | 同 upstream |
 
 - **Redis 仅用于**：预扣（`reserve`）、限流（RPM/TPM）、结算 `commit`、幂等锁；**不**作为展示 SSOT。
-- **写路径**：proxy/callback 成功结算后异步 `UPSERT` 汇总表（`schedule_platform_budget_usage_upsert` / `schedule_quota_plan_usage_upsert`）；platform 按 `request_id` + 来源（`proxy` / `callback`）幂等，允许 defer 流式先记 token、callback 再记 cost。
+- **写路径**：proxy/callback 成功结算后异步 `UPSERT` 汇总表（`schedule_platform_budget_usage_upsert` / `schedule_quota_plan_usage_upsert`）；platform 按 `request_id` + 来源（`proxy` / `callback`）幂等。defer 流式下 proxy 先记 token、callback 补记 cost；**callback 经 `_delta_after_proxy_cost` / `_delta_after_proxy_tokens` 始终扣减 proxy 已记部分**，避免 token 在 Redis 执法桶与汇总表重复累加。
+- **管理面手工校正/清零**（`apply_quota_usage_adjustment`）以 `set_bucket` 覆盖写入汇总桶并同步 Redis 执法桶；因展示读「有桶优先」，校正值即时生效，不再被历史日志覆盖。
 - **勿**直接读 `gateway_budgets.current_*` 作展示权威：无日/月自动 reset 任务，与 Redis 日切语义可能漂移；展示以 bucket + 日志为准。
 - **preflight 锚点 pin**：`check_budget` 将当时各坐标周期锚点写入 `ctx.platform_budget_preflight` 并序列化到 `gateway_platform_budget_anchor_pins`；同一次请求的 `reserve` / `commit`（含 callback）优先使用 pin，避免管理面 mid-flight 改锚点导致 Redis 分桶不一致。改锚点后旧 `ws:*` / `%Y%m%d` 桶自然 TTL 过期，不自动迁移历史用量。
 

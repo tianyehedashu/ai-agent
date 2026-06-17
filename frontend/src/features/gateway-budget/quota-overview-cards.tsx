@@ -74,9 +74,13 @@ export function QuotaOverviewCards({
     layerCounts[rule.key.layer]++
 
     if (rule.usage && quotaUsageHasMetrics(rule.usage)) {
-      totalUsd += parseQuotaNumeric(rule.usage.current_usd)
-      totalTokens += parseQuotaNumeric(rule.usage.current_tokens)
-      totalRequests += parseQuotaNumeric(rule.usage.current_requests)
+      // 金额合计仅取平台层：同一笔调用会同时计入 platform / upstream / downstream 三层护栏，
+      // 跨层相加会重复计数。平台层最贴近真实平台消费；精确账单以统计页为准。
+      if (rule.key.layer === 'platform') {
+        totalUsd += parseQuotaNumeric(rule.usage.current_usd)
+        totalTokens += parseQuotaNumeric(rule.usage.current_tokens)
+        totalRequests += parseQuotaNumeric(rule.usage.current_requests)
+      }
 
       const { ratio } = computeQuotaRuleUsageRatio(rule)
       if (ratio >= 1) dangerCount++
@@ -105,7 +109,7 @@ export function QuotaOverviewCards({
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <KpiCard title="我的配额数" value={String(totalCount)} isLoading={isLoading} />
         <KpiCard
-          title="本月已用"
+          title="平台层已用"
           value={`$${parseQuotaNumeric(totalUsd).toFixed(2)}`}
           sub={`${totalTokens.toLocaleString()} Token`}
           isLoading={isLoading}
@@ -140,7 +144,7 @@ export function QuotaOverviewCards({
         isLoading={isLoading}
       />
       <KpiCard
-        title="本月累计用量"
+        title="平台层用量合计"
         value={`$${parseQuotaNumeric(totalUsd).toFixed(2)}`}
         sub={`${totalTokens.toLocaleString()} Token · ${totalRequests.toLocaleString()} 请求`}
         isLoading={isLoading}

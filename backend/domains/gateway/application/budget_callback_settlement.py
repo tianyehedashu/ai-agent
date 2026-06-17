@@ -44,6 +44,58 @@ def _to_uuid(value: object) -> uuid.UUID | None:
     return None
 
 
+def _redis_decimal(raw: object) -> Decimal | None:
+    if raw is None:
+        return None
+    try:
+        return Decimal(raw.decode() if isinstance(raw, bytes) else str(raw))
+    except (ValueError, ArithmeticError):
+        return None
+
+
+def _redis_int(raw: object) -> int | None:
+    if raw is None:
+        return None
+    try:
+        return int(raw.decode() if isinstance(raw, bytes) else str(raw))
+    except (TypeError, ValueError):
+        return None
+
+
+def _delta_after_proxy_cost(cost_usd: Decimal, proxy_cost_raw: object) -> Decimal:
+    """callback 应补记的成本：proxy 已 commit 的部分扣除，未记则全额。
+
+    仅非流式 proxy 会写 ``proxy_cost``；defer 流式 proxy 成本为 0、不写键，全额由 callback 落账。
+    """
+    proxy_cost = _redis_decimal(proxy_cost_raw)
+    if proxy_cost is None:
+        return cost_usd
+    return max(Decimal("0"), cost_usd - proxy_cost)
+
+
+def _delta_after_proxy_tokens(
+    total_tokens: int,
+    *,
+    proxy_tokens_raw: object,
+    proxy_settled: bool,
+) -> int:
+    """callback 应补记的 token，与 proxy settle_usage 协同去重（与 defer 无关）。
+
+    - proxy 未结算该请求（两个 proxy 键皆无）→ token 全额由 callback 记账；
+    - proxy 已记 token → 仅补 proxy 未覆盖的增量；
+    - proxy 已结算但未单独记 token（旧 proxy 仅记 cost / 两键非原子写入时 token 写失败）
+      → token 已随 proxy 结算计入，返回 0，避免在执法桶与汇总表双计。
+    """
+    if not proxy_settled:
+        return total_tokens
+    if proxy_tokens_raw is None:
+        return 0
+    proxy_tokens = _redis_int(proxy_tokens_raw)
+    if proxy_tokens is None:
+        return 0
+    return max(0, total_tokens - proxy_tokens)
+
+
 async def record_proxy_cost_commit(request_id: str, cost_usd: Decimal) -> None:
     """非流式 proxy 路径已 commit 的上游成本（供 callback 做 delta 修正）。"""
     if cost_usd <= 0:
@@ -92,35 +144,19 @@ async def commit_budget_from_callback(
         return
 
     defer = bool(metadata.get("gateway_defer_cost_settlement"))
-    proxy_key = f"{_PROXY_COST_PREFIX}{request_id}"
-    proxy_tokens_key = f"{_PROXY_TOKENS_PREFIX}{request_id}"
-    proxy_raw = await client.get(proxy_key)
-    proxy_tokens_raw = await client.get(proxy_tokens_key)
-    delta = cost_usd
-    delta_tokens = total_tokens
-    if not defer and proxy_raw is not None:
-        with suppress(Exception):
-            proxy_cost = Decimal(
-                proxy_raw.decode() if isinstance(proxy_raw, bytes) else str(proxy_raw)
-            )
-            delta = cost_usd - proxy_cost
-        if proxy_tokens_raw is not None:
-            try:
-                proxy_tokens = int(
-                    proxy_tokens_raw.decode()
-                    if isinstance(proxy_tokens_raw, bytes)
-                    else str(proxy_tokens_raw)
-                )
-                delta_tokens = max(0, total_tokens - proxy_tokens)
-            except (TypeError, ValueError):
-                delta_tokens = 0
-        else:
-            # 同次 proxy settle_usage 已写入 token（旧部署仅记 cost 时亦成立）
-            delta_tokens = 0
-        if delta <= 0 and delta_tokens <= 0:
-            return
-        if delta < 0:
-            delta = Decimal("0")
+    proxy_cost_raw = await client.get(f"{_PROXY_COST_PREFIX}{request_id}")
+    proxy_tokens_raw = await client.get(f"{_PROXY_TOKENS_PREFIX}{request_id}")
+    # 与 proxy settle_usage 协同去重：proxy 已记的 cost / token 一律扣减，仅补差额。
+    # 任一 proxy 键存在即表示 proxy 已结算该请求（token 已随结算计入）。
+    proxy_settled = proxy_cost_raw is not None or proxy_tokens_raw is not None
+    delta = _delta_after_proxy_cost(cost_usd, proxy_cost_raw)
+    delta_tokens = _delta_after_proxy_tokens(
+        total_tokens,
+        proxy_tokens_raw=proxy_tokens_raw,
+        proxy_settled=proxy_settled,
+    )
+    if delta <= 0 and delta_tokens <= 0:
+        return
 
     team_id = _to_uuid(metadata.get("gateway_team_id"))
     user_id = _to_uuid(metadata.get("gateway_user_id"))

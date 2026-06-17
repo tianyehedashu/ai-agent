@@ -1,4 +1,4 @@
-"""Platform 预算配额用量读路径：汇总表 + 日志窗口合并（展示 SSOT）。"""
+"""Platform 预算配额用量读路径：有桶优先，桶缺失时按请求日志窗口兜底（展示 SSOT）。"""
 
 from __future__ import annotations
 
@@ -12,14 +12,14 @@ from sqlalchemy import DateTime, and_, func, literal, select, tuple_, union_all
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 
 from domains.gateway.application.management.quota_plan_usage_reads import QuotaUsageTotals
-from domains.gateway.domain.platform_budget_display import (
-    PlatformBudgetLogScope,
-    platform_log_fallback_supported,
-)
 from domains.gateway.domain.period_reset_anchor import (
     DEFAULT_PERIOD_RESET_ANCHOR,
     PeriodResetAnchor,
     compute_period_window_start,
+)
+from domains.gateway.domain.platform_budget_display import (
+    PlatformBudgetLogScope,
+    platform_log_fallback_supported,
 )
 from domains.gateway.domain.quota_plan import PLATFORM_NS
 from domains.gateway.infrastructure.models.quota_plan_usage_bucket import (
@@ -63,18 +63,6 @@ class BudgetWindowKey:
 _ZERO_TOTALS = QuotaUsageTotals(Decimal("0"), 0, 0)
 
 
-def merge_platform_display_totals(
-    bucket: QuotaUsageTotals,
-    logs: QuotaUsageTotals,
-) -> QuotaUsageTotals:
-    """展示读合并：各维度取较大值，避免 bucket 初建截断历史窗口用量。"""
-    return QuotaUsageTotals(
-        cost_usd=max(bucket.cost_usd, logs.cost_usd),
-        tokens=max(bucket.tokens, logs.tokens),
-        requests=max(bucket.requests, logs.requests),
-    )
-
-
 def resolve_budget_window_key(lookup: BudgetWindowLookup, *, now: datetime) -> BudgetWindowKey:
     window_start = compute_period_window_start(now, lookup.period, lookup.period_reset_anchor)
     return BudgetWindowKey(budget_id=lookup.budget_id, window_start=window_start)
@@ -109,6 +97,11 @@ class PlatformBudgetUsageReadService:
         *,
         now: datetime | None = None,
     ) -> dict[BudgetWindowKey, QuotaUsageTotals]:
+        """有桶优先：存在汇总桶（含人工校正/清零写入的覆盖值）即以桶为准；
+        仅当桶缺失且维度可日志归因时，才用请求日志兜底。
+
+        与上下游 plan 读路径口径一致，避免 max 合并让人工下调被历史日志覆盖。
+        """
         if not items:
             return {}
 
@@ -120,36 +113,27 @@ class PlatformBudgetUsageReadService:
 
         bucket_rows = await self._load_buckets([k for k, _ in keys])
 
-        log_fallback_items = [
-            (key, lookup) for key, lookup in keys if platform_log_fallback_supported(lookup.log_scope())
-        ]
-        log_totals: dict[BudgetWindowKey, QuotaUsageTotals] = {}
-        if log_fallback_items:
-            log_totals = await self._aggregate_logs(log_fallback_items, until=when)
-
         result: dict[BudgetWindowKey, QuotaUsageTotals] = {}
+        missing_log_items: list[tuple[BudgetWindowKey, BudgetWindowLookup]] = []
         for key, lookup in keys:
-            bucket_key = (
-                PLATFORM_NS,
-                lookup.budget_id,
-                lookup.budget_id,
-                key.window_start,
+            row = bucket_rows.get(
+                (PLATFORM_NS, lookup.budget_id, lookup.budget_id, key.window_start)
             )
-            row = bucket_rows.get(bucket_key)
-            bucket_usage = (
-                QuotaUsageTotals(
+            if row is not None:
+                result[key] = QuotaUsageTotals(
                     cost_usd=Decimal(row.cost_usd or 0),
                     tokens=int(row.tokens or 0),
                     requests=int(row.requests or 0),
                 )
-                if row is not None
-                else _ZERO_TOTALS
-            )
-            if platform_log_fallback_supported(lookup.log_scope()):
-                logs_usage = log_totals.get(key, _ZERO_TOTALS)
-                result[key] = merge_platform_display_totals(bucket_usage, logs_usage)
+            elif platform_log_fallback_supported(lookup.log_scope()):
+                missing_log_items.append((key, lookup))
             else:
-                result[key] = bucket_usage
+                result[key] = _ZERO_TOTALS
+
+        if missing_log_items:
+            log_totals = await self._aggregate_logs(missing_log_items, until=when)
+            for key, _lookup in missing_log_items:
+                result[key] = log_totals.get(key, _ZERO_TOTALS)
 
         return result
 
@@ -224,6 +208,5 @@ __all__ = [
     "BudgetWindowKey",
     "BudgetWindowLookup",
     "PlatformBudgetUsageReadService",
-    "merge_platform_display_totals",
     "resolve_budget_window_key",
 ]

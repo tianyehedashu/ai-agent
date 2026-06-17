@@ -140,3 +140,111 @@ async def test_record_proxy_cost_commit() -> None:
     ):
         await record_proxy_cost_commit("req-x", Decimal("0.01"))
     mock_client.set.assert_awaited_once()
+
+
+def _dedup_session_patches(mock_client: AsyncMock, captured: dict) -> tuple:
+    """复用：mock Redis + PG 会话 + 平台预算累加，捕获 callback 实际补差。"""
+    mock_cm = MagicMock()
+    mock_cm.__aenter__ = AsyncMock(return_value=MagicMock())
+    mock_cm.__aexit__ = AsyncMock(return_value=None)
+
+    async def _fake_commit(_budget: object, **kwargs: object) -> None:
+        captured.update(kwargs)
+
+    return (
+        patch(
+            "domains.gateway.application.budget_callback_settlement.get_redis_client",
+            return_value=mock_client,
+        ),
+        patch(
+            "domains.gateway.application.budget_callback_settlement.BudgetService",
+            return_value=AsyncMock(),
+        ),
+        patch(
+            "domains.gateway.application.budget_callback_settlement.commit_cached_platform_budgets",
+            side_effect=_fake_commit,
+        ),
+        patch(
+            "domains.gateway.application.budget_callback_settlement.get_session_context",
+            return_value=mock_cm,
+        ),
+        patch(
+            "domains.gateway.application.budget_callback_settlement.BudgetRepository",
+        ),
+    )
+
+
+@pytest.mark.asyncio
+async def test_defer_dedups_proxy_tokens_fully() -> None:
+    """defer 流式：proxy 已记全部 token，callback 不得重复累加 token（回归 token 双计）。"""
+    mock_client = AsyncMock()
+    mock_client.set = AsyncMock(return_value=True)
+    # get 顺序：proxy_cost(None) → proxy_tokens(b"100")
+    mock_client.get = AsyncMock(side_effect=[None, b"100"])
+    captured: dict = {}
+
+    redis_p, budget_p, commit_p, session_p, repo_p = _dedup_session_patches(mock_client, captured)
+    with redis_p, budget_p, commit_p, session_p, repo_p as repo_cls:
+        repo_cls.return_value.get_for = AsyncMock(return_value=None)
+        await commit_budget_from_callback(
+            metadata={
+                "gateway_team_id": "00000000-0000-0000-0000-000000000099",
+                "gateway_defer_cost_settlement": True,
+            },
+            request_id="req-defer-tok",
+            cost_usd=Decimal("0.02"),
+            total_tokens=100,
+            budget_model=None,
+        )
+    assert captured["delta_tokens"] == 0
+    assert captured["delta_cost"] == Decimal("0.02")
+
+
+@pytest.mark.asyncio
+async def test_defer_dedups_proxy_tokens_partial() -> None:
+    """defer 流式：callback 仅补 proxy 未记的 token 增量。"""
+    mock_client = AsyncMock()
+    mock_client.set = AsyncMock(return_value=True)
+    mock_client.get = AsyncMock(side_effect=[None, b"60"])
+    captured: dict = {}
+
+    redis_p, budget_p, commit_p, session_p, repo_p = _dedup_session_patches(mock_client, captured)
+    with redis_p, budget_p, commit_p, session_p, repo_p as repo_cls:
+        repo_cls.return_value.get_for = AsyncMock(return_value=None)
+        await commit_budget_from_callback(
+            metadata={
+                "gateway_team_id": "00000000-0000-0000-0000-000000000099",
+                "gateway_defer_cost_settlement": True,
+            },
+            request_id="req-defer-tok2",
+            cost_usd=Decimal("0"),
+            total_tokens=100,
+            budget_model=None,
+        )
+    assert captured["delta_tokens"] == 40
+
+
+@pytest.mark.asyncio
+async def test_non_stream_proxy_cost_without_tokens_no_double_count() -> None:
+    """proxy 已结算但未单独记 token（旧 proxy 仅记 cost / token 写失败）：
+
+    callback 必须按「proxy 已结算」视为 token 已计入，仅补 cost 差额，不重复累加 token。
+    """
+    mock_client = AsyncMock()
+    mock_client.set = AsyncMock(return_value=True)
+    # get 顺序：proxy_cost(b"0.02") → proxy_tokens(None)
+    mock_client.get = AsyncMock(side_effect=[b"0.02", None])
+    captured: dict = {}
+
+    redis_p, budget_p, commit_p, session_p, repo_p = _dedup_session_patches(mock_client, captured)
+    with redis_p, budget_p, commit_p, session_p, repo_p as repo_cls:
+        repo_cls.return_value.get_for = AsyncMock(return_value=None)
+        await commit_budget_from_callback(
+            metadata={"gateway_team_id": "00000000-0000-0000-0000-000000000099"},
+            request_id="req-cost-no-tok",
+            cost_usd=Decimal("0.05"),
+            total_tokens=50,
+            budget_model=None,
+        )
+    assert captured["delta_tokens"] == 0
+    assert captured["delta_cost"] == Decimal("0.03")
