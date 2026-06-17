@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 
-import type { QuotaRule } from '@/api/gateway/quota-rules'
+import type { QuotaRule, QuotaRuleUsage } from '@/api/gateway/quota-rules'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -58,17 +58,21 @@ export function QuotaUsageInlineEditor({
   const dirty = usd !== baseline.usd || tokens !== baseline.tokens || requests !== baseline.requests
 
   const previewRule = useMemo((): QuotaRule => {
-    const usage = {
+    const usage: QuotaRuleUsage = {
       current_usd: Number.parseFloat(usd) || 0,
       current_tokens: Number.parseInt(tokens, 10) || 0,
       current_requests: Number.parseInt(requests, 10) || 0,
+      window_start: rule.usage?.window_start ?? null,
+      reset_at: rule.usage?.reset_at ?? null,
+      budget_reset_at: rule.usage?.budget_reset_at ?? null,
     }
     return { ...rule, usage }
   }, [requests, rule, tokens, usd])
 
   const { ratio, barColor } = computeQuotaRuleUsageRatio(previewRule)
   const hasLimits = limitUsd !== null || limitTok !== null
-  const showProgress = hasLimits && (canEdit || quotaUsageHasMetrics(rule.usage))
+  const showProgress =
+    hasLimits && (canEdit || (rule.usage !== null && quotaUsageHasMetrics(rule.usage)))
 
   const limitUsdLabel =
     limitUsd !== null ? `$${Number.parseFloat(String(limitUsd)).toFixed(2)}` : '∞'
