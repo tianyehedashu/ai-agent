@@ -57,6 +57,12 @@ class _FakeRedisPipeline:
     def hmget(self, *args: Any, **kwargs: Any) -> None:
         self._ops.append(("hmget", args, kwargs))
 
+    def hset(self, *args: Any, **kwargs: Any) -> None:
+        self._ops.append(("hset", args, kwargs))
+
+    def delete(self, *args: Any, **kwargs: Any) -> None:
+        self._ops.append(("delete", args, kwargs))
+
     def set(self, *args: Any, **kwargs: Any) -> None:
         self._ops.append(("set", args, kwargs))
 
@@ -103,6 +109,28 @@ class _FakeRedis:
     def hmget(self, key: str, fields: list[str]) -> list[str | None]:
         row = self.hashes.get(key, {})
         return [row.get(field) for field in fields]
+
+    def hset(self, key: str, mapping: dict[str, str] | None = None, **kwargs: Any) -> int:
+        _ = kwargs
+        if mapping is None:
+            return 0
+        row = self.hashes.setdefault(key, {})
+        row.update(mapping)
+        return len(mapping)
+
+    def delete(self, *keys: str) -> int:
+        removed = 0
+        for key in keys:
+            if key in self.hashes:
+                del self.hashes[key]
+                removed += 1
+            if key in self.zsets:
+                del self.zsets[key]
+                removed += 1
+            if key in self.values:
+                del self.values[key]
+                removed += 1
+        return removed
 
     def set(self, key: str, value: str, *, ex: int | None = None) -> bool:
         _ = ex
@@ -210,6 +238,50 @@ async def test_quota_plan_service_rolling_window_prunes_old_buckets(
 
     snap = (await service.snapshot(PROVIDER_NS, plan_id, [spec], now=later))[0]
     assert snap.used_requests == 0
+    assert not snap.exhausted
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_quota_plan_service_set_window_usage_replaces_window_totals(
+    fake_redis: _FakeRedis,
+) -> None:
+    _ = fake_redis
+    service = QuotaPlanService()
+    plan_id = uuid.uuid4()
+    spec = PlanQuotaSpec(
+        quota_id=uuid.uuid4(),
+        label="daily",
+        window_seconds=86400,
+        limit_tokens=10_000,
+        limit_requests=100,
+        limit_usd=Decimal("50"),
+    )
+    start = datetime(2026, 5, 18, 3, 0, tzinfo=UTC)
+    await service.check_and_reserve(PROVIDER_NS, plan_id, [spec], now=start)
+    await service.commit(
+        PROVIDER_NS,
+        plan_id,
+        [spec],
+        delta_tokens=500,
+        delta_usd=Decimal("1.00"),
+        now=start,
+    )
+
+    await service.set_window_usage(
+        PROVIDER_NS,
+        plan_id,
+        spec,
+        cost_usd=Decimal("9.50"),
+        tokens=2000,
+        requests=7,
+        now=start,
+    )
+
+    snap = (await service.snapshot(PROVIDER_NS, plan_id, [spec], now=start))[0]
+    assert snap.used_usd == Decimal("9.50")
+    assert snap.used_tokens == 2000
+    assert snap.used_requests == 7
     assert not snap.exhausted
 
 

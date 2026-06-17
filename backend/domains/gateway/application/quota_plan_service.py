@@ -237,6 +237,62 @@ class QuotaPlanService:
             logger.warning("QuotaPlanService.release failed for %s: %s", bkey, exc)
 
     # ------------------------------------------------------------------
+    # set_window_usage - 管理面手工校正（与 PG bucket 对齐）
+    # ------------------------------------------------------------------
+    async def set_window_usage(
+        self,
+        ns: QuotaPlanNamespace,
+        plan_id: uuid.UUID,
+        spec: PlanQuotaSpec,
+        *,
+        cost_usd: Decimal,
+        tokens: int,
+        requests: int,
+        now: datetime | None = None,
+    ) -> None:
+        """将当前窗口累计用量设为绝对值（清空窗口内旧分钟桶，写入当前分钟桶）。"""
+        when = now or datetime.now(UTC)
+        minute_unix = compute_minute_index(when)
+        client = await get_redis_client()
+        base = _quota_key_base(ns, plan_id, spec.quota_id)
+        ikey = _index_key(base)
+        bkey = _bucket_key(base, minute_unix)
+
+        if spec.window_seconds and spec.window_seconds > 0:
+            window_start_minute = compute_window_start_minute(
+                when,
+                spec.window_seconds,
+                strategy=spec.reset_strategy,
+                plan_valid_from=spec.plan_valid_from,
+                period_reset_anchor=spec.period_reset_anchor,
+            )
+            await client.zremrangebyscore(ikey, 0, window_start_minute - 1)
+
+        members_raw = await client.zrange(ikey, 0, -1, withscores=False)
+        pipe = client.pipeline()
+        for raw in members_raw:
+            try:
+                minute = int(raw.decode() if isinstance(raw, bytes) else raw)
+            except (ValueError, AttributeError):
+                continue
+            pipe.delete(_bucket_key(base, minute))
+        pipe.delete(f"{base}:forced_until")
+        pipe.delete(ikey)
+        pipe.hset(
+            bkey,
+            mapping={
+                "cost": str(cost_usd),
+                "tokens": str(tokens),
+                "requests": str(requests),
+            },
+        )
+        pipe.zadd(ikey, {str(minute_unix): minute_unix})
+        ttl = _bucket_ttl_seconds(spec)
+        pipe.expire(bkey, ttl)
+        pipe.expire(ikey, ttl)
+        await pipe.execute()
+
+    # ------------------------------------------------------------------
     # force_exhaust - 上游 429 / insufficient_quota 信号反馈
     # ------------------------------------------------------------------
     async def force_exhaust(

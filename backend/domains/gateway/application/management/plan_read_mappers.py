@@ -2,12 +2,18 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import TYPE_CHECKING
 
 from domains.gateway.application.management.plan_read_models import (
     EntitlementPlanReadModel,
     PlanQuotaReadModel,
     ProviderPlanReadModel,
+)
+from domains.gateway.domain.period_reset_anchor import period_reset_anchor_from_plan_quota
+from domains.gateway.domain.quota_plan import (
+    PlanQuotaSpec,
+    normalize_reset_strategy,
 )
 
 if TYPE_CHECKING:
@@ -53,6 +59,50 @@ def _entitlement_quota_from_orm(row: EntitlementPlanQuota) -> PlanQuotaReadModel
     )
 
 
+def provider_plan_quota_to_spec(
+    row: ProviderPlanQuota,
+    *,
+    plan_valid_from: datetime,
+) -> PlanQuotaSpec:
+    return PlanQuotaSpec(
+        quota_id=row.id,
+        label=row.label,
+        window_seconds=row.window_seconds,
+        limit_usd=row.limit_usd,
+        limit_tokens=row.limit_tokens,
+        limit_requests=row.limit_requests,
+        reset_strategy=normalize_reset_strategy(row.reset_strategy),
+        plan_valid_from=plan_valid_from,
+        period_reset_anchor=period_reset_anchor_from_plan_quota(
+            reset_timezone=row.reset_timezone,
+            reset_time_minutes=row.reset_time_minutes,
+            reset_day_of_month=row.reset_day_of_month,
+        ),
+    )
+
+
+def entitlement_plan_quota_to_spec(
+    row: EntitlementPlanQuota,
+    *,
+    plan_valid_from: datetime,
+) -> PlanQuotaSpec:
+    return PlanQuotaSpec(
+        quota_id=row.id,
+        label=row.label,
+        window_seconds=row.window_seconds,
+        limit_usd=row.limit_usd,
+        limit_tokens=row.limit_tokens,
+        limit_requests=row.limit_requests,
+        reset_strategy=normalize_reset_strategy(row.reset_strategy),
+        plan_valid_from=plan_valid_from,
+        period_reset_anchor=period_reset_anchor_from_plan_quota(
+            reset_timezone=row.reset_timezone,
+            reset_time_minutes=row.reset_time_minutes,
+            reset_day_of_month=row.reset_day_of_month,
+        ),
+    )
+
+
 def provider_plan_from_orm(
     plan: ProviderPlan,
     quotas: list[ProviderPlanQuota],
@@ -93,4 +143,9 @@ def entitlement_plan_from_orm(
     )
 
 
-__all__ = ["entitlement_plan_from_orm", "provider_plan_from_orm"]
+__all__ = [
+    "entitlement_plan_from_orm",
+    "entitlement_plan_quota_to_spec",
+    "provider_plan_from_orm",
+    "provider_plan_quota_to_spec",
+]

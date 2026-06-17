@@ -12,12 +12,6 @@ from domains.gateway.application.management.quota_usage_adjustment import (
 from domains.gateway.application.management.quota_usage_snapshot import enrich_quota_rules_with_usage
 from domains.gateway.application.management.write_modules._base import GatewayManagementWriteBaseMixin
 from domains.gateway.infrastructure.repositories.budget_repository import BudgetRepository
-from domains.gateway.infrastructure.repositories.entitlement_plan_repository import (
-    EntitlementPlanRepository,
-)
-from domains.gateway.infrastructure.repositories.provider_plan_repository import (
-    ProviderPlanRepository,
-)
 from libs.exceptions import NotFoundError, PermissionDeniedError, ValidationError
 
 if TYPE_CHECKING:
@@ -156,16 +150,18 @@ class QuotaUsageAdjustmentWritesMixin(GatewayManagementWriteBaseMixin):
             raise ValidationError(f"{cmd.layer} 用量校正需要 plan_id 与 quota_id")
 
         if cmd.layer == "upstream":
-            plan = await ProviderPlanRepository(self._session).get(cmd.plan_id)
-            if plan is None:
+            row = await self._provider_plans.get_with_quotas(cmd.plan_id)
+            if row is None:
                 raise NotFoundError(f"上游套餐不存在: {cmd.plan_id}")
-            read_model = provider_plan_from_orm(plan)
+            plan, quotas = row
+            read_model = provider_plan_from_orm(plan, quotas)
             rules = flatten_provider_plan(read_model, team_id=tenant_id)
         else:
-            plan = await EntitlementPlanRepository(self._session).get(cmd.plan_id)
-            if plan is None:
+            row = await self._entitlement_plans.get_with_quotas(cmd.plan_id)
+            if row is None:
                 raise NotFoundError(f"下游套餐不存在: {cmd.plan_id}")
-            read_model = entitlement_plan_from_orm(plan)
+            plan, quotas = row
+            read_model = entitlement_plan_from_orm(plan, quotas)
             rules = flatten_entitlement_plan(read_model, team_id=tenant_id)
 
         matched = next(

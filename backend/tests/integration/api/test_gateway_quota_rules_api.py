@@ -488,6 +488,122 @@ class TestGatewayQuotaRulesApi:
         assert body["usage"]["current_requests"] == 3
 
     @pytest.mark.asyncio
+    async def test_adjust_upstream_quota_usage(
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict[str, str],
+        db_session,
+        test_user: User,
+    ) -> None:
+        team = await TeamService(db_session).ensure_personal_team(test_user.id)
+        await db_session.commit()
+
+        r_cred = await dev_client.post(
+            f"/api/v1/gateway/teams/{team.id}/credentials",
+            headers=auth_headers,
+            json={
+                "provider": "openai",
+                "name": f"quota-adj-up-{uuid.uuid4().hex[:8]}",
+                "api_key": "sk-quota-adj-upstream-test-123456789",
+                "scope": "team",
+            },
+        )
+        assert r_cred.status_code == 201, r_cred.text
+        credential_id = r_cred.json()["id"]
+        real_model = "openai/gpt-4o-mini"
+
+        r_model = await dev_client.post(
+            f"/api/v1/gateway/teams/{team.id}/models",
+            headers=auth_headers,
+            json={
+                "name": f"quota-adj-model-{uuid.uuid4().hex[:8]}",
+                "capability": "chat",
+                "real_model": real_model,
+                "credential_id": credential_id,
+                "provider": "openai",
+            },
+        )
+        assert r_model.status_code == 201, r_model.text
+
+        r_batch = await dev_client.put(
+            f"/api/v1/gateway/teams/{team.id}/quota-rules/batch",
+            headers=auth_headers,
+            json={
+                "rules": [
+                    {
+                        "layer": "upstream",
+                        "credential_id": credential_id,
+                        "model_name": real_model,
+                        "window_seconds": 0,
+                        "quota_label": "default",
+                        "limit_usd": "20.00",
+                        "limit_requests": 3,
+                    }
+                ]
+            },
+        )
+        assert r_batch.status_code == 200, r_batch.text
+        rule = r_batch.json()["succeeded"][0]
+
+        r_adj = await dev_client.post(
+            f"/api/v1/gateway/teams/{team.id}/quota-rules/usage-adjustments",
+            headers=auth_headers,
+            json={
+                "layer": "upstream",
+                "plan_id": rule["source_ref"]["plan_id"],
+                "quota_id": rule["source_ref"]["quota_id"],
+                "mode": "set",
+                "current_usd": "3.25",
+                "current_tokens": 500,
+                "current_requests": 2,
+            },
+        )
+        assert r_adj.status_code == 200, r_adj.text
+        body = r_adj.json()
+        assert body["usage"] is not None
+        assert float(body["usage"]["current_usd"]) == 3.25
+        assert body["usage"]["current_tokens"] == 500
+        assert body["usage"]["current_requests"] == 2
+
+        from domains.gateway.application.management.plan_read_mappers import (
+            provider_plan_quota_to_spec,
+        )
+        from domains.gateway.application.quota_plan_service import get_quota_plan_service
+        from domains.gateway.domain.quota_plan import PROVIDER_NS
+        from domains.gateway.infrastructure.repositories.provider_plan_repository import (
+            ProviderPlanRepository,
+        )
+
+        plan_uuid = uuid.UUID(rule["source_ref"]["plan_id"])
+        quota_uuid = uuid.UUID(rule["source_ref"]["quota_id"])
+        loaded = await ProviderPlanRepository(db_session).get_with_quotas(plan_uuid)
+        assert loaded is not None
+        plan, quotas = loaded
+        quota_row = next(q for q in quotas if q.id == quota_uuid)
+        spec = provider_plan_quota_to_spec(quota_row, plan_valid_from=plan.valid_from)
+        snap = (await get_quota_plan_service().snapshot(PROVIDER_NS, plan_uuid, [spec]))[0]
+        assert snap.used_usd == Decimal("3.25")
+        assert snap.used_tokens == 500
+        assert snap.used_requests == 2
+
+        allowed = await get_quota_plan_service().check_and_reserve(
+            PROVIDER_NS,
+            plan_uuid,
+            [spec],
+            request_count=1,
+        )
+        assert allowed.allowed
+        blocked = await get_quota_plan_service().check_and_reserve(
+            PROVIDER_NS,
+            plan_uuid,
+            [spec],
+            request_count=1,
+        )
+        assert not blocked.allowed
+        assert blocked.exhausted_snapshot is not None
+        assert blocked.exhausted_snapshot.exhausted_reason == "requests"
+
+    @pytest.mark.asyncio
     async def test_adjust_usage_rejects_cross_team_budget(
         self,
         dev_client: AsyncClient,

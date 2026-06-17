@@ -13,10 +13,15 @@ from domains.gateway.application.management.budget_usage_reads import (
     BudgetWindowLookup,
     resolve_budget_window_key,
 )
+from domains.gateway.application.management.plan_read_mappers import (
+    entitlement_plan_quota_to_spec,
+    provider_plan_quota_to_spec,
+)
 from domains.gateway.application.management.quota_plan_usage_reads import (
     QuotaWindowLookup,
     resolve_quota_window_key,
 )
+from domains.gateway.application.quota_plan_service import get_quota_plan_service
 from domains.gateway.domain.period_reset_anchor import (
     period_reset_anchor_from_plan_quota,
     period_reset_anchor_from_row,
@@ -67,7 +72,7 @@ async def apply_quota_usage_adjustment(
     session: object,
     cmd: QuotaUsageAdjustmentCommand,
 ) -> None:
-    """写入 PG 汇总桶；platform 层同步 Redis 执法桶与 gateway_budgets.current_*。"""
+    """写入 PG 汇总桶并同步 Redis 执法桶（platform / plan 全层一致）。"""
     from sqlalchemy.ext.asyncio import AsyncSession
 
     if not isinstance(session, AsyncSession):
@@ -187,6 +192,20 @@ async def apply_quota_usage_adjustment(
         tokens=tokens,
         requests=requests,
         cost_usd=cost_usd,
+    )
+    quota_spec = (
+        provider_plan_quota_to_spec(quota, plan_valid_from=plan.valid_from)
+        if cmd.layer == "upstream"
+        else entitlement_plan_quota_to_spec(quota, plan_valid_from=plan.valid_from)
+    )
+    await get_quota_plan_service().set_window_usage(
+        ns,
+        cmd.plan_id,
+        quota_spec,
+        cost_usd=cost_usd,
+        tokens=tokens,
+        requests=requests,
+        now=now,
     )
 
 
