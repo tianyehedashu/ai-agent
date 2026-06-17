@@ -189,7 +189,10 @@ export function ModelDetailQuotaLayerPanel({
             userId: selfUserId,
             credentialOwnerId,
           })
-        const canDeleteRow = editable && rule.source_ref.budget_id !== null
+        const canDeleteRow =
+          editable &&
+          (rule.source_ref.budget_id !== null ||
+            (rule.source_ref.plan_id !== null && rule.source_ref.quota_id !== null))
         const canAdjustUsage =
           canWrite &&
           canEditQuotaRuleOnModelDetail(rule, {

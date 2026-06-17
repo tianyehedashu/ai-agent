@@ -149,6 +149,27 @@ export const quotaRulesApi = {
   /** 成员自助：删除本人「user + 本人凭据」的平台配额行 */
   deleteSelfQuotaRule: (teamId: string, budgetId: string) =>
     apiClient.delete<unknown>(teamGatewayPath(teamId, `/quota-rules/self/${budgetId}`)),
+  /** 团队管理员：删除单条上游 / 下游 plan 配额（仅 plan_id+quota_id、无 budget_id） */
+  deletePlanQuota: (
+    teamId: string,
+    params: { layer: 'upstream' | 'downstream'; planId: string; quotaId: string }
+  ) => {
+    const search = new URLSearchParams({
+      layer: params.layer,
+      plan_id: params.planId,
+      quota_id: params.quotaId,
+    })
+    return apiClient.delete<unknown>(
+      teamGatewayPath(teamId, `/quota-rules/plan?${search.toString()}`)
+    )
+  },
+  /** 成员自助：删除本人凭据上的单条上游 plan 配额 */
+  deleteSelfPlanQuota: (teamId: string, params: { planId: string; quotaId: string }) => {
+    const search = new URLSearchParams({ plan_id: params.planId, quota_id: params.quotaId })
+    return apiClient.delete<unknown>(
+      teamGatewayPath(teamId, `/quota-rules/self/plan?${search.toString()}`)
+    )
+  },
   adjustQuotaRuleUsage: (teamId: string, body: QuotaUsageAdjustmentBody) =>
     apiClient.post<QuotaRule>(teamGatewayPath(teamId, '/quota-rules/usage-adjustments'), body),
   adjustSelfQuotaRuleUsage: (teamId: string, body: QuotaUsageAdjustmentBody) =>

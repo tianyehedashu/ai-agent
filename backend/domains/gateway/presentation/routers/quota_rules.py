@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import cast
+from typing import Literal, cast
 import uuid
 
 from fastapi import APIRouter, Query, status
@@ -120,6 +120,46 @@ async def delete_self_quota_rule(
         budget_id,
         tenant_id=team.team_id,
         actor_user_id=team.user_id,
+    )
+
+
+@router.delete("/quota-rules/plan", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_plan_quota(
+    team: RequiredTeamAdmin,
+    writes: MgmtWrites,
+    layer: str = Query(pattern="^(upstream|downstream)$"),
+    plan_id: uuid.UUID = Query(),
+    quota_id: uuid.UUID = Query(),
+) -> None:
+    """团队管理员：删除单条上游 / 下游 plan 配额（删空套餐时连带删空套餐）。"""
+    await writes.delete_plan_quota(
+        layer=cast("Literal['upstream', 'downstream']", layer),
+        plan_id=plan_id,
+        quota_id=quota_id,
+        tenant_id=team.team_id,
+        actor_user_id=team.user_id,
+        is_platform_admin=team.is_platform_admin,
+        is_team_admin=is_team_admin_or_platform(team),
+    )
+
+
+@router.delete("/quota-rules/self/plan", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_self_plan_quota(
+    team: CurrentTeam,
+    writes: MgmtWrites,
+    plan_id: uuid.UUID = Query(),
+    quota_id: uuid.UUID = Query(),
+) -> None:
+    """成员自助：删除本人凭据上的单条上游 plan 配额。"""
+    await writes.delete_plan_quota(
+        layer="upstream",
+        plan_id=plan_id,
+        quota_id=quota_id,
+        tenant_id=team.team_id,
+        actor_user_id=team.user_id,
+        is_platform_admin=False,
+        is_team_admin=False,
+        member_self_service=True,
     )
 
 

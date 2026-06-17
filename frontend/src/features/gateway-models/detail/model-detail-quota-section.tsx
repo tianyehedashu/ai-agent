@@ -80,21 +80,22 @@ export function ModelDetailQuotaSection({
     [isPersonal, model.credential_id, model.real_model]
   )
 
-  const { submitForm, deleteRule, batchPending, deletePending } = useQuotaBatchSubmit({
-    teamId,
-    mode,
-    selfUserId: userId,
-    buildBatchRulesOptions: upstreamBatchRuleOptions,
-    onSuccess: () => {
-      setFormMode({ kind: 'closed' })
-    },
-  })
+  const { submitForm, deleteRule, deleteRuleEntity, batchPending, deletePending } =
+    useQuotaBatchSubmit({
+      teamId,
+      mode,
+      selfUserId: userId,
+      buildBatchRulesOptions: upstreamBatchRuleOptions,
+      onSuccess: () => {
+        setFormMode({ kind: 'closed' })
+      },
+    })
 
   const handleDeleteFromRow = (rule: QuotaRule): void => {
-    const budgetId = rule.source_ref.budget_id
-    if (!budgetId) return
+    const ref = rule.source_ref
+    if (ref.budget_id === null && (ref.plan_id === null || ref.quota_id === null)) return
     if (!window.confirm('确定删除此限额？')) return
-    deleteRule(budgetId)
+    deleteRuleEntity(rule)
   }
 
   if (!userId) return null

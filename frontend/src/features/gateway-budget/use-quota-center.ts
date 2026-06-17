@@ -4,7 +4,6 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 
 import {
-  gatewayApi,
   fetchAllGatewayModelPages,
   fetchAllManagedTeamModelPages,
   fetchAllPersonalGatewayModels,
@@ -51,6 +50,7 @@ import {
   type RealModelsByCredential,
 } from './quota-batch-rules'
 import { executeQuotaBatchUpsert } from './quota-batch-upsert'
+import { deleteQuotaRule, isQuotaRuleDeletable } from './quota-rule-delete'
 import {
   buildQuotaRuleModelLookupFromCatalog,
   buildAliasByRealModelFromLookup,
@@ -338,10 +338,7 @@ function useQuotaCenterImpl(): QuotaCenterState {
   })
 
   const deleteMutation = useMutation({
-    mutationFn: (budgetId: string) =>
-      mode === 'member'
-        ? gatewayApi.deleteSelfQuotaRule(teamId, budgetId)
-        : gatewayApi.deleteBudget(teamId, budgetId),
+    mutationFn: (rule: QuotaRule) => deleteQuotaRule(teamId, rule, mode),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: gatewayQuotaRulesBaseQueryKey(teamId) })
       void queryClient.invalidateQueries({ queryKey: gatewayBudgetsBaseQueryKey(teamId) })
@@ -656,13 +653,12 @@ function useQuotaCenterImpl(): QuotaCenterState {
 
   const confirmDelete = useCallback(
     (rule: QuotaRule) => {
-      const budgetId = rule.source_ref.budget_id
-      if (!budgetId) {
-        toast({ title: '计划类配额请至模型详情或 Key 页管理', variant: 'destructive' })
+      if (!isQuotaRuleDeletable(rule)) {
+        toast({ title: '该配额暂不支持在此删除', variant: 'destructive' })
         return
       }
       // P11: 删除确认 — 直接执行删除，由调用方展示确认对话框
-      deleteMutation.mutate(budgetId)
+      deleteMutation.mutate(rule)
     },
     [deleteMutation, toast]
   )
@@ -670,12 +666,11 @@ function useQuotaCenterImpl(): QuotaCenterState {
   /** 编辑模式下删除当前规则 */
   const deleteEditingRule = useCallback(() => {
     if (!editingRule) return
-    const budgetId = editingRule.source_ref.budget_id
-    if (!budgetId) {
-      toast({ title: '计划类配额请至模型详情或 Key 页管理', variant: 'destructive' })
+    if (!isQuotaRuleDeletable(editingRule)) {
+      toast({ title: '该配额暂不支持在此删除', variant: 'destructive' })
       return
     }
-    deleteMutation.mutate(budgetId, {
+    deleteMutation.mutate(editingRule, {
       onSuccess: () => {
         setBatchOpen(false)
       },
@@ -684,21 +679,15 @@ function useQuotaCenterImpl(): QuotaCenterState {
 
   const confirmBatchDelete = useCallback(
     async (rules: QuotaRule[]) => {
-      const deletable = rules.filter((r) => r.source_ref.budget_id !== null)
+      const deletable = rules.filter(isQuotaRuleDeletable)
       if (deletable.length === 0) {
         toast({
-          title: '所选规则均不可删除（计划类配额请至模型详情或 Key 页管理）',
+          title: '所选规则均不可删除',
           variant: 'destructive',
         })
         return
       }
-      const results = await Promise.allSettled(
-        deletable.map((r) => {
-          const budgetId = r.source_ref.budget_id
-          // deletable 已过滤 budget_id !== null，此处安全断言
-          return deleteMutation.mutateAsync(budgetId as string)
-        })
-      )
+      const results = await Promise.allSettled(deletable.map((r) => deleteMutation.mutateAsync(r)))
       const succeeded = results.filter((r) => r.status === 'fulfilled').length
       const failed = results.filter((r) => r.status === 'rejected').length
       if (failed > 0) {

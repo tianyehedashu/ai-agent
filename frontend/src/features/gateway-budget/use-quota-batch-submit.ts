@@ -2,13 +2,14 @@ import { useCallback } from 'react'
 
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 
-import type { QuotaRuleUpsertBody } from '@/api/gateway'
+import type { QuotaRule, QuotaRuleUpsertBody } from '@/api/gateway'
 import { gatewayApi } from '@/api/gateway'
 import { useActorCredentialSummaries } from '@/features/gateway-credentials/hooks/use-actor-credential-summaries'
 import { useToast } from '@/hooks/use-toast'
 
 import { buildBatchRules, type BuildBatchRulesOptions } from './quota-batch-rules'
 import { collectQuotaBatchInvalidationTeamIds, executeQuotaBatchUpsert } from './quota-batch-upsert'
+import { deleteQuotaRule } from './quota-rule-delete'
 import { gatewayBudgetsBaseQueryKey } from './use-gateway-budgets'
 import { gatewayQuotaRulesBaseQueryKey } from './use-gateway-quota-rules'
 
@@ -43,6 +44,7 @@ export function useQuotaBatchSubmit({
 }: UseQuotaBatchSubmitOptions): {
   submitForm: (values: QuotaBatchFormValues) => void
   deleteRule: (budgetId: string) => void
+  deleteRuleEntity: (rule: QuotaRule) => void
   batchPending: boolean
   deletePending: boolean
 } {
@@ -77,10 +79,12 @@ export function useQuotaBatchSubmit({
   })
 
   const deleteMutation = useMutation({
-    mutationFn: (budgetId: string) =>
-      mode === 'member'
-        ? gatewayApi.deleteSelfQuotaRule(teamId, budgetId)
-        : gatewayApi.deleteBudget(teamId, budgetId),
+    mutationFn: (target: string | QuotaRule) =>
+      typeof target === 'string'
+        ? mode === 'member'
+          ? gatewayApi.deleteSelfQuotaRule(teamId, target)
+          : gatewayApi.deleteBudget(teamId, target)
+        : deleteQuotaRule(teamId, target, mode),
     onSuccess: () => {
       invalidateQuotaCaches(queryClient, [teamId])
       toast({ title: '已删除配额规则' })
@@ -158,9 +162,17 @@ export function useQuotaBatchSubmit({
     [deleteMutation]
   )
 
+  const deleteRuleEntity = useCallback(
+    (rule: QuotaRule): void => {
+      deleteMutation.mutate(rule)
+    },
+    [deleteMutation]
+  )
+
   return {
     submitForm,
     deleteRule,
+    deleteRuleEntity,
     batchPending: batchMutation.isPending,
     deletePending: deleteMutation.isPending,
   }

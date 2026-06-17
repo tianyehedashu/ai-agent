@@ -240,6 +240,21 @@ class ProviderPlanRepository:
         await self._session.flush()
         return [await self.add_quota(plan_id=plan_id, **q) for q in quotas]
 
+    async def delete_quota(self, plan_id: uuid.UUID, quota_id: uuid.UUID) -> bool:
+        """删除套餐下单条配额；命中返回 True，否则 False（按 plan 限定避免越权）。"""
+        result = await self._session.execute(
+            select(ProviderPlanQuota).where(
+                ProviderPlanQuota.plan_id == plan_id,
+                ProviderPlanQuota.id == quota_id,
+            )
+        )
+        quota = result.scalar_one_or_none()
+        if quota is None:
+            return False
+        await self._session.delete(quota)
+        await self._session.flush()
+        return True
+
     async def get_with_quotas(
         self, plan_id: uuid.UUID
     ) -> tuple[ProviderPlan, list[ProviderPlanQuota]] | None:
