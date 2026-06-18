@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
-from typing import TYPE_CHECKING, Final, cast
+from typing import TYPE_CHECKING, cast
 import uuid
 
 from sqlalchemy import DateTime, and_, func, literal, select, tuple_, union_all
@@ -19,6 +19,7 @@ from domains.gateway.domain.quota_plan import (
     PROVIDER_NS,
     QuotaPlanNamespace,
     compute_window_start_datetime,
+    is_sliding_rolling_window,
     normalize_reset_strategy,
 )
 from domains.gateway.infrastructure.models.quota_plan_usage_bucket import (
@@ -28,11 +29,6 @@ from domains.gateway.infrastructure.models.request_log import GatewayRequestLog
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
-
-# 滚动窗口的 window_start 每分钟滑动，按它落/查 PG 汇总桶必然错位（写出每分钟一行、
-# 读到的桶只含当前分钟而严重低估）。滚动一律按 [window_start, now] 直接聚合日志，
-# 与执法侧 Redis 分钟桶滑动求和口径一致。
-_ROLLING_STRATEGY: Final[str] = "rolling"
 
 
 @dataclass(frozen=True)
@@ -107,18 +103,21 @@ class QuotaPlanUsageReadService:
             (resolve_quota_window_key(item, now=when), item) for item in items
         ]
 
-        # 滚动窗口不查桶（口径错位），直接进日志聚合；其余策略仍「有桶优先」。
+        # 真正的滚动窗口（window_seconds>0 且 rolling）window_start 每分钟滑动，按它落/查 PG
+        # 汇总桶必然错位（写出每分钟一行、读到的桶只含当前分钟而严重低估），故跳桶、直接按
+        # [window_start, now] 聚合日志，与执法侧 Redis 分钟桶滑动求和口径一致；window_seconds<=0
+        # 的累计（总额）即便策略名是 rolling 也按固定累计「有桶优先」。
         bucket_keys = [
             key
             for key, item in keyed_items
-            if normalize_reset_strategy(item.reset_strategy) != _ROLLING_STRATEGY
+            if not is_sliding_rolling_window(item.window_seconds, item.reset_strategy)
         ]
         bucket_rows = await self._load_buckets(bucket_keys)
         result: dict[QuotaWindowKey, QuotaUsageTotals] = {}
         missing_log_windows: dict[_LogWindowKey, list[QuotaWindowKey]] = {}
 
         for key, item in keyed_items:
-            if normalize_reset_strategy(item.reset_strategy) != _ROLLING_STRATEGY:
+            if not is_sliding_rolling_window(item.window_seconds, item.reset_strategy):
                 row = bucket_rows.get(key)
                 if row is not None:
                     result[key] = QuotaUsageTotals(

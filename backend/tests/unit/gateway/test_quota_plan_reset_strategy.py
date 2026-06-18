@@ -16,6 +16,7 @@ from domains.gateway.domain.quota_plan import (
     compute_window_start_datetime,
     compute_window_start_minute,
     default_reset_strategy_for_window,
+    is_sliding_rolling_window,
     normalize_reset_strategy,
 )
 from domains.gateway.infrastructure.callbacks.custom_logger import (
@@ -35,6 +36,16 @@ class TestQuotaPlanResetStrategy:
         assert default_reset_strategy_for_window(2592000) == "calendar_monthly_utc"
         assert default_reset_strategy_for_window(18000) == "rolling"
         assert default_reset_strategy_for_window(0) == "rolling"
+
+    def test_is_sliding_rolling_window(self) -> None:
+        # 仅 window_seconds>0 且 rolling 才算真滚动。
+        assert is_sliding_rolling_window(18000, "rolling") is True
+        assert is_sliding_rolling_window(86400, "rolling") is True
+        # 日历策略不是滚动。
+        assert is_sliding_rolling_window(86400, "calendar_daily_utc") is False
+        # 累计（window<=0）即便策略名是 rolling 也不算滚动 → 可正常落桶/校正。
+        assert is_sliding_rolling_window(0, "rolling") is False
+        assert is_sliding_rolling_window(-1, "rolling") is False
 
     def test_compute_window_start_datetime_matches_minute_index(self) -> None:
         now = datetime(2026, 5, 18, 11, 20, tzinfo=UTC)

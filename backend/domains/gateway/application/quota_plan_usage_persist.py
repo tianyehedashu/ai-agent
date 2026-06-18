@@ -13,6 +13,7 @@ from domains.gateway.domain.quota_plan import (
     PlanQuotaSpec,
     QuotaPlanNamespace,
     compute_window_start_datetime,
+    is_sliding_rolling_window,
 )
 from domains.gateway.infrastructure.repositories.quota_plan_usage_bucket_repository import (
     QuotaPlanUsageBucketRepository,
@@ -58,9 +59,12 @@ async def _upsert_quota_plan_usage(
     request_id: str,
     settled_at: datetime,
 ) -> None:
-    # 滚动窗口的 window_start 每分钟滑动，落桶会产生每分钟一行的垃圾且无法被读路径正确
-    # 命中（详见 quota_plan_usage_reads）。滚动一律不落 PG 桶，展示读直接聚合日志。
-    persist_specs = [spec for spec in specs if spec.reset_strategy != "rolling"]
+    # 真正的滚动窗口（window_seconds>0 且 rolling）window_start 每分钟滑动，落桶会产生每分钟
+    # 一行的垃圾且无法被读路径正确命中（详见 quota_plan_usage_reads），故不落 PG 桶、展示读直接
+    # 聚合日志。window_seconds<=0 的累计（总额）即便策略名是 rolling 也按固定累计正常落桶。
+    persist_specs = [
+        spec for spec in specs if not is_sliding_rolling_window(spec.window_seconds, spec.reset_strategy)
+    ]
     if not persist_specs:
         return
     if not await _acquire_bucket_upsert_once(ns, request_id):

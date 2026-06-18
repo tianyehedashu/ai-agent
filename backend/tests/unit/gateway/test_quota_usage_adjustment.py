@@ -145,3 +145,45 @@ async def test_apply_upstream_rolling_adjustment_rejected(db_session) -> None:
                 current_tokens=100,
             ),
         )
+
+
+@pytest.mark.asyncio
+async def test_apply_upstream_total_rolling_adjustment_allowed(db_session) -> None:
+    """累计（window=0）即便策略名是 rolling 也可校正：不应被滚动守卫误拒。"""
+    from datetime import timedelta
+
+    from domains.gateway.application.management.quota_usage_adjustment import (
+        apply_quota_usage_adjustment,
+    )
+    from domains.gateway.infrastructure.repositories.provider_plan_repository import (
+        ProviderPlanRepository,
+    )
+
+    now = datetime.now(UTC)
+    repo = ProviderPlanRepository(db_session)
+    plan = await repo.create(
+        credential_id=uuid.uuid4(),
+        real_model=None,
+        label="total-pack",
+        valid_from=now,
+        valid_until=now + timedelta(days=30),
+    )
+    quota = await repo.add_quota(
+        plan_id=plan.id,
+        label="total",
+        window_seconds=0,
+        reset_strategy="rolling",
+        limit_tokens=1_000_000,
+    )
+
+    # 不抛 ValidationError 即为通过（累计型允许校正）。
+    await apply_quota_usage_adjustment(
+        db_session,
+        QuotaUsageAdjustmentCommand(
+            layer="upstream",
+            plan_id=plan.id,
+            quota_id=quota.id,
+            mode="set",
+            current_tokens=123,
+        ),
+    )

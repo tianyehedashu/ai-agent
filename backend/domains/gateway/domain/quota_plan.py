@@ -91,6 +91,17 @@ def default_reset_strategy_for_window(window_seconds: int) -> ResetStrategy:
     return RESET_STRATEGY_DEFAULT
 
 
+def is_sliding_rolling_window(window_seconds: int, reset_strategy: str) -> bool:
+    """是否为「真正的滚动窗口」（用量随时间连续滑动、无固定重置时刻）。
+
+    仅当 ``window_seconds > 0`` 且策略为 ``rolling`` 时成立。``window_seconds <= 0``
+    表示整套餐有效期累计（总额），即便历史上把 ``reset_strategy`` 默认存成了
+    ``rolling``，它也按固定累计处理（窗口起点 = 套餐生效时刻），可正常落桶 / 校正。
+    展示读跳桶、落库跳桶、用量校正拒绝等"滚动特判"统一以此为单一真源。
+    """
+    return window_seconds > 0 and normalize_reset_strategy(reset_strategy) == "rolling"
+
+
 @dataclass(frozen=True)
 class PlanQuotaSpec:
     """套餐内单层桶的纯值对象。
@@ -349,5 +360,6 @@ __all__ = [
     "compute_window_start_datetime",
     "compute_window_start_minute",
     "default_reset_strategy_for_window",
+    "is_sliding_rolling_window",
     "normalize_reset_strategy",
 ]

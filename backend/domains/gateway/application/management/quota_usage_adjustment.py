@@ -30,7 +30,7 @@ from domains.gateway.domain.quota_plan import (
     ENTITLEMENT_NS,
     PLATFORM_NS,
     PROVIDER_NS,
-    normalize_reset_strategy,
+    is_sliding_rolling_window,
 )
 from domains.gateway.infrastructure.repositories.budget_repository import BudgetRepository
 from domains.gateway.infrastructure.repositories.entitlement_plan_repository import (
@@ -179,9 +179,10 @@ async def apply_quota_usage_adjustment(
         )
         plan_valid_from = plan.valid_from
 
-    # 滚动窗口用量由请求日志实时统计（展示读忽略 PG 桶），手工校正 / 清零写桶不会反映到
-    # 展示，徒增误解。直接拒绝并引导改用固定日历周期。
-    if normalize_reset_strategy(reset_strategy) == "rolling":
+    # 真正的滚动窗口（window_seconds>0 且 rolling）用量由请求日志实时统计（展示读忽略
+    # PG 桶），手工校正 / 清零写桶不会反映到展示，徒增误解，直接拒绝并引导改固定周期。
+    # 注意：window_seconds<=0 的累计（总额）即便策略名是 rolling 也按固定累计，允许校正。
+    if is_sliding_rolling_window(window_seconds, reset_strategy):
         raise ValidationError(
             "滚动窗口配额用量由请求日志实时统计，不支持手工校正 / 清零；"
             "如需可校正 / 到点重置，请将该配额改为每日 / 每月固定周期。"
