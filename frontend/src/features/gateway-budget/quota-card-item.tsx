@@ -6,7 +6,7 @@ import type { QuotaRule } from '@/api/gateway/quota-rules'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
-import { Pencil, Trash2 } from '@/lib/lucide-icons'
+import { Copy, Pencil, Trash2 } from '@/lib/lucide-icons'
 import { cn } from '@/lib/utils'
 
 import { isQuotaRuleDeletable } from './quota-rule-delete'
@@ -28,6 +28,8 @@ export interface QuotaCardItemProps {
   onClick?: (rule: QuotaRule) => void
   isSelected?: boolean
   onEdit?: (rule: QuotaRule) => void
+  onAddFromRule?: (rule: QuotaRule) => void
+  canAddFromRule?: (rule: QuotaRule) => boolean
   onDelete?: (rule: QuotaRule) => void
   formDisabled?: boolean
 }
@@ -38,6 +40,8 @@ export function QuotaCardItem({
   onClick,
   isSelected,
   onEdit,
+  onAddFromRule,
+  canAddFromRule,
   onDelete,
   formDisabled = false,
 }: QuotaCardItemProps): React.JSX.Element {
@@ -47,6 +51,7 @@ export function QuotaCardItem({
   const usage = rule.usage
   const canEdit = rule.source_ref.budget_id !== null || rule.source_ref.quota_id !== null
   const canDelete = isQuotaRuleDeletable(rule)
+  const canCopyAdd = !formDisabled && (canAddFromRule?.(rule) ?? false)
   const periodWindow = formatQuotaRulePeriodWindow(rule)
   const sourceLabel = resolveQuotaRuleSourceLabel(rule)
 
@@ -103,6 +108,20 @@ export function QuotaCardItem({
                 title="编辑配额"
               >
                 <Pencil className="h-3 w-3 text-muted-foreground" />
+              </Button>
+            ) : null}
+            {canCopyAdd && onAddFromRule ? (
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-6 w-6"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onAddFromRule(rule)
+                }}
+                title="复制为新配额"
+              >
+                <Copy className="h-3 w-3 text-muted-foreground" />
               </Button>
             ) : null}
             {canDelete && onDelete ? (

@@ -131,7 +131,7 @@ export function QuotaCenterWorkspace(): React.JSX.Element {
           <Button
             disabled={ws.formDisabled}
             onClick={() => {
-              ws.setBatchOpen(true)
+              ws.openBatchCreate()
             }}
           >
             {isMember ? '设置我的配额' : '批量设置'}
@@ -254,6 +254,9 @@ export function QuotaCenterWorkspace(): React.JSX.Element {
           labelContext={ws.labelContext}
           onSelect={ws.selectRule}
           onEdit={ws.onEditRule}
+          onAddFromRule={ws.onAddFromRule}
+          canAddFromRule={ws.canAddFromRule}
+          onCreate={ws.openBatchCreate}
           onDelete={handleDelete}
           onBatchDelete={handleBatchDelete}
         />
@@ -267,6 +270,9 @@ export function QuotaCenterWorkspace(): React.JSX.Element {
           onViewModeChange={setViewMode}
           onSelect={ws.selectRule}
           onEdit={ws.onEditRule}
+          onAddFromRule={ws.onAddFromRule}
+          canAddFromRule={ws.canAddFromRule}
+          onCreate={ws.openBatchCreate}
           onDelete={handleDelete}
           formDisabled={ws.formDisabled}
         />

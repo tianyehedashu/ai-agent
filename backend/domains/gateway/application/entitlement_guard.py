@@ -23,6 +23,13 @@ import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from domains.gateway.application.entitlement_config_cache import (
+    enforceable_quotas,
+    entitlement_plan_rows_from_orm,
+    entitlement_quota_to_spec,
+    get_cached_entitlement_plans,
+    select_active_plan_config,
+)
 from domains.gateway.application.entitlement_model_status import ENTITLEMENT_RESETTING_SOON_SECONDS
 from domains.gateway.domain.errors import EntitlementPlanExhaustedError
 from domains.gateway.domain.period_reset_anchor import period_reset_anchor_from_plan_quota
@@ -42,6 +49,7 @@ from domains.gateway.infrastructure.repositories.entitlement_plan_repository imp
 )
 
 if TYPE_CHECKING:
+    from domains.gateway.application.entitlement_config_cache import EntitlementPlanConfigRow
     from domains.gateway.application.quota_plan_service import QuotaPlanService
     from domains.gateway.infrastructure.models.entitlement_plan import (
         EntitlementPlan,
@@ -130,29 +138,30 @@ class EntitlementGuard:
     ) -> EntitlementCheckResult:
         """没有匹配 plan = 默认放行；命中 plan 但任一桶耗尽 → 抛错。"""
         when = now or datetime.now(UTC)
-        plan = await self._resolve_active_plan(ctx, when=when)
+        empty = EntitlementCheckResult(
+            plan_id=None,
+            plan_label=None,
+            specs=[],
+            reservations=[],
+            quota_quotas_unit_prices={},
+        )
+        scope_pair = self._scope_from_ctx(ctx)
+        if scope_pair is None:
+            return empty
+        scope, scope_id = scope_pair
+        rows = await get_cached_entitlement_plans(
+            scope, scope_id, loader=lambda: self._load_plan_configs(scope, scope_id)
+        )
+        plan = select_active_plan_config(
+            rows, virtual_model=ctx.virtual_model, capability=ctx.capability
+        )
         if plan is None:
-            return EntitlementCheckResult(
-                plan_id=None,
-                plan_label=None,
-                specs=[],
-                reservations=[],
-                quota_quotas_unit_prices={},
-            )
-        quotas = [
-            q
-            for q in await self._repo.list_quotas(plan.id)
-            if is_quota_row_enforceable(
-                enabled=q.enabled,
-                valid_from=q.valid_from,
-                valid_until=q.valid_until,
-                now=when,
-            )
-        ]
-        specs = [_quota_to_spec(q) for q in quotas]
+            return empty
+        quotas = enforceable_quotas(plan, now=when)
+        specs = [entitlement_quota_to_spec(q) for q in quotas]
         if not specs:
             return EntitlementCheckResult(
-                plan_id=plan.id,
+                plan_id=plan.plan_id,
                 plan_label=plan.label,
                 specs=[],
                 reservations=[],
@@ -160,7 +169,7 @@ class EntitlementGuard:
             )
         result = await self._quota.check_and_reserve(
             ENTITLEMENT_NS,
-            plan.id,
+            plan.plan_id,
             specs,
             estimate_tokens=estimate_tokens,
             now=when,
@@ -172,16 +181,16 @@ class EntitlementGuard:
             label = exhausted.spec.label if exhausted is not None else "(unknown)"
             reason = exhausted.exhausted_reason or "requests" if exhausted else "requests"
             raise EntitlementPlanExhaustedError(
-                plan_id=str(plan.id),
+                plan_id=str(plan.plan_id),
                 quota_label=label,
                 reason=reason,
                 retry_at=retry_at,
             )
         unit_prices: dict[uuid.UUID, tuple[Decimal | None, Decimal | None]] = {
-            q.id: (q.unit_price_usd_per_token, q.unit_price_usd_per_request) for q in quotas
+            q.quota_id: (q.unit_price_usd_per_token, q.unit_price_usd_per_request) for q in quotas
         }
         return EntitlementCheckResult(
-            plan_id=plan.id,
+            plan_id=plan.plan_id,
             plan_label=plan.label,
             specs=specs,
             reservations=result.reservations,
@@ -217,27 +226,20 @@ class EntitlementGuard:
             return
         await self._quota.release(ENTITLEMENT_NS, plan_id, reservations)
 
-    async def _resolve_active_plan(
-        self, ctx: EntitlementContext, *, when: datetime
-    ) -> EntitlementPlan | None:
-        """优先按 vkey 查；否则按 apikey_grant 查；都没有则返回 None。"""
+    @staticmethod
+    def _scope_from_ctx(ctx: EntitlementContext) -> tuple[str, uuid.UUID] | None:
+        """优先按 vkey 解析；否则按 apikey_grant；都没有则返回 None（默认放行）。"""
         if ctx.vkey_id is not None:
-            return await self._repo.get_active_for_scope(
-                ENTITLEMENT_SCOPE_VKEY,
-                ctx.vkey_id,
-                virtual_model=ctx.virtual_model,
-                capability=ctx.capability,
-                now=when,
-            )
+            return ENTITLEMENT_SCOPE_VKEY, ctx.vkey_id
         if ctx.apikey_grant_id is not None:
-            return await self._repo.get_active_for_scope(
-                ENTITLEMENT_SCOPE_APIKEY_GRANT,
-                ctx.apikey_grant_id,
-                virtual_model=ctx.virtual_model,
-                capability=ctx.capability,
-                now=when,
-            )
+            return ENTITLEMENT_SCOPE_APIKEY_GRANT, ctx.apikey_grant_id
         return None
+
+    async def _load_plan_configs(
+        self, scope: str, scope_id: uuid.UUID
+    ) -> tuple[EntitlementPlanConfigRow, ...]:
+        pairs = await self._repo.list_with_quotas_for_scope(scope, scope_id)
+        return entitlement_plan_rows_from_orm(pairs)
 
     async def status_for_models(
         self,

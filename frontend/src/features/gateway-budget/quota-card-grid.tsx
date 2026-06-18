@@ -35,7 +35,10 @@ interface QuotaCardGridProps {
   onViewModeChange: (mode: QuotaViewMode) => void
   onSelect: (rule: QuotaRule) => void
   onEdit?: (rule: QuotaRule) => void
+  onAddFromRule?: (rule: QuotaRule) => void
+  canAddFromRule?: (rule: QuotaRule) => boolean
   onDelete?: (rule: QuotaRule) => void
+  onCreate?: () => void
   formDisabled?: boolean
 }
 
@@ -129,7 +132,10 @@ export function QuotaCardGrid({
   onViewModeChange,
   onSelect,
   onEdit,
+  onAddFromRule,
+  canAddFromRule,
   onDelete,
+  onCreate,
   formDisabled = false,
 }: QuotaCardGridProps): React.JSX.Element {
   const [groupBy, setGroupBy] = useState<QuotaGroupBy>('none')
@@ -175,7 +181,16 @@ export function QuotaCardGrid({
   }
 
   if (items.length === 0) {
-    return <div className="py-12 text-center text-sm text-muted-foreground">暂无配额规则</div>
+    return (
+      <div className="flex flex-col items-center gap-3 py-12 text-center text-sm text-muted-foreground">
+        <span>暂无配额规则</span>
+        {!formDisabled && onCreate ? (
+          <Button size="sm" onClick={onCreate}>
+            新增配额
+          </Button>
+        ) : null}
+      </div>
+    )
   }
 
   return (
@@ -268,6 +283,8 @@ export function QuotaCardGrid({
                     isSelected={selectedId === rowId}
                     onClick={onSelect}
                     onEdit={onEdit}
+                    onAddFromRule={onAddFromRule}
+                    canAddFromRule={canAddFromRule}
                     onDelete={onDelete}
                     formDisabled={formDisabled}
                   />

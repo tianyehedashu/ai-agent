@@ -11,12 +11,7 @@ import { teamGatewayPath } from './_base'
 
 // ---------- 配额公共类型 ----------
 
-export type PlanResetStrategy =
-  | 'rolling'
-  | 'calendar_daily_utc'
-  | 'calendar_monthly_utc'
-  | 'plan_anniversary'
-
+export type PlanResetStrategy = 'rolling' | 'calendar_daily_utc' | 'calendar_monthly_utc'
 /** 套餐配额输入 */
 export interface PlanQuotaInput {
   label: string
@@ -65,11 +60,8 @@ export interface EntitlementPlan {
   scope_id: string
   label: string
   valid_from: string
-  valid_until: string
   included_models: string[]
   included_capabilities: string[]
-  is_active: boolean
-  auto_renew: boolean
   notes: string | null
   extra: Record<string, unknown> | null
   quotas: EntitlementPlanQuota[]
@@ -78,11 +70,8 @@ export interface EntitlementPlan {
 export interface EntitlementPlanCreateBody {
   label: string
   valid_from: string
-  valid_until: string
   included_models?: string[]
   included_capabilities?: string[]
-  is_active?: boolean
-  auto_renew?: boolean
   notes?: string | null
   extra?: Record<string, unknown> | null
   quotas?: EntitlementPlanQuotaInput[]
@@ -91,11 +80,8 @@ export interface EntitlementPlanCreateBody {
 export interface EntitlementPlanUpdateBody {
   label?: string
   valid_from?: string
-  valid_until?: string
   included_models?: string[]
   included_capabilities?: string[]
-  is_active?: boolean
-  auto_renew?: boolean
   notes?: string | null
   extra?: Record<string, unknown> | null
   quotas?: EntitlementPlanQuotaInput[]

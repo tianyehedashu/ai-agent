@@ -8,7 +8,7 @@ import uuid
 
 import pytest
 
-from domains.gateway.application import provider_plan_callback_settlement as mod
+from domains.gateway.application import provider_quota_callback_settlement as mod
 from domains.gateway.domain.quota_plan import PlanQuotaSpec, QuotaPlanReservation
 
 
@@ -26,12 +26,12 @@ async def test_commit_provider_quota_on_success(monkeypatch) -> None:
     guard.commit_rule = AsyncMock()
     guard.release_rule = AsyncMock()
     monkeypatch.setattr(mod, "get_provider_quota_guard", lambda: guard)
-    monkeypatch.setattr(mod, "_load_rule_spec", AsyncMock(return_value=spec))
+    monkeypatch.setattr(mod, "_load_rule_specs", AsyncMock(return_value={rule_id: spec}))
     monkeypatch.setattr(mod, "acquire_settlement_once", AsyncMock(return_value=True))
     schedule = MagicMock()
     monkeypatch.setattr(mod, "schedule_quota_plan_usage_upsert", schedule)
 
-    await mod.settle_provider_plan_from_callback(
+    await mod.settle_provider_quota_from_callback(
         metadata={
             "gateway_provider_plan_id": str(rule_id),
             "gateway_provider_quota_reservations": [
@@ -74,10 +74,10 @@ async def test_release_provider_quota_on_failure(monkeypatch) -> None:
     guard.commit_rule = AsyncMock()
     guard.release_rule = AsyncMock()
     monkeypatch.setattr(mod, "get_provider_quota_guard", lambda: guard)
-    monkeypatch.setattr(mod, "_load_rule_spec", AsyncMock(return_value=spec))
+    monkeypatch.setattr(mod, "_load_rule_specs", AsyncMock(return_value={rule_id: spec}))
     monkeypatch.setattr(mod, "acquire_settlement_once", AsyncMock(return_value=True))
 
-    await mod.settle_provider_plan_from_callback(
+    await mod.settle_provider_quota_from_callback(
         metadata={
             "gateway_provider_plan_id": str(rule_id),
             "gateway_provider_quota_reservations": [
@@ -104,7 +104,7 @@ async def test_settle_noop_without_metadata(monkeypatch) -> None:
     guard.release_rule = AsyncMock()
     monkeypatch.setattr(mod, "get_provider_quota_guard", lambda: guard)
 
-    await mod.settle_provider_plan_from_callback(
+    await mod.settle_provider_quota_from_callback(
         metadata={},
         status="success",
         cost_usd=Decimal("1"),

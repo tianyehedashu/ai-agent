@@ -1,11 +1,11 @@
 import type { GatewayModel } from '@/api/gateway/models'
 import type { PersonalGatewayModel } from '@/api/gateway/my-models'
-import type {
-  ListQuotaRulesParams,
-  QuotaRule,
-  QuotaRuleLayer,
-  QuotaRuleUsage,
+import {
   quotaRuleLegacyPlanLabel,
+  type ListQuotaRulesParams,
+  type QuotaRule,
+  type QuotaRuleLayer,
+  type QuotaRuleUsage,
 } from '@/api/gateway/quota-rules'
 import {
   modelsIndexHref,
@@ -16,6 +16,7 @@ import {
 } from '@/features/gateway-models/paths'
 
 import { formatPeriodResetLabel, isCalendarPeriodResetVisible } from './period-reset-utils'
+import { quotaRuleToBatchFormValues } from './quota-batch-from-rule'
 
 import type { BudgetViewContext } from './budget-match'
 
@@ -273,6 +274,38 @@ export function shouldManageQuotaOnModelDetail(rule: QuotaRule): boolean {
   const modelName = rule.key.model_name?.trim() ?? ''
   if (!modelName) return false
   return rule.key.layer === 'platform' || rule.key.layer === 'upstream'
+}
+
+export interface CanAddFromRuleOptions {
+  mode: 'admin' | 'member'
+  selfUserId?: string | null
+  /** 成员自助可写凭据（platform 团队凭据 + upstream 个人 BYOK） */
+  selfCredentialIds?: ReadonlySet<string>
+}
+
+/** 是否可从当前行「复制为新配额」：需可反解且符合成员/admin 写权限边界。 */
+export function canAddFromRule(rule: QuotaRule, options: CanAddFromRuleOptions): boolean {
+  if (quotaRuleToBatchFormValues(rule) === null) return false
+  if (options.mode === 'admin') return true
+
+  const userId = options.selfUserId
+  if (!userId) return false
+
+  const layer = rule.key.layer
+  if (layer === 'downstream') return false
+
+  if (layer === 'platform') {
+    if (rule.key.target_kind !== 'user' || rule.key.user_id !== userId) return false
+    const credId = rule.key.credential_id
+    if (credId && options.selfCredentialIds && !options.selfCredentialIds.has(credId)) {
+      return false
+    }
+    return true
+  }
+
+  const credId = rule.key.credential_id
+  if (!credId) return false
+  return options.selfCredentialIds?.has(credId) ?? false
 }
 
 /** 模型级 platform / upstream 规则 → 模型详情深链（限额与用量在详情页维护）。 */

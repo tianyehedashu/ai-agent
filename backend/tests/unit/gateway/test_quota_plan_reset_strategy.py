@@ -28,6 +28,7 @@ from domains.gateway.infrastructure.callbacks.custom_logger import (
 class TestQuotaPlanResetStrategy:
     def test_normalize_reset_strategy_falls_back_to_rolling(self) -> None:
         assert normalize_reset_strategy("calendar_daily_utc") == "calendar_daily_utc"
+        assert normalize_reset_strategy("plan_anniversary") == "rolling"
         assert normalize_reset_strategy("unknown") == "rolling"
 
     def test_default_reset_strategy_for_window(self) -> None:

@@ -439,16 +439,15 @@ Gateway 支持两层互相解耦的套餐额度，二者共享 ``QuotaPlanServic
 
 **周期策略与厂商周期不一致的纠偏**：
 
-``provider_plan_quotas`` / ``entitlement_plan_quotas`` 均有 ``reset_strategy``：
+``provider_quotas`` / ``entitlement_plan_quotas`` 均有 ``reset_strategy``：
 
 | 策略 | 含义 | 典型场景 |
 |------|------|----------|
 | ``rolling`` | 按 ``window_seconds`` 滚动窗口（默认，兼容历史） | 自建分钟 / 小时窗口 |
 | ``calendar_daily_utc`` | 当前 UTC 日 00:00 起算，次日 00:00 重置 | 厂商日额度 / RPD |
 | ``calendar_monthly_utc`` | 自然月 1 号 UTC 00:00 重置 | 月套餐 |
-| ``plan_anniversary`` | 以 plan.valid_from 为锚点，每 ``window_seconds`` 切片 | 订阅合同日 / 购买日不在自然边界 |
 
-本地窗口只是预测，**上游返回 402 / 429 / ``insufficient_quota`` / ``RESOURCE_EXHAUSTED`` 才是事实来源**。``custom_logger.async_log_failure_event`` 会识别这些信号，并调用 ``ProviderPlanGuard.mark_upstream_exhausted`` → ``QuotaPlanService.force_exhaust`` 把对应 ``ProviderPlan`` 的 quota 立即打满到下次 reset。这样不用引入复杂的厂商 header 同步，也能在真实偏差出现后快速收敛，避免连续浪费上游调用。
+本地窗口只是预测，**上游返回 402 / 429 / ``insufficient_quota`` / ``RESOURCE_EXHAUSTED`` 才是事实来源**。``custom_logger.async_log_failure_event`` 会识别这些信号，并调用 ``ProviderQuotaGuard.mark_upstream_exhausted_rules`` → ``QuotaPlanService.force_exhaust`` 把对应 ``ProviderQuota`` 规则立即打满到下次 reset。这样不用引入复杂的厂商 header 同步，也能在真实偏差出现后快速收敛，避免连续浪费上游调用。
 
 ### 4.9 模型定价目录（上下游分离）
 

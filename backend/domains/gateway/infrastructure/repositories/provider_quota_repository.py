@@ -22,6 +22,15 @@ class ProviderQuotaRepository:
     async def get(self, rule_id: uuid.UUID) -> ProviderQuota | None:
         return await self._session.get(ProviderQuota, rule_id)
 
+    async def get_many(self, rule_ids: list[uuid.UUID]) -> dict[uuid.UUID, ProviderQuota]:
+        """单次查询批量取规则，供 callback 结算消除 N 次独立 session。"""
+        if not rule_ids:
+            return {}
+        unique_ids = list(dict.fromkeys(rule_ids))
+        stmt = select(ProviderQuota).where(ProviderQuota.id.in_(unique_ids))
+        rows = (await self._session.execute(stmt)).scalars().all()
+        return {row.id: row for row in rows}
+
     async def list_for_credential(self, credential_id: uuid.UUID) -> list[ProviderQuota]:
         stmt = (
             select(ProviderQuota)

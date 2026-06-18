@@ -1288,7 +1288,6 @@ PlanResetStrategy = Literal[
     "rolling",
     "calendar_daily_utc",
     "calendar_monthly_utc",
-    "plan_anniversary",
 ]
 
 
@@ -1302,7 +1301,7 @@ class PlanQuotaUpsert(BaseModel):
         description=(
             "重置策略；缺省按窗口长度自动推导（86400=每日固定重置 / 2592000=每月固定重置 / "
             "其它=滚动窗口）。rolling=滚动窗口；calendar_daily_utc=每日 UTC 重置；"
-            "calendar_monthly_utc=自然月重置；plan_anniversary=按 valid_from 切片"
+            "calendar_monthly_utc=自然月重置"
         ),
     )
     limit_usd: Decimal | None = None
@@ -1316,18 +1315,6 @@ class PlanQuotaUpsert(BaseModel):
 class EntitlementPlanQuotaUpsert(PlanQuotaUpsert):
     unit_price_usd_per_token: Decimal | None = None
     unit_price_usd_per_request: Decimal | None = None
-
-
-class ProviderPlanCreate(BaseModel):
-    """已废弃：上游 provider-plans CRUD 已移除，请使用配额中心 batch upsert。"""
-
-    model_config = ConfigDict(extra="forbid")
-
-
-class ProviderPlanUpdate(BaseModel):
-    """已废弃：上游 provider-plans CRUD 已移除。"""
-
-    model_config = ConfigDict(extra="forbid")
 
 
 class PlanQuotaResponse(BaseModel):
@@ -1378,11 +1365,8 @@ class EntitlementPlanResponse(BaseModel):
     scope_id: uuid.UUID
     label: str
     valid_from: datetime
-    valid_until: datetime
     included_models: list[str] = Field(default_factory=list)
     included_capabilities: list[str] = Field(default_factory=list)
-    is_active: bool
-    auto_renew: bool
     notes: str | None = None
     extra: dict[str, Any] | None = None
     quotas: list[EntitlementPlanQuotaResponse] = Field(default_factory=list)
@@ -1397,12 +1381,6 @@ class EntitlementUsageResponse(BaseModel):
     output_tokens: int
     cost_usd: Decimal
     charged_usd: Decimal
-
-
-class ProviderPlanCostResponse(BaseModel):
-    """已废弃：上游 provider-plan 用量 API 已移除。"""
-
-    model_config = ConfigDict(extra="forbid")
 
 
 class MarginGroupItemResponse(BaseModel):
@@ -1478,9 +1456,6 @@ __all__ = [
     "PlanResetStrategy",
     "PlatformCredentialStatItem",
     "PlatformCredentialStatListResponse",
-    "ProviderPlanCreate",
-    "ProviderPlanUpdate",
-    "ProviderPlanCostResponse",
     "QuotaRuleBatchFailureItem",
     "QuotaRuleBatchUpsertRequest",
     "QuotaRuleBatchUpsertResponse",

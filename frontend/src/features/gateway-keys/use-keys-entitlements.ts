@@ -16,13 +16,9 @@ export const MANAGED_TEAM_VKEY_ENTITLEMENTS_QUERY_KEY = [
 ] as const
 
 export function filterActiveEntitlementPlans(plans: readonly EntitlementPlan[]): EntitlementPlan[] {
+  // plan 头已退化为容器：活性/有效期由 quota 行承载，列表层仅按 valid_from 是否生效过滤。
   const now = Date.now()
-  return plans.filter(
-    (plan) =>
-      plan.is_active &&
-      new Date(plan.valid_from).getTime() <= now &&
-      new Date(plan.valid_until).getTime() > now
-  )
+  return plans.filter((plan) => new Date(plan.valid_from).getTime() <= now)
 }
 
 export function useKeysEntitlementsMap(vkeyIds: readonly string[]): {

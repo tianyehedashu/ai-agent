@@ -20,7 +20,7 @@ from domains.gateway.domain.quota_plan import PlanQuotaSpec, QuotaPlanReservatio
 
 @pytest.mark.asyncio
 async def test_budget_exhausted_short_circuits_before_provider_quota(monkeypatch) -> None:
-    provider_guard = ppg.get_provider_plan_guard()
+    provider_guard = ppg.get_provider_quota_guard()
     provider_guard.check_and_reserve = AsyncMock()  # type: ignore[method-assign]
 
     async def _exhausted(_data: dict[str, Any], **_kw: object) -> None:
@@ -28,7 +28,7 @@ async def test_budget_exhausted_short_circuits_before_provider_quota(monkeypatch
 
     monkeypatch.setattr(budget_mod, "maybe_reserve_user_credential_budget", _exhausted)
 
-    logger = ppg.build_provider_plan_pre_call_logger()
+    logger = ppg.build_provider_quota_pre_call_logger()
     data: dict[str, Any] = {
         "metadata": {"gateway_user_id": str(uuid.uuid4())},
         "litellm_params": {"model_info": {"gateway_credential_id": str(uuid.uuid4())}},
@@ -43,14 +43,14 @@ async def test_budget_exhausted_short_circuits_before_provider_quota(monkeypatch
 @pytest.mark.asyncio
 async def test_provider_quota_runs_when_budget_allows(monkeypatch) -> None:
     cred_id = uuid.uuid4()
-    provider_guard = ppg.get_provider_plan_guard()
+    provider_guard = ppg.get_provider_quota_guard()
     provider_guard.check_and_reserve = AsyncMock(return_value=[])  # type: ignore[method-assign]
 
     monkeypatch.setattr(
         budget_mod, "maybe_reserve_user_credential_budget", AsyncMock(return_value=None)
     )
 
-    logger = ppg.build_provider_plan_pre_call_logger()
+    logger = ppg.build_provider_quota_pre_call_logger()
     data: dict[str, Any] = {
         "metadata": {},
         "litellm_params": {
@@ -75,14 +75,14 @@ async def test_provider_quota_uses_gateway_real_model_for_matching(monkeypatch) 
         captured.update(kwargs)
         return []
 
-    provider_guard = ppg.get_provider_plan_guard()
+    provider_guard = ppg.get_provider_quota_guard()
     provider_guard.check_and_reserve = AsyncMock(side_effect=_capture)  # type: ignore[method-assign]
 
     monkeypatch.setattr(
         budget_mod, "maybe_reserve_user_credential_budget", AsyncMock(return_value=None)
     )
 
-    logger = ppg.build_provider_plan_pre_call_logger()
+    logger = ppg.build_provider_quota_pre_call_logger()
     data: dict[str, Any] = {
         "metadata": {},
         "litellm_params": {
@@ -113,7 +113,7 @@ async def test_provider_quota_stamps_metadata_for_callback(monkeypatch) -> None:
         reserved_requests=1,
     )
 
-    provider_guard = ppg.get_provider_plan_guard()
+    provider_guard = ppg.get_provider_quota_guard()
     provider_guard.check_and_reserve = AsyncMock(  # type: ignore[method-assign]
         return_value=[
             ProviderQuotaReservation(rule_id=rule_id, spec=spec, reservation=reservation)
@@ -123,7 +123,7 @@ async def test_provider_quota_stamps_metadata_for_callback(monkeypatch) -> None:
         budget_mod, "maybe_reserve_user_credential_budget", AsyncMock(return_value=None)
     )
 
-    logger = ppg.build_provider_plan_pre_call_logger()
+    logger = ppg.build_provider_quota_pre_call_logger()
     data: dict[str, Any] = {
         "metadata": {"gateway_request_id": "req-stamp"},
         "litellm_params": {
@@ -151,13 +151,13 @@ async def test_provider_quota_deployment_hook_reads_top_level_model_info(monkeyp
         captured.update(kwargs)
         return []
 
-    provider_guard = ppg.get_provider_plan_guard()
+    provider_guard = ppg.get_provider_quota_guard()
     provider_guard.check_and_reserve = AsyncMock(side_effect=_capture)  # type: ignore[method-assign]
     monkeypatch.setattr(
         budget_mod, "maybe_reserve_user_credential_budget", AsyncMock(return_value=None)
     )
 
-    logger = ppg.build_provider_plan_pre_call_logger()
+    logger = ppg.build_provider_quota_pre_call_logger()
     data: dict[str, Any] = {
         "metadata": {"gateway_request_id": "req-router"},
         "model_info": {

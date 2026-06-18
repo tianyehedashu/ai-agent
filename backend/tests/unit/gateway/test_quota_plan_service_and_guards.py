@@ -15,12 +15,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from domains.gateway.application import entitlement_guard as entitlement_guard_module
 from domains.gateway.application import provider_quota_guard as provider_quota_guard_module
 from domains.gateway.application import quota_plan_service as quota_plan_service_module
-from domains.gateway.application.provider_quota_config_cache import (
-    clear_provider_quota_config_cache_for_tests,
+from domains.gateway.application.entitlement_config_cache import (
+    clear_entitlement_config_cache_for_tests,
 )
 from domains.gateway.application.entitlement_guard import (
     EntitlementContext,
     EntitlementGuard,
+)
+from domains.gateway.application.provider_quota_config_cache import (
+    clear_provider_quota_config_cache_for_tests,
 )
 from domains.gateway.application.provider_quota_guard import ProviderQuotaGuard
 from domains.gateway.application.quota_plan_service import QuotaPlanService
@@ -319,6 +322,7 @@ class _FakeEntitlementPlan:
     is_active: bool = True
     included_models: list[str] | None = None
     included_capabilities: list[str] | None = None
+    created_at: datetime = datetime(2026, 1, 1, tzinfo=UTC)
 
 
 @dataclass
@@ -357,6 +361,11 @@ class _FakeEntitlementRepo:
 
     async def list_for_scope(self, *_args: object, **_kwargs: object) -> list[_FakeEntitlementPlan]:
         return [self.plan] if self.plan is not None else []
+
+    async def list_with_quotas_for_scope(
+        self, *_args: object, **_kwargs: object
+    ) -> list[tuple[_FakeEntitlementPlan, list[_FakeEntitlementQuota]]]:
+        return [(self.plan, list(self.quotas))] if self.plan is not None else []
 
 
 class _AllowedQuota:
@@ -404,6 +413,7 @@ class _ExhaustedQuota:
 async def test_entitlement_guard_allows_active_plan(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    clear_entitlement_config_cache_for_tests()
     now = datetime(2026, 5, 18, tzinfo=UTC)
     plan_id = uuid.uuid4()
     _FakeEntitlementRepo.plan = _FakeEntitlementPlan(
@@ -448,6 +458,7 @@ async def test_entitlement_guard_allows_active_plan(
 async def test_entitlement_guard_exhaustion_is_hard_429_semantics(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    clear_entitlement_config_cache_for_tests()
     now = datetime(2026, 5, 18, tzinfo=UTC)
     plan_id = uuid.uuid4()
     _FakeEntitlementRepo.plan = _FakeEntitlementPlan(
@@ -583,8 +594,8 @@ async def test_provider_quota_guard_mark_upstream_exhausted_forces_quota(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     clear_provider_quota_config_cache_for_tests()
-    now = datetime(2026, 5, 18, tzinfo=UTC)
     rule_id = uuid.uuid4()
+    second_rule_id = uuid.uuid4()
     _FakeProviderRepo.rules = [
         _FakeProviderQuotaRow(
             id=rule_id,
@@ -594,21 +605,30 @@ async def test_provider_quota_guard_mark_upstream_exhausted_forces_quota(
             window_seconds=86400,
             limit_requests=100,
             reset_strategy="calendar_daily_utc",
-        )
+        ),
+        _FakeProviderQuotaRow(
+            id=second_rule_id,
+            credential_id=uuid.uuid4(),
+            real_model="ep-1",
+            label="model-daily",
+            window_seconds=86400,
+            limit_requests=50,
+            reset_strategy="calendar_daily_utc",
+        ),
     ]
     monkeypatch.setattr(provider_quota_guard_module, "ProviderQuotaRepository", _FakeProviderRepo)
     monkeypatch.setattr(provider_quota_guard_module, "get_session_context", lambda: _FakeSessionCM())
     quota = _RecordingProviderQuota()
 
     guard = ProviderQuotaGuard(quota_service=cast("QuotaPlanService", quota))
-    await guard.mark_upstream_exhausted(rule_id, reason="upstream_signal:RateLimitError")
+    await guard.mark_upstream_exhausted_rules(
+        [rule_id, second_rule_id],
+        reason="upstream_signal:RateLimitError",
+    )
 
-    assert quota.forced
-    ns, forced_rule_id, specs, reason = quota.forced[0]
-    assert ns == PROVIDER_NS
-    assert forced_rule_id == rule_id
-    assert specs[0].reset_strategy == "calendar_daily_utc"
-    assert reason == "upstream_signal:RateLimitError"
+    assert len(quota.forced) == 2
+    forced_ids = {item[1] for item in quota.forced}
+    assert forced_ids == {rule_id, second_rule_id}
 
 
 @pytest.mark.unit

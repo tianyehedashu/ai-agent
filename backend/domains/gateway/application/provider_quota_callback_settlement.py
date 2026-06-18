@@ -27,45 +27,43 @@ from domains.gateway.infrastructure.repositories.provider_quota_repository impor
 )
 from libs.db.database import get_session_context
 
-_RESERVATIONS_KEYS = (
-    "gateway_provider_quota_reservations",
-    "gateway_provider_plan_reservations",
-)
+_RESERVATIONS_KEY = "gateway_provider_quota_reservations"
 _SETTLED_PREFIX = "gateway:quota:provider_settled:"
 _RELEASED_PREFIX = "gateway:quota:provider_released:"
 
 
-async def _load_rule_spec(rule_id: uuid.UUID) -> PlanQuotaSpec | None:
+async def _load_rule_specs(rule_ids: list[uuid.UUID]) -> dict[uuid.UUID, PlanQuotaSpec]:
+    """单 session 批量加载规则 spec，消除按 rule_id 逐个开 session 的开销。"""
+    if not rule_ids:
+        return {}
     async with get_session_context() as session:
         repo = ProviderQuotaRepository(session)
-        row = await repo.get(rule_id)
-    if row is None:
-        return None
-    return quota_row_to_spec(
-        ProviderQuotaConfigRow(
-            rule_id=row.id,
-            label=row.label,
-            window_seconds=row.window_seconds,
-            reset_strategy=row.reset_strategy,
-            reset_timezone=row.reset_timezone,
-            reset_time_minutes=row.reset_time_minutes,
-            reset_day_of_month=row.reset_day_of_month,
-            limit_usd=row.limit_usd,
-            limit_tokens=row.limit_tokens,
-            limit_requests=row.limit_requests,
-            enabled=row.enabled,
-            valid_from=row.valid_from,
-            valid_until=row.valid_until,
+        rows = await repo.get_many(rule_ids)
+    return {
+        rid: quota_row_to_spec(
+            ProviderQuotaConfigRow(
+                rule_id=row.id,
+                label=row.label,
+                window_seconds=row.window_seconds,
+                reset_strategy=row.reset_strategy,
+                reset_timezone=row.reset_timezone,
+                reset_time_minutes=row.reset_time_minutes,
+                reset_day_of_month=row.reset_day_of_month,
+                limit_usd=row.limit_usd,
+                limit_tokens=row.limit_tokens,
+                limit_requests=row.limit_requests,
+                enabled=row.enabled,
+                valid_from=row.valid_from,
+                valid_until=row.valid_until,
+            )
         )
-    )
+        for rid, row in rows.items()
+    }
 
 
 def _reservations_raw(metadata: dict[str, Any]) -> object | None:
-    for key in _RESERVATIONS_KEYS:
-        raw = metadata.get(key)
-        if raw:
-            return raw
-    return None
+    raw = metadata.get(_RESERVATIONS_KEY)
+    return raw if raw else None
 
 
 def _rule_ids_from_raw(raw: object, metadata: dict[str, Any]) -> list[uuid.UUID]:
@@ -77,13 +75,13 @@ def _rule_ids_from_raw(raw: object, metadata: dict[str, Any]) -> list[uuid.UUID]
                 if rid is not None and rid not in ids:
                     ids.append(rid)
     if not ids:
-        legacy = to_plan_uuid(metadata.get("gateway_provider_plan_id"))
-        if legacy is not None:
-            ids.append(legacy)
+        primary = to_plan_uuid(metadata.get("gateway_provider_plan_id"))
+        if primary is not None:
+            ids.append(primary)
     return ids
 
 
-async def settle_provider_plan_from_callback(
+async def settle_provider_quota_from_callback(
     *,
     metadata: dict[str, Any],
     status: str,
@@ -94,17 +92,13 @@ async def settle_provider_plan_from_callback(
     raw = _reservations_raw(metadata)
     rule_ids = _rule_ids_from_raw(raw, metadata) if raw is not None else []
     if not rule_ids:
-        legacy = to_plan_uuid(metadata.get("gateway_provider_plan_id"))
-        if legacy is not None:
-            rule_ids = [legacy]
+        primary = to_plan_uuid(metadata.get("gateway_provider_plan_id"))
+        if primary is not None:
+            rule_ids = [primary]
     if not rule_ids:
         return
 
-    specs_by_rule: dict[uuid.UUID, PlanQuotaSpec] = {}
-    for rid in rule_ids:
-        spec = await _load_rule_spec(rid)
-        if spec is not None:
-            specs_by_rule[rid] = spec
+    specs_by_rule = await _load_rule_specs(rule_ids)
     if not specs_by_rule:
         return
 
@@ -159,4 +153,4 @@ async def settle_provider_plan_from_callback(
         )
 
 
-__all__ = ["settle_provider_plan_from_callback"]
+__all__ = ["settle_provider_quota_from_callback"]

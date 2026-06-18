@@ -838,11 +838,11 @@ async def _settle_budgets(
             await release_user_credential_budget_from_metadata(metadata)
 
     with suppress(Exception):
-        from domains.gateway.application.provider_plan_callback_settlement import (
-            settle_provider_plan_from_callback,
+        from domains.gateway.application.provider_quota_callback_settlement import (
+            settle_provider_quota_from_callback,
         )
 
-        await settle_provider_plan_from_callback(
+        await settle_provider_quota_from_callback(
             metadata=metadata,
             status=status,
             cost_usd=cost_usd,
@@ -898,7 +898,7 @@ async def _post_persist_side_effects(
         )
     if status == "failed" and provider_plan_id is not None:
         with suppress(Exception):
-            await _maybe_mark_provider_plan_upstream_exhausted(
+            await _maybe_mark_provider_quota_upstream_exhausted(
                 kwargs=kwargs,
                 provider_plan_id=provider_plan_id,
                 error_code=error_code,
@@ -1161,14 +1161,14 @@ async def _persist_event(
     )
 
 
-async def _maybe_mark_provider_plan_upstream_exhausted(
+async def _maybe_mark_provider_quota_upstream_exhausted(
     *,
     kwargs: dict[str, Any],
     provider_plan_id: uuid.UUID,
     error_code: str | None,
     error_message: str | None,
 ) -> None:
-    """检测上游"配额耗尽"信号并即时同步本地 ProviderPlan quota。
+    """检测上游"配额耗尽"信号并即时同步本地 ProviderQuota 规则。
 
     本地 quota 永远是"礼貌的预测"，上游 429 才是真理；命中此分支 = 用真理收敛
     预测，避免后续连续浪费上游调用。
@@ -1181,11 +1181,17 @@ async def _maybe_mark_provider_plan_upstream_exhausted(
         status_code=status_code,
     ):
         return
-    from domains.gateway.application.provider_quota_guard import get_provider_plan_guard
+    from domains.gateway.application.provider_quota_guard import (
+        get_provider_quota_guard,
+        upstream_rule_ids_from_call_data,
+    )
 
-    guard = get_provider_plan_guard()
-    await guard.mark_upstream_exhausted(
-        provider_plan_id,
+    guard = get_provider_quota_guard()
+    rule_ids = upstream_rule_ids_from_call_data(kwargs)
+    if not rule_ids:
+        rule_ids = [provider_plan_id]
+    await guard.mark_upstream_exhausted_rules(
+        rule_ids,
         reason=f"upstream_signal:{error_code or status_code or 'unknown'}",
     )
 

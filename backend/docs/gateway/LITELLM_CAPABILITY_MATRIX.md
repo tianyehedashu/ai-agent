@@ -77,7 +77,7 @@
 | B6 | `num_retries` | ✅ | 固定 `2`（`router_singleton._build_router_kwargs`） | |
 | B7 | `allowed_fails` + `cooldown_time` | ✅ | `gateway_router_cooldown_threshold` / `gateway_router_cooldown_seconds` | deployment 冷却 |
 | B8 | `redis_url`（跨进程 cooldown/TPM/RPM） | ✅ | `gateway_router_redis_url` 或 `redis_url` | 多 worker 共享 Router 状态 |
-| B9 | `enable_pre_call_checks` | ✅ | 固定 `True` | 与 ProviderPlanGuard 配合 |
+| B9 | `enable_pre_call_checks` | ✅ | 固定 `True` | 与 ProviderQuotaGuard 配合 |
 | B10 | deployment `rpm` / `tpm` | ✅ | 来自 `GatewayModel.rpm_limit` / `tpm_limit` | 写入 `litellm_params`；Anthropic 直连时会剔除（`filter_litellm_params_for_direct_anthropic`） |
 | B11 | deployment `weight` | ✅ | `GatewayModel.weight` → `litellm_params.weight` + `model_info.weight` | `litellm_params.weight` 影响 shuffle 权重；`model_info.weight` 用于展示/归因 |
 | B12 | `add_deployment` / `delete_deployment` | ◐ | 主要用 `set_model_list` 全量热更 | 未逐条增量 API |
@@ -175,7 +175,7 @@ litellm_params.api_key / api_base / rpm / tpm / input_cost_per_token / …
         │
         ▼
 model_info = { id, team_id, capability, gateway_credential_id, … }
-           → ProviderPlanGuard pre-call 读 credential_id
+           → ProviderQuotaGuard pre-call 读 credential_id
            → GatewayCustomLogger 写 request log
 ```
 

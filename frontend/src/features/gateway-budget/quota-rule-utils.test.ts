@@ -5,6 +5,7 @@ import type { QuotaRule } from '@/api/gateway/quota-rules'
 import {
   buildQuotaRuleModelLookupFromCatalog,
   buildStatsQuotaLookup,
+  canAddFromRule,
   describeUpstreamQuotaRuleScope,
   findQuotaRuleForStatsRow,
   formatQuotaRuleInvokeNameLabel,
@@ -777,5 +778,126 @@ describe('formatQuotaRulePeriodWindow', () => {
     expect(text).toContain('滚动窗口')
     expect(text).toContain('5h')
     expect(text).not.toContain('本周期')
+  })
+})
+
+describe('canAddFromRule', () => {
+  const selfCreds = new Set(['team-cred', 'byok-cred'])
+
+  it('admin allows parseable downstream vkey', () => {
+    const rule: QuotaRule = {
+      key: {
+        team_id: 'team-1',
+        layer: 'downstream',
+        user_id: null,
+        credential_id: null,
+        model_name: null,
+        period: null,
+        window_seconds: 86400,
+        reset_strategy: null,
+        access_kind: 'vkey',
+        access_id: 'vkey-1',
+        quota_label: 'default',
+        target_kind: null,
+        target_id: null,
+      },
+      source_ref: {
+        layer: 'downstream',
+        budget_id: null,
+        plan_id: 'plan-1',
+        quota_id: 'quota-1',
+      },
+      limits: {
+        limit_usd: 10,
+        soft_limit_usd: null,
+        limit_tokens: null,
+        limit_requests: null,
+        unit_price_usd_per_token: null,
+        unit_price_usd_per_request: null,
+      },
+      usage: null,
+      is_active: true,
+      valid_from: null,
+      valid_until: null,
+    }
+    expect(canAddFromRule(rule, { mode: 'admin' })).toBe(true)
+  })
+
+  it('member blocks downstream', () => {
+    const rule: QuotaRule = {
+      key: {
+        team_id: 'team-1',
+        layer: 'downstream',
+        user_id: null,
+        credential_id: null,
+        model_name: null,
+        period: null,
+        window_seconds: 86400,
+        reset_strategy: null,
+        access_kind: 'vkey',
+        access_id: 'vkey-1',
+        quota_label: 'default',
+        target_kind: null,
+        target_id: null,
+      },
+      source_ref: {
+        layer: 'downstream',
+        budget_id: null,
+        plan_id: 'plan-1',
+        quota_id: 'quota-1',
+      },
+      limits: {
+        limit_usd: 10,
+        soft_limit_usd: null,
+        limit_tokens: null,
+        limit_requests: null,
+        unit_price_usd_per_token: null,
+        unit_price_usd_per_request: null,
+      },
+      usage: null,
+      is_active: true,
+      valid_from: null,
+      valid_until: null,
+    }
+    expect(
+      canAddFromRule(rule, { mode: 'member', selfUserId: 'user-1', selfCredentialIds: selfCreds })
+    ).toBe(false)
+  })
+
+  it('member allows own platform rule with team credential', () => {
+    const rule: QuotaRule = {
+      ...platformRule('gpt-4'),
+      key: {
+        ...platformRule('gpt-4').key,
+        target_kind: 'user',
+        user_id: 'user-1',
+        credential_id: 'team-cred',
+      },
+    }
+    expect(
+      canAddFromRule(rule, { mode: 'member', selfUserId: 'user-1', selfCredentialIds: selfCreds })
+    ).toBe(true)
+  })
+
+  it('member allows own upstream BYOK credential', () => {
+    const rule = upstreamRule('byok-cred', 'gpt-4')
+    expect(
+      canAddFromRule(rule, { mode: 'member', selfUserId: 'user-1', selfCredentialIds: selfCreds })
+    ).toBe(true)
+  })
+
+  it('member blocks other user platform rule', () => {
+    const rule: QuotaRule = {
+      ...platformRule('gpt-4'),
+      key: {
+        ...platformRule('gpt-4').key,
+        target_kind: 'user',
+        user_id: 'other-user',
+        credential_id: 'team-cred',
+      },
+    }
+    expect(
+      canAddFromRule(rule, { mode: 'member', selfUserId: 'user-1', selfCredentialIds: selfCreds })
+    ).toBe(false)
   })
 })

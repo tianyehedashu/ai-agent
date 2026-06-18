@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
-from typing import TYPE_CHECKING, Any
+from typing import Any
 import uuid
 
 from domains.gateway.application.provider_quota_config_cache import (
@@ -15,6 +15,7 @@ from domains.gateway.application.provider_quota_config_cache import (
     provider_quota_rows_from_orm,
     quota_row_to_spec,
 )
+from domains.gateway.application.quota_plan_callback_settlement_shared import to_plan_uuid
 from domains.gateway.application.quota_plan_service import QuotaPlanService
 from domains.gateway.domain.errors import ProviderPlanExhaustedError
 from domains.gateway.domain.litellm_deployment_attribution import (
@@ -27,9 +28,6 @@ from domains.gateway.infrastructure.repositories.provider_quota_repository impor
 )
 from libs.db.database import get_session_context
 from utils.logging import get_logger
-
-if TYPE_CHECKING:
-    pass
 
 logger = get_logger(__name__)
 
@@ -150,6 +148,28 @@ class ProviderQuotaGuard:
         reason: str = "upstream_quota_exhausted",
         until: datetime | None = None,
     ) -> None:
+        await self.mark_upstream_exhausted_rules([rule_id], reason=reason, until=until)
+
+    async def mark_upstream_exhausted_rules(
+        self,
+        rule_ids: list[uuid.UUID],
+        *,
+        reason: str = "upstream_quota_exhausted",
+        until: datetime | None = None,
+    ) -> None:
+        unique_ids = list(dict.fromkeys(rule_ids))
+        for rule_id in unique_ids:
+            await self._mark_single_upstream_exhausted(
+                rule_id, reason=reason, until=until
+            )
+
+    async def _mark_single_upstream_exhausted(
+        self,
+        rule_id: uuid.UUID,
+        *,
+        reason: str,
+        until: datetime | None,
+    ) -> None:
         try:
             async with get_session_context() as session:
                 repo = ProviderQuotaRepository(session)
@@ -200,11 +220,6 @@ def get_provider_quota_guard() -> ProviderQuotaGuard:
     return _provider_quota_guard_singleton
 
 
-# 兼容旧导入名（pre_call / callback 逐步迁移）
-get_provider_plan_guard = get_provider_quota_guard
-ProviderPlanGuard = ProviderQuotaGuard
-
-
 def _extract_credential_and_model(data: dict[str, Any]) -> tuple[uuid.UUID | None, str | None]:
     return gateway_deployment_credential_id(data), gateway_deployment_real_model(data)
 
@@ -240,9 +255,9 @@ def _stamp_provider_quotas_on_call(
         for item in reserved
     ]
     gateway_fields: dict[str, Any] = {
+        # 主命中规则 id；同时落 gateway_request_logs.provider_plan_id 列（拍平后即 quota_id）。
         "gateway_provider_plan_id": primary_rule_id,
         "gateway_provider_quota_reservations": reservations_payload,
-        "gateway_provider_plan_reservations": reservations_payload,
     }
 
     for meta in _metadata_dicts_on_call(data):
@@ -252,6 +267,24 @@ def _stamp_provider_quotas_on_call(
             auth.update(gateway_fields)
         else:
             meta["user_api_key_auth_metadata"] = dict(gateway_fields)
+
+
+def upstream_rule_ids_from_call_data(data: dict[str, Any]) -> list[uuid.UUID]:
+    """从 pre_call / callback metadata 收集本次命中的全部上游扁平 rule_id。"""
+    ids: list[uuid.UUID] = []
+    for meta in _metadata_dicts_on_call(data):
+        raw = meta.get("gateway_provider_quota_reservations")
+        if isinstance(raw, list):
+            for item in raw:
+                if not isinstance(item, dict):
+                    continue
+                rid = to_plan_uuid(item.get("rule_id")) or to_plan_uuid(item.get("quota_id"))
+                if rid is not None and rid not in ids:
+                    ids.append(rid)
+        primary = to_plan_uuid(meta.get("gateway_provider_plan_id"))
+        if primary is not None and primary not in ids:
+            ids.append(primary)
+    return ids
 
 
 async def _apply_provider_quota_pre_call(data: dict[str, Any]) -> None:
@@ -270,7 +303,7 @@ async def _apply_provider_quota_pre_call(data: dict[str, Any]) -> None:
         _stamp_provider_quotas_on_call(data, reserved=reserved)
 
 
-def build_provider_plan_pre_call_logger() -> Any:
+def build_provider_quota_pre_call_logger() -> Any:
     from litellm.integrations.custom_logger import CustomLogger  # type: ignore[import-not-found]
 
     class _Impl(CustomLogger):  # type: ignore[misc, valid-type]
@@ -296,10 +329,9 @@ def build_provider_plan_pre_call_logger() -> Any:
 
 
 __all__ = [
-    "ProviderPlanGuard",
     "ProviderQuotaGuard",
     "ProviderQuotaReservation",
-    "build_provider_plan_pre_call_logger",
-    "get_provider_plan_guard",
+    "build_provider_quota_pre_call_logger",
     "get_provider_quota_guard",
+    "upstream_rule_ids_from_call_data",
 ]

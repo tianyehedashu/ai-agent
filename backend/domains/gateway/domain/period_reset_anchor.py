@@ -96,7 +96,7 @@ def period_reset_anchor_from_plan_quota(
     reset_time_minutes: int | None,
     reset_day_of_month: int | None,
 ) -> PeriodResetAnchor:
-    """``provider_plan_quotas`` / ``entitlement_plan_quotas`` 行 → 锚点。"""
+    """``provider_quotas`` / ``entitlement_plan_quotas`` 行 → 锚点。"""
     return normalize_period_reset_anchor(
         timezone=reset_timezone,
         time_minutes=reset_time_minutes,
@@ -263,6 +263,6 @@ __all__ = [
     "compute_platform_redis_period_suffix",
     "effective_day_in_month",
     "normalize_period_reset_anchor",
-    "period_reset_anchor_from_row",
     "period_reset_anchor_from_plan_quota",
+    "period_reset_anchor_from_row",
 ]

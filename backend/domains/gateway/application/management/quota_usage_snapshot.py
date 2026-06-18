@@ -95,7 +95,17 @@ async def enrich_quota_rules_with_usage(
             )
             continue
 
-        if rule.source_ref.plan_id is None or rule.source_ref.quota_id is None:
+        if rule.key.layer == "upstream":
+            if rule.source_ref.quota_id is None:
+                continue
+            plan_id = rule.source_ref.quota_id
+            quota_id = rule.source_ref.quota_id
+        elif rule.key.layer == "downstream":
+            if rule.source_ref.plan_id is None or rule.source_ref.quota_id is None:
+                continue
+            plan_id = rule.source_ref.plan_id
+            quota_id = rule.source_ref.quota_id
+        else:
             continue
 
         ns = PROVIDER_NS if rule.key.layer == "upstream" else ENTITLEMENT_NS
@@ -104,11 +114,11 @@ async def enrich_quota_rules_with_usage(
                 idx,
                 QuotaWindowLookup(
                     ns=ns,
-                    plan_id=rule.source_ref.plan_id,
-                    quota_id=rule.source_ref.quota_id,
+                    plan_id=plan_id,
+                    quota_id=quota_id,
                     window_seconds=rule.key.window_seconds or 0,
                     reset_strategy=rule.key.reset_strategy or "rolling",
-                    row_valid_from=rule.valid_from,
+                    plan_valid_from=rule.valid_from,
                     period_reset_anchor=period_reset_anchor_from_plan_quota(
                         reset_timezone=rule.key.period_timezone,
                         reset_time_minutes=rule.key.period_reset_minutes,

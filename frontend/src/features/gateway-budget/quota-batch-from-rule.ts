@@ -141,5 +141,71 @@ export function quotaRuleToBatchFormValues(
     }
   }
 
-  return null
+  if (rule.key.access_kind !== 'vkey') return null
+  const accessId = stringOrNull(rule.key.access_id)
+  if (!accessId) return null
+  if (rule.source_ref.quota_id === null) return null
+
+  const values = patchQuotaBatchFormForLayer(
+    {
+      ...DEFAULT_BATCH_FORM,
+      layer: 'downstream',
+      periodTimezone: rule.key.period_timezone ?? 'UTC',
+      periodResetTime: minutesToTimeString(rule.key.period_reset_minutes ?? 0),
+      periodResetDay: rule.key.period_reset_day ?? 1,
+      windowSeconds: String(rule.key.window_seconds ?? 0),
+      quotaLabel: rule.key.quota_label ?? 'default',
+      allModels: rule.key.model_name === null,
+      modelNames: rule.key.model_name ? [rule.key.model_name] : [],
+      keyIds: [accessId],
+      limit_usd: numberToStr(rule.limits.limit_usd),
+      limit_tokens: numberToStr(rule.limits.limit_tokens),
+      limit_requests: numberToStr(rule.limits.limit_requests),
+      validFrom: isoToLocalDateTime(rule.valid_from),
+      validUntil: isoToLocalDateTime(rule.valid_until),
+    },
+    'downstream'
+  )
+  return {
+    values,
+    info: {
+      rule,
+      budgetId: '',
+      layer,
+      originalTargetId: accessId,
+    },
+  }
+}
+
+const COPY_LABEL_SUFFIX = '-copy'
+
+/** 复制为新配额时避免与原桶自然键碰撞。 */
+function dedupeQuotaLabelForCopy(label: string): string {
+  const trimmed = label.trim() || 'default'
+  if (trimmed.endsWith(COPY_LABEL_SUFFIX)) {
+    return `${trimmed}2`
+  }
+  return `${trimmed}${COPY_LABEL_SUFFIX}`
+}
+
+/**
+ * 从现有规则提取维度预填，用于「复制为新配额」创建态。
+ * 保留主体/凭据/模型/周期，清空限额与起止时间；upstream/downstream 的 quotaLabel 追加去重后缀。
+ */
+export function quotaRuleToScopePrefill(rule: QuotaRule): QuotaBatchFormValues | null {
+  const parsed = quotaRuleToBatchFormValues(rule)
+  if (!parsed) return null
+
+  const { values, info } = parsed
+  return {
+    ...values,
+    limit_usd: '',
+    limit_tokens: '',
+    limit_requests: '',
+    validFrom: '',
+    validUntil: '',
+    ...(info.layer === 'upstream' || info.layer === 'downstream'
+      ? { quotaLabel: dedupeQuotaLabelForCopy(values.quotaLabel) }
+      : {}),
+  }
 }

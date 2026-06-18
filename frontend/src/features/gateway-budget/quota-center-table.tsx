@@ -11,7 +11,15 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Switch } from '@/components/ui/switch'
 import { QuotaCenterResizableHeader } from '@/features/gateway-budget/quota-center-resizable-header'
 import { useQuotaCenterColumnWidths } from '@/features/gateway-budget/use-quota-center-column-widths'
-import { ArrowDown, ArrowUp, CircleDollarSign, Loader2, Pencil, Trash2 } from '@/lib/lucide-icons'
+import {
+  ArrowDown,
+  ArrowUp,
+  CircleDollarSign,
+  Copy,
+  Loader2,
+  Pencil,
+  Trash2,
+} from '@/lib/lucide-icons'
 import { cn } from '@/lib/utils'
 
 import { isQuotaRuleDeletable } from './quota-rule-delete'
@@ -26,7 +34,6 @@ import {
   quotaUsageHasMetrics,
   LAYER_ORDER,
   quotaRuleRowId,
-  resolveQuotaRuleModelDetailHref,
   resolveQuotaRuleSourceLabel,
   resolveQuotaRuleCredentialLabel,
   resolveQuotaRuleSubjectLabel,
@@ -49,6 +56,9 @@ export interface QuotaCenterTableProps {
   onSelect: (rule: QuotaRule) => void
   onDelete: (rule: QuotaRule) => void
   onEdit?: (rule: QuotaRule) => void
+  onAddFromRule?: (rule: QuotaRule) => void
+  canAddFromRule?: (rule: QuotaRule) => boolean
+  onCreate?: () => void
   onBatchDelete?: (rules: QuotaRule[]) => void
 }
 
@@ -165,6 +175,8 @@ interface QuotaCenterTableRowProps {
   onSelect: (rule: QuotaRule) => void
   onToggleCheck: (rule: QuotaRule, checked: boolean) => void
   onEdit: (rule: QuotaRule) => void
+  onAddFromRule?: (rule: QuotaRule) => void
+  canAddFromRule?: (rule: QuotaRule) => boolean
   onDelete: (rule: QuotaRule) => void
   onAdjustUsage: (rule: QuotaRule) => void
   onToggleEnabled: (rule: QuotaRule, enabled: boolean) => void
@@ -181,6 +193,8 @@ const QuotaCenterTableRow = memo(function QuotaCenterTableRow({
   onSelect,
   onToggleCheck,
   onEdit,
+  onAddFromRule,
+  canAddFromRule,
   onDelete,
   onAdjustUsage,
   onToggleEnabled,
@@ -194,10 +208,10 @@ const QuotaCenterTableRow = memo(function QuotaCenterTableRow({
   const usage = rule.usage
   const canEdit = rule.source_ref.budget_id !== null || rule.source_ref.quota_id !== null
   const canDelete = isQuotaRuleDeletable(rule)
+  const canCopyAdd = !formDisabled && (canAddFromRule?.(rule) ?? false)
 
   const invokeLabel = formatQuotaRuleInvokeNameLabel(rule, labelContext)
   const upstreamLabel = formatQuotaRuleUpstreamNameLabel(rule, labelContext)
-  const modelDetailHref = resolveQuotaRuleModelDetailHref(rule, labelContext)
 
   return (
     <div
@@ -334,9 +348,22 @@ const QuotaCenterTableRow = memo(function QuotaCenterTableRow({
               onClick={() => {
                 onEdit(rule)
               }}
-              title={modelDetailHref ? '去模型详情管理配额' : '编辑配额'}
+              title="编辑配额"
             >
               <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
+            </Button>
+          ) : null}
+          {canCopyAdd && onAddFromRule ? (
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-7 w-7"
+              onClick={() => {
+                onAddFromRule(rule)
+              }}
+              title="复制为新配额"
+            >
+              <Copy className="h-3.5 w-3.5 text-muted-foreground" />
             </Button>
           ) : null}
           {!formDisabled && isQuotaRuleUsageAdjustable(rule) ? (
@@ -383,6 +410,9 @@ export function QuotaCenterTable({
   onSelect,
   onDelete,
   onEdit,
+  onAddFromRule,
+  canAddFromRule,
+  onCreate,
   onBatchDelete,
 }: QuotaCenterTableProps): React.JSX.Element {
   const [sort, setSort] = useState<SortState | null>({ key: 'usage', dir: 'desc' })
@@ -568,8 +598,13 @@ export function QuotaCenterTable({
               </div>
             ) : null}
             {!isLoading && items.length === 0 ? (
-              <div className="px-4 py-8 text-center text-sm text-muted-foreground">
-                暂无配额规则
+              <div className="flex flex-col items-center gap-3 px-4 py-8 text-center text-sm text-muted-foreground">
+                <span>暂无配额规则</span>
+                {!formDisabled && onCreate ? (
+                  <Button size="sm" onClick={onCreate}>
+                    新增配额
+                  </Button>
+                ) : null}
               </div>
             ) : null}
             {sortedItems.map((rule) => {
@@ -586,6 +621,8 @@ export function QuotaCenterTable({
                   onSelect={onSelect}
                   onToggleCheck={toggleRow}
                   onEdit={onEdit ?? (() => {})}
+                  onAddFromRule={onAddFromRule}
+                  canAddFromRule={canAddFromRule}
                   onDelete={onDelete}
                   onAdjustUsage={setAdjustRule}
                   onToggleEnabled={setEnabled}

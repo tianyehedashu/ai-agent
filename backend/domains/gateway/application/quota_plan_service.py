@@ -1,6 +1,6 @@
 """QuotaPlanService - 通用滚动窗口配额算子（Redis）
 
-服务于上下游对称的 Plan 体系（``ProviderPlan`` / ``EntitlementPlan``）：
+服务于上下游对称的配额体系（上游 ``provider_quotas`` 扁平规则 / 下游 ``EntitlementPlan``）：
 
 - 键空间 ``gateway:quota:{ns}:{plan_id}:{quota_id}``，``ns ∈ {entitlement, provider}``
   保证两侧不串扰；与 ``BudgetService`` (``gateway:budget:*``) 与 ``RateLimit``
@@ -8,9 +8,10 @@
 - 每条 quota 内部使用「分钟分桶」：每分钟一条 ``…:b:{minute}`` hash，所有分钟通过
   ``…:idx`` ZSET 索引；查询用量时 ``ZREMRANGEBYSCORE`` 清窗口外，``ZRANGE`` +
   ``HMGET`` 累加得到当前窗口 used。``window_seconds=0`` 表示「整套餐期累计」。
-- 30s 进程内 LRU 读缓存，缓存 key 含 ``minute_unix // (30/60)`` 取整以让缓存自然失效。
 
-服务自身不接 ORM。所有 ``PlanQuotaSpec`` 由调用方仓储查得。
+服务自身不接 ORM，也不做读缓存：用量是强一致计数，缓存语义不安全；配置层缓存由
+上游 ``provider_quota_config_cache`` / 下游 ``entitlement_config_cache`` 负责。
+所有 ``PlanQuotaSpec`` 由调用方仓储查得。
 """
 
 from __future__ import annotations
@@ -53,7 +54,6 @@ def _bucket_ttl_seconds(spec: PlanQuotaSpec) -> int:
     - rolling：``window_seconds + 120``。
     - calendar_daily_utc：1 天 + 容差。
     - calendar_monthly_utc：31 天 + 容差。
-    - plan_anniversary：``window_seconds + 120``。
     - ``window_seconds=0``（整套餐期）：90 天兜底。
     """
     if spec.window_seconds <= 0:

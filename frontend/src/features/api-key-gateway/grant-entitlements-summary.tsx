@@ -6,8 +6,10 @@ import type React from 'react'
 
 import { useQuery } from '@tanstack/react-query'
 
-import { entitlementsApi, type EntitlementPlan } from '@/api/gateway/entitlements'
+import { entitlementsApi } from '@/api/gateway/entitlements'
 import { Badge } from '@/components/ui/badge'
+
+import { filterActiveEntitlementPlans } from '../gateway-keys/use-keys-entitlements'
 
 const GRANT_ENTITLEMENTS_STALE_MS = 60_000
 
@@ -27,7 +29,7 @@ export function GrantEntitlementsSummary({
     staleTime: GRANT_ENTITLEMENTS_STALE_MS,
   })
 
-  const active = plans.filter((plan: EntitlementPlan) => plan.is_active)
+  const active = filterActiveEntitlementPlans(plans)
 
   if (isLoading) {
     return <span className="text-xs text-muted-foreground">套餐加载中…</span>

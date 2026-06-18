@@ -43,7 +43,11 @@ import {
   expandBatchFormValues,
   type QuotaBatchFormValues,
 } from './quota-batch-form'
-import { quotaRuleToBatchFormValues, type EditingRuleInfo } from './quota-batch-from-rule'
+import {
+  quotaRuleToBatchFormValues,
+  quotaRuleToScopePrefill,
+  type EditingRuleInfo,
+} from './quota-batch-from-rule'
 import {
   buildBatchRules,
   buildRealModelsByCredentialMap,
@@ -54,9 +58,11 @@ import { deleteQuotaRule, isQuotaRuleDeletable } from './quota-rule-delete'
 import {
   buildQuotaRuleModelLookupFromCatalog,
   buildAliasByRealModelFromLookup,
+  canAddFromRule,
   needsQuotaModelIdentityLookup,
   quotaRuleRowId,
   resolveQuotaRuleModelDetailHref,
+  resolveQuotaRulePlanManagementLink,
   shouldManageQuotaOnModelDetail,
   type QuotaRuleLabelContext,
 } from './quota-rule-utils'
@@ -130,6 +136,11 @@ export interface QuotaCenterState {
   editingRuleId: string | null
   editingRule: QuotaRule | null
   onEditRule: (rule: QuotaRule) => void
+  /** 基于当前行维度预填并打开创建向导（复制为新配额） */
+  onAddFromRule: (rule: QuotaRule) => void
+  canAddFromRule: (rule: QuotaRule) => boolean
+  /** 打开空白创建向导（重置编辑态） */
+  openBatchCreate: () => void
   /** 编辑模式下删除当前规则并关闭向导 */
   deleteEditingRule: () => void
 }
@@ -372,6 +383,14 @@ function useQuotaCenterImpl(): QuotaCenterState {
     }
     return filterPlatformQuotaCredentialSummaries(raw, teamId, isPlatformAdmin)
   }, [actorCredentials.list, mode, batchValues.layer, teamId, adminTeamIds, isPlatformAdmin])
+
+  const memberSelfCredentialIds = useMemo((): ReadonlySet<string> => {
+    if (mode !== 'member') return new Set()
+    const raw = actorCredentials.list
+    const platformCreds = filterMemberSelfServiceCredentialSummaries(raw, teamId, 'platform')
+    const upstreamCreds = filterMemberSelfServiceCredentialSummaries(raw, teamId, 'upstream')
+    return new Set([...platformCreds, ...upstreamCreds].map((c) => c.id))
+  }, [actorCredentials.list, mode, teamId])
 
   const credentialOptions = useMemo(() => {
     return pickerCredentials.map((c) => ({
@@ -785,32 +804,30 @@ function useQuotaCenterImpl(): QuotaCenterState {
 
   const onEditRule = useCallback(
     (rule: QuotaRule) => {
-      if (shouldManageQuotaOnModelDetail(rule)) {
-        if (labelContext.quotaModelLookupLoading) {
-          toast({
-            title: '模型信息加载中',
-            description: '请稍候再试。',
-          })
-          return
-        }
-        const modelDetailHref = resolveQuotaRuleModelDetailHref(rule, labelContext)
-        if (modelDetailHref) {
-          navigate(modelDetailHref)
-          return
-        }
-        toast({
-          title: '未找到模型详情',
-          description: '请从模型列表进入后再管理配额。',
-          variant: 'destructive',
-        })
-        return
-      }
-
       const parsed = quotaRuleToBatchFormValues(rule)
       if (!parsed) {
+        if (shouldManageQuotaOnModelDetail(rule)) {
+          if (labelContext.quotaModelLookupLoading) {
+            toast({
+              title: '模型信息加载中',
+              description: '请稍候再试。',
+            })
+            return
+          }
+          const modelDetailHref = resolveQuotaRuleModelDetailHref(rule, labelContext)
+          if (modelDetailHref) {
+            navigate(modelDetailHref)
+            return
+          }
+        }
+        const planLink = resolveQuotaRulePlanManagementLink(rule, labelContext)
+        if (planLink) {
+          navigate(planLink.href)
+          return
+        }
         toast({
           title: '暂不支持在此编辑',
-          description: '计划类规则请使用操作列「去模型详情管理」，下游权益请至 Key 页管理。',
+          description: '授权码下游权益请至 Key 页管理。',
           variant: 'destructive',
         })
         return
@@ -823,6 +840,44 @@ function useQuotaCenterImpl(): QuotaCenterState {
     },
     [labelContext, navigate, toast]
   )
+
+  const onAddFromRule = useCallback(
+    (rule: QuotaRule) => {
+      const prefill = quotaRuleToScopePrefill(rule)
+      if (!prefill) {
+        toast({
+          title: '无法复制为新配额',
+          description: '该规则维度无法在此预填，请使用顶部批量设置。',
+          variant: 'destructive',
+        })
+        return
+      }
+      editingInfoRef.current = null
+      setEditingRule(null)
+      setEditingRuleId(null)
+      setBatchValues(prefill)
+      setBatchOpen(true)
+    },
+    [toast]
+  )
+
+  const canAddFromRuleForRow = useCallback(
+    (rule: QuotaRule) =>
+      canAddFromRule(rule, {
+        mode,
+        selfUserId,
+        selfCredentialIds: memberSelfCredentialIds,
+      }),
+    [mode, selfUserId, memberSelfCredentialIds]
+  )
+
+  const openBatchCreate = useCallback(() => {
+    editingInfoRef.current = null
+    setEditingRule(null)
+    setEditingRuleId(null)
+    setBatchValues(DEFAULT_BATCH_FORM)
+    setBatchOpen(true)
+  }, [])
 
   const handleSetBatchOpen = useCallback((open: boolean) => {
     setBatchOpen(open)
@@ -894,6 +949,9 @@ function useQuotaCenterImpl(): QuotaCenterState {
     editingRuleId,
     editingRule,
     onEditRule,
+    onAddFromRule,
+    canAddFromRule: canAddFromRuleForRow,
+    openBatchCreate,
     deleteEditingRule,
   }
 }
