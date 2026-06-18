@@ -226,3 +226,4 @@ sequenceDiagram
 - 删除/归属校验（`_assert_budget_in_team`）除 target 归属外，还校验成员护栏行的 `tenant_id == 当前团队`、成员+凭据行的凭据在当前团队可见集合内，防止同一成员所在他团队管理员跨团队删除。
 - metadata/model_info 丢失时 Phase2 跳过（与 ProviderPlan 一致的 fail-open：无规则则放行）。
 - 不改 `EntitlementPlan`/`ProviderPlan` 语义；不改造 `identity/UserQuota`（旧身份配额并行存在）。
+- **下游 `apikey_grant` scope 权益不进配额中心（有意为之）**：`EntitlementPlan` 的 `scope ∈ {vkey, apikey_grant}` 两者均参与执法（入站经平台 API Key 时 `gateway_proxy_context` 写入 `platform_api_key_grant_id` → `EntitlementGuard` 命中即可 429），但配额中心装配器 `quota_rule_assembler` **仅枚举 vkey scope**（`list_entitlement_plans_with_quotas_for_vkeys`）。`apikey_grant` 权益的查看 / 增删改统一在 **API Key grant → 权益** 页（`GET|POST /plans/api-key-grants/{grant_id}/entitlements`），不在配额中心聚合展示。读模型 / 映射 / 可见性 / 单条删除均已支持 `access_kind='apikey_grant'`；若后续需在配额中心聚合，仅缺「列团队全部 api-key grant」查询（`ApiKeyGatewayGrantQueryPort` 现仅 `assert_..._in_team`，需补 list 端口 + 仓储查询，再让装配器比照 vkey 遍历）。
