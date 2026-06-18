@@ -1,7 +1,7 @@
 import type React from 'react'
 import { type KeyboardEvent, useRef, useEffect } from 'react'
 
-import { Send, Paperclip, Globe, Loader2 } from 'lucide-react'
+import { Send, Loader2 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
@@ -55,7 +55,7 @@ export default function ChatInput({
       <div
         className={cn(
           'relative flex flex-col rounded-2xl border border-border bg-muted/30 shadow-sm transition-all duration-200',
-          'focus-within:border-primary/50 focus-within:shadow-md focus-within:ring-2 focus-within:ring-primary/10'
+          'border-border/70 bg-card/80 shadow-lg shadow-black/[0.04] backdrop-blur-xl focus-within:border-primary/50 focus-within:shadow-primary/10 focus-within:ring-2 focus-within:ring-primary/10 dark:shadow-black/30'
         )}
       >
         {/* Text Input */}
@@ -73,26 +73,8 @@ export default function ChatInput({
         />
 
         {/* Toolbar */}
-        <div className="flex items-center justify-between border-t border-border/30 px-2 py-1.5">
-          <div className="flex items-center gap-0.5">
-            {toolbarLeftExtra}
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8 rounded-lg text-muted-foreground/70 transition-colors hover:bg-secondary hover:text-foreground"
-              title="上传文件"
-            >
-              <Paperclip className="h-4 w-4" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8 rounded-lg text-muted-foreground/70 transition-colors hover:bg-secondary hover:text-foreground"
-              title="联网搜索"
-            >
-              <Globe className="h-4 w-4" />
-            </Button>
-          </div>
+        <div className="flex items-center justify-between border-t border-border/50 bg-muted/20 px-2 py-1.5">
+          <div className="flex items-center gap-0.5">{toolbarLeftExtra}</div>
 
           <div className="flex items-center gap-2">
             <span className="text-[11px] text-muted-foreground/40">
@@ -102,12 +84,13 @@ export default function ChatInput({
               size="icon"
               onClick={onSend}
               disabled={!value.trim() || isLoading}
-              title="发送 (Enter)"
+              aria-label="发送消息"
+              title="发送"
               className={cn(
-                'h-8 w-8 rounded-lg transition-all duration-200',
+                'h-8 w-8 rounded-lg transition-colors',
                 value.trim() && !isLoading
-                  ? 'bg-primary text-primary-foreground shadow-sm hover:bg-primary/90 hover:shadow-md'
-                  : 'bg-muted text-muted-foreground/50'
+                  ? 'bg-primary text-primary-foreground shadow-sm shadow-primary/20 hover:bg-primary/90'
+                  : 'bg-muted text-muted-foreground/50 shadow-none'
               )}
             >
               {isLoading ? (

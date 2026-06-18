@@ -28,6 +28,15 @@ const pageTitles: Partial<Record<string, string>> = {
   '/settings': '设置',
 }
 
+function resolveSectionLabel(pathname: string): string {
+  if (pathname.startsWith('/gateway')) return 'AI 基础设施'
+  if (pathname.startsWith('/video-tasks') || pathname.startsWith('/listing-studio'))
+    return '创作工作台'
+  if (pathname.startsWith('/admin') || pathname.startsWith('/mcp')) return '平台管理'
+  if (pathname.startsWith('/settings')) return '系统设置'
+  return 'AI Workspace'
+}
+
 export default function Header(): React.JSX.Element {
   const location = useLocation()
   const { sessionId } = useParams<{ sessionId?: string }>()
@@ -47,6 +56,7 @@ export default function Header(): React.JSX.Element {
 
   // 优先显示会话标题，否则显示页面标题
   const title = session?.title ?? pageTitles[location.pathname] ?? '对话'
+  const sectionLabel = resolveSectionLabel(location.pathname)
 
   const handleLogout = async (): Promise<void> => {
     await logout()
@@ -57,9 +67,17 @@ export default function Header(): React.JSX.Element {
   const displayEmail = currentUser?.email ?? 'user@example.com'
 
   return (
-    <header className="sticky top-0 z-[60] flex h-14 items-center justify-between border-b border-border/40 bg-background/95 px-6 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+    <header className="sticky top-0 z-[60] flex h-14 items-center justify-between border-b border-border/60 bg-card/80 px-6 shadow-sm shadow-black/[0.02] backdrop-blur-xl supports-[backdrop-filter]:bg-card/65 dark:shadow-black/20">
       {/* Page Title */}
-      <h1 className="text-lg font-semibold">{title}</h1>
+      <div className="min-w-0">
+        <div className="flex items-center gap-2">
+          <span className="h-1.5 w-1.5 rounded-full bg-primary shadow-[0_0_14px_hsl(var(--primary)/0.7)]" />
+          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+            {sectionLabel}
+          </p>
+        </div>
+        <h1 className="truncate text-base font-semibold tracking-tight">{title}</h1>
+      </div>
 
       {/* Actions */}
       <div className="flex items-center gap-2">
@@ -67,6 +85,7 @@ export default function Header(): React.JSX.Element {
         <Button
           variant="ghost"
           size="icon"
+          aria-label={theme === 'dark' ? '切换到浅色主题' : '切换到深色主题'}
           onClick={() => {
             setTheme(theme === 'dark' ? 'light' : 'dark')
           }}
@@ -78,7 +97,11 @@ export default function Header(): React.JSX.Element {
         <div className="flex items-center gap-2">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="relative h-8 w-8 rounded-full">
+              <Button
+                variant="ghost"
+                className="relative h-8 w-8 rounded-full"
+                aria-label="打开用户菜单"
+              >
                 <Avatar className="h-8 w-8">
                   <AvatarImage src="" alt="用户头像" />
                   <AvatarFallback>

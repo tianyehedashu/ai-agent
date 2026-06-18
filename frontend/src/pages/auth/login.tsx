@@ -198,16 +198,10 @@ export default function LoginPage(): React.JSX.Element {
   )
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-background">
-      {/* Dynamic Background Effects */}
-      <div className="absolute inset-0 z-0">
-        <div className="absolute -left-1/4 -top-1/4 h-1/2 w-1/2 rounded-full bg-primary/20 blur-[120px]" />
-        <div className="absolute -bottom-1/4 -right-1/4 h-1/2 w-1/2 rounded-full bg-blue-500/10 blur-[120px]" />
-      </div>
-
-      <Card className="relative z-10 w-full max-w-md border-border/50 bg-background/60 shadow-xl backdrop-blur-xl">
+    <div className="auth-stage flex min-h-screen items-center justify-center overflow-hidden px-4 py-10">
+      <Card className="relative z-10 w-full max-w-md border-border/70 bg-card/80 shadow-2xl shadow-black/10 backdrop-blur-xl dark:shadow-black/40">
         <CardHeader className="space-y-1 pb-6 text-center">
-          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 ring-1 ring-primary/20">
+          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl border border-primary/20 bg-primary/10 ring-1 ring-primary/10">
             <Terminal className="h-6 w-6 text-primary" />
           </div>
           <CardTitle className="text-2xl font-bold tracking-tight">AI Agent</CardTitle>

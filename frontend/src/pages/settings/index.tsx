@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { PageHeader, PageShell } from '@/components/ui/page-shell'
 import {
   Select,
   SelectContent,
@@ -20,6 +21,7 @@ import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useToast } from '@/hooks/use-toast'
+import { Key, Server, Settings2, Shield, UserCog } from '@/lib/lucide-icons'
 import { CURRENT_USER_QUERY_KEY, useCurrentUser } from '@/stores/user'
 
 import { ApiKeyTab } from './components/api-key-tab'
@@ -162,136 +164,166 @@ export default function SettingsPage(): React.JSX.Element {
   }
 
   return (
-    <div className="mx-auto max-w-4xl p-6">
-      <h1 className="mb-6 text-2xl font-bold">设置</h1>
+    <PageShell size="default" className="space-y-6">
+      <PageHeader
+        eyebrow="System"
+        title="设置"
+        description="集中管理账户、平台访问与本地工作台偏好。"
+        icon={Settings2}
+      />
 
-      <Tabs value={activeTab} onValueChange={handleTabChange}>
-        <TabsList className="mb-6">
-          <TabsTrigger value="general">通用</TabsTrigger>
-          <TabsTrigger value="api">API 密钥</TabsTrigger>
-          {isPlatformAdmin && <TabsTrigger value="mcp">MCP 服务器</TabsTrigger>}
-          <TabsTrigger value="account">账户</TabsTrigger>
-          {isPlatformAdmin && <TabsTrigger value="platform">平台管理</TabsTrigger>}
+      <Tabs
+        value={activeTab}
+        onValueChange={handleTabChange}
+        className="grid gap-6 lg:grid-cols-[220px_minmax(0,1fr)]"
+      >
+        <TabsList className="h-auto flex-col items-stretch justify-start gap-1 rounded-xl bg-card/70 p-2">
+          <TabsTrigger value="general" className="w-full justify-start gap-2">
+            <Settings2 className="h-4 w-4" />
+            通用
+          </TabsTrigger>
+          <TabsTrigger value="api" className="w-full justify-start gap-2">
+            <Key className="h-4 w-4" />
+            API 密钥
+          </TabsTrigger>
+          {isPlatformAdmin && (
+            <TabsTrigger value="mcp" className="w-full justify-start gap-2">
+              <Server className="h-4 w-4" />
+              MCP 服务器
+            </TabsTrigger>
+          )}
+          <TabsTrigger value="account" className="w-full justify-start gap-2">
+            <UserCog className="h-4 w-4" />
+            账户
+          </TabsTrigger>
+          {isPlatformAdmin && (
+            <TabsTrigger value="platform" className="w-full justify-start gap-2">
+              <Shield className="h-4 w-4" />
+              平台管理
+            </TabsTrigger>
+          )}
         </TabsList>
 
-        <TabsContent value="general">
-          <Card>
-            <CardHeader>
-              <CardTitle>通用设置</CardTitle>
-              <CardDescription>配置应用的基本设置</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <Label>主题</Label>
-                  <p className="text-sm text-muted-foreground">选择您喜欢的主题</p>
+        <div className="min-w-0">
+          <TabsContent value="general" className="mt-0">
+            <Card>
+              <CardHeader>
+                <CardTitle>通用设置</CardTitle>
+                <CardDescription>配置应用的基本设置</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label>主题</Label>
+                    <p className="text-sm text-muted-foreground">选择您喜欢的主题</p>
+                  </div>
+                  <Select
+                    value={theme}
+                    onValueChange={(v) => {
+                      setTheme(v as 'light' | 'dark' | 'system')
+                    }}
+                  >
+                    <SelectTrigger className="w-32">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="light">浅色</SelectItem>
+                      <SelectItem value="dark">深色</SelectItem>
+                      <SelectItem value="system">跟随系统</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
-                <Select
-                  value={theme}
-                  onValueChange={(v) => {
-                    setTheme(v as 'light' | 'dark' | 'system')
-                  }}
-                >
-                  <SelectTrigger className="w-32">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="light">浅色</SelectItem>
-                    <SelectItem value="dark">深色</SelectItem>
-                    <SelectItem value="system">跟随系统</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
 
-              <div className="flex items-center justify-between">
-                <div>
-                  <Label>通知</Label>
-                  <p className="text-sm text-muted-foreground">接收桌面通知</p>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label>通知</Label>
+                    <p className="text-sm text-muted-foreground">接收桌面通知</p>
+                  </div>
+                  <Switch />
                 </div>
-                <Switch />
-              </div>
 
-              <div className="flex items-center justify-between">
-                <div>
-                  <Label>声音</Label>
-                  <p className="text-sm text-muted-foreground">播放通知声音</p>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label>声音</Label>
+                    <p className="text-sm text-muted-foreground">播放通知声音</p>
+                  </div>
+                  <Switch />
                 </div>
-                <Switch />
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="api">
-          <ApiKeyTab />
-        </TabsContent>
-
-        {isPlatformAdmin && (
-          <TabsContent value="mcp">
-            <MCPTab />
+              </CardContent>
+            </Card>
           </TabsContent>
-        )}
 
-        <TabsContent value="account">
-          <Card>
-            <CardHeader>
-              <CardTitle>账户设置</CardTitle>
-              <CardDescription>管理您的账户信息</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="space-y-2">
-                <Label>邮箱</Label>
-                <Input value={currentUser?.email ?? ''} disabled />
-              </div>
+          <TabsContent value="api" className="mt-0">
+            <ApiKeyTab />
+          </TabsContent>
 
-              <div className="space-y-2">
-                <Label>用户名</Label>
-                <Input
-                  value={userName}
-                  onChange={(e) => {
-                    setUserName(e.target.value)
-                  }}
-                  placeholder="请输入用户名"
-                  disabled={!currentUser}
-                />
-              </div>
+          {isPlatformAdmin && (
+            <TabsContent value="mcp" className="mt-0">
+              <MCPTab />
+            </TabsContent>
+          )}
 
-              <div className="space-y-2">
-                <Label>厂商用户 ID</Label>
-                <Input
-                  type="number"
-                  value={vendorCreatorId}
-                  onChange={(e) => {
-                    setVendorCreatorId(e.target.value)
-                  }}
-                  placeholder="用于视频生成等第三方服务追踪"
-                  disabled={!currentUser}
-                />
-                <p className="text-xs text-muted-foreground">
-                  此 ID 用于 GIIKIN 等视频生成服务的操作追踪，请向服务商获取您的用户 ID
-                </p>
-              </div>
+          <TabsContent value="account" className="mt-0">
+            <Card>
+              <CardHeader>
+                <CardTitle>账户设置</CardTitle>
+                <CardDescription>管理您的账户信息</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="space-y-2">
+                  <Label>邮箱</Label>
+                  <Input value={currentUser?.email ?? ''} disabled />
+                </div>
 
-              <Button onClick={handleSaveAccount} disabled={isSaving || !currentUser}>
-                {isSaving ? '保存中...' : '保存更改'}
-              </Button>
+                <div className="space-y-2">
+                  <Label>用户名</Label>
+                  <Input
+                    value={userName}
+                    onChange={(e) => {
+                      setUserName(e.target.value)
+                    }}
+                    placeholder="请输入用户名"
+                    disabled={!currentUser}
+                  />
+                </div>
 
-              <div className="border-t pt-6">
-                <h4 className="mb-2 text-sm font-medium text-destructive">危险区域</h4>
-                <Button variant="destructive" size="sm" disabled={!currentUser}>
-                  删除账户
+                <div className="space-y-2">
+                  <Label>厂商用户 ID</Label>
+                  <Input
+                    type="number"
+                    value={vendorCreatorId}
+                    onChange={(e) => {
+                      setVendorCreatorId(e.target.value)
+                    }}
+                    placeholder="用于视频生成等第三方服务追踪"
+                    disabled={!currentUser}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    此 ID 用于 GIIKIN 等视频生成服务的操作追踪，请向服务商获取您的用户 ID
+                  </p>
+                </div>
+
+                <Button onClick={handleSaveAccount} disabled={isSaving || !currentUser}>
+                  {isSaving ? '保存中...' : '保存更改'}
                 </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
 
-        {isPlatformAdmin && (
-          <TabsContent value="platform">
-            <PlatformAdminPanel />
+                <div className="border-t pt-6">
+                  <h4 className="mb-2 text-sm font-medium text-destructive">危险区域</h4>
+                  <Button variant="destructive" size="sm" disabled={!currentUser}>
+                    删除账户
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
           </TabsContent>
-        )}
+
+          {isPlatformAdmin && (
+            <TabsContent value="platform" className="mt-0">
+              <PlatformAdminPanel />
+            </TabsContent>
+          )}
+        </div>
       </Tabs>
-    </div>
+    </PageShell>
   )
 }

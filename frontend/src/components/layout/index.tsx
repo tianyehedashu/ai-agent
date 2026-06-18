@@ -25,17 +25,17 @@ export default function Layout({ children }: Readonly<LayoutProps>): React.JSX.E
   useEffect(() => installOverlayPointerGuard(), [])
 
   return (
-    <div className="pointer-events-auto flex h-screen bg-background">
+    <div className="pointer-events-auto flex h-screen overflow-hidden bg-background text-foreground">
       {/* Sidebar */}
       <Sidebar />
 
       {/* Main Content */}
-      <div className="flex flex-1 flex-col overflow-hidden">
+      <div className="app-shell-surface flex flex-1 flex-col overflow-hidden">
         {/* Header */}
         <Header />
 
         {/* Page Content */}
-        <main className="flex-1 overflow-auto">{children}</main>
+        <main className="relative flex-1 overflow-auto">{children}</main>
       </div>
     </div>
   )

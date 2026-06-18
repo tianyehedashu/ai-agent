@@ -368,6 +368,7 @@ export default function ChatPage(): React.JSX.Element {
           processRuns={processRuns}
           currentRunId={currentRunId}
           sessionId={sessionId}
+          onPromptSelect={setInput}
         />
       </div>
 
@@ -375,7 +376,7 @@ export default function ChatPage(): React.JSX.Element {
       <ChatSessionVideoTasks sessionId={sessionId} />
 
       {/* Input Area - Fixed at bottom with centered content */}
-      <div className="relative z-10 border-t border-border/40 bg-background/95 pb-4 pt-2 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+      <div className="relative z-10 border-t border-border/60 bg-card/70 pb-4 pt-3 shadow-[0_-12px_30px_-24px_hsl(var(--foreground)/0.35)] backdrop-blur-xl supports-[backdrop-filter]:bg-card/60">
         <div className="mx-auto max-w-3xl px-4">
           <UnifiedInputArea
             creativeMode={creativeMode}

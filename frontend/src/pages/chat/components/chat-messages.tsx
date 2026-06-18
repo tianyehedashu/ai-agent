@@ -20,7 +20,14 @@ interface ChatMessagesProps {
   currentRunId?: string | null
   /** 当前会话 ID，供 ProcessPanel 内视频任务块跳转链接使用 */
   sessionId?: string
+  onPromptSelect?: (prompt: string) => void
 }
+
+const EMPTY_PROMPTS = [
+  { title: '排查一次调用失败', prompt: '帮我分析最近一次 AI Gateway 调用失败的可能原因。' },
+  { title: '整理模型路由策略', prompt: '帮我设计一个兼顾成本、延迟和稳定性的模型路由策略。' },
+  { title: '生成 Listing 素材', prompt: '帮我为一个新品 Listing 生成卖点、标题和图片创意方向。' },
+]
 
 export default function ChatMessages({
   messages,
@@ -30,6 +37,7 @@ export default function ChatMessages({
   processRuns = {},
   currentRunId = null,
   sessionId,
+  onPromptSelect,
 }: Readonly<ChatMessagesProps>): React.JSX.Element {
   const bottomRef = useRef<HTMLDivElement>(null)
 
@@ -41,14 +49,30 @@ export default function ChatMessages({
   if (messages.length === 0 && !isLoading) {
     return (
       <div className="flex h-full flex-col items-center justify-center px-4 py-8">
-        <div className="text-center">
-          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-primary/20 to-primary/5">
+        <div className="w-full max-w-2xl text-center">
+          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-primary/20 bg-primary/10 shadow-sm shadow-primary/10">
             <Bot className="h-7 w-7 text-primary" />
           </div>
           <h1 className="text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
-            有什么我可以帮你的？
+            今天从哪里开始？
           </h1>
-          <p className="mt-1.5 text-sm text-muted-foreground">直接输入你的问题或需求即可</p>
+          <p className="mt-1.5 text-sm text-muted-foreground">选择一个任务，或直接开始新的对话。</p>
+          {onPromptSelect ? (
+            <div className="mt-6 grid gap-2 sm:grid-cols-3">
+              {EMPTY_PROMPTS.map((item) => (
+                <button
+                  key={item.title}
+                  type="button"
+                  className="rounded-lg border border-border/70 bg-card/70 px-3 py-3 text-left text-sm transition-colors hover:border-primary/30 hover:bg-accent/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  onClick={() => {
+                    onPromptSelect(item.prompt)
+                  }}
+                >
+                  <span className="font-medium text-foreground">{item.title}</span>
+                </button>
+              ))}
+            </div>
+          ) : null}
         </div>
       </div>
     )
@@ -74,8 +98,8 @@ export default function ChatMessages({
         {/* Streaming content with live process panel */}
         {(currentRunId !== null || isLoading) && (
           <div className="group flex items-start gap-3 animate-in fade-in slide-in-from-bottom-2">
-            <Avatar className="mt-0.5 h-8 w-8 shrink-0 border shadow-sm">
-              <AvatarFallback className="bg-gradient-to-br from-primary/20 to-primary/5">
+            <Avatar className="mt-0.5 h-8 w-8 shrink-0 border border-primary/20 shadow-sm">
+              <AvatarFallback className="bg-primary/10">
                 <Bot className="h-4 w-4 text-primary" />
               </AvatarFallback>
             </Avatar>
@@ -172,14 +196,14 @@ const MessageBubble = memo(function MessageBubble({
     return (
       <div className="flex items-start justify-end gap-3 animate-in fade-in slide-in-from-bottom-2">
         <div className="max-w-[85%] sm:max-w-[75%]">
-          <div className="rounded-2xl rounded-br-md bg-secondary px-4 py-3 text-secondary-foreground shadow-sm">
+          <div className="rounded-2xl rounded-br-md border border-primary/15 bg-primary/10 px-4 py-3 text-foreground shadow-sm shadow-primary/5">
             <div className="text-[15px] leading-relaxed">
               <ReactMarkdown>{message.content}</ReactMarkdown>
             </div>
           </div>
         </div>
-        <Avatar className="mt-0.5 h-8 w-8 shrink-0 border shadow-sm">
-          <AvatarFallback className="bg-secondary">
+        <Avatar className="mt-0.5 h-8 w-8 shrink-0 border border-primary/15 shadow-sm">
+          <AvatarFallback className="bg-primary/10 text-primary">
             <User className="h-4 w-4" />
           </AvatarFallback>
         </Avatar>
@@ -189,8 +213,8 @@ const MessageBubble = memo(function MessageBubble({
 
   return (
     <div className="group flex items-start gap-3 animate-in fade-in slide-in-from-bottom-2">
-      <Avatar className="mt-0.5 h-8 w-8 shrink-0 border shadow-sm">
-        <AvatarFallback className="bg-gradient-to-br from-primary/20 to-primary/5">
+      <Avatar className="mt-0.5 h-8 w-8 shrink-0 border border-primary/20 shadow-sm">
+        <AvatarFallback className="bg-primary/10">
           <Bot className="h-4 w-4 text-primary" />
         </AvatarFallback>
       </Avatar>

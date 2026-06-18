@@ -144,7 +144,7 @@ export default function UnifiedInputArea({
 
   return (
     <div className="space-y-2">
-      <div className="flex justify-center gap-0.5 rounded-full bg-muted/40 p-0.5">
+      <div className="mx-auto flex w-fit justify-center gap-0.5 rounded-full border border-border/70 bg-card/70 p-0.5 shadow-sm shadow-black/[0.03] backdrop-blur dark:shadow-black/20">
         <Button
           variant="ghost"
           size="sm"
@@ -154,7 +154,7 @@ export default function UnifiedInputArea({
           className={cn(
             'h-7 rounded-full px-3 text-xs font-medium',
             isChat
-              ? 'bg-background text-foreground shadow-sm'
+              ? 'bg-primary text-primary-foreground shadow-sm shadow-primary/20'
               : 'text-muted-foreground hover:text-foreground'
           )}
         >
@@ -170,7 +170,7 @@ export default function UnifiedInputArea({
           className={cn(
             'h-7 rounded-full px-3 text-xs font-medium',
             isImageGen
-              ? 'bg-background text-foreground shadow-sm'
+              ? 'bg-primary text-primary-foreground shadow-sm shadow-primary/20'
               : 'text-muted-foreground hover:text-foreground'
           )}
         >
@@ -186,7 +186,7 @@ export default function UnifiedInputArea({
           className={cn(
             'h-7 rounded-full px-3 text-xs font-medium',
             isVideo
-              ? 'bg-background text-foreground shadow-sm'
+              ? 'bg-primary text-primary-foreground shadow-sm shadow-primary/20'
               : 'text-muted-foreground hover:text-foreground'
           )}
         >

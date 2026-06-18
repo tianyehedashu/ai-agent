@@ -34,10 +34,22 @@ type NavItem = {
   to: string
   label: string
   icon: ComponentType<{ className?: string }>
+  section: GatewayNavSection
   end?: boolean
   /** 与带 legacy `?tab=system` 的入口区分高亮（凭据） */
   navMatch?: GatewayNavMatch
 }
+
+type GatewayNavSection = 'observe' | 'access' | 'control' | 'admin'
+
+const GATEWAY_NAV_SECTION_LABELS: Record<GatewayNavSection, string> = {
+  observe: '观测',
+  access: '接入',
+  control: '治理',
+  admin: '组织',
+}
+
+const GATEWAY_NAV_SECTION_ORDER: GatewayNavSection[] = ['observe', 'access', 'control', 'admin']
 
 function scopeTabFromSearch(search: string): string | null {
   return new URLSearchParams(search).get('tab')
@@ -112,74 +124,163 @@ export default function GatewayLayout(): React.JSX.Element {
 
   const items = useMemo((): NavItem[] => {
     const base: NavItem[] = [
-      { to: gatewayTeamNavHref(teamId, 'overview'), label: '概览', icon: BarChart3, end: true },
-      { to: gatewayTeamNavHref(teamId, 'stats'), label: '调用统计', icon: LineChart, end: true },
-      { to: '/gateway/guide', label: '调用指南', icon: BookOpen, end: true },
-      { to: gatewayTeamNavHref(teamId, 'keys'), label: '虚拟 Key', icon: Key, end: true },
+      {
+        to: gatewayTeamNavHref(teamId, 'overview'),
+        label: '概览',
+        icon: BarChart3,
+        section: 'observe',
+        end: true,
+      },
+      {
+        to: gatewayTeamNavHref(teamId, 'stats'),
+        label: '调用统计',
+        icon: LineChart,
+        section: 'observe',
+        end: true,
+      },
+      { to: '/gateway/guide', label: '调用指南', icon: BookOpen, section: 'observe', end: true },
+      {
+        to: gatewayTeamNavHref(teamId, 'keys'),
+        label: '虚拟 Key',
+        icon: Key,
+        section: 'access',
+        end: true,
+      },
       {
         to: gatewayTeamNavHref(teamId, 'credentials'),
         label: '凭据',
         icon: Database,
+        section: 'access',
         end: true,
       },
       {
         to: gatewayTeamNavHref(teamId, 'models'),
         label: '模型',
         icon: Network,
+        section: 'access',
         end: true,
       },
-      { to: gatewayTeamNavHref(teamId, 'pricing'), label: '定价目录', icon: CircleDollarSign },
-      { to: gatewayTeamNavHref(teamId, 'routes'), label: '虚拟路由', icon: Route, end: true },
+      {
+        to: gatewayTeamNavHref(teamId, 'pricing'),
+        label: '定价目录',
+        icon: CircleDollarSign,
+        section: 'control',
+      },
+      {
+        to: gatewayTeamNavHref(teamId, 'routes'),
+        label: '虚拟路由',
+        icon: Route,
+        section: 'control',
+        end: true,
+      },
       {
         to: gatewayTeamNavHref(teamId, 'budgets'),
         label: isAdmin ? '配额中心' : '我的配额',
         icon: Receipt,
+        section: 'control',
         end: true,
       },
-      { to: gatewayTeamNavHref(teamId, 'logs'), label: '调用日志', icon: FileText, end: true },
-      { to: gatewayTeamNavHref(teamId, 'members'), label: '团队管理', icon: Users, end: true },
+      {
+        to: gatewayTeamNavHref(teamId, 'logs'),
+        label: '调用日志',
+        icon: FileText,
+        section: 'control',
+        end: true,
+      },
+      {
+        to: gatewayTeamNavHref(teamId, 'members'),
+        label: '团队管理',
+        icon: Users,
+        section: 'admin',
+        end: true,
+      },
     ]
     if (isPlatformAdmin) {
       base.push(
-        { to: '/gateway/platform-stats', label: '平台统计', icon: LineChart, end: true },
-        { to: '/admin/users', label: '用户管理', icon: UserCog, end: true }
+        {
+          to: '/gateway/platform-stats',
+          label: '平台统计',
+          icon: LineChart,
+          section: 'admin',
+          end: true,
+        },
+        {
+          to: '/admin/users',
+          label: '用户管理',
+          icon: UserCog,
+          section: 'admin',
+          end: true,
+        }
       )
     }
     return base
   }, [isAdmin, isPlatformAdmin, teamId])
+  const navSections = useMemo(
+    () =>
+      GATEWAY_NAV_SECTION_ORDER.map((section) => ({
+        section,
+        items: items.filter((item) => item.section === section),
+      })).filter((group) => group.items.length > 0),
+    [items]
+  )
 
   return (
     <div className="flex h-full min-h-0">
-      <aside className="flex w-56 flex-col border-r border-border/40 bg-background/60 px-3 py-4">
-        <div className="mb-3 flex items-center gap-2 px-2 text-sm font-semibold tracking-tight">
-          <Server className="h-4 w-4 shrink-0 text-primary" />
-          AI Gateway
+      <aside className="flex w-60 flex-col border-r border-border/60 bg-card/55 px-3 py-4 backdrop-blur-xl">
+        <div className="mb-4 rounded-lg border border-primary/15 bg-primary/10 px-3 py-3">
+          <div className="flex items-center gap-2 text-sm font-semibold tracking-tight text-foreground">
+            <Server className="h-4 w-4 shrink-0 text-primary" />
+            AI Gateway
+          </div>
+          <p className="mt-1 text-[11px] leading-4 text-muted-foreground">
+            模型、凭据、调用与预算中心
+          </p>
         </div>
-        <nav className="flex flex-col gap-1">
-          {items.map((it) => {
-            const customActive =
-              it.navMatch !== undefined
-                ? isGatewayNavActive(location.pathname, location.search, it.navMatch)
-                : null
-            return (
-              <NavLink
-                key={`${it.label}-${it.to}`}
-                to={it.to}
-                end={it.end}
-                className={({ isActive }) =>
-                  cn(
-                    'flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors',
-                    (customActive ?? isActive)
-                      ? 'bg-primary/10 text-primary'
-                      : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
-                  )
-                }
-              >
-                <it.icon className="h-4 w-4" />
-                <span>{it.label}</span>
-              </NavLink>
-            )
-          })}
+        <nav className="flex flex-col gap-4">
+          {navSections.map(({ section, items: sectionItems }) => (
+            <div key={section} className="space-y-1">
+              <p className="px-3 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground/60">
+                {GATEWAY_NAV_SECTION_LABELS[section]}
+              </p>
+              {sectionItems.map((it) => {
+                const customActive =
+                  it.navMatch !== undefined
+                    ? isGatewayNavActive(location.pathname, location.search, it.navMatch)
+                    : null
+                return (
+                  <NavLink
+                    key={`${it.label}-${it.to}`}
+                    to={it.to}
+                    end={it.end}
+                    className={({ isActive }) =>
+                      cn(
+                        'group flex items-center gap-2 rounded-lg border border-transparent px-3 py-2 text-sm transition-colors',
+                        (customActive ?? isActive)
+                          ? 'border-primary/20 bg-primary/10 text-primary shadow-sm shadow-primary/10'
+                          : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+                      )
+                    }
+                  >
+                    {({ isActive }) => {
+                      const active = customActive ?? isActive
+                      return (
+                        <>
+                          <span
+                            className={cn(
+                              'h-4 w-0.5 rounded-full transition-colors',
+                              active ? 'bg-primary' : 'bg-transparent group-hover:bg-border'
+                            )}
+                          />
+                          <it.icon className="h-4 w-4" />
+                          <span>{it.label}</span>
+                        </>
+                      )
+                    }}
+                  </NavLink>
+                )
+              })}
+            </div>
+          ))}
         </nav>
       </aside>
       <section

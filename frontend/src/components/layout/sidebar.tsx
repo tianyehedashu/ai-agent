@@ -51,6 +51,7 @@ interface NavItem {
   name: string
   href: string
   icon: typeof Bot
+  section: NavSection
   /** 仅登录用户可见 */
   requiresAuth?: boolean
   /** 仅平台管理员可见 */
@@ -59,28 +60,56 @@ interface NavItem {
   adminLabel?: string
 }
 
+type NavSection = 'workbench' | 'gateway' | 'ops' | 'system'
+
+const NAV_SECTION_LABELS: Record<NavSection, string> = {
+  workbench: '工作台',
+  gateway: 'AI 基础设施',
+  ops: '管理',
+  system: '系统',
+}
+
+const NAV_SECTION_ORDER: NavSection[] = ['workbench', 'gateway', 'ops', 'system']
+
 const navigation: NavItem[] = [
-  { name: 'Agents', href: '/agents', icon: Bot, requiresAuth: true, requiresAdmin: true },
+  {
+    name: 'Agents',
+    href: '/agents',
+    icon: Bot,
+    section: 'ops',
+    requiresAuth: true,
+    requiresAdmin: true,
+  },
   {
     name: 'AI 网关',
     href: '/gateway',
     icon: Network,
+    section: 'gateway',
     requiresAuth: true,
     adminLabel: 'AI 网关（管理）',
   },
-  { name: 'MCP 服务器', href: '/mcp', icon: Zap, requiresAuth: true, requiresAdmin: true },
+  {
+    name: 'MCP 服务器',
+    href: '/mcp',
+    icon: Zap,
+    section: 'ops',
+    requiresAuth: true,
+    requiresAdmin: true,
+  },
   {
     name: '系统 MCP',
     href: '/mcp/system',
     icon: Server,
+    section: 'ops',
     requiresAuth: true,
   },
-  { name: '视频', href: '/video-tasks', icon: Video },
-  { name: 'Listing 创作', href: '/listing-studio', icon: Package },
+  { name: '视频', href: '/video-tasks', icon: Video, section: 'workbench' },
+  { name: 'Listing 创作', href: '/listing-studio', icon: Package, section: 'workbench' },
   {
     name: '用户管理',
     href: '/admin/users',
     icon: Users,
+    section: 'ops',
     requiresAuth: true,
     requiresAdmin: true,
   },
@@ -88,10 +117,11 @@ const navigation: NavItem[] = [
     name: '对象存储',
     href: '/admin/storage',
     icon: HardDrive,
+    section: 'ops',
     requiresAuth: true,
     requiresAdmin: true,
   },
-  { name: '设置', href: '/settings', icon: Settings },
+  { name: '设置', href: '/settings', icon: Settings, section: 'system' },
 ]
 
 export default function Sidebar(): React.JSX.Element {
@@ -111,6 +141,14 @@ export default function Sidebar(): React.JSX.Element {
         return true
       }),
     [isAuthenticated, isAdmin]
+  )
+  const navigationSections = useMemo(
+    () =>
+      NAV_SECTION_ORDER.map((section) => ({
+        section,
+        items: visibleNavigation.filter((item) => item.section === section),
+      })).filter((group) => group.items.length > 0),
+    [visibleNavigation]
   )
 
   // Fetch sessions
@@ -147,7 +185,7 @@ export default function Sidebar(): React.JSX.Element {
       <div
         data-app-sidebar=""
         className={cn(
-          'pointer-events-auto relative z-[60] flex h-full flex-col border-r border-border/40 bg-background/95 backdrop-blur transition-all duration-300 supports-[backdrop-filter]:bg-background/60',
+          'pointer-events-auto relative z-[60] flex h-full flex-col border-r border-border/60 bg-card/90 shadow-xl shadow-black/[0.03] backdrop-blur-xl transition-all duration-300 supports-[backdrop-filter]:bg-card/70 dark:shadow-black/20',
           isCollapsed ? 'w-16' : 'w-72'
         )}
       >
@@ -155,14 +193,14 @@ export default function Sidebar(): React.JSX.Element {
         <div className="flex h-14 items-center border-b border-border/40 px-4">
           {!isCollapsed && (
             <Link to="/chat" className="group flex items-center gap-2">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 shadow-sm transition-colors group-hover:bg-primary/20">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-primary/20 bg-primary/10 shadow-sm shadow-primary/10 transition-colors group-hover:bg-primary/15">
                 <Bot className="h-5 w-5 text-primary" />
               </div>
               <span className="text-lg font-semibold tracking-tight">AI Agent</span>
             </Link>
           )}
           {isCollapsed && (
-            <div className="mx-auto flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 shadow-sm">
+            <div className="mx-auto flex h-8 w-8 items-center justify-center rounded-lg border border-primary/20 bg-primary/10 shadow-sm shadow-primary/10">
               <Bot className="h-5 w-5 text-primary" />
             </div>
           )}
@@ -173,11 +211,7 @@ export default function Sidebar(): React.JSX.Element {
           {isCollapsed ? (
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button
-                  variant="default"
-                  className="w-full bg-primary px-0 text-primary-foreground shadow-sm transition-all hover:bg-primary/90 hover:shadow-md"
-                  onClick={handleCreateChat}
-                >
+                <Button variant="default" className="w-full px-0" onClick={handleCreateChat}>
                   <Plus className="h-4 w-4" />
                 </Button>
               </TooltipTrigger>
@@ -186,7 +220,7 @@ export default function Sidebar(): React.JSX.Element {
           ) : (
             <Button
               variant="default"
-              className="w-full justify-start gap-2 bg-primary text-primary-foreground shadow-sm transition-all hover:bg-primary/90 hover:shadow-md"
+              className="w-full justify-start gap-2"
               onClick={handleCreateChat}
             >
               <Plus className="h-4 w-4" />
@@ -275,50 +309,65 @@ export default function Sidebar(): React.JSX.Element {
           <div className="my-3 h-px bg-border/50" />
 
           {/* Other Navigation */}
-          <nav className="space-y-1">
-            {visibleNavigation.map((item) => {
-              const label =
-                isAdmin && item.adminLabel !== undefined && item.adminLabel !== ''
-                  ? item.adminLabel
-                  : item.name
-              const isActive =
-                location.pathname === item.href ||
-                (item.href !== '/' && location.pathname.startsWith(item.href))
+          <nav className="space-y-4">
+            {navigationSections.map(({ section, items }) => (
+              <div key={section} className="space-y-1">
+                {!isCollapsed && (
+                  <p className="px-3 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground/60">
+                    {NAV_SECTION_LABELS[section]}
+                  </p>
+                )}
+                {items.map((item) => {
+                  const label =
+                    isAdmin && item.adminLabel !== undefined && item.adminLabel !== ''
+                      ? item.adminLabel
+                      : item.name
+                  const isActive =
+                    location.pathname === item.href ||
+                    (item.href !== '/' && location.pathname.startsWith(item.href))
 
-              return isCollapsed ? (
-                <Tooltip key={item.name}>
-                  <TooltipTrigger asChild>
+                  return isCollapsed ? (
+                    <Tooltip key={item.name}>
+                      <TooltipTrigger asChild>
+                        <Link
+                          to={item.href}
+                          className={cn(
+                            'flex items-center justify-center rounded-lg border border-transparent p-2 transition-colors',
+                            isActive
+                              ? 'border-primary/20 bg-primary/10 text-primary shadow-sm shadow-primary/10'
+                              : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+                          )}
+                        >
+                          <item.icon className="h-4 w-4" />
+                        </Link>
+                      </TooltipTrigger>
+                      <TooltipContent side="right">{label}</TooltipContent>
+                    </Tooltip>
+                  ) : (
                     <Link
+                      key={item.name}
                       to={item.href}
+                      title={label}
                       className={cn(
-                        'flex items-center justify-center rounded-lg p-2 transition-colors',
+                        'group flex items-center gap-2 rounded-lg border border-transparent px-3 py-2 text-sm transition-colors',
                         isActive
-                          ? 'bg-primary/10 text-primary'
+                          ? 'border-primary/20 bg-primary/10 text-primary shadow-sm shadow-primary/10'
                           : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
                       )}
                     >
-                      <item.icon className="h-4 w-4" />
+                      <span
+                        className={cn(
+                          'h-4 w-0.5 rounded-full transition-colors',
+                          isActive ? 'bg-primary' : 'bg-transparent group-hover:bg-border'
+                        )}
+                      />
+                      <item.icon className="h-4 w-4 flex-shrink-0" />
+                      <span>{label}</span>
                     </Link>
-                  </TooltipTrigger>
-                  <TooltipContent side="right">{label}</TooltipContent>
-                </Tooltip>
-              ) : (
-                <Link
-                  key={item.name}
-                  to={item.href}
-                  title={label}
-                  className={cn(
-                    'flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors',
-                    isActive
-                      ? 'bg-primary/10 text-primary'
-                      : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
-                  )}
-                >
-                  <item.icon className="h-4 w-4 flex-shrink-0" />
-                  <span>{label}</span>
-                </Link>
-              )
-            })}
+                  )
+                })}
+              </div>
+            ))}
           </nav>
         </ScrollArea>
 
