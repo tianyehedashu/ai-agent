@@ -1,7 +1,11 @@
 import { useQuery, type UseQueryResult } from '@tanstack/react-query'
 
 import { gatewayApi } from '@/api/gateway'
-import type { ListQuotaRulesParams, QuotaRule } from '@/api/gateway/quota-rules'
+import type {
+  ListQuotaRulesParams,
+  QuotaRule,
+  QuotaRuleListResponse,
+} from '@/api/gateway/quota-rules'
 
 /** 配额规则与标签元数据缓存 60s，避免切换筛选时重复请求。 */
 export const GATEWAY_QUOTA_META_STALE_MS = 60_000
@@ -25,10 +29,24 @@ export function useGatewayQuotaRules(
   teamId: string,
   params?: ListQuotaRulesParams,
   options?: { enabled?: boolean }
-): UseQueryResult<QuotaRule[]> {
+): UseQueryResult<QuotaRuleListResponse> {
   return useQuery({
     queryKey: gatewayQuotaRulesQueryKey(teamId, params),
     queryFn: () => gatewayApi.listQuotaRules(teamId, params),
+    enabled: (options?.enabled ?? true) && teamId.length > 0,
+    staleTime: GATEWAY_QUOTA_META_STALE_MS,
+  })
+}
+
+/** 需全量匹配规则的场景（模型详情、凭据卡片等） */
+export function useGatewayQuotaRulesAll(
+  teamId: string,
+  params?: Omit<ListQuotaRulesParams, 'page' | 'page_size'>,
+  options?: { enabled?: boolean }
+): UseQueryResult<QuotaRule[]> {
+  return useQuery({
+    queryKey: [...gatewayQuotaRulesQueryKey(teamId, params), 'all'] as const,
+    queryFn: () => gatewayApi.listAllQuotaRules(teamId, params),
     enabled: (options?.enabled ?? true) && teamId.length > 0,
     staleTime: GATEWAY_QUOTA_META_STALE_MS,
   })

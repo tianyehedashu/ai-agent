@@ -5,6 +5,7 @@
 import { lazy, Suspense, useState } from 'react'
 
 import type { QuotaRule } from '@/api/gateway/quota-rules'
+import { PaginationControls } from '@/components/pagination-controls'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -168,6 +169,28 @@ export function QuotaCenterWorkspace(): React.JSX.Element {
           </Select>
         </div>
 
+        <div className="min-w-[180px]">
+          <Label className="text-xs text-muted-foreground">凭据</Label>
+          <Select
+            value={ws.credentialFilter}
+            onValueChange={(v) => {
+              ws.setFilter('credential', v)
+            }}
+          >
+            <SelectTrigger className="h-9">
+              <SelectValue placeholder="全部凭据" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">全部凭据</SelectItem>
+              {ws.filterCredentialOptions.map((c) => (
+                <SelectItem key={c.id} value={c.id}>
+                  {c.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
         <div className="ml-auto flex items-center gap-1 rounded-md border bg-background p-0.5">
           <Button
             size="sm"
@@ -194,7 +217,12 @@ export function QuotaCenterWorkspace(): React.JSX.Element {
         </div>
       </div>
 
-      <QuotaOverviewCards rules={ws.filteredItems} isLoading={ws.isLoading} mode={ws.mode} />
+      <QuotaOverviewCards
+        rules={ws.filteredItems}
+        listTotal={ws.listTotal}
+        isLoading={ws.isLoading}
+        mode={ws.mode}
+      />
 
       {ws.listLoadError ? (
         <p className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive">
@@ -245,6 +273,16 @@ export function QuotaCenterWorkspace(): React.JSX.Element {
           formDisabled={ws.formDisabled}
         />
       )}
+
+      <PaginationControls
+        page={ws.listPage}
+        page_size={ws.listPageSize}
+        total={ws.listTotal}
+        has_next={ws.listHasNext}
+        has_prev={ws.listHasPrev}
+        onPageChange={ws.setListPage}
+        className="pt-1"
+      />
 
       {/* P11: 删除确认对话框 */}
       <AlertDialog

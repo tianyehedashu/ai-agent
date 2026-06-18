@@ -10,7 +10,7 @@ import {
   quotaListParamsForTeamModelPlatform,
   quotaListParamsForTeamModelUpstream,
 } from '@/features/gateway-budget/quota-rule-utils'
-import { useGatewayQuotaRules } from '@/features/gateway-budget/use-gateway-quota-rules'
+import { useGatewayQuotaRulesAll } from '@/features/gateway-budget/use-gateway-quota-rules'
 import type { ModelInspectorScope } from '@/features/gateway-models/detail/model-inspector'
 
 interface UseModelDetailQuotaRulesInput {
@@ -70,13 +70,13 @@ export function useModelDetailQuotaRules({
     [context]
   )
 
-  const platformRulesQuery = useGatewayQuotaRules(teamId, platformListParams, {
+  const platformRulesQuery = useGatewayQuotaRulesAll(teamId, platformListParams, {
     enabled: context !== null && !isPersonal,
   })
-  const upstreamRulesQuery = useGatewayQuotaRules(teamId, upstreamListParams, {
+  const upstreamRulesQuery = useGatewayQuotaRulesAll(teamId, upstreamListParams, {
     enabled: context !== null && Boolean(model.credential_id),
   })
-  const personalRulesQuery = useGatewayQuotaRules(teamId, personalListParams, {
+  const personalRulesQuery = useGatewayQuotaRulesAll(teamId, personalListParams, {
     enabled: context?.kind === 'personal',
   })
 

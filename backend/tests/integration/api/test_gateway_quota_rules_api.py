@@ -16,6 +16,12 @@ from domains.identity.infrastructure.models.user import User
 from domains.tenancy.application.team_service import TeamService
 
 
+def _quota_rule_list_items(body: dict | list) -> list:
+    if isinstance(body, list):
+        return body
+    return body["items"]
+
+
 @pytest.mark.integration
 class TestGatewayQuotaRulesApi:
     @pytest.mark.asyncio
@@ -42,7 +48,7 @@ class TestGatewayQuotaRulesApi:
             headers=auth_headers,
         )
         assert r.status_code == 200, r.text
-        rows = r.json()
+        rows = _quota_rule_list_items(r.json())
         assert any(
             row["key"]["layer"] == "platform" and row["source_ref"]["budget_id"] is not None
             for row in rows
@@ -81,7 +87,7 @@ class TestGatewayQuotaRulesApi:
             headers=auth_headers,
         )
         assert listed.status_code == 200
-        assert any(row["key"]["period"] == "daily" for row in listed.json())
+        assert any(row["key"]["period"] == "daily" for row in _quota_rule_list_items(listed.json()))
 
     @pytest.mark.asyncio
     async def test_batch_upsert_platform_daily_custom_anchor_fields(
@@ -114,7 +120,7 @@ class TestGatewayQuotaRulesApi:
             headers=auth_headers,
         )
         assert listed.status_code == 200
-        rows = listed.json()
+        rows = _quota_rule_list_items(listed.json())
         row = next(r for r in rows if r["key"]["period"] == "daily")
         assert row["key"]["period_timezone"] == "Asia/Shanghai"
         assert row["key"]["period_reset_minutes"] == 540
@@ -188,7 +194,7 @@ class TestGatewayQuotaRulesApi:
             params={"layer": "upstream", "include_usage": "true"},
         )
         assert r_list.status_code == 200, r_list.text
-        rows = r_list.json()
+        rows = _quota_rule_list_items(r_list.json())
         assert any(
             row["key"]["layer"] == "upstream"
             and row["key"]["credential_id"] == credential_id
@@ -316,7 +322,7 @@ class TestGatewayQuotaRulesApi:
             params={"layer": "upstream", "include_usage": "true"},
         )
         assert r_list.status_code == 200, r_list.text
-        rows = r_list.json()
+        rows = _quota_rule_list_items(r_list.json())
         assert any(
             row["key"]["credential_id"] == credential_id
             and row["key"]["quota_label"] == "daily"
@@ -394,7 +400,7 @@ class TestGatewayQuotaRulesApi:
             },
         )
         assert r_list.status_code == 200, r_list.text
-        rows = r_list.json()
+        rows = _quota_rule_list_items(r_list.json())
         assert any(
             row["key"]["layer"] == "upstream"
             and row["key"]["credential_id"] == credential_id
@@ -604,3 +610,48 @@ class TestGatewayQuotaRulesApi:
             },
         )
         assert r_adj.status_code == 404, r_adj.text
+
+    @pytest.mark.asyncio
+    async def test_list_quota_rules_pagination_envelope(
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict[str, str],
+        db_session,
+        test_user: User,
+    ) -> None:
+        team = await TeamService(db_session).ensure_personal_team(test_user.id)
+        for period in ("daily", "monthly", "total"):
+            db_session.add(
+                GatewayBudget(
+                    target_kind="tenant",
+                    target_id=team.id,
+                    period=period,
+                    model_name=None,
+                    limit_usd=Decimal("10"),
+                )
+            )
+        await db_session.commit()
+
+        r = await dev_client.get(
+            f"/api/v1/gateway/teams/{team.id}/quota-rules",
+            headers=auth_headers,
+            params={"layer": "platform", "page": 1, "page_size": 2},
+        )
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["total"] >= 3
+        assert len(body["items"]) == 2
+        assert body["page"] == 1
+        assert body["page_size"] == 2
+        assert body["has_next"] is True
+        assert body["has_prev"] is False
+
+        r2 = await dev_client.get(
+            f"/api/v1/gateway/teams/{team.id}/quota-rules",
+            headers=auth_headers,
+            params={"layer": "platform", "page": 2, "page_size": 2},
+        )
+        assert r2.status_code == 200, r2.text
+        body2 = r2.json()
+        assert len(body2["items"]) >= 1
+        assert body2["has_prev"] is True

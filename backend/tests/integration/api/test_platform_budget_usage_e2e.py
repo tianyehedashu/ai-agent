@@ -32,6 +32,12 @@ _COMPLETION_TOKENS = 40
 _EXPECTED_TOTAL_TOKENS = _PROMPT_TOKENS + _COMPLETION_TOKENS
 
 
+def _quota_rule_list_items(body: dict | list) -> list:
+    if isinstance(body, list):
+        return body
+    return body["items"]
+
+
 @pytest.fixture(autouse=True)
 def _bind_platform_settlement_to_test_db(
     monkeypatch: pytest.MonkeyPatch, db_session: AsyncSession
@@ -216,7 +222,7 @@ async def test_platform_budget_usage_visible_after_redis_flush(
         params={"layer": "platform", "include_usage": "true"},
     )
     assert r_rules.status_code == 200, r_rules.text
-    rows = r_rules.json()
+    rows = _quota_rule_list_items(r_rules.json())
     matched = [
         row
         for row in rows
@@ -295,7 +301,7 @@ async def test_platform_display_merges_partial_bucket_with_logs(
     assert r_rules.status_code == 200, r_rules.text
     matched = [
         row
-        for row in r_rules.json()
+        for row in _quota_rule_list_items(r_rules.json())
         if row.get("source_ref", {}).get("budget_id") == str(budget_id)
         and row.get("key", {}).get("period") == "daily"
         and row.get("key", {}).get("model_name") is None

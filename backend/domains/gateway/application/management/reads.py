@@ -901,7 +901,9 @@ class GatewayManagementReadService(GatewayUsageLogReadMixin):
         is_team_admin: bool,
         filters: QuotaRuleListFilters | None = None,
         include_usage: bool = False,
-    ) -> list[QuotaRuleReadModel]:
+        page: int = 1,
+        page_size: int = 20,
+    ) -> tuple[list[QuotaRuleReadModel], int]:
         from domains.gateway.application.management.quota_rule_assembler import (
             assemble_team_quota_rules,
         )
@@ -918,9 +920,11 @@ class GatewayManagementReadService(GatewayUsageLogReadMixin):
             is_team_admin=is_team_admin,
             filters=filters,
         )
-        if include_usage:
-            rules = await enrich_quota_rules_with_usage(rules, session=self._session)
-        return rules
+        total = len(rules)
+        page_rows, _ = slice_page(rules, page=page, page_size=page_size)
+        if include_usage and page_rows:
+            page_rows = await enrich_quota_rules_with_usage(page_rows, session=self._session)
+        return page_rows, total
 
     async def aggregate_personal_model_route_usage(
         self,

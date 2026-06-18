@@ -15,6 +15,8 @@ import {
 
 interface QuotaOverviewCardsProps {
   rules: QuotaRule[]
+  /** 服务端筛选后的总条数（分页时用于「总数」KPI） */
+  listTotal?: number
   isLoading?: boolean
   mode?: 'admin' | 'member'
 }
@@ -56,6 +58,7 @@ function KpiCard({
 
 export function QuotaOverviewCards({
   rules,
+  listTotal,
   isLoading,
   mode,
 }: QuotaOverviewCardsProps): React.JSX.Element {
@@ -101,7 +104,7 @@ export function QuotaOverviewCards({
     }
   }
 
-  const totalCount = rules.length
+  const totalCount = listTotal ?? rules.length
 
   // P21: 成员模式简化为个人视角
   if (mode === 'member') {

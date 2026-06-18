@@ -38,6 +38,12 @@ def _model_list_items(payload: dict | list) -> list:
     raise TypeError(f"unexpected models list payload: {type(payload)!r}")
 
 
+def _quota_rule_list_items(body: dict | list) -> list:
+    if isinstance(body, list):
+        return body
+    return body["items"]
+
+
 _PAGINATED_ENVELOPE_KEYS = ("items", "total", "page", "page_size", "has_next", "has_prev")
 
 
@@ -2478,7 +2484,7 @@ class TestGatewayManagementApi:
             params={"layer": "upstream", "credential_id": credential_id},
         )
         assert r_list.status_code == 200, r_list.text
-        assert len(r_list.json()) == 1
+        assert len(_quota_rule_list_items(r_list.json())) == 1
 
     @pytest.mark.asyncio
     async def test_plan_apis_reject_cross_team_access(

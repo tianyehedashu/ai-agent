@@ -34,6 +34,7 @@ import {
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { useToast } from '@/hooks/use-toast'
+import { DEFAULT_PAGE_SIZE, buildFilterKey, usePaginationPageForFilters } from '@/lib/pagination'
 import { useCurrentUser } from '@/stores/user'
 import { formatTeamMemberDisplay } from '@/types/permissions'
 
@@ -106,7 +107,15 @@ export interface QuotaCenterState {
   layerFilter: string
   modelFilter: string
   periodFilter: string
-  setFilter: (key: 'layer' | 'model' | 'period', value: string) => void
+  credentialFilter: string
+  setFilter: (key: 'layer' | 'model' | 'period' | 'credential', value: string) => void
+  listTotal: number
+  listPage: number
+  listPageSize: number
+  listHasNext: boolean
+  listHasPrev: boolean
+  setListPage: (page: number) => void
+  filterCredentialOptions: { id: string; label: string }[]
   batchOpen: boolean
   setBatchOpen: (open: boolean) => void
   batchValues: QuotaBatchFormValues
@@ -164,6 +173,7 @@ function useQuotaCenterImpl(): QuotaCenterState {
   const layerFilter = searchParams.get('layer') ?? 'all'
   const modelFilter = searchParams.get('model') ?? ''
   const periodFilter = searchParams.get('period') ?? 'all'
+  const credentialFilter = searchParams.get('credential_id') ?? 'all'
   // 成员自助：从凭据详情「设置我的限额 →」带入的凭据预填，用于预加载凭据元数据并自动开抽屉。
   const credentialPrefill = mode === 'member' ? searchParams.get('credential_id') : null
   // 管理员：统计页「设配额」/ 凭据详情跳转带入的成员、凭据预填。
@@ -177,25 +187,44 @@ function useQuotaCenterImpl(): QuotaCenterState {
   const [editingRule, setEditingRule] = useState<QuotaRule | null>(null)
   const editingInfoRef = useRef<EditingRuleInfo | null>(null)
 
+  const listFilterKey = useMemo(
+    () => buildFilterKey([teamId, layerFilter, modelFilter, periodFilter, credentialFilter]),
+    [teamId, layerFilter, modelFilter, periodFilter, credentialFilter]
+  )
+  const [listPage, setListPage] = usePaginationPageForFilters(listFilterKey)
+
   const listParams = useMemo(
     () => ({
       layer: layerFilter === 'all' ? undefined : (layerFilter as QuotaRuleLayer),
       model_name: modelFilter || undefined,
       period: periodFilter === 'all' ? undefined : (periodFilter as 'daily' | 'monthly' | 'total'),
+      credential_id: credentialFilter === 'all' ? undefined : credentialFilter,
       include_usage: true,
+      page: listPage,
+      page_size: DEFAULT_PAGE_SIZE,
     }),
-    [layerFilter, modelFilter, periodFilter]
+    [layerFilter, modelFilter, periodFilter, credentialFilter, listPage]
   )
 
   const rulesQuery = useGatewayQuotaRules(teamId, listParams)
-  const quotaRules = useMemo(() => rulesQuery.data ?? [], [rulesQuery.data])
+  const quotaRules = useMemo(() => rulesQuery.data?.items ?? [], [rulesQuery.data?.items])
+  const listTotal = rulesQuery.data?.total ?? 0
+  const listPageSize = rulesQuery.data?.page_size ?? DEFAULT_PAGE_SIZE
+  const listHasNext = rulesQuery.data?.has_next ?? false
+  const listHasPrev = rulesQuery.data?.has_prev ?? false
 
-  const needsPickerData = batchOpen || modelFilter.trim() !== ''
+  const needsPickerData = batchOpen || modelFilter.trim() !== '' || credentialFilter !== 'all'
   const needsModelIdentityLookup = useMemo(
     () => needsQuotaModelIdentityLookup(quotaRules) || batchOpen,
     [quotaRules, batchOpen]
   )
-  const needsLabelData = batchOpen || quotaRules.length > 0 || credentialPrefill !== null || isAdmin
+  const needsLabelData =
+    batchOpen ||
+    listTotal > 0 ||
+    quotaRules.length > 0 ||
+    credentialPrefill !== null ||
+    credentialFilter !== 'all' ||
+    isAdmin
 
   // 数据权限：平台管理员可解析全站团队名；普通成员仅限其 membership 团队，避免越权拉取。
   const memberTeamNameById = useGatewayMemberTeamNameMap(needsLabelData && !isPlatformAdmin)
@@ -314,7 +343,7 @@ function useQuotaCenterImpl(): QuotaCenterState {
 
   // 周期等筛选由后端 list 参数完成（滚动窗口型 upstream/downstream 规则的保留规则在服务端），
   // 此处不再二次过滤，避免与服务端语义不一致导致规则"消失"。
-  const filteredItems = useMemo(() => rulesQuery.data ?? [], [rulesQuery.data])
+  const filteredItems = useMemo(() => quotaRules, [quotaRules])
 
   const selectedRule = useMemo(
     () => filteredItems.find((r) => quotaRuleRowId(r) === selectedId) ?? null,
@@ -373,16 +402,37 @@ function useQuotaCenterImpl(): QuotaCenterState {
   })
 
   const setFilter = useCallback(
-    (key: 'layer' | 'model' | 'period', value: string) => {
+    (key: 'layer' | 'model' | 'period' | 'credential', value: string) => {
       setSearchParams((prev) => {
         const next = new URLSearchParams(prev)
-        if (value === '' || value === 'all') next.delete(key)
+        if (key === 'credential') {
+          if (value === '' || value === 'all') next.delete('credential_id')
+          else next.set('credential_id', value)
+        } else if (value === '' || value === 'all') next.delete(key)
         else next.set(key, value)
         return next
       })
     },
     [setSearchParams]
   )
+
+  const filterCredentialOptions = useMemo(() => {
+    const raw = actorCredentials.list
+    if (mode === 'member') {
+      const platform = filterMemberSelfServiceCredentialSummaries(raw, teamId, 'platform')
+      const upstream = filterMemberSelfServiceCredentialSummaries(raw, teamId, 'upstream')
+      return [...platform, ...upstream].map((c) => ({ id: c.id, label: c.name }))
+    }
+    const seen = new Set<string>()
+    const options: { id: string; label: string }[] = []
+    for (const c of raw) {
+      if (seen.has(c.id)) continue
+      seen.add(c.id)
+      options.push({ id: c.id, label: c.name })
+    }
+    options.sort((a, b) => a.label.localeCompare(b.label, 'zh-CN'))
+    return options
+  }, [actorCredentials.list, mode, teamId])
 
   const pickerCredentials = useMemo(() => {
     const raw = actorCredentials.list
@@ -927,7 +977,15 @@ function useQuotaCenterImpl(): QuotaCenterState {
     layerFilter,
     modelFilter,
     periodFilter,
+    credentialFilter,
     setFilter,
+    listTotal,
+    listPage,
+    listPageSize,
+    listHasNext,
+    listHasPrev,
+    setListPage,
+    filterCredentialOptions,
     batchOpen,
     setBatchOpen: handleSetBatchOpen,
     batchValues,

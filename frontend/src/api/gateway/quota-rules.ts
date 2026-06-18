@@ -3,6 +3,8 @@
  */
 
 import { apiClient } from '@/api/client'
+import { buildPageQuerySearch, fetchAllPaginatedPages } from '@/lib/pagination'
+import type { PaginatedList, PageQuery } from '@/types'
 
 import { teamGatewayPath } from './_base'
 
@@ -117,7 +119,7 @@ export interface QuotaRuleBatchUpsertResponse {
   failed: QuotaRuleBatchFailure[]
 }
 
-export interface ListQuotaRulesParams {
+export interface ListQuotaRulesParams extends PageQuery {
   layer?: QuotaRuleLayer
   user_id?: string
   credential_id?: string
@@ -125,6 +127,8 @@ export interface ListQuotaRulesParams {
   period?: 'daily' | 'monthly' | 'total'
   include_usage?: boolean
 }
+
+export type QuotaRuleListResponse = PaginatedList<QuotaRule>
 
 export interface QuotaRuleEnablementBody {
   layer: QuotaRuleLayer
@@ -149,7 +153,7 @@ export interface QuotaUsageAdjustmentBody {
 
 export const quotaRulesApi = {
   listQuotaRules: (teamId: string, params?: ListQuotaRulesParams) => {
-    const search = new URLSearchParams()
+    const search = new URLSearchParams(buildPageQuerySearch(params))
     if (params?.layer) search.set('layer', params.layer)
     if (params?.user_id) search.set('user_id', params.user_id)
     if (params?.credential_id) search.set('credential_id', params.credential_id)
@@ -158,8 +162,16 @@ export const quotaRulesApi = {
     if (params?.include_usage) search.set('include_usage', 'true')
     const qs = search.toString()
     const path = qs ? `/quota-rules?${qs}` : '/quota-rules'
-    return apiClient.get<QuotaRule[]>(teamGatewayPath(teamId, path))
+    return apiClient.get<QuotaRuleListResponse>(teamGatewayPath(teamId, path))
   },
+  /** 拉取全部匹配页（批量/详情等需全量场景） */
+  listAllQuotaRules: async (
+    teamId: string,
+    params?: Omit<ListQuotaRulesParams, 'page' | 'page_size'>
+  ): Promise<QuotaRule[]> =>
+    fetchAllPaginatedPages((page, page_size) =>
+      quotaRulesApi.listQuotaRules(teamId, { ...params, page, page_size })
+    ),
   batchUpsertQuotaRules: (teamId: string, rules: QuotaRuleUpsertBody[]) =>
     apiClient.put<QuotaRuleBatchUpsertResponse>(teamGatewayPath(teamId, '/quota-rules/batch'), {
       rules,

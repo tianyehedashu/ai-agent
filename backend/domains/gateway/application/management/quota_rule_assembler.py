@@ -45,6 +45,7 @@ async def assemble_team_quota_rules(
         is_team_admin=is_team_admin,
         is_platform_admin=is_platform_admin,
         team_role=team_role,
+        actor_user_id=actor_user_id,
     )
     cached = await get_cached_quota_rules(
         team_id,

@@ -339,9 +339,18 @@ def build_actor_role_hash(
     is_team_admin: bool,
     is_platform_admin: bool,
     team_role: str,
+    actor_user_id: uuid.UUID | None = None,
 ) -> str:
-    """为不同权限角色生成稳定哈希，确保缓存隔离。"""
+    """为不同权限视角生成稳定哈希，确保缓存隔离。
+
+    非管理员列表按 actor 过滤（``target_kind=user`` 仅本人可见、凭据级收敛），
+    缓存须按 ``actor_user_id`` 隔离；否则同团队同角色的成员会串号——
+    看到他人配额、且看不到自己设的配额（数据泄漏）。管理员视角看全量，
+    与 actor 无关，保持共享以提升命中率。
+    """
     parts = f"ta={is_team_admin}:pa={is_platform_admin}:tr={team_role}"
+    if not is_team_admin:
+        parts += f":u={actor_user_id}"
     return hashlib.sha256(parts.encode()).hexdigest()[:16]
 
 

@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from typing import Literal, cast
+from typing import Annotated, Literal, cast
 import uuid
 
-from fastapi import APIRouter, Query, status
+from fastapi import APIRouter, Depends, Query, status
 
 from domains.gateway.application.management.quota_rule_read_model import (
     QuotaRuleLayer,
@@ -18,27 +18,33 @@ from domains.gateway.application.management.write_modules.quota_rule_writes impo
     QuotaRuleUpsertCommand,
 )
 from domains.gateway.presentation.deps import CurrentTeam, RequiredTeamAdmin
+from domains.gateway.presentation.quota_rule_list_response import build_quota_rule_list_response
 from domains.gateway.presentation.quota_rule_response import quota_rule_to_response
 from domains.gateway.presentation.schemas.common import (
     QuotaRuleBatchFailureItem,
     QuotaRuleBatchUpsertRequest,
     QuotaRuleBatchUpsertResponse,
     QuotaRuleEnablementRequest,
+    QuotaRuleListResponse,
     QuotaRuleResponse,
     QuotaRuleUpsert,
     QuotaUsageAdjustmentRequest,
 )
 from domains.tenancy.domain.policies.team_role import is_team_admin_or_platform
+from libs.api.pagination import PageParams, page_query_params
 
 from ._common import MgmtReads, MgmtWrites
 
 router = APIRouter()
 
+PageDep = Annotated[PageParams, Depends(page_query_params)]
 
-@router.get("/quota-rules", response_model=list[QuotaRuleResponse])
+
+@router.get("/quota-rules", response_model=QuotaRuleListResponse)
 async def list_quota_rules(
     team: CurrentTeam,
     reads: MgmtReads,
+    page: PageDep,
     layer: str | None = Query(
         default=None,
         pattern="^(platform|upstream|downstream)$",
@@ -48,7 +54,7 @@ async def list_quota_rules(
     model_name: str | None = Query(default=None, max_length=200),
     period: str | None = Query(default=None, pattern="^(daily|monthly|total)$"),
     include_usage: bool = Query(default=False),
-) -> list[QuotaRuleResponse]:
+) -> QuotaRuleListResponse:
     filters = QuotaRuleListFilters(
         layer=cast("QuotaRuleLayer | None", layer),
         user_id=user_id,
@@ -56,7 +62,7 @@ async def list_quota_rules(
         model_name=(model_name or "").strip() or None,
         period=period,
     )
-    rows = await reads.list_quota_rules_for_team(
+    rows, total = await reads.list_quota_rules_for_team(
         team.team_id,
         actor_user_id=team.user_id,
         team_role=team.team_role,
@@ -64,8 +70,15 @@ async def list_quota_rules(
         is_team_admin=is_team_admin_or_platform(team),
         filters=filters,
         include_usage=include_usage,
+        page=page.page,
+        page_size=page.page_size,
     )
-    return [quota_rule_to_response(row) for row in rows]
+    return build_quota_rule_list_response(
+        rows=rows,
+        total=total,
+        page=page.page,
+        page_size=page.page_size,
+    )
 
 
 @router.put("/quota-rules/batch", response_model=QuotaRuleBatchUpsertResponse)

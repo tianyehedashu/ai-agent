@@ -1011,6 +1011,10 @@ class QuotaRuleResponse(BaseModel):
     valid_until: datetime | None = None
 
 
+class QuotaRuleListResponse(PaginatedListResponse[QuotaRuleResponse]):
+    """GET /quota-rules 分页列表。"""
+
+
 class QuotaRuleUpsert(BaseModel):
     layer: Literal["platform", "upstream", "downstream"]
     target_kind: str | None = Field(
@@ -1462,6 +1466,7 @@ __all__ = [
     "QuotaRuleKeyResponse",
     "QuotaRuleLimitsResponse",
     "QuotaRuleResponse",
+    "QuotaRuleListResponse",
     "QuotaRuleSourceRefResponse",
     "QuotaRuleUpsert",
     "QuotaRuleUsageResponse",

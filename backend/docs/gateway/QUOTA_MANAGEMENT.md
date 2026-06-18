@@ -148,6 +148,7 @@ sequenceDiagram
 | **读（管理员）** | `list_budgets_for_team_admin` 拉全团队成员 budget（含带 `credential_id` 的 platform 行） |
 | **读（普通成员）** | 仅 tenant + **本人** user + 可见 vkey 的 budget，经 `quota_rule_visible_to_member` 过滤 |
 | **成员隔离** | `target_kind=user` 行仅 `user_id == actor_user_id` 可见；**凭据可见不扩大 user 行可见范围**——看不到他人的"成员+凭据"限额（防 `credential_id` 过滤枚举） |
+| **读缓存隔离** | `assemble_team_quota_rules` 缓存的是**按 actor 过滤后**的列表（`quota_rule_cache`）。非管理员缓存键含 `actor_user_id`（`build_actor_role_hash`），避免同团队同角色成员串号；管理员看全量、与 actor 无关，缓存按角色共享 |
 
 ### 5.3 启用 / 停用与行级起止
 

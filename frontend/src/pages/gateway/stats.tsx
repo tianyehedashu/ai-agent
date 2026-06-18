@@ -23,12 +23,13 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
+import { PageHeader } from '@/components/ui/page-shell'
 import { budgetsAdminHref } from '@/features/gateway-budget/paths'
 import {
   buildStatsQuotaLookup,
   findQuotaRuleForStatsRow,
 } from '@/features/gateway-budget/quota-rule-utils'
-import { useGatewayQuotaRules } from '@/features/gateway-budget/use-gateway-quota-rules'
+import { useGatewayQuotaRulesAll } from '@/features/gateway-budget/use-gateway-quota-rules'
 import { useInfiniteGatewayModelPages } from '@/features/gateway-models/hooks/use-infinite-gateway-model-pages'
 import { GATEWAY_DISPLAY_CURRENCY } from '@/features/gateway-pricing/display-currency'
 import { GatewayRefreshButton } from '@/features/gateway-shared/gateway-refresh-button'
@@ -434,7 +435,7 @@ export default function GatewayStatsPage(): React.JSX.Element {
   const items = useMemo(() => statsQuery.data?.items ?? EMPTY_STATS_ITEMS, [statsQuery.data?.items])
 
   // 配额（含实时用量）：platform 优先，upstream 按模型目录别名解析
-  const quotaRulesQuery = useGatewayQuotaRules(
+  const quotaRulesQuery = useGatewayQuotaRulesAll(
     teamId,
     { include_usage: true },
     { enabled: teamId.length > 0 && !crossTeamStatsEnabled }
@@ -677,87 +678,88 @@ export default function GatewayStatsPage(): React.JSX.Element {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-        <div>
-          <h2 className="flex items-center gap-2 text-2xl font-semibold tracking-tight">
-            <LineChart className="h-6 w-6 text-primary" />
-            调用统计
-          </h2>
-          <p className="text-sm text-muted-foreground">
+      <PageHeader
+        eyebrow="Usage Analytics"
+        title="调用统计"
+        icon={LineChart}
+        description={
+          <>
             {statsQuery.data
               ? `${new Date(statsQuery.data.start).toLocaleDateString()} - ${new Date(statsQuery.data.end).toLocaleDateString()} · ${usageAggregationScopeLabel(usageAggregation)}`
               : `${usageAggregationScopeLabel(usageAggregation)} · 按当前时间窗口聚合调用日志`}
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <UsageAggregationToggle
-            value={usageAggregation}
-            onChange={setUsageAggregation}
-            options={aggregationOptions}
-          />
-          <div className="flex flex-wrap gap-1 rounded-md border bg-background p-0.5">
-            {RANGE_DAYS.map((range) => (
-              <Button
-                key={range.value}
-                size="sm"
-                variant={dateRange.presetDays === range.value ? 'default' : 'ghost'}
-                className="h-7 px-3 text-xs"
-                type="button"
-                onClick={() => {
-                  handlePresetRangeChange(range.value)
-                }}
-              >
-                {range.label}
-              </Button>
-            ))}
-          </div>
-          <div className="flex items-center gap-1 rounded-md border bg-background px-1 py-0.5">
-            <Input
-              type="date"
-              value={dateRange.startDate}
-              max={dateRange.endDate}
-              aria-label="统计开始日期"
-              className="h-7 w-[8.5rem] border-0 px-2 text-xs shadow-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-offset-0"
-              onChange={(event) => {
-                handleStartDateChange(event.target.value)
-              }}
+          </>
+        }
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            <UsageAggregationToggle
+              value={usageAggregation}
+              onChange={setUsageAggregation}
+              options={aggregationOptions}
             />
-            <span className="text-xs text-muted-foreground">至</span>
-            <Input
-              type="date"
-              value={dateRange.endDate}
-              min={dateRange.startDate}
-              aria-label="统计结束日期"
-              className="h-7 w-[8.5rem] border-0 px-2 text-xs shadow-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-offset-0"
-              onChange={(event) => {
-                handleEndDateChange(event.target.value)
-              }}
+            <div className="flex flex-wrap gap-1 rounded-lg border border-border/70 bg-card/70 p-0.5 shadow-sm">
+              {RANGE_DAYS.map((range) => (
+                <Button
+                  key={range.value}
+                  size="sm"
+                  variant={dateRange.presetDays === range.value ? 'default' : 'ghost'}
+                  className="h-7 px-3 text-xs"
+                  type="button"
+                  onClick={() => {
+                    handlePresetRangeChange(range.value)
+                  }}
+                >
+                  {range.label}
+                </Button>
+              ))}
+            </div>
+            <div className="flex items-center gap-1 rounded-lg border border-border/70 bg-card/70 px-1 py-0.5 shadow-sm">
+              <Input
+                type="date"
+                value={dateRange.startDate}
+                max={dateRange.endDate}
+                aria-label="统计开始日期"
+                className="h-7 w-[8.5rem] border-0 px-2 text-xs shadow-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-offset-0"
+                onChange={(event) => {
+                  handleStartDateChange(event.target.value)
+                }}
+              />
+              <span className="text-xs text-muted-foreground">至</span>
+              <Input
+                type="date"
+                value={dateRange.endDate}
+                min={dateRange.startDate}
+                aria-label="统计结束日期"
+                className="h-7 w-[8.5rem] border-0 px-2 text-xs shadow-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-offset-0"
+                onChange={(event) => {
+                  handleEndDateChange(event.target.value)
+                }}
+              />
+            </div>
+            <div className="hidden h-6 w-px bg-border sm:block" />
+            <div className="flex flex-wrap gap-1">
+              {groupOptions.map((option) => (
+                <Button
+                  key={option.value}
+                  type="button"
+                  size="sm"
+                  variant={groupBy === option.value ? 'default' : 'ghost'}
+                  className="h-7 px-2.5 text-xs"
+                  onClick={() => {
+                    setGroupBy(option.value)
+                  }}
+                >
+                  {option.label}
+                </Button>
+              ))}
+            </div>
+            <GatewayRefreshButton
+              isFetching={statsQuery.isFetching}
+              ariaLabel="刷新统计"
+              onRefresh={() => statsQuery.refetch()}
             />
           </div>
-          <div className="hidden h-6 w-px bg-border sm:block" />
-          <div className="flex flex-wrap gap-1">
-            {groupOptions.map((option) => (
-              <Button
-                key={option.value}
-                type="button"
-                size="sm"
-                variant={groupBy === option.value ? 'default' : 'ghost'}
-                className="h-7 px-2.5 text-xs"
-                onClick={() => {
-                  setGroupBy(option.value)
-                }}
-              >
-                {option.label}
-              </Button>
-            ))}
-          </div>
-          <GatewayRefreshButton
-            isFetching={statsQuery.isFetching}
-            ariaLabel="刷新统计"
-            onRefresh={() => statsQuery.refetch()}
-          />
-        </div>
-      </div>
+        }
+      />
 
       <div
         className={`grid grid-cols-1 gap-3 md:grid-cols-2 ${isAdmin ? 'xl:grid-cols-7' : 'xl:grid-cols-6'}`}
@@ -1066,12 +1068,15 @@ function MetricCard({
   value: string
 }>): React.JSX.Element {
   return (
-    <Card>
+    <Card className="overflow-hidden">
       <CardHeader className="pb-2">
         <CardTitle className="text-xs font-medium text-muted-foreground">{title}</CardTitle>
       </CardHeader>
-      <CardContent>
+      <CardContent className="pt-0">
         <div className="text-2xl font-semibold tabular-nums">{value}</div>
+        <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-muted">
+          <div className="h-full w-2/3 rounded-full bg-primary/60" />
+        </div>
       </CardContent>
     </Card>
   )

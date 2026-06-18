@@ -9,7 +9,7 @@ import { matchQuotaRulesForContext, type BudgetViewContext } from './budget-matc
 import { budgetsAdminHref } from './paths'
 import { quotaListParamsForContext, quotaRuleRowId } from './quota-rule-utils'
 import { QuotaUsageRow } from './quota-usage-row'
-import { useGatewayQuotaRules } from './use-gateway-quota-rules'
+import { useGatewayQuotaRulesAll } from './use-gateway-quota-rules'
 
 export interface BudgetUsageCardProps {
   teamId: string
@@ -32,7 +32,7 @@ export function BudgetUsageCard({
   modelsLoading = false,
 }: BudgetUsageCardProps): React.JSX.Element {
   const listParams = useMemo(() => quotaListParamsForContext(context), [context])
-  const { data: rules, isLoading: rulesLoading } = useGatewayQuotaRules(teamId, listParams)
+  const { data: rules, isLoading: rulesLoading } = useGatewayQuotaRulesAll(teamId, listParams)
   const matched = useMemo(() => matchQuotaRulesForContext(rules ?? [], context), [rules, context])
   const isLoading = rulesLoading || modelsLoading
 
