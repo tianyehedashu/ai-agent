@@ -1,5 +1,6 @@
 /**
- * 配额批量设置内联向导：替代侧边栏 Drawer，三步式引导。
+ * 配额批量设置向导：新建走三步；行内编辑时仅展示限额步骤。
+ * 在配额中心以侧边 Sheet 嵌入，列表保持可见。
  *
  * Step 1 — 选择对象（层级 + 主体/凭据/Key）
  * Step 2 — 设置限额（模型 + 周期 + 限额值 + 模板预设）
@@ -99,6 +100,8 @@ export interface QuotaBatchWizardProps {
   upstreamModelAliasByReal?: ReadonlyMap<string, string>
   /** 上游层：凭据→real_model，用于预览/计数过滤非法组合 */
   upstreamRealModelsByCredential?: RealModelsByCredential
+  /** 嵌入 Sheet 时隐藏「返回列表」，由 Sheet 关闭按钮承担 */
+  embedded?: boolean
 }
 
 type Step = 1 | 2 | 3
@@ -1278,6 +1281,7 @@ export function QuotaBatchWizard(props: QuotaBatchWizardProps): React.JSX.Elemen
     credentialOptions,
     upstreamRealModelsByCredential,
     modelsLoading,
+    embedded = false,
   } = props
 
   const upstreamEstimateOptions = useMemo(
@@ -1354,21 +1358,25 @@ export function QuotaBatchWizard(props: QuotaBatchWizardProps): React.JSX.Elemen
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="h-8 gap-1 px-2"
-            onClick={onBack}
-          >
-            <ArrowLeft className="h-4 w-4" />
-            返回列表
-          </Button>
+          {!embedded ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-8 gap-1 px-2"
+              onClick={onBack}
+            >
+              <ArrowLeft className="h-4 w-4" />
+              返回列表
+            </Button>
+          ) : null}
           <div className="flex items-center gap-2">
             {isEditing ? <Pencil className="h-4 w-4 text-muted-foreground" /> : null}
-            <h2 className="text-lg font-semibold">
-              {isEditing ? '编辑配额' : isMember ? '设置我的配额' : '批量设置配额'}
-            </h2>
+            {!embedded ? (
+              <h2 className="text-lg font-semibold">
+                {isEditing ? '编辑配额' : isMember ? '设置我的配额' : '批量设置配额'}
+              </h2>
+            ) : null}
           </div>
           {/* P10: 编辑模式删除按钮 */}
           {isEditing && onDelete ? (

@@ -24,10 +24,15 @@ import { useGatewayVirtualKeys } from '@/features/gateway-keys/use-gateway-virtu
 import { useGatewayRoutes } from '@/features/gateway-models/hooks/use-gateway-routes'
 import { useInfiniteGatewayModelPages } from '@/features/gateway-models/hooks/use-infinite-gateway-model-pages'
 import { GATEWAY_MODELS_STALE_MS } from '@/features/gateway-models/utils'
+import { resolveTeamLabelFromMap } from '@/features/gateway-teams/gateway-team-resolve-label'
 import { useGatewayTeamMembers } from '@/features/gateway-teams/use-gateway-team-members'
-import { useGatewayWritableTeams } from '@/features/gateway-teams/use-gateway-teams'
+import {
+  useGatewayMemberTeamNameMap,
+  useGatewayTeamNameMap,
+  useGatewayWritableTeams,
+} from '@/features/gateway-teams/use-gateway-teams'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
-import { useGatewayTeamId, useGatewayTeamRecord } from '@/hooks/use-gateway-team-id'
+import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import { useToast } from '@/hooks/use-toast'
 import { useCurrentUser } from '@/stores/user'
 import { formatTeamMemberDisplay } from '@/types/permissions'
@@ -147,7 +152,6 @@ export interface QuotaCenterState {
 
 function useQuotaCenterImpl(): QuotaCenterState {
   const teamId = useGatewayTeamId()
-  const teamRecord = useGatewayTeamRecord(teamId)
   const navigate = useNavigate()
   const { toast } = useToast()
   const { isAdmin, isPlatformViewer, isPlatformAdmin } = useGatewayPermission()
@@ -192,6 +196,11 @@ function useQuotaCenterImpl(): QuotaCenterState {
     [quotaRules, batchOpen]
   )
   const needsLabelData = batchOpen || quotaRules.length > 0 || credentialPrefill !== null || isAdmin
+
+  // 数据权限：平台管理员可解析全站团队名；普通成员仅限其 membership 团队，避免越权拉取。
+  const memberTeamNameById = useGatewayMemberTeamNameMap(needsLabelData && !isPlatformAdmin)
+  const adminTeamNameById = useGatewayTeamNameMap(needsLabelData && isPlatformAdmin)
+  const teamNameById = isPlatformAdmin ? adminTeamNameById : memberTeamNameById
 
   const keysQuery = useGatewayVirtualKeys(teamId, {
     enabled: teamId.length > 0 && needsLabelData,
@@ -281,6 +290,7 @@ function useQuotaCenterImpl(): QuotaCenterState {
       memberLabels,
       keyLabels,
       credentialLabels,
+      teamNameById,
       modelRefByCredentialRealModel: fallbackLookup,
       quotaModelLookupLoading:
         needsModelIdentityLookup &&
@@ -293,6 +303,7 @@ function useQuotaCenterImpl(): QuotaCenterState {
     membersQuery.data,
     keysQuery.data,
     actorCredentials.list,
+    teamNameById,
     quotaModelIdentityLookupQuery.data,
     quotaModelIdentityLookupQuery.isLoading,
     quotaModelIdentityLookupQuery.isFetching,
@@ -900,7 +911,7 @@ function useQuotaCenterImpl(): QuotaCenterState {
 
   return {
     teamId,
-    teamName: teamRecord?.name ?? teamId.slice(0, 8),
+    teamName: resolveTeamLabelFromMap(teamNameById, teamId),
     mode,
     // 平台只读账号全站不可写；成员模式下若无法识别本人则禁用自助写入。
     formDisabled: isPlatformViewer || (mode === 'member' && selfUserId === null),

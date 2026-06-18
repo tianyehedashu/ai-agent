@@ -12,13 +12,16 @@ import { cn } from '@/lib/utils'
 import { isQuotaRuleDeletable } from './quota-rule-delete'
 import {
   computeQuotaRuleUsageRatio,
+  formatQuotaRuleInvokeNameLabel,
   formatQuotaRulePeriod,
   formatQuotaRulePeriodWindow,
   LAYER_LABELS,
   parseQuotaNumeric,
   quotaUsageHasMetrics,
+  resolveQuotaRuleCredentialLabel,
   resolveQuotaRuleModelLabel,
   resolveQuotaRuleSourceLabel,
+  resolveQuotaRuleSubjectLabel,
   type QuotaRuleLabelContext,
 } from './quota-rule-utils'
 
@@ -61,16 +64,13 @@ export function QuotaCardItem({
     downstream: 'bg-emerald-500/10 text-emerald-600',
   }
 
-  const subjectLabel =
-    rule.key.target_kind === 'tenant'
-      ? '全团队'
-      : rule.key.target_kind === 'system'
-        ? '系统'
-        : rule.key.user_id
-          ? (labelContext.memberLabels.get(rule.key.user_id) ?? '成员')
-          : rule.key.access_id
-            ? (labelContext.keyLabels.get(rule.key.access_id) ?? 'Key')
-            : '—'
+  const isUpstream = rule.key.layer === 'upstream'
+  const primaryLabel = isUpstream
+    ? resolveQuotaRuleCredentialLabel(rule, labelContext)
+    : resolveQuotaRuleSubjectLabel(rule, labelContext)
+  const secondaryLabel = isUpstream
+    ? formatQuotaRuleInvokeNameLabel(rule, labelContext)
+    : resolveQuotaRuleModelLabel(rule, labelContext)
 
   return (
     <Card
@@ -83,10 +83,8 @@ export function QuotaCardItem({
       <CardHeader className="pb-2">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
-            <div className="truncate text-sm font-medium">{subjectLabel}</div>
-            <div className="truncate text-xs text-muted-foreground">
-              {resolveQuotaRuleModelLabel(rule, labelContext)}
-            </div>
+            <div className="truncate text-sm font-medium">{primaryLabel}</div>
+            <div className="truncate text-xs text-muted-foreground">{secondaryLabel}</div>
           </div>
           <div className="flex items-center gap-1">
             <Badge

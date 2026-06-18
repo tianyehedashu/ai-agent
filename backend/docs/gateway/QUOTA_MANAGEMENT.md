@@ -239,6 +239,8 @@ API：`POST /quota-rules/enablement`（管理员）、`POST /quota-rules/self/en
 
 前端：配额中心（`frontend/src/features/gateway-budget`）统一 batch upsert；upstream 定位用 `source_ref.quota_id`，无 `plan_id`。
 
+火山 `ep-*` endpoint 的日历日限额、北京时间 11:00 重置、展示读与热路径细节见 [UPSTREAM_EP_QUOTA.md](./UPSTREAM_EP_QUOTA.md)。
+
 ## 9. 转发效率要点
 
 - **DB**：Phase1/Phase2 主查走 `ix_gateway_budgets_target_lookup`，`OR` 批量拉取，单请求 ≤1 次查库且仅在缓存未命中时。

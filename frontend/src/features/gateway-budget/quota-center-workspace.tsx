@@ -24,6 +24,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet'
 import { GatewayRefreshButton } from '@/features/gateway-shared/gateway-refresh-button'
 import { LayoutGrid, List } from '@/lib/lucide-icons'
 
@@ -74,47 +81,8 @@ export function QuotaCenterWorkspace(): React.JSX.Element {
     }
   }
 
-  // 向导模式：batchOpen 时显示向导，否则显示列表
-  if (ws.batchOpen) {
-    return (
-      <Suspense
-        fallback={
-          <div className="flex items-center justify-center py-12 text-muted-foreground">
-            加载中…
-          </div>
-        }
-      >
-        <QuotaBatchWizard
-          values={ws.batchValues}
-          onChange={ws.setBatchValues}
-          onSubmit={ws.submitBatch}
-          onBack={() => {
-            ws.setBatchOpen(false)
-          }}
-          onDelete={ws.editingRuleId ? ws.deleteEditingRule : undefined}
-          disabled={ws.formDisabled}
-          pending={ws.batchPending}
-          previewCount={ws.batchPreviewCount}
-          mode={ws.mode}
-          teamName={ws.teamName}
-          memberOptions={ws.memberOptions}
-          keyOptions={ws.keyOptions}
-          credentialOptions={ws.credentialOptions}
-          metaLoading={ws.metaLoading}
-          modelOptions={ws.batchModelOptions}
-          modelsLoading={ws.batchModelsLoading}
-          modelOptionMetaLabel={ws.batchModelOptionMetaLabel}
-          onModelPickerOpenChange={ws.onModelPickerOpenChange}
-          editingRuleId={ws.editingRuleId}
-          editingRule={ws.editingRule}
-          teamId={ws.teamId}
-          labelContext={ws.labelContext}
-          upstreamModelAliasByReal={ws.upstreamModelAliasByReal}
-          upstreamRealModelsByCredential={ws.upstreamRealModelsByCredential}
-        />
-      </Suspense>
-    )
-  }
+  // 行内编辑/新增：列表保持可见，向导在侧边 Sheet 中打开
+  const wizardTitle = ws.editingRuleId ? '编辑配额' : isMember ? '设置我的配额' : '批量设置配额'
 
   return (
     <div className="space-y-4">
@@ -330,6 +298,61 @@ export function QuotaCenterWorkspace(): React.JSX.Element {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <Sheet
+        open={ws.batchOpen}
+        onOpenChange={(open) => {
+          ws.setBatchOpen(open)
+        }}
+      >
+        <SheetContent side="right" className="flex w-full flex-col overflow-y-auto sm:max-w-2xl">
+          <SheetHeader className="pr-8 text-left">
+            <SheetTitle>{wizardTitle}</SheetTitle>
+            <SheetDescription>
+              {ws.editingRuleId
+                ? '在当前行维度上修改限额与有效期，保存后列表即时更新。'
+                : '选择对象并设置限额；列表保持可见，可随时关闭继续浏览。'}
+            </SheetDescription>
+          </SheetHeader>
+          <Suspense
+            fallback={
+              <div className="flex flex-1 items-center justify-center py-12 text-muted-foreground">
+                加载中…
+              </div>
+            }
+          >
+            <QuotaBatchWizard
+              embedded
+              values={ws.batchValues}
+              onChange={ws.setBatchValues}
+              onSubmit={ws.submitBatch}
+              onBack={() => {
+                ws.setBatchOpen(false)
+              }}
+              onDelete={ws.editingRuleId ? ws.deleteEditingRule : undefined}
+              disabled={ws.formDisabled}
+              pending={ws.batchPending}
+              previewCount={ws.batchPreviewCount}
+              mode={ws.mode}
+              teamName={ws.teamName}
+              memberOptions={ws.memberOptions}
+              keyOptions={ws.keyOptions}
+              credentialOptions={ws.credentialOptions}
+              metaLoading={ws.metaLoading}
+              modelOptions={ws.batchModelOptions}
+              modelsLoading={ws.batchModelsLoading}
+              modelOptionMetaLabel={ws.batchModelOptionMetaLabel}
+              onModelPickerOpenChange={ws.onModelPickerOpenChange}
+              editingRuleId={ws.editingRuleId}
+              editingRule={ws.editingRule}
+              teamId={ws.teamId}
+              labelContext={ws.labelContext}
+              upstreamModelAliasByReal={ws.upstreamModelAliasByReal}
+              upstreamRealModelsByCredential={ws.upstreamRealModelsByCredential}
+            />
+          </Suspense>
+        </SheetContent>
+      </Sheet>
     </div>
   )
 }

@@ -14,6 +14,7 @@ import {
   teamModelDetailHref,
   teamModelsFilteredHref,
 } from '@/features/gateway-models/paths'
+import { resolveTeamLabelFromMap } from '@/features/gateway-teams/gateway-team-resolve-label'
 
 import { formatPeriodResetLabel, isCalendarPeriodResetVisible } from './period-reset-utils'
 import { quotaRuleToBatchFormValues } from './quota-batch-from-rule'
@@ -97,6 +98,8 @@ export interface QuotaRuleLabelContext {
   memberLabels: Map<string, string>
   keyLabels: Map<string, string>
   credentialLabels: Map<string, string>
+  /** team_id → 团队名称，用于团队级规则主体如实展示其归属团队 */
+  teamNameById?: ReadonlyMap<string, string>
   /** upstream 配额：`credentialId:realModel` → 模型详情 */
   modelRefByCredentialRealModel?: Map<string, QuotaRuleModelRef>
   /** 全量模型目录加载中（避免链接在 lookup 完成前误降级为列表页） */
@@ -356,9 +359,24 @@ export function resolveQuotaRuleModelDetailHref(
   return null
 }
 
+/** 团队级规则主体：如实显示规则归属团队（rule.key.team_id），目录缺失则降级 ID 前缀。 */
+function resolveQuotaRuleTeamLabel(rule: QuotaRule, ctx: QuotaRuleLabelContext): string {
+  const teamId = rule.key.team_id
+  if (!ctx.teamNameById) return teamId ? `${teamId.slice(0, 8)}…` : '—'
+  return resolveTeamLabelFromMap(ctx.teamNameById, teamId)
+}
+
+/** 上游配额无主体维度（按凭据 + real_model 全局共享），展示读统一返回占位。 */
+export function isQuotaRuleSubjectApplicable(rule: QuotaRule): boolean {
+  return rule.key.layer !== 'upstream'
+}
+
 export function resolveQuotaRuleSubjectLabel(rule: QuotaRule, ctx: QuotaRuleLabelContext): string {
+  if (rule.key.layer === 'upstream') {
+    return '—'
+  }
   if (rule.key.layer === 'platform') {
-    if (rule.key.target_kind === 'tenant') return '全团队'
+    if (rule.key.target_kind === 'tenant') return resolveQuotaRuleTeamLabel(rule, ctx)
     if (rule.key.target_kind === 'system') return '系统'
     if (rule.key.target_kind === 'user' && rule.key.user_id) {
       return ctx.memberLabels.get(rule.key.user_id) ?? rule.key.user_id.slice(0, 8)
@@ -376,7 +394,7 @@ export function resolveQuotaRuleSubjectLabel(rule: QuotaRule, ctx: QuotaRuleLabe
   if (rule.key.user_id) {
     return ctx.memberLabels.get(rule.key.user_id) ?? rule.key.user_id.slice(0, 8)
   }
-  return '全团队'
+  return resolveQuotaRuleTeamLabel(rule, ctx)
 }
 
 export function resolveQuotaRuleCredentialLabel(

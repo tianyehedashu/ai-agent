@@ -36,6 +36,7 @@ import {
   quotaRuleRowId,
   resolveQuotaRuleSourceLabel,
   resolveQuotaRuleCredentialLabel,
+  isQuotaRuleSubjectApplicable,
   resolveQuotaRuleSubjectLabel,
   type QuotaRuleLabelContext,
 } from './quota-rule-utils'
@@ -212,6 +213,8 @@ const QuotaCenterTableRow = memo(function QuotaCenterTableRow({
 
   const invokeLabel = formatQuotaRuleInvokeNameLabel(rule, labelContext)
   const upstreamLabel = formatQuotaRuleUpstreamNameLabel(rule, labelContext)
+  const subjectLabel = resolveQuotaRuleSubjectLabel(rule, labelContext)
+  const subjectApplicable = isQuotaRuleSubjectApplicable(rule)
 
   return (
     <div
@@ -245,11 +248,11 @@ const QuotaCenterTableRow = memo(function QuotaCenterTableRow({
         {LAYER_LABELS[rule.key.layer]}
       </div>
       <div
-        className={cn(GRID_CELL, 'truncate')}
+        className={cn(GRID_CELL, 'truncate', !subjectApplicable && 'text-muted-foreground')}
         role="cell"
-        title={resolveQuotaRuleSubjectLabel(rule, labelContext)}
+        title={subjectApplicable ? subjectLabel : '上游配额按凭据 + 模型共享，无主体维度'}
       >
-        {resolveQuotaRuleSubjectLabel(rule, labelContext)}
+        {subjectLabel}
       </div>
       <div
         className={cn(GRID_CELL, 'truncate')}

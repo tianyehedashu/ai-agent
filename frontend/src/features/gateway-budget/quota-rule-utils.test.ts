@@ -27,6 +27,7 @@ import {
   resolveQuotaRuleModelLabel,
   resolveQuotaRulePlanManagementLink,
   resolveQuotaRuleSourceLabel,
+  resolveQuotaRuleSubjectLabel,
   type QuotaRuleLabelContext,
 } from './quota-rule-utils'
 
@@ -899,5 +900,35 @@ describe('canAddFromRule', () => {
     expect(
       canAddFromRule(rule, { mode: 'member', selfUserId: 'user-1', selfCredentialIds: selfCreds })
     ).toBe(false)
+  })
+})
+
+describe('resolveQuotaRuleSubjectLabel', () => {
+  const teamNameById = new Map([
+    ['team-1', '研发团队'],
+    ['team-2', '测试团队'],
+  ])
+
+  const ctx: QuotaRuleLabelContext = {
+    memberLabels: new Map(),
+    keyLabels: new Map(),
+    credentialLabels: new Map(),
+    teamNameById,
+  }
+
+  it('shows team name for platform tenant rules', () => {
+    expect(resolveQuotaRuleSubjectLabel(platformRule('gpt-4'), ctx)).toBe('研发团队')
+  })
+
+  it('returns placeholder for upstream rules (no subject dimension)', () => {
+    const rule: QuotaRule = {
+      ...upstreamRule('cred-a', 'ep-abc'),
+      key: {
+        ...upstreamRule('cred-a', 'ep-abc').key,
+        team_id: 'team-2',
+        target_kind: null,
+      },
+    }
+    expect(resolveQuotaRuleSubjectLabel(rule, ctx)).toBe('—')
   })
 })

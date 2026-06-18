@@ -154,6 +154,9 @@ export function useGatewayTeamsBySearch(search: string, enabled: boolean): Gatew
   return teams
 }
 
-export function resolveGatewayTeamLabel(teamNameById: Map<string, string>, teamId: string): string {
+export function resolveGatewayTeamLabel(
+  teamNameById: ReadonlyMap<string, string>,
+  teamId: string
+): string {
   return teamNameById.get(teamId) ?? teamId.slice(0, 8)
 }

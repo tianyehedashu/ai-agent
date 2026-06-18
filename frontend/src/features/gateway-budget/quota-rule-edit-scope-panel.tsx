@@ -4,6 +4,7 @@ import {
   formatQuotaRulePeriod,
   formatQuotaRulePeriodWindow,
   formatQuotaRuleUpstreamNameLabel,
+  isQuotaRuleSubjectApplicable,
   resolveQuotaRuleCredentialLabel,
   resolveQuotaRuleSubjectLabel,
   type QuotaRuleLabelContext,
@@ -49,10 +50,14 @@ export function QuotaRuleEditScopePanel({
             {rule.key.layer === 'platform' ? '平台护栏' : '上游额度'}
           </dd>
         </div>
-        <div>
-          <dt className="text-muted-foreground">主体</dt>
-          <dd className="mt-0.5 font-medium">{resolveQuotaRuleSubjectLabel(rule, labelContext)}</dd>
-        </div>
+        {isQuotaRuleSubjectApplicable(rule) ? (
+          <div>
+            <dt className="text-muted-foreground">主体</dt>
+            <dd className="mt-0.5 font-medium">
+              {resolveQuotaRuleSubjectLabel(rule, labelContext)}
+            </dd>
+          </div>
+        ) : null}
         <div>
           <dt className="text-muted-foreground">凭据</dt>
           <dd className="mt-0.5 font-medium">

@@ -20,6 +20,7 @@ import { QuotaCardItem } from './quota-card-item'
 import {
   computeQuotaRuleUsageRatio,
   quotaRuleRowId,
+  resolveQuotaRuleSubjectLabel,
   type QuotaRuleLabelContext,
 } from './quota-rule-utils'
 
@@ -59,20 +60,9 @@ function groupRulesBy(
       case 'model':
         key = rule.key.model_name ?? '全模型'
         break
-      case 'subject': {
-        const subject =
-          rule.key.target_kind === 'tenant'
-            ? '全团队'
-            : rule.key.target_kind === 'system'
-              ? '系统'
-              : rule.key.user_id
-                ? (labelContext.memberLabels.get(rule.key.user_id) ?? '成员')
-                : rule.key.access_id
-                  ? (labelContext.keyLabels.get(rule.key.access_id) ?? 'Key')
-                  : '—'
-        key = subject
+      case 'subject':
+        key = resolveQuotaRuleSubjectLabel(rule, labelContext)
         break
-      }
       case 'credential': {
         key = rule.key.credential_id
           ? (labelContext.credentialLabels.get(rule.key.credential_id) ?? '凭据')
