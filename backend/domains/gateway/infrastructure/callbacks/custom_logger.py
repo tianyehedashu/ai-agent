@@ -1181,7 +1181,7 @@ async def _maybe_mark_provider_plan_upstream_exhausted(
         status_code=status_code,
     ):
         return
-    from domains.gateway.application.provider_plan_guard import get_provider_plan_guard
+    from domains.gateway.application.provider_quota_guard import get_provider_plan_guard
 
     guard = get_provider_plan_guard()
     await guard.mark_upstream_exhausted(

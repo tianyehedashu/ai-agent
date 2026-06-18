@@ -14,7 +14,7 @@ from domains.gateway.application.management.quota_rule_read_mappers import (
     budget_to_quota_rule,
     filter_quota_rules,
     flatten_entitlement_plan,
-    flatten_provider_plan,
+    provider_quota_to_quota_rule,
 )
 from domains.gateway.application.management.quota_rule_read_model import (
     QuotaRuleListFilters,
@@ -90,13 +90,11 @@ async def assemble_team_quota_rules(
             item.credential.id: item.context_team_id for item in playground_items
         }
         if upstream_cred_ids:
-            plans_by_cred = await reads.list_provider_plans_with_quotas_for_credentials(
-                upstream_cred_ids
-            )
+            quotas_by_cred = await reads.list_provider_quotas_for_credentials(upstream_cred_ids)
             for cred_id in upstream_cred_ids:
                 ctx_team = context_team_by_cred.get(cred_id) or team_id
-                for plan in plans_by_cred.get(cred_id, ()):
-                    rules.extend(flatten_provider_plan(plan, team_id=ctx_team))
+                for quota in quotas_by_cred.get(cred_id, ()):
+                    rules.append(provider_quota_to_quota_rule(quota, team_id=ctx_team))
 
     vkeys = await reads.list_virtual_keys_for_team(
         team_id,

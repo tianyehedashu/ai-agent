@@ -263,7 +263,7 @@ class QuotaPlanService:
                 when,
                 spec.window_seconds,
                 strategy=spec.reset_strategy,
-                plan_valid_from=spec.plan_valid_from,
+                row_valid_from=None,
                 period_reset_anchor=spec.period_reset_anchor,
             )
             await client.zremrangebyscore(ikey, 0, window_start_minute - 1)
@@ -350,7 +350,7 @@ class QuotaPlanService:
                     window_seconds=spec.window_seconds,
                     now=when,
                     earliest_minute_in_window=snap.earliest_minute_in_window,
-                    plan_valid_from=spec.plan_valid_from,
+                    row_valid_from=None,
                 )
                 if resolved_until is not None:
                     forced_key = f"{base}:forced_until"
@@ -418,7 +418,7 @@ class QuotaPlanService:
                 now,
                 spec.window_seconds,
                 strategy=spec.reset_strategy,
-                plan_valid_from=spec.plan_valid_from,
+                row_valid_from=None,
                 period_reset_anchor=spec.period_reset_anchor,
             )
             try:

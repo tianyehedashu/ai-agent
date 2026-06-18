@@ -93,7 +93,7 @@ export function ModelDetailQuotaSection({
 
   const handleDeleteFromRow = (rule: QuotaRule): void => {
     const ref = rule.source_ref
-    if (ref.budget_id === null && (ref.plan_id === null || ref.quota_id === null)) return
+    if (ref.budget_id === null && ref.quota_id === null) return
     if (!window.confirm('确定删除此限额？')) return
     deleteRuleEntity(rule)
   }

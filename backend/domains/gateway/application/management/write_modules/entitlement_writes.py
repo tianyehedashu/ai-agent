@@ -17,7 +17,6 @@ from domains.gateway.domain.policies.platform_budget_upsert_policy import (
 )
 from domains.gateway.domain.quota_plan import default_reset_strategy_for_window
 from domains.gateway.infrastructure.models.entitlement_plan import EntitlementPlan
-from domains.gateway.infrastructure.models.provider_plan import ProviderPlan
 from libs.exceptions import ValidationError
 from utils.logging import get_logger
 
@@ -224,106 +223,6 @@ class EntitlementWritesMixin:
             raise ManagementEntityNotFoundError("alert_rule", str(rule_id))
         await self._alerts.delete_rule(rule)
 
-    async def create_provider_plan(
-        self,
-        *,
-        credential_id: uuid.UUID,
-        tenant_id: uuid.UUID,
-        is_platform_admin: bool,
-        actor_user_id: uuid.UUID | None = None,
-        real_model: str | None,
-        label: str,
-        valid_from: datetime,
-        valid_until: datetime,
-        is_active: bool = True,
-        auto_renew: bool = False,
-        notes: str | None = None,
-        extra: dict[str, Any] | None = None,
-        quotas: list[dict[str, Any]] | None = None,
-    ) -> ProviderPlan:
-        await self._assert_credential_in_team(
-            credential_id, tenant_id=tenant_id, is_platform_admin=is_platform_admin
-        )
-        if real_model:
-            real_model = await self._resolve_registered_real_model(credential_id, real_model)
-        plan = await self._provider_plans.create(
-            credential_id=credential_id,
-            real_model=real_model,
-            label=label,
-            valid_from=valid_from,
-            valid_until=valid_until,
-            is_active=is_active,
-            auto_renew=auto_renew,
-            notes=notes,
-            extra=extra,
-        )
-        for q in _normalize_plan_quota_items(quotas):
-            await self._provider_plans.add_quota(plan_id=plan.id, **q)
-        await self._invalidate_upstream_quota_rule_list_cache(
-            tenant_id=tenant_id,
-            actor_user_id=actor_user_id,
-        )
-        return plan
-
-    async def update_provider_plan(
-        self,
-        plan_id: uuid.UUID,
-        *,
-        credential_id: uuid.UUID,
-        tenant_id: uuid.UUID,
-        is_platform_admin: bool,
-        actor_user_id: uuid.UUID | None = None,
-        fields: dict[str, Any],
-        quotas: list[dict[str, Any]] | None = None,
-    ) -> ProviderPlan:
-        await self._assert_credential_in_team(
-            credential_id, tenant_id=tenant_id, is_platform_admin=is_platform_admin
-        )
-        await self._assert_provider_plan_in_credential(plan_id, credential_id=credential_id)
-        next_real_model = fields.get("real_model")
-        if isinstance(next_real_model, str) and next_real_model:
-            fields = {
-                **fields,
-                "real_model": await self._resolve_registered_real_model(
-                    credential_id, next_real_model
-                ),
-            }
-        await self._provider_plans.update(plan_id, **fields)
-        if quotas is not None:
-            await self._provider_plans.replace_quotas(
-                plan_id,
-                _normalize_plan_quota_items(quotas),
-            )
-        result = await self._provider_plans.get(plan_id)
-        if result is None:
-            raise ManagementEntityNotFoundError("provider_plan", str(plan_id))
-        await self._invalidate_upstream_quota_rule_list_cache(
-            tenant_id=tenant_id,
-            actor_user_id=actor_user_id,
-        )
-        return result
-
-    async def delete_provider_plan(
-        self,
-        plan_id: uuid.UUID,
-        *,
-        credential_id: uuid.UUID,
-        tenant_id: uuid.UUID,
-        is_platform_admin: bool,
-        actor_user_id: uuid.UUID | None = None,
-    ) -> None:
-        await self._assert_credential_in_team(
-            credential_id, tenant_id=tenant_id, is_platform_admin=is_platform_admin
-        )
-        await self._assert_provider_plan_in_credential(plan_id, credential_id=credential_id)
-        ok = await self._provider_plans.delete(plan_id)
-        if not ok:
-            raise ManagementEntityNotFoundError("provider_plan", str(plan_id))
-        await self._invalidate_upstream_quota_rule_list_cache(
-            tenant_id=tenant_id,
-            actor_user_id=actor_user_id,
-        )
-
     async def create_entitlement_plan(
         self,
         *,
@@ -333,11 +232,8 @@ class EntitlementWritesMixin:
         is_platform_admin: bool,
         label: str,
         valid_from: datetime,
-        valid_until: datetime,
         included_models: list[str] | None = None,
         included_capabilities: list[str] | None = None,
-        is_active: bool = True,
-        auto_renew: bool = False,
         notes: str | None = None,
         extra: dict[str, Any] | None = None,
         quotas: list[dict[str, Any]] | None = None,
@@ -357,11 +253,8 @@ class EntitlementWritesMixin:
             scope_id=scope_id,
             label=label,
             valid_from=valid_from,
-            valid_until=valid_until,
             included_models=included_models,
             included_capabilities=included_capabilities,
-            is_active=is_active,
-            auto_renew=auto_renew,
             notes=notes,
             extra=extra,
         )

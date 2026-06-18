@@ -69,6 +69,9 @@ class QuotaRuleReadModel:
     plan_label: str | None
     is_active: bool
     plan_valid_from: datetime | None = None
+    # 按行（规则）维度的起止时间；NULL 表示该侧不限。is_active 即「启用停用」。
+    valid_from: datetime | None = None
+    valid_until: datetime | None = None
 
 
 @dataclass(frozen=True)

@@ -5,6 +5,7 @@ import type {
   QuotaRule,
   QuotaRuleLayer,
   QuotaRuleUsage,
+  quotaRuleLegacyPlanLabel,
 } from '@/api/gateway/quota-rules'
 import {
   modelsIndexHref,
@@ -33,7 +34,8 @@ export const LAYER_ORDER: Record<QuotaRuleLayer, number> = {
 export function quotaRuleRowId(rule: QuotaRule): string {
   const ref = rule.source_ref
   if (ref.budget_id) return `budget:${ref.budget_id}`
-  return `plan:${ref.plan_id ?? ''}:${ref.quota_id ?? ''}`
+  if (ref.quota_id) return `quota:${ref.quota_id}`
+  return `orphan:${rule.key.layer}`
 }
 
 export function formatQuotaRulePeriod(rule: QuotaRule): string {
@@ -94,16 +96,21 @@ export interface QuotaRuleLabelContext {
   memberLabels: Map<string, string>
   keyLabels: Map<string, string>
   credentialLabels: Map<string, string>
-  /** upstream 计划配额：`credentialId:realModel` → 模型详情 */
+  /** upstream 配额：`credentialId:realModel` → 模型详情 */
   modelRefByCredentialRealModel?: Map<string, QuotaRuleModelRef>
   /** 全量模型目录加载中（避免链接在 lookup 完成前误降级为列表页） */
+  quotaModelLookupLoading?: boolean
+  /** @deprecated 使用 quotaModelLookupLoading */
   planRuleModelLookupLoading?: boolean
 }
 
-/** 是否存在需跳转模型详情的 upstream 计划类规则（``budget_id IS NULL``）。 */
-export function hasUpstreamPlanRules(rules: readonly QuotaRule[]): boolean {
-  return rules.some((rule) => rule.source_ref.budget_id === null && rule.key.layer === 'upstream')
+/** 是否存在需跳转模型详情的 upstream 配额规则。 */
+export function hasUpstreamQuotaRules(rules: readonly QuotaRule[]): boolean {
+  return rules.some((rule) => rule.key.layer === 'upstream' && rule.source_ref.quota_id !== null)
 }
+
+/** @deprecated 使用 hasUpstreamQuotaRules */
+export const hasUpstreamPlanRules = hasUpstreamQuotaRules
 
 /** 配额列表是否需要 Gateway 模型目录（解析调用名 / 模型详情深链）。 */
 export function needsQuotaModelIdentityLookup(rules: readonly QuotaRule[]): boolean {
@@ -212,7 +219,7 @@ export interface QuotaRulePlanManagementLink {
   label: string
 }
 
-/** 计划类 upstream/downstream 规则的操作列跳转（upstream → 模型详情/列表）。 */
+/** upstream/downstream 规则的操作列跳转（upstream → 模型详情/列表）。 */
 export function resolveQuotaRulePlanManagementLink(
   rule: QuotaRule,
   ctx: QuotaRuleLabelContext
@@ -243,7 +250,7 @@ export function resolveQuotaRulePlanManagementLink(
             : teamModelDetailHref(teamId, ref.modelId, { credentialId })
       return { href, label: '去模型详情管理' }
     }
-    if (ctx.planRuleModelLookupLoading) {
+    if (ctx.quotaModelLookupLoading) {
       return null
     }
   }
@@ -289,7 +296,7 @@ export function resolveQuotaRuleModelDetailHref(
           ? systemModelDetailHref(teamId, ref.modelId, credentialId)
           : teamModelDetailHref(teamId, ref.modelId, { credentialId })
     }
-    if (ctx.planRuleModelLookupLoading) return null
+    if (ctx.quotaModelLookupLoading) return null
     return teamModelsFilteredHref(teamId, credentialId)
   }
 
@@ -310,7 +317,7 @@ export function resolveQuotaRuleModelDetailHref(
             : teamModelDetailHref(teamId, ref.modelId, { credentialId: cid })
       }
     }
-    if (ctx.planRuleModelLookupLoading) return null
+    if (ctx.quotaModelLookupLoading) return null
   }
 
   return null
@@ -418,7 +425,7 @@ export function formatQuotaRuleInvokeNameLabel(
   }
   const identity = resolveQuotaRuleModelIdentity(rule, ctx)
   if (identity.invokeName) return identity.invokeName
-  if (ctx?.planRuleModelLookupLoading) return '加载中…'
+  if (ctx?.quotaModelLookupLoading) return '加载中…'
   // 上游 model_name 存 real_model；目录未命中说明模型未注册或已删除
   return '（未注册调用名）'
 }
@@ -432,9 +439,18 @@ export function formatQuotaRuleUpstreamNameLabel(
   return identity.upstreamName ?? '—'
 }
 
+/** 配额中心「来源」列：优先 key.quota_label，下游回退 plan_label。 */
+export function resolveQuotaRuleSourceLabel(rule: QuotaRule): string {
+  const quotaLabel = rule.key.quota_label?.trim()
+  if (quotaLabel) return quotaLabel
+  const planLabel = quotaRuleLegacyPlanLabel(rule)
+  if (planLabel) return planLabel
+  return '自定义'
+}
+
 /**
  * 配额中心「模型」列：platform 用别名；upstream 用目录解析的 Gateway 别名，
- * 解析不到则回退上游 endpoint（`real_model`）。不用 `plan_label`（那是「来源」列的套餐名）。
+ * 解析不到则回退上游 endpoint（`real_model`）。来源列见 resolveQuotaRuleSourceLabel。
  */
 export function resolveQuotaRuleModelLabel(rule: QuotaRule, ctx?: QuotaRuleLabelContext): string {
   if (!rule.key.model_name) return '（全模型）'
@@ -696,6 +712,18 @@ export function formatQuotaRulePeriodWindow(rule: QuotaRule): string | null {
     return `周期自 ${formatQuotaTimestamp(start)}`
   }
   return null
+}
+
+/** 起止时间（按行/规则维度）展示；两侧皆空返回 null（= 始终有效）。 */
+export function formatQuotaRuleValidityRange(rule: QuotaRule): string | null {
+  const from = rule.valid_from
+  const until = rule.valid_until
+  if (!from && !until) return null
+  if (from && until) {
+    return `${formatQuotaTimestamp(from)} — ${formatQuotaTimestamp(until)}`
+  }
+  if (from) return `${formatQuotaTimestamp(from)} 起`
+  return until ? `至 ${formatQuotaTimestamp(until)}` : null
 }
 
 export function formatQuotaRuleResetAt(rule: QuotaRule): string | null {

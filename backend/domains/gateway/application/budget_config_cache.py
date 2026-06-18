@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from decimal import Decimal
 import json
 import time
@@ -58,6 +59,10 @@ class BudgetConfigRow:
     credential_id: uuid.UUID | None = None
     tenant_id: uuid.UUID | None = None
     period_reset_anchor: PeriodResetAnchor = DEFAULT_PERIOD_RESET_ANCHOR
+    # 启用停用 + 起止时间（执法侧据此决定是否纳入；NULL 起止 = 不限）
+    enabled: bool = True
+    valid_from: datetime | None = None
+    valid_until: datetime | None = None
 
 
 def budget_config_row_from_orm(row: GatewayBudget) -> BudgetConfigRow:
@@ -76,6 +81,9 @@ def budget_config_row_from_orm(row: GatewayBudget) -> BudgetConfigRow:
             time_minutes=getattr(row, "period_reset_minutes", None),
             day_of_month=getattr(row, "period_reset_day", None),
         ),
+        enabled=getattr(row, "enabled", True),
+        valid_from=getattr(row, "valid_from", None),
+        valid_until=getattr(row, "valid_until", None),
     )
 
 
@@ -270,6 +278,13 @@ async def _get_redis_by_coord(version: str, coord: _Coord) -> BudgetConfigRow | 
                 time_minutes=payload.get("period_reset_minutes"),
                 day_of_month=payload.get("period_reset_day"),
             ),
+            enabled=bool(payload.get("enabled", True)),
+            valid_from=datetime.fromisoformat(payload["valid_from"])
+            if payload.get("valid_from")
+            else None,
+            valid_until=datetime.fromisoformat(payload["valid_until"])
+            if payload.get("valid_until")
+            else None,
         )
     except (TypeError, ValueError, json.JSONDecodeError, KeyError):
         return _MISS
@@ -292,6 +307,9 @@ async def _put_redis_by_coord(version: str, coord: _Coord, row: BudgetConfigRow)
         "period_timezone": row.period_reset_anchor.timezone,
         "period_reset_minutes": row.period_reset_anchor.time_minutes,
         "period_reset_day": row.period_reset_anchor.day_of_month,
+        "enabled": row.enabled,
+        "valid_from": row.valid_from.isoformat() if row.valid_from is not None else None,
+        "valid_until": row.valid_until.isoformat() if row.valid_until is not None else None,
     }
     try:
         await redis.set(

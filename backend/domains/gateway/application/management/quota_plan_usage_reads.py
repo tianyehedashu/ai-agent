@@ -74,7 +74,7 @@ def resolve_quota_window_key(lookup: QuotaWindowLookup, *, now: datetime) -> Quo
         now,
         lookup.window_seconds,
         strategy=normalize_reset_strategy(lookup.reset_strategy),
-        plan_valid_from=lookup.plan_valid_from,
+        row_valid_from=lookup.plan_valid_from,
         period_reset_anchor=lookup.period_reset_anchor,
     )
     return QuotaWindowKey(

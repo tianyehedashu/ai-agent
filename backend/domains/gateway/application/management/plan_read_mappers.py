@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-from datetime import datetime
 from typing import TYPE_CHECKING
 
 from domains.gateway.application.management.plan_read_models import (
     EntitlementPlanReadModel,
     PlanQuotaReadModel,
-    ProviderPlanReadModel,
+    ProviderQuotaReadModel,
 )
 from domains.gateway.domain.period_reset_anchor import period_reset_anchor_from_plan_quota
 from domains.gateway.domain.quota_plan import (
@@ -21,25 +20,7 @@ if TYPE_CHECKING:
         EntitlementPlan,
         EntitlementPlanQuota,
     )
-    from domains.gateway.infrastructure.models.provider_plan import (
-        ProviderPlan,
-        ProviderPlanQuota,
-    )
-
-
-def _provider_quota_from_orm(row: ProviderPlanQuota) -> PlanQuotaReadModel:
-    return PlanQuotaReadModel(
-        id=row.id,
-        label=row.label,
-        window_seconds=row.window_seconds,
-        reset_strategy=row.reset_strategy,
-        reset_timezone=row.reset_timezone,
-        reset_time_minutes=row.reset_time_minutes,
-        reset_day_of_month=row.reset_day_of_month,
-        limit_usd=row.limit_usd,
-        limit_tokens=row.limit_tokens,
-        limit_requests=row.limit_requests,
-    )
+    from domains.gateway.infrastructure.models.provider_quota import ProviderQuota
 
 
 def _entitlement_quota_from_orm(row: EntitlementPlanQuota) -> PlanQuotaReadModel:
@@ -56,14 +37,33 @@ def _entitlement_quota_from_orm(row: EntitlementPlanQuota) -> PlanQuotaReadModel
         limit_requests=row.limit_requests,
         unit_price_usd_per_token=row.unit_price_usd_per_token,
         unit_price_usd_per_request=row.unit_price_usd_per_request,
+        enabled=row.enabled,
+        valid_from=row.valid_from,
+        valid_until=row.valid_until,
     )
 
 
-def provider_plan_quota_to_spec(
-    row: ProviderPlanQuota,
-    *,
-    plan_valid_from: datetime,
-) -> PlanQuotaSpec:
+def provider_quota_from_orm(row: ProviderQuota) -> ProviderQuotaReadModel:
+    return ProviderQuotaReadModel(
+        id=row.id,
+        credential_id=row.credential_id,
+        real_model=row.real_model,
+        label=row.label,
+        window_seconds=row.window_seconds,
+        reset_strategy=row.reset_strategy,
+        reset_timezone=row.reset_timezone,
+        reset_time_minutes=row.reset_time_minutes,
+        reset_day_of_month=row.reset_day_of_month,
+        limit_usd=row.limit_usd,
+        limit_tokens=row.limit_tokens,
+        limit_requests=row.limit_requests,
+        enabled=row.enabled,
+        valid_from=row.valid_from,
+        valid_until=row.valid_until,
+    )
+
+
+def provider_quota_to_spec(row: ProviderQuota) -> PlanQuotaSpec:
     return PlanQuotaSpec(
         quota_id=row.id,
         label=row.label,
@@ -72,7 +72,6 @@ def provider_plan_quota_to_spec(
         limit_tokens=row.limit_tokens,
         limit_requests=row.limit_requests,
         reset_strategy=normalize_reset_strategy(row.reset_strategy),
-        plan_valid_from=plan_valid_from,
         period_reset_anchor=period_reset_anchor_from_plan_quota(
             reset_timezone=row.reset_timezone,
             reset_time_minutes=row.reset_time_minutes,
@@ -81,11 +80,7 @@ def provider_plan_quota_to_spec(
     )
 
 
-def entitlement_plan_quota_to_spec(
-    row: EntitlementPlanQuota,
-    *,
-    plan_valid_from: datetime,
-) -> PlanQuotaSpec:
+def entitlement_plan_quota_to_spec(row: EntitlementPlanQuota) -> PlanQuotaSpec:
     return PlanQuotaSpec(
         quota_id=row.id,
         label=row.label,
@@ -94,31 +89,11 @@ def entitlement_plan_quota_to_spec(
         limit_tokens=row.limit_tokens,
         limit_requests=row.limit_requests,
         reset_strategy=normalize_reset_strategy(row.reset_strategy),
-        plan_valid_from=plan_valid_from,
         period_reset_anchor=period_reset_anchor_from_plan_quota(
             reset_timezone=row.reset_timezone,
             reset_time_minutes=row.reset_time_minutes,
             reset_day_of_month=row.reset_day_of_month,
         ),
-    )
-
-
-def provider_plan_from_orm(
-    plan: ProviderPlan,
-    quotas: list[ProviderPlanQuota],
-) -> ProviderPlanReadModel:
-    return ProviderPlanReadModel(
-        id=plan.id,
-        credential_id=plan.credential_id,
-        real_model=plan.real_model,
-        label=plan.label,
-        valid_from=plan.valid_from,
-        valid_until=plan.valid_until,
-        is_active=plan.is_active,
-        auto_renew=plan.auto_renew,
-        notes=plan.notes,
-        extra=plan.extra,
-        quotas=tuple(_provider_quota_from_orm(q) for q in quotas),
     )
 
 
@@ -132,11 +107,8 @@ def entitlement_plan_from_orm(
         scope_id=plan.target_id,
         label=plan.label,
         valid_from=plan.valid_from,
-        valid_until=plan.valid_until,
         included_models=tuple(plan.included_models or ()),
         included_capabilities=tuple(plan.included_capabilities or ()),
-        is_active=plan.is_active,
-        auto_renew=plan.auto_renew,
         notes=plan.notes,
         extra=plan.extra,
         quotas=tuple(_entitlement_quota_from_orm(q) for q in quotas),
@@ -146,6 +118,6 @@ def entitlement_plan_from_orm(
 __all__ = [
     "entitlement_plan_from_orm",
     "entitlement_plan_quota_to_spec",
-    "provider_plan_from_orm",
-    "provider_plan_quota_to_spec",
+    "provider_quota_from_orm",
+    "provider_quota_to_spec",
 ]

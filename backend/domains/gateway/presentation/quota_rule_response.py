@@ -59,6 +59,8 @@ def quota_rule_to_response(model: QuotaRuleReadModel) -> QuotaRuleResponse:
         usage=usage,
         plan_label=model.plan_label,
         is_active=model.is_active,
+        valid_from=model.valid_from,
+        valid_until=model.valid_until,
     )
 
 

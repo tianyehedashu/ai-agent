@@ -2314,90 +2314,20 @@ class TestGatewayManagementApi:
         assert r_del.status_code == 204, r_del.text
 
     @pytest.mark.asyncio
-    async def test_provider_and_entitlement_plan_management_apis(
+    async def test_entitlement_plan_management_apis(
         self,
         dev_client: AsyncClient,
         auth_headers: dict[str, str],
         db_session,
         test_user: User,
     ) -> None:
-        """三组套餐管理 API：ProviderPlan、EntitlementPlan、usage/margin 读入口。"""
+        """EntitlementPlan 管理 API 与 usage/margin 读入口。"""
         team = await TeamService(db_session).ensure_personal_team(test_user.id)
         await db_session.commit()
         headers = auth_headers
         now = datetime.now(UTC).replace(microsecond=0)
         valid_from = (now - timedelta(minutes=1)).isoformat()
         valid_until = (now + timedelta(days=30)).isoformat()
-
-        r_cred = await dev_client.post(
-            f"/api/v1/gateway/teams/{team.id}/credentials",
-            headers=headers,
-            json={
-                "provider": "openai",
-                "name": f"plan-cred-{uuid.uuid4().hex[:8]}",
-                "api_key": "sk-plan-api-test-123456789",
-                "scope": "team",
-            },
-        )
-        assert r_cred.status_code == 201, r_cred.text
-        credential_id = r_cred.json()["id"]
-
-        r_provider_create = await dev_client.post(
-            f"/api/v1/gateway/teams/{team.id}/credentials/{credential_id}/provider-plans",
-            headers=headers,
-            json={
-                "real_model": "openai/gpt-4o-mini",
-                "label": "OpenAI daily pack",
-                "valid_from": valid_from,
-                "valid_until": valid_until,
-                "auto_renew": True,
-                "quotas": [
-                    {
-                        "label": "daily",
-                        "window_seconds": 86400,
-                        "reset_strategy": "calendar_daily_utc",
-                        "limit_requests": 100,
-                    }
-                ],
-            },
-        )
-        assert r_provider_create.status_code == 201, r_provider_create.text
-        provider_plan = r_provider_create.json()
-        provider_plan_id = provider_plan["id"]
-        assert provider_plan["quotas"][0]["reset_strategy"] == "calendar_daily_utc"
-
-        r_provider_list = await dev_client.get(
-            f"/api/v1/gateway/teams/{team.id}/credentials/{credential_id}/provider-plans",
-            headers=headers,
-        )
-        assert r_provider_list.status_code == 200, r_provider_list.text
-        assert any(p["id"] == provider_plan_id for p in r_provider_list.json())
-
-        r_provider_patch = await dev_client.patch(
-            f"/api/v1/gateway/teams/{team.id}/credentials/{credential_id}/provider-plans/{provider_plan_id}",
-            headers=headers,
-            json={
-                "label": "OpenAI monthly pack",
-                "quotas": [
-                    {
-                        "label": "monthly",
-                        "window_seconds": 31 * 86400,
-                        "reset_strategy": "calendar_monthly_utc",
-                        "limit_requests": 1000,
-                    }
-                ],
-            },
-        )
-        assert r_provider_patch.status_code == 200, r_provider_patch.text
-        assert r_provider_patch.json()["label"] == "OpenAI monthly pack"
-        assert r_provider_patch.json()["quotas"][0]["reset_strategy"] == "calendar_monthly_utc"
-
-        r_provider_usage = await dev_client.get(
-            f"/api/v1/gateway/teams/{team.id}/credentials/{credential_id}/provider-plan-usage?days=7",
-            headers=headers,
-        )
-        assert r_provider_usage.status_code == 200, r_provider_usage.text
-        assert isinstance(r_provider_usage.json(), list)
 
         r_key = await dev_client.post(
             f"/api/v1/gateway/teams/{team.id}/keys",
@@ -2464,14 +2394,14 @@ class TestGatewayManagementApi:
         assert r_margin.status_code == 403, r_margin.text
 
     @pytest.mark.asyncio
-    async def test_provider_plan_list_readable_by_credential_owner_member(
+    async def test_upstream_quota_rules_readable_by_credential_owner_member(
         self,
         dev_client: AsyncClient,
         auth_headers: dict[str, str],
         db_session,
         test_user: User,
     ) -> None:
-        """凭据创建者（非 admin 成员）可读 provider-plans，与 GET 凭据详情权限一致。"""
+        """凭据创建者（非 admin 成员）可在配额中心看到本人凭据的上游规则。"""
         owner = test_user
         member = User(
             email=f"member_{uuid.uuid4()}@example.com",
@@ -2483,7 +2413,7 @@ class TestGatewayManagementApi:
         await db_session.refresh(member)
 
         ts = TeamService(db_session)
-        shared = await ts.create_team(name="Provider Plan Read Team", owner_user_id=owner.id)
+        shared = await ts.create_team(name="Upstream Quota Read Team", owner_user_id=owner.id)
         await ts.add_member(shared.id, member.id, "member")
         await db_session.commit()
 
@@ -2494,9 +2424,7 @@ class TestGatewayManagementApi:
             "X-Team-Id": str(shared.id),
         }
 
-        now = datetime.now(UTC).replace(microsecond=0)
-        valid_from = (now - timedelta(minutes=1)).isoformat()
-        valid_until = (now + timedelta(days=30)).isoformat()
+        real_model = "openai/gpt-4o-mini"
 
         r_cred = await dev_client.post(
             f"/api/v1/gateway/teams/{shared.id}/credentials",
@@ -2504,59 +2432,53 @@ class TestGatewayManagementApi:
             json={
                 "provider": "openai",
                 "name": f"member-cred-{uuid.uuid4().hex[:8]}",
-                "api_key": "sk-member-plan-read-test",
+                "api_key": "sk-member-quota-read-test",
                 "scope": "team",
             },
         )
         assert r_cred.status_code == 201, r_cred.text
         credential_id = r_cred.json()["id"]
 
-        r_create = await dev_client.post(
-            f"/api/v1/gateway/teams/{shared.id}/credentials/{credential_id}/provider-plans",
-            headers=auth_headers,
+        r_model = await dev_client.post(
+            f"/api/v1/gateway/teams/{shared.id}/models",
+            headers=member_headers,
             json={
-                "real_model": "openai/gpt-4o-mini",
-                "label": "Owner-created plan",
-                "valid_from": valid_from,
-                "valid_until": valid_until,
-                "quotas": [{"label": "daily", "window_seconds": 86400, "limit_requests": 100}],
+                "name": f"member-model-{uuid.uuid4().hex[:8]}",
+                "capability": "chat",
+                "real_model": real_model,
+                "credential_id": credential_id,
+                "provider": "openai",
             },
         )
-        assert r_create.status_code == 201, r_create.text
+        assert r_model.status_code == 201, r_model.text
+
+        r_batch = await dev_client.put(
+            f"/api/v1/gateway/teams/{shared.id}/quota-rules/batch",
+            headers=auth_headers,
+            json={
+                "rules": [
+                    {
+                        "layer": "upstream",
+                        "credential_id": credential_id,
+                        "model_name": real_model,
+                        "window_seconds": 86400,
+                        "quota_label": "daily",
+                        "reset_strategy": "calendar_daily_utc",
+                        "limit_requests": 100,
+                    }
+                ]
+            },
+        )
+        assert r_batch.status_code == 200, r_batch.text
+        assert r_batch.json()["failed"] == []
 
         r_list = await dev_client.get(
-            f"/api/v1/gateway/teams/{shared.id}/credentials/{credential_id}/provider-plans",
+            f"/api/v1/gateway/teams/{shared.id}/quota-rules",
             headers=member_headers,
+            params={"layer": "upstream", "credential_id": credential_id},
         )
         assert r_list.status_code == 200, r_list.text
         assert len(r_list.json()) == 1
-
-        r_usage = await dev_client.get(
-            f"/api/v1/gateway/teams/{shared.id}/credentials/{credential_id}/provider-plan-usage?days=7",
-            headers=member_headers,
-        )
-        assert r_usage.status_code == 200, r_usage.text
-
-        r_other_member = User(
-            email=f"other_{uuid.uuid4()}@example.com",
-            hashed_password="hashed_password",
-            name="Other Member",
-        )
-        db_session.add(r_other_member)
-        await db_session.commit()
-        await db_session.refresh(r_other_member)
-        await ts.add_member(shared.id, r_other_member.id, "member")
-        await db_session.commit()
-        other_token = await member_uc.create_token(r_other_member)
-        other_headers = {
-            "Authorization": f"Bearer {other_token.access_token}",
-            "X-Team-Id": str(shared.id),
-        }
-        r_forbidden = await dev_client.get(
-            f"/api/v1/gateway/teams/{shared.id}/credentials/{credential_id}/provider-plans",
-            headers=other_headers,
-        )
-        assert r_forbidden.status_code == 404, r_forbidden.text
 
     @pytest.mark.asyncio
     async def test_plan_apis_reject_cross_team_access(
@@ -2566,7 +2488,7 @@ class TestGatewayManagementApi:
         db_session,
         test_user: User,
     ) -> None:
-        """ProviderPlan / EntitlementPlan / api-key-grant entitlements API 跨团队应返回 404。
+        """EntitlementPlan / api-key-grant entitlements API 跨团队应返回 404。
 
         IDOR 防护：用 team A 的 credential / vkey id，从 team B 的 personal team
         上下文（不同 user，且非平台管理员）访问应得到 404，且不暴露实体存在性。
@@ -2590,20 +2512,40 @@ class TestGatewayManagementApi:
         )
         assert r_cred.status_code == 201, r_cred.text
         credential_id = r_cred.json()["id"]
+        real_model = "openai/gpt-4o-mini"
 
-        r_pp = await dev_client.post(
-            f"/api/v1/gateway/teams/{team_a.id}/credentials/{credential_id}/provider-plans",
+        r_model = await dev_client.post(
+            f"/api/v1/gateway/teams/{team_a.id}/models",
             headers=headers_a,
             json={
-                "real_model": "openai/gpt-4o-mini",
-                "label": "Owner Plan",
-                "valid_from": valid_from,
-                "valid_until": valid_until,
-                "quotas": [{"label": "daily", "window_seconds": 86400, "limit_requests": 100}],
+                "name": f"cross-team-model-{uuid.uuid4().hex[:8]}",
+                "capability": "chat",
+                "real_model": real_model,
+                "credential_id": credential_id,
+                "provider": "openai",
             },
         )
-        assert r_pp.status_code == 201, r_pp.text
-        provider_plan_id = r_pp.json()["id"]
+        assert r_model.status_code == 201, r_model.text
+
+        r_quota_batch = await dev_client.put(
+            f"/api/v1/gateway/teams/{team_a.id}/quota-rules/batch",
+            headers=headers_a,
+            json={
+                "rules": [
+                    {
+                        "layer": "upstream",
+                        "credential_id": credential_id,
+                        "model_name": real_model,
+                        "window_seconds": 86400,
+                        "quota_label": "daily",
+                        "reset_strategy": "calendar_daily_utc",
+                        "limit_requests": 100,
+                    }
+                ]
+            },
+        )
+        assert r_quota_batch.status_code == 200, r_quota_batch.text
+        quota_id = r_quota_batch.json()["succeeded"][0]["source_ref"]["quota_id"]
 
         r_key = await dev_client.post(
             f"/api/v1/gateway/teams/{team_a.id}/keys",
@@ -2642,24 +2584,36 @@ class TestGatewayManagementApi:
             "X-Team-Id": str(team_b.id),
         }
 
-        r1 = await dev_client.get(
-            f"/api/v1/gateway/teams/{team_b.id}/credentials/{credential_id}/provider-plans",
+        r1 = await dev_client.put(
+            f"/api/v1/gateway/teams/{team_b.id}/quota-rules/batch",
             headers=headers_b,
+            json={
+                "rules": [
+                    {
+                        "layer": "upstream",
+                        "credential_id": credential_id,
+                        "model_name": real_model,
+                        "window_seconds": 86400,
+                        "quota_label": "daily",
+                        "limit_requests": 1,
+                    }
+                ]
+            },
         )
-        assert r1.status_code == 404, r1.text
+        assert r1.status_code == 200, r1.text
+        assert len(r1.json()["failed"]) == 1, r1.text
 
-        r2 = await dev_client.patch(
-            f"/api/v1/gateway/teams/{team_b.id}/credentials/{credential_id}/provider-plans/{provider_plan_id}",
+        r2 = await dev_client.post(
+            f"/api/v1/gateway/teams/{team_b.id}/quota-rules/usage-adjustments",
             headers=headers_b,
-            json={"label": "hijacked"},
+            json={
+                "layer": "upstream",
+                "quota_id": quota_id,
+                "mode": "set",
+                "current_usd": "1.00",
+            },
         )
         assert r2.status_code == 404, r2.text
-
-        r3 = await dev_client.delete(
-            f"/api/v1/gateway/teams/{team_b.id}/credentials/{credential_id}/provider-plans/{provider_plan_id}",
-            headers=headers_b,
-        )
-        assert r3.status_code == 404, r3.text
 
         r4 = await dev_client.get(
             f"/api/v1/gateway/teams/{team_b.id}/keys/{vkey_id}/entitlements",

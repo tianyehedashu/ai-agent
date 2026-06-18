@@ -15,7 +15,7 @@ from domains.gateway.application.management.budget_usage_reads import (
 )
 from domains.gateway.application.management.plan_read_mappers import (
     entitlement_plan_quota_to_spec,
-    provider_plan_quota_to_spec,
+    provider_quota_to_spec,
 )
 from domains.gateway.application.management.quota_plan_usage_reads import (
     QuotaWindowLookup,
@@ -35,13 +35,12 @@ from domains.gateway.domain.quota_plan import (
     QuotaPlanNamespace,
     is_sliding_rolling_window,
 )
-from domains.gateway.infrastructure.models.provider_plan import ProviderPlanQuota
 from domains.gateway.infrastructure.repositories.budget_repository import BudgetRepository
 from domains.gateway.infrastructure.repositories.entitlement_plan_repository import (
     EntitlementPlanRepository,
 )
-from domains.gateway.infrastructure.repositories.provider_plan_repository import (
-    ProviderPlanRepository,
+from domains.gateway.infrastructure.repositories.provider_quota_repository import (
+    ProviderQuotaRepository,
 )
 from domains.gateway.infrastructure.repositories.quota_plan_usage_bucket_repository import (
     QuotaPlanUsageBucketRepository,
@@ -80,46 +79,59 @@ def _resolved_usage_values(
 @dataclass(frozen=True)
 class _PlanQuotaContext:
     ns: QuotaPlanNamespace
+    plan_id: uuid.UUID
+    quota_id: uuid.UUID
     window_seconds: int
     reset_strategy: str
     anchor: PeriodResetAnchor
-    plan_valid_from: datetime | None
+    row_valid_from: datetime | None
     quota_spec: PlanQuotaSpec
 
 
 async def _load_plan_quota_context(
     session: object,
     layer: Literal["upstream", "downstream"],
-    plan_id: uuid.UUID,
+    plan_id: uuid.UUID | None,
     quota_id: uuid.UUID,
 ) -> _PlanQuotaContext:
-    """加载上游 / 下游套餐配额上下文（两层仅仓储与命名空间不同，去重收敛于此）。"""
+    """加载上游扁平配额 / 下游套餐配额上下文。"""
     if layer == "upstream":
-        plan_repo: ProviderPlanRepository | EntitlementPlanRepository = ProviderPlanRepository(
-            session
+        repo = ProviderQuotaRepository(session)
+        row = await repo.get(quota_id)
+        if row is None:
+            raise NotFoundError(f"上游配额不存在: {quota_id}")
+        quota_spec = provider_quota_to_spec(row)
+        return _PlanQuotaContext(
+            ns=PROVIDER_NS,
+            plan_id=row.id,
+            quota_id=row.id,
+            window_seconds=row.window_seconds,
+            reset_strategy=row.reset_strategy,
+            anchor=period_reset_anchor_from_plan_quota(
+                reset_timezone=row.reset_timezone,
+                reset_time_minutes=row.reset_time_minutes,
+                reset_day_of_month=row.reset_day_of_month,
+            ),
+            row_valid_from=row.valid_from,
+            quota_spec=quota_spec,
         )
-        ns: QuotaPlanNamespace = PROVIDER_NS
-        noun = "上游"
-    else:
-        plan_repo = EntitlementPlanRepository(session)
-        ns = ENTITLEMENT_NS
-        noun = "下游"
 
+    if plan_id is None:
+        raise ValidationError("downstream 用量校正需要 plan_id")
+    plan_repo = EntitlementPlanRepository(session)
     plan = await plan_repo.get(plan_id)
     if plan is None:
-        raise NotFoundError(f"{noun}套餐不存在: {plan_id}")
+        raise NotFoundError(f"下游套餐不存在: {plan_id}")
     quotas = await plan_repo.list_quotas(plan_id)
     quota = next((q for q in quotas if q.id == quota_id), None)
     if quota is None:
-        raise NotFoundError(f"{noun}配额不存在: {quota_id}")
+        raise NotFoundError(f"下游配额不存在: {quota_id}")
 
-    quota_spec = (
-        provider_plan_quota_to_spec(quota, plan_valid_from=plan.valid_from)
-        if isinstance(quota, ProviderPlanQuota)
-        else entitlement_plan_quota_to_spec(quota, plan_valid_from=plan.valid_from)
-    )
+    quota_spec = entitlement_plan_quota_to_spec(quota)
     return _PlanQuotaContext(
-        ns=ns,
+        ns=ENTITLEMENT_NS,
+        plan_id=plan_id,
+        quota_id=quota_id,
         window_seconds=quota.window_seconds,
         reset_strategy=quota.reset_strategy,
         anchor=period_reset_anchor_from_plan_quota(
@@ -127,7 +139,7 @@ async def _load_plan_quota_context(
             reset_time_minutes=quota.reset_time_minutes,
             reset_day_of_month=quota.reset_day_of_month,
         ),
-        plan_valid_from=plan.valid_from,
+        row_valid_from=quota.valid_from,
         quota_spec=quota_spec,
     )
 
@@ -198,19 +210,16 @@ async def apply_quota_usage_adjustment(
         )
         return
 
-    if cmd.plan_id is None or cmd.quota_id is None:
-        raise ValidationError(f"{cmd.layer} 用量校正需要 plan_id 与 quota_id")
+    rule_id = cmd.quota_id or cmd.plan_id
+    if rule_id is None:
+        raise ValidationError(f"{cmd.layer} 用量校正需要 quota_id")
 
-    ctx = await _load_plan_quota_context(session, cmd.layer, cmd.plan_id, cmd.quota_id)
+    ctx = await _load_plan_quota_context(session, cmd.layer, cmd.plan_id, rule_id)
     ns = ctx.ns
     window_seconds = ctx.window_seconds
     reset_strategy = ctx.reset_strategy
     anchor = ctx.anchor
-    plan_valid_from = ctx.plan_valid_from
 
-    # 真正的滚动窗口（window_seconds>0 且 rolling）用量由请求日志实时统计（展示读忽略
-    # PG 桶），手工校正 / 清零写桶不会反映到展示，徒增误解，直接拒绝并引导改固定周期。
-    # 注意：window_seconds<=0 的累计（总额）即便策略名是 rolling 也按固定累计，允许校正。
     if is_sliding_rolling_window(window_seconds, reset_strategy):
         raise ValidationError(
             "滚动窗口配额用量由请求日志实时统计，不支持手工校正 / 清零；"
@@ -219,18 +228,18 @@ async def apply_quota_usage_adjustment(
 
     lookup = QuotaWindowLookup(
         ns=ns,
-        plan_id=cmd.plan_id,
-        quota_id=cmd.quota_id,
+        plan_id=ctx.plan_id,
+        quota_id=ctx.quota_id,
         window_seconds=window_seconds,
         reset_strategy=reset_strategy,
-        plan_valid_from=plan_valid_from,
+        plan_valid_from=ctx.row_valid_from,
         period_reset_anchor=anchor,
     )
     window_key = resolve_quota_window_key(lookup, now=now)
     await bucket_repo.set_bucket(
         ns,
-        cmd.plan_id,
-        cmd.quota_id,
+        ctx.plan_id,
+        ctx.quota_id,
         window_key.window_start,
         tokens=tokens,
         requests=requests,
@@ -238,7 +247,7 @@ async def apply_quota_usage_adjustment(
     )
     await get_quota_plan_service().set_window_usage(
         ns,
-        cmd.plan_id,
+        ctx.plan_id,
         ctx.quota_spec,
         cost_usd=cost_usd,
         tokens=tokens,

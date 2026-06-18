@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 from contextlib import suppress
+from datetime import UTC, datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 import uuid
@@ -28,6 +29,9 @@ from domains.gateway.application.budget_service import (
 from domains.gateway.application.user_credential_budget_index import has_user_credential
 from domains.gateway.domain.errors import BudgetExceededError
 from domains.gateway.domain.period_reset_anchor import period_reset_anchor_from_row
+from domains.gateway.domain.policies.quota_window_enforcement import (
+    is_quota_row_enforceable,
+)
 from domains.gateway.domain.proxy_policy import (
     build_user_credential_budget_plan,
     first_present_limit,
@@ -118,6 +122,7 @@ async def maybe_reserve_user_credential_budget(
     budget = BudgetService()
     user_id_str = str(user_id)
     cred_seg = redis_credential_segment_for_budget(credential_id)
+    now = datetime.now(UTC)
 
     check_items = []
     usage_coords: list[BudgetUsageCoord] = []
@@ -133,6 +138,14 @@ async def maybe_reserve_user_credential_budget(
             )
         )
         if config is None:
+            continue
+        # 停用 / 不在有效期内的预算行不纳入 Phase2 执法。
+        if not is_quota_row_enforceable(
+            enabled=config.enabled,
+            valid_from=config.valid_from,
+            valid_until=config.valid_until,
+            now=now,
+        ):
             continue
         coord = BudgetUsageCoord(
             target_kind="user",

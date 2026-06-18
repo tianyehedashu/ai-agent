@@ -23,6 +23,7 @@ from domains.gateway.presentation.schemas.common import (
     QuotaRuleBatchFailureItem,
     QuotaRuleBatchUpsertRequest,
     QuotaRuleBatchUpsertResponse,
+    QuotaRuleEnablementRequest,
     QuotaRuleResponse,
     QuotaRuleUpsert,
     QuotaUsageAdjustmentRequest,
@@ -128,10 +129,10 @@ async def delete_plan_quota(
     team: RequiredTeamAdmin,
     writes: MgmtWrites,
     layer: str = Query(pattern="^(upstream|downstream)$"),
-    plan_id: uuid.UUID = Query(),
     quota_id: uuid.UUID = Query(),
+    plan_id: uuid.UUID | None = Query(default=None),
 ) -> None:
-    """团队管理员：删除单条上游 / 下游 plan 配额（删空套餐时连带删空套餐）。"""
+    """团队管理员：删除单条上游 / 下游配额（下游删空套餐时连带删空 plan 头）。"""
     await writes.delete_plan_quota(
         layer=cast("Literal['upstream', 'downstream']", layer),
         plan_id=plan_id,
@@ -147,10 +148,10 @@ async def delete_plan_quota(
 async def delete_self_plan_quota(
     team: CurrentTeam,
     writes: MgmtWrites,
-    plan_id: uuid.UUID = Query(),
     quota_id: uuid.UUID = Query(),
+    plan_id: uuid.UUID | None = Query(default=None),
 ) -> None:
-    """成员自助：删除本人凭据上的单条上游 plan 配额。"""
+    """成员自助：删除本人凭据上的单条上游配额。"""
     await writes.delete_plan_quota(
         layer="upstream",
         plan_id=plan_id,
@@ -176,6 +177,49 @@ async def adjust_quota_rule_usage(
         actor_user_id=team.user_id,
         is_platform_admin=team.is_platform_admin,
         is_team_admin=is_team_admin_or_platform(team),
+    )
+    return quota_rule_to_response(row)
+
+
+@router.post("/quota-rules/enablement", response_model=QuotaRuleResponse)
+async def set_quota_rule_enablement(
+    body: QuotaRuleEnablementRequest,
+    team: RequiredTeamAdmin,
+    writes: MgmtWrites,
+) -> QuotaRuleResponse:
+    """团队管理员：启用 / 停用单条配额规则。"""
+    row = await writes.set_quota_rule_enabled(
+        layer=body.layer,
+        budget_id=body.budget_id,
+        plan_id=body.plan_id,
+        quota_id=body.quota_id,
+        enabled=body.enabled,
+        tenant_id=team.team_id,
+        actor_user_id=team.user_id,
+        is_platform_admin=team.is_platform_admin,
+        is_team_admin=is_team_admin_or_platform(team),
+    )
+    return quota_rule_to_response(row)
+
+
+@router.post("/quota-rules/self/enablement", response_model=QuotaRuleResponse)
+async def set_self_quota_rule_enablement(
+    body: QuotaRuleEnablementRequest,
+    team: CurrentTeam,
+    writes: MgmtWrites,
+) -> QuotaRuleResponse:
+    """成员自助：启用 / 停用本人平台或本人凭据上游配额规则。"""
+    row = await writes.set_quota_rule_enabled(
+        layer=body.layer,
+        budget_id=body.budget_id,
+        plan_id=body.plan_id,
+        quota_id=body.quota_id,
+        enabled=body.enabled,
+        tenant_id=team.team_id,
+        actor_user_id=team.user_id,
+        is_platform_admin=False,
+        is_team_admin=False,
+        member_self_service=True,
     )
     return quota_rule_to_response(row)
 
@@ -242,6 +286,7 @@ def _upsert_to_command(body: QuotaRuleUpsert) -> QuotaRuleUpsertCommand:
         plan_label=body.plan_label,
         valid_from=body.valid_from,
         valid_until=body.valid_until,
+        enabled=body.enabled,
     )
 
 

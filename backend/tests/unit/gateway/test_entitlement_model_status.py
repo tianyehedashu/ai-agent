@@ -84,7 +84,6 @@ def test_status_from_quota_snapshots_resetting() -> None:
         limit_tokens=None,
         limit_requests=100,
         reset_strategy="rolling",
-        plan_valid_from=when - timedelta(days=1),
     )
     snap = PlanQuotaSnapshot(
         spec=spec,
@@ -140,3 +139,76 @@ async def test_entitlement_status_by_model_names_no_scope() -> None:
         model_names=["a"],
     )
     assert out == {"a": "none"}
+
+
+@pytest.mark.asyncio
+async def test_status_for_models_with_enforceable_quota_does_not_typeerror() -> None:
+    """回归：status_for_models 须与 check_and_reserve 一致调用 _quota_to_spec(q)。"""
+    from dataclasses import dataclass
+    from decimal import Decimal
+
+    from domains.gateway.application.entitlement_guard import EntitlementGuard
+
+    when = datetime(2026, 6, 18, tzinfo=UTC)
+    plan_id = uuid.uuid4()
+    quota_id = uuid.uuid4()
+    vkey_id = uuid.uuid4()
+
+    @dataclass
+    class _Plan:
+        id: uuid.UUID
+        label: str
+        included_models: list[str]
+
+    @dataclass
+    class _Quota:
+        id: uuid.UUID
+        label: str
+        window_seconds: int
+        reset_strategy: str
+        limit_usd: Decimal | None
+        limit_tokens: int | None
+        limit_requests: int | None
+        reset_timezone: str
+        reset_time_minutes: int
+        reset_day_of_month: int
+        enabled: bool
+        valid_from: datetime | None
+        valid_until: datetime | None
+
+    plan = _Plan(id=plan_id, label="pack", included_models=["gpt-4o"])
+    quota = _Quota(
+        id=quota_id,
+        label="daily",
+        window_seconds=86400,
+        reset_strategy="calendar_daily_utc",
+        limit_usd=None,
+        limit_tokens=None,
+        limit_requests=10,
+        reset_timezone="UTC",
+        reset_time_minutes=0,
+        reset_day_of_month=1,
+        enabled=True,
+        valid_from=None,
+        valid_until=None,
+    )
+
+    mock_repo = MagicMock()
+    mock_repo.list_for_scope = AsyncMock(return_value=[plan])
+    mock_repo.list_quotas = AsyncMock(return_value=[quota])
+
+    mock_quota = MagicMock()
+    mock_quota.snapshot = AsyncMock(return_value=[])
+
+    guard = EntitlementGuard(MagicMock(), quota_service=mock_quota)
+    guard._repo = mock_repo  # type: ignore[method-assign]
+
+    result = await guard.status_for_models(
+        ENTITLEMENT_SCOPE_VKEY,
+        vkey_id,
+        ["gpt-4o"],
+        now=when,
+    )
+
+    assert result == {"gpt-4o": "active"}
+    mock_quota.snapshot.assert_awaited_once()

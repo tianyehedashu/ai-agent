@@ -1105,11 +1105,45 @@ function StepLimits({
         />
       </div>
 
+      <div className="space-y-2">
+        <Label>起止时间（可选，留空表示长期有效）</Label>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1">
+            <Label htmlFor="qbw-valid-from" className="text-xs text-muted-foreground">
+              生效起
+            </Label>
+            <Input
+              id="qbw-valid-from"
+              type="datetime-local"
+              value={values.validFrom}
+              onChange={(e) => {
+                onChange({ ...values, validFrom: e.target.value })
+              }}
+              disabled={disabled}
+            />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="qbw-valid-until" className="text-xs text-muted-foreground">
+              失效止
+            </Label>
+            <Input
+              id="qbw-valid-until"
+              type="datetime-local"
+              value={values.validUntil}
+              onChange={(e) => {
+                onChange({ ...values, validUntil: e.target.value })
+              }}
+              disabled={disabled}
+            />
+          </div>
+        </div>
+      </div>
+
       {/* P10: 编辑模式提示 + 删除按钮 */}
       {isEditing ? (
         <div className="flex items-center justify-between rounded-md border border-amber-200 bg-amber-50 px-3 py-2">
           <p className="text-xs text-amber-700">
-            编辑模式下仅可修改限额值和模型范围，层级与主体不可变更。如需更换维度请删除后新建。
+            编辑模式下仅可修改限额值、起止时间和模型范围，层级与主体不可变更。如需更换维度请删除后新建。
           </p>
         </div>
       ) : null}

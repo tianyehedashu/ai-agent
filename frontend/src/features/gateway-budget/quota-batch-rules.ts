@@ -29,6 +29,20 @@ function applyPeriodResetToBody(body: QuotaRuleUpsertBody, values: QuotaBatchFor
   }
 }
 
+/** datetime-local（无时区，本地时间）→ ISO 字符串；空串返回 null（= 该侧不限）。 */
+function localDateTimeToIso(value: string): string | null {
+  const trimmed = value.trim()
+  if (!trimmed) return null
+  const parsed = new Date(trimmed)
+  if (Number.isNaN(parsed.getTime())) return null
+  return parsed.toISOString()
+}
+
+function applyValidityToBody(body: QuotaRuleUpsertBody, values: QuotaBatchFormValues): void {
+  body.valid_from = localDateTimeToIso(values.validFrom)
+  body.valid_until = localDateTimeToIso(values.validUntil)
+}
+
 export interface BuildBatchRulesOptions {
   /** 上游层：凭据 id → 已注册 real_model 列表；用于过滤非法笛卡尔积 */
   realModelsByCredential?: RealModelsByCredential
@@ -123,6 +137,7 @@ export function buildBatchRules(
           if (lt !== null) body.limit_tokens = lt
           if (lr !== null) body.limit_requests = lr
           applyPeriodResetToBody(body, values)
+          applyValidityToBody(body, values)
           rules.push(body)
         }
       }
@@ -153,6 +168,7 @@ export function buildBatchRules(
         if (lt !== null) body.limit_tokens = lt
         if (lr !== null) body.limit_requests = lr
         applyPeriodResetToBody(body, values)
+        applyValidityToBody(body, values)
         rules.push(body)
       }
     }
@@ -175,6 +191,7 @@ export function buildBatchRules(
       if (lt !== null) body.limit_tokens = lt
       if (lr !== null) body.limit_requests = lr
       applyPeriodResetToBody(body, values)
+      applyValidityToBody(body, values)
       rules.push(body)
     }
   }

@@ -3,11 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Literal
 import uuid
 
-from domains.gateway.application.management.plan_quota_merge import merge_plan_quotas_by_label
 from domains.gateway.domain.period_reset_anchor import PeriodResetAnchor
 from domains.gateway.domain.policies.plan_quota_reset_anchor_policy import (
     resolve_plan_quota_reset_anchor,
@@ -18,7 +17,7 @@ from domains.gateway.domain.policies.platform_budget_upsert_policy import (
 from domains.gateway.domain.quota_plan import default_reset_strategy_for_window
 from domains.gateway.infrastructure.models.budget import GatewayBudget
 from domains.gateway.infrastructure.models.entitlement_plan import EntitlementPlan
-from domains.gateway.infrastructure.models.provider_plan import ProviderPlan
+from domains.gateway.infrastructure.models.provider_quota import ProviderQuota
 from libs.exceptions import AIAgentError, ValidationError
 from utils.logging import get_logger
 
@@ -57,7 +56,7 @@ def _plan_reset_fields_from_cmd(
 
 QuotaRuleLayer = Literal["platform", "upstream", "downstream"]
 
-QuotaRuleUpsertResult = GatewayBudget | ProviderPlan | EntitlementPlan
+QuotaRuleUpsertResult = GatewayBudget | ProviderQuota | EntitlementPlan
 
 
 @dataclass(frozen=True)
@@ -106,6 +105,8 @@ class QuotaRuleUpsertCommand:
 
     valid_until: datetime | None = None
 
+    enabled: bool = True
+
     period_timezone: str | None = None
     period_reset_minutes: int | None = None
     period_reset_day: int | None = None
@@ -149,13 +150,13 @@ class QuotaRuleWritesMixin:
         if cmd.layer == "upstream":
             if actor_user_id is None:
                 raise ValidationError("upstream 配额写入需要 actor_user_id")
-            plan, _display_team_id = await self._upsert_upstream_quota_rule(
+            quota, _display_team_id = await self._upsert_upstream_quota_rule(
                 cmd,
                 tenant_id=tenant_id,
                 actor_user_id=actor_user_id,
                 is_platform_admin=is_platform_admin,
             )
-            return plan
+            return quota
 
         if cmd.layer == "downstream":
             return await self._upsert_downstream_quota_rule(
@@ -197,12 +198,12 @@ class QuotaRuleWritesMixin:
     ) -> QuotaRuleBatchResult:
         from domains.gateway.application.management.plan_read_mappers import (
             entitlement_plan_from_orm,
-            provider_plan_from_orm,
+            provider_quota_from_orm,
         )
         from domains.gateway.application.management.quota_rule_read_mappers import (
             budget_to_quota_rule,
             flatten_entitlement_plan,
-            flatten_provider_plan,
+            provider_quota_to_quota_rule,
         )
 
         succeeded: list[QuotaRuleReadModel] = []
@@ -210,9 +211,6 @@ class QuotaRuleWritesMixin:
         any_changed = False
         upstream_changed = False
 
-        # ------------------------------------------------------------------
-        # Platform 层批量优化：先逐条校验 + 推导参数，再一次性批量 upsert
-        # ------------------------------------------------------------------
         platform_items: list[tuple[int, dict[str, object]]] = []
         non_platform_commands: list[tuple[int, QuotaRuleUpsertCommand]] = []
 
@@ -252,9 +250,6 @@ class QuotaRuleWritesMixin:
 
             await invalidate_gateway_budget_config_cache()
 
-        # ------------------------------------------------------------------
-        # Upstream / Downstream 保持逐条处理（plan 逻辑复杂，不适合纯 SQL 批量）
-        # ------------------------------------------------------------------
         for index, cmd in non_platform_commands:
             try:
                 if actor_user_id is None:
@@ -277,21 +272,13 @@ class QuotaRuleWritesMixin:
                 any_changed = True
                 if cmd.layer == "upstream":
                     upstream_changed = True
-
-                if cmd.layer == "upstream":
-                    plan, quotas = await self._provider_plans.get_with_quotas(result.id)
-
-                    if plan is not None:
-                        model = provider_plan_from_orm(plan, quotas)
-
-                        flat = flatten_provider_plan(model, team_id=display_team_id)
-
-                        label = cmd.quota_label or "default"
-
-                        matched = [r for r in flat if r.key.quota_label == label]
-
-                        succeeded.extend(matched or flat[:1])
-
+                    read_model = provider_quota_from_orm(result)
+                    rule = provider_quota_to_quota_rule(read_model, team_id=display_team_id)
+                    label = cmd.quota_label or "default"
+                    if rule.key.quota_label == label:
+                        succeeded.append(rule)
+                    else:
+                        succeeded.append(rule)
                 else:
                     row = await self._entitlement_plans.get_with_quotas(result.id)
 
@@ -331,14 +318,6 @@ class QuotaRuleWritesMixin:
         actor_user_id: uuid.UUID | None = None,
         member_self_service: bool = False,
     ) -> tuple[str, uuid.UUID | None, uuid.UUID | None, str, PeriodResetAnchor]:
-        """归一化 platform target_kind/target_id/budget_tenant/period 并完成校验链。
-
-        返回的 ``budget_tenant`` 仅在「成员总量/模型护栏」（``target_kind=user`` 且无
-        ``credential_id``）时为当前团队，使成员额度按团队隔离；其余维度为 ``None``。
-
-        ``member_self_service=True`` 时强制「本人 user + 本人凭据(+模型)」，
-        并以凭据归属断言替代团队管理员的成员/凭据归属断言。
-        """
         target_kind = cmd.target_kind
         if target_kind is None:
             if cmd.access_kind == "vkey" and cmd.access_id is not None:
@@ -417,7 +396,6 @@ class QuotaRuleWritesMixin:
                 if cmd.model_name:
                     await self._assert_model_alias_on_credential(cmd.credential_id, cmd.model_name)
 
-        # 成员总量/模型护栏按团队隔离；成员+凭据行由 credential 绑定团队，tenant 维度留空。
         budget_tenant = tenant_id if (target_kind == "user" and cmd.credential_id is None) else None
         return target_kind, target_id, budget_tenant, period, anchor
 
@@ -430,7 +408,6 @@ class QuotaRuleWritesMixin:
         actor_user_id: uuid.UUID | None = None,
         member_self_service: bool = False,
     ) -> dict[str, object]:
-        """将 platform 命令解析为 batch_upsert 所需字典；校验失败会抛异常。"""
         target_kind, target_id, budget_tenant, period, anchor = await self._resolve_platform_target(
             cmd,
             tenant_id=tenant_id,
@@ -452,6 +429,9 @@ class QuotaRuleWritesMixin:
             "period_timezone": anchor.timezone,
             "period_reset_minutes": anchor.time_minutes,
             "period_reset_day": anchor.day_of_month,
+            "enabled": cmd.enabled,
+            "valid_from": cmd.valid_from,
+            "valid_until": cmd.valid_until,
         }
 
     async def _upsert_platform_quota_rule(
@@ -482,6 +462,9 @@ class QuotaRuleWritesMixin:
                         "period_timezone": anchor.timezone,
                         "period_reset_minutes": anchor.time_minutes,
                         "period_reset_day": anchor.day_of_month,
+                        "enabled": cmd.enabled,
+                        "valid_from": cmd.valid_from,
+                        "valid_until": cmd.valid_until,
                     }
                 ]
             )
@@ -499,7 +482,6 @@ class QuotaRuleWritesMixin:
 
     @staticmethod
     async def _maybe_index_user_credential_budget(budget: GatewayBudget) -> None:
-        """维护成员+凭据预算存在性索引（热路径 Phase2 快路径依赖）。"""
         if budget.credential_id is None or budget.target_id is None:
             return
         from domains.gateway.application.user_credential_budget_index import (
@@ -515,7 +497,7 @@ class QuotaRuleWritesMixin:
         tenant_id: uuid.UUID,
         actor_user_id: uuid.UUID,
         is_platform_admin: bool,
-    ) -> tuple[ProviderPlan, uuid.UUID]:
+    ) -> tuple[ProviderQuota, uuid.UUID]:
         if cmd.credential_id is None:
             raise ValidationError("upstream 配额需要 credential_id")
 
@@ -539,41 +521,26 @@ class QuotaRuleWritesMixin:
             else None
         )
 
-        plan = await self._provider_plans.get_active_for_credential_model(
-            cmd.credential_id,
-            real_model,
+        reset_fields = _plan_reset_fields_from_cmd(
+            cmd, window_seconds=window_seconds, reset_strategy=reset_strategy
         )
 
-        if plan is None:
-            now = datetime.now(UTC)
+        row = await self._provider_quotas.upsert(
+            credential_id=cmd.credential_id,
+            real_model=real_model,
+            label=label,
+            window_seconds=window_seconds,
+            reset_strategy=reset_strategy,
+            limit_usd=cmd.limit_usd,
+            limit_tokens=cmd.limit_tokens,
+            limit_requests=cmd.limit_requests,
+            enabled=cmd.enabled,
+            valid_from=cmd.valid_from,
+            valid_until=cmd.valid_until,
+            **reset_fields,
+        )
 
-            plan = await self._provider_plans.create(
-                credential_id=cmd.credential_id,
-                real_model=real_model,
-                label=cmd.plan_label or f"auto-{now.date().isoformat()}",
-                valid_from=cmd.valid_from or now,
-                valid_until=cmd.valid_until or (now + timedelta(days=365)),
-            )
-
-        existing_quotas = await self._provider_plans.list_quotas(plan.id)
-
-        quota_payload = {
-            "label": label,
-            "window_seconds": window_seconds,
-            "reset_strategy": reset_strategy,
-            "limit_usd": cmd.limit_usd,
-            "limit_tokens": cmd.limit_tokens,
-            "limit_requests": cmd.limit_requests,
-            **_plan_reset_fields_from_cmd(
-                cmd, window_seconds=window_seconds, reset_strategy=reset_strategy
-            ),
-        }
-
-        merged = merge_plan_quotas_by_label(existing_quotas, label, quota_payload)
-
-        await self._provider_plans.replace_quotas(plan.id, merged)
-
-        return plan, display_team_id
+        return row, display_team_id
 
     async def _upsert_downstream_quota_rule(
         self,
@@ -627,8 +594,7 @@ class QuotaRuleWritesMixin:
                 scope=scope,
                 scope_id=scope_id,
                 label=cmd.plan_label or f"auto-{now.date().isoformat()}",
-                valid_from=cmd.valid_from or now,
-                valid_until=cmd.valid_until or (now + timedelta(days=365)),
+                valid_from=now,
                 included_models=included_models,
             )
 
@@ -637,6 +603,8 @@ class QuotaRuleWritesMixin:
         else:
             existing_quotas = await self._entitlement_plans.list_quotas(plan.id)
 
+        from domains.gateway.application.management.plan_quota_merge import merge_plan_quotas_by_label
+
         quota_payload: dict[str, object] = {
             "label": label,
             "window_seconds": window_seconds,
@@ -644,6 +612,9 @@ class QuotaRuleWritesMixin:
             "limit_usd": cmd.limit_usd,
             "limit_tokens": cmd.limit_tokens,
             "limit_requests": cmd.limit_requests,
+            "enabled": cmd.enabled,
+            "valid_from": cmd.valid_from,
+            "valid_until": cmd.valid_until,
             **_plan_reset_fields_from_cmd(
                 cmd, window_seconds=window_seconds, reset_strategy=reset_strategy
             ),

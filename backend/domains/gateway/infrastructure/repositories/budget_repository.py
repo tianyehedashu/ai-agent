@@ -27,6 +27,16 @@ def _apply_period_reset_fields(row: GatewayBudget, item: dict[str, object]) -> N
         row.period_reset_day = int(item["period_reset_day"])  # type: ignore[arg-type]
 
 
+def _apply_enablement_fields(row: GatewayBudget, item: dict[str, object]) -> None:
+    """启用停用 + 起止时间：仅当 key 存在时写入（兼容部分字段更新）。"""
+    if "enabled" in item and item["enabled"] is not None:
+        row.enabled = bool(item["enabled"])
+    if "valid_from" in item:
+        row.valid_from = item["valid_from"]  # type: ignore[assignment]
+    if "valid_until" in item:
+        row.valid_until = item["valid_until"]  # type: ignore[assignment]
+
+
 class BudgetRepository:
     def __init__(self, session: AsyncSession):
         self._session = session
@@ -306,6 +316,7 @@ class BudgetRepository:
                 if reset_at is not None:
                     existing.reset_at = reset_at
                 _apply_period_reset_fields(existing, item)
+                _apply_enablement_fields(existing, item)
                 results.append(existing)
             else:
                 budget = GatewayBudget(
@@ -322,6 +333,7 @@ class BudgetRepository:
                     reset_at=item.get("reset_at"),
                 )
                 _apply_period_reset_fields(budget, item)
+                _apply_enablement_fields(budget, item)
                 to_insert.append(budget)
                 results.append(budget)
 

@@ -27,11 +27,11 @@ from domains.gateway.application.management.credential_read_mappers import (
 from domains.gateway.application.management.credential_read_model import CredentialReadModel
 from domains.gateway.application.management.plan_read_mappers import (
     entitlement_plan_from_orm,
-    provider_plan_from_orm,
+    provider_quota_from_orm,
 )
 from domains.gateway.application.management.plan_read_models import (
     EntitlementPlanReadModel,
-    ProviderPlanReadModel,
+    ProviderQuotaReadModel,
 )
 from domains.gateway.application.management.quota_rule_read_model import (
     QuotaRuleListFilters,
@@ -111,15 +111,15 @@ from domains.gateway.infrastructure.repositories.credential_repository import (
 from domains.gateway.infrastructure.repositories.entitlement_plan_repository import (
     EntitlementPlanRepository,
 )
+from domains.gateway.infrastructure.repositories.metrics_hourly_read_repository import (
+    MetricsHourlyReadRepository,
+)
 from domains.gateway.infrastructure.repositories.model_repository import (
     GatewayModelRepository,
     GatewayRouteRepository,
 )
-from domains.gateway.infrastructure.repositories.provider_plan_repository import (
-    ProviderPlanRepository,
-)
-from domains.gateway.infrastructure.repositories.metrics_hourly_read_repository import (
-    MetricsHourlyReadRepository,
+from domains.gateway.infrastructure.repositories.provider_quota_repository import (
+    ProviderQuotaRepository,
 )
 from domains.gateway.infrastructure.repositories.request_log_repository import (
     RequestLogRepository,
@@ -196,7 +196,7 @@ class GatewayManagementReadService(GatewayUsageLogReadMixin):
         self._hourly_metrics = MetricsHourlyReadRepository(session)
         self._usage_metrics = UsageMetricsRouter(self._logs, self._hourly_metrics)
         self._alerts = GatewayAlertRepository(session)
-        self._provider_plans = ProviderPlanRepository(session)
+        self._provider_quotas = ProviderQuotaRepository(session)
         self._entitlement_plans = EntitlementPlanRepository(session)
         self._plan_usage = GatewayPlanUsageReadService(session)
         self.access = GatewayManagementAccessAssertions(
@@ -747,24 +747,30 @@ class GatewayManagementReadService(GatewayUsageLogReadMixin):
         ]
 
     # ------------------------------------------------------------------
-    # ProviderPlan / EntitlementPlan reads
+    # ProviderQuota / EntitlementPlan reads
     #
     # 套餐列表/详情返回 application 读模型；presentation 再映射为 HTTP Schema。
     # ------------------------------------------------------------------
-    async def list_provider_plans_with_quotas_for_credential(
+    async def list_provider_quotas_for_credential(
         self, credential_id: UUID
-    ) -> list[ProviderPlanReadModel]:
-        rows = await self._provider_plans.list_with_quotas_for_credential(credential_id)
-        return [provider_plan_from_orm(plan, quotas) for plan, quotas in rows]
+    ) -> list[ProviderQuotaReadModel]:
+        rows = await self._provider_quotas.list_for_credential(credential_id)
+        return [provider_quota_from_orm(row) for row in rows]
 
-    async def list_provider_plans_with_quotas_for_credentials(
+    async def list_provider_quotas_for_credentials(
         self, credential_ids: list[UUID]
-    ) -> dict[UUID, list[ProviderPlanReadModel]]:
-        rows_by_cred = await self._provider_plans.list_with_quotas_for_credentials(credential_ids)
+    ) -> dict[UUID, list[ProviderQuotaReadModel]]:
+        rows_by_cred = await self._provider_quotas.list_for_credentials(credential_ids)
         return {
-            cred_id: [provider_plan_from_orm(plan, quotas) for plan, quotas in plan_rows]
-            for cred_id, plan_rows in rows_by_cred.items()
+            cred_id: [provider_quota_from_orm(row) for row in quota_rows]
+            for cred_id, quota_rows in rows_by_cred.items()
         }
+
+    async def get_provider_quota(self, rule_id: UUID) -> ProviderQuotaReadModel | None:
+        row = await self._provider_quotas.get(rule_id)
+        if row is None:
+            return None
+        return provider_quota_from_orm(row)
 
     async def list_entitlement_plans_with_quotas_for_scope(
         self, scope: str, scope_id: UUID
@@ -780,13 +786,6 @@ class GatewayManagementReadService(GatewayUsageLogReadMixin):
             vkey_id: [entitlement_plan_from_orm(plan, quotas) for plan, quotas in plan_rows]
             for vkey_id, plan_rows in rows_by_vkey.items()
         }
-
-    async def get_provider_plan_with_quotas(self, plan_id: UUID) -> ProviderPlanReadModel | None:
-        row = await self._provider_plans.get_with_quotas(plan_id)
-        if row is None:
-            return None
-        plan, quotas = row
-        return provider_plan_from_orm(plan, quotas)
 
     async def get_entitlement_plan_with_quotas(
         self, plan_id: UUID

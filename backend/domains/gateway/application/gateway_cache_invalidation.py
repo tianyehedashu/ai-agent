@@ -30,12 +30,16 @@ async def invalidate_gateway_budget_config_cache() -> None:
     await invalidate_budget_config_cache()
 
 
-async def invalidate_gateway_provider_plan_config_cache() -> None:
-    from domains.gateway.application.provider_plan_config_cache import (
-        invalidate_provider_plan_config_cache,
+async def invalidate_gateway_provider_quota_config_cache() -> None:
+    from domains.gateway.application.provider_quota_config_cache import (
+        invalidate_provider_quota_config_cache,
     )
 
-    await invalidate_provider_plan_config_cache()
+    await invalidate_provider_quota_config_cache()
+
+
+# 兼容旧导入名
+invalidate_gateway_provider_plan_config_cache = invalidate_gateway_provider_quota_config_cache
 
 
 async def invalidate_gateway_grants_cache_for_team(team_id: UUID) -> None:
@@ -52,8 +56,8 @@ async def invalidate_gateway_quota_rule_cache_for_team(team_id: UUID) -> None:
 
 def clear_all_gateway_read_caches_for_tests() -> None:
     from domains.gateway.application.budget_config_cache import clear_budget_config_cache_for_tests
-    from domains.gateway.application.provider_plan_config_cache import (
-        clear_provider_plan_config_cache_for_tests,
+    from domains.gateway.application.provider_quota_config_cache import (
+        clear_provider_quota_config_cache_for_tests,
     )
     from domains.gateway.application.resolve_model_cache import clear_resolve_model_cache_for_tests
     from domains.gateway.application.route_snapshot_cache import (
@@ -63,7 +67,7 @@ def clear_all_gateway_read_caches_for_tests() -> None:
     from domains.tenancy.application.team_cache import clear_team_cache_for_tests
 
     clear_budget_config_cache_for_tests()
-    clear_provider_plan_config_cache_for_tests()
+    clear_provider_quota_config_cache_for_tests()
     clear_resolve_model_cache_for_tests()
     clear_grants_cache_for_tests()
     clear_team_cache_for_tests()
@@ -75,6 +79,7 @@ __all__ = [
     "invalidate_gateway_budget_config_cache",
     "invalidate_gateway_grants_cache_for_team",
     "invalidate_gateway_provider_plan_config_cache",
+    "invalidate_gateway_provider_quota_config_cache",
     "invalidate_gateway_quota_rule_cache_for_team",
     "invalidate_gateway_read_caches_for_tenant",
 ]

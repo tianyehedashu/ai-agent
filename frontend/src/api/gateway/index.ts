@@ -134,6 +134,7 @@ export type {
   QuotaRuleLayer,
   QuotaRuleUpsertBody,
   QuotaRuleBatchUpsertResponse,
+  QuotaRuleEnablementBody,
   ListQuotaRulesParams,
 } from './quota-rules'
 
@@ -166,10 +167,6 @@ export type {
   EntitlementPlanQuotaInput,
   PlanQuota,
   EntitlementPlanQuota,
-  ProviderPlan,
-  ProviderPlanCreateBody,
-  ProviderPlanUpdateBody,
-  ProviderPlanCost,
   EntitlementPlan,
   EntitlementPlanCreateBody,
   EntitlementPlanUpdateBody,

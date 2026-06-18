@@ -20,6 +20,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from contextlib import suppress
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 import uuid
 
@@ -38,10 +39,6 @@ from domains.gateway.application.budget_service import (
     redis_model_segment_for_budget,
     redis_tenant_segment_for_budget,
 )
-from domains.gateway.application.proxy_context import (
-    BudgetAnchorCoord,
-    PlatformBudgetPreflightState,
-)
 from domains.gateway.application.entitlement_guard import (
     EntitlementContext,
     EntitlementGuard,
@@ -50,10 +47,17 @@ from domains.gateway.application.model_or_route_resolution import (
     ResolvedModelName,
     resolve_model_or_route,
 )
-from domains.gateway.domain.period_reset_anchor import PeriodResetAnchor
+from domains.gateway.application.proxy_context import (
+    BudgetAnchorCoord,
+    PlatformBudgetPreflightState,
+)
 from domains.gateway.domain.errors import BudgetExceededError, GatewayModelNotFoundError
+from domains.gateway.domain.period_reset_anchor import PeriodResetAnchor
 from domains.gateway.domain.policies.budget_exemption_policy import (
     should_skip_platform_budget_preflight,
+)
+from domains.gateway.domain.policies.quota_window_enforcement import (
+    is_quota_row_enforceable,
 )
 from domains.gateway.domain.proxy_policy import (
     BudgetCheckQuery,
@@ -286,6 +290,7 @@ class ProxyGuard:
 
         budget_by_coord = await get_cached_budget_by_plan(plan, load_budget_rows)
 
+        now = datetime.now(UTC)
         anchor_pins: dict[BudgetAnchorCoord, PeriodResetAnchor] = {}
         check_items: list[
             tuple[BudgetCheckQuery, BudgetConfigRow, BudgetUsageCoord, str]
@@ -301,6 +306,14 @@ class ProxyGuard:
             )
             budget = budget_by_coord.get(coord)
             if budget is None:
+                continue
+            # 停用 / 不在有效期内的预算行不纳入执法（等价于该坐标无规则）
+            if not is_quota_row_enforceable(
+                enabled=budget.enabled,
+                valid_from=budget.valid_from,
+                valid_until=budget.valid_until,
+                now=now,
+            ):
                 continue
             anchor_pins[coord] = budget.period_reset_anchor
             target_id_str = str(query.target_id) if query.target_id is not None else None

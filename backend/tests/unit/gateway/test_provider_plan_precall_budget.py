@@ -1,6 +1,6 @@
-"""Phase2 成员+凭据预算与 ProviderPlan pre_call hook 共存语义单测。
+"""Phase2 成员+凭据预算与 ProviderQuota pre_call hook 共存语义单测。
 
-预算耗尽须 hard fail（BudgetExceededError），不进入 ProviderPlan / Router fallback。
+预算耗尽须 hard fail（BudgetExceededError），不进入 ProviderQuota / Router fallback。
 """
 
 from __future__ import annotations
@@ -12,13 +12,14 @@ import uuid
 import pytest
 
 import domains.gateway.application.budget_deployment_check as budget_mod
-import domains.gateway.application.provider_plan_guard as ppg
+import domains.gateway.application.provider_quota_guard as ppg
+from domains.gateway.application.provider_quota_guard import ProviderQuotaReservation
 from domains.gateway.domain.errors import BudgetExceededError
 from domains.gateway.domain.quota_plan import PlanQuotaSpec, QuotaPlanReservation
 
 
 @pytest.mark.asyncio
-async def test_budget_exhausted_short_circuits_before_provider_plan(monkeypatch) -> None:
+async def test_budget_exhausted_short_circuits_before_provider_quota(monkeypatch) -> None:
     provider_guard = ppg.get_provider_plan_guard()
     provider_guard.check_and_reserve = AsyncMock()  # type: ignore[method-assign]
 
@@ -40,10 +41,10 @@ async def test_budget_exhausted_short_circuits_before_provider_plan(monkeypatch)
 
 
 @pytest.mark.asyncio
-async def test_provider_plan_runs_when_budget_allows(monkeypatch) -> None:
+async def test_provider_quota_runs_when_budget_allows(monkeypatch) -> None:
     cred_id = uuid.uuid4()
     provider_guard = ppg.get_provider_plan_guard()
-    provider_guard.check_and_reserve = AsyncMock(return_value=(None, [], []))  # type: ignore[method-assign]
+    provider_guard.check_and_reserve = AsyncMock(return_value=[])  # type: ignore[method-assign]
 
     monkeypatch.setattr(
         budget_mod, "maybe_reserve_user_credential_budget", AsyncMock(return_value=None)
@@ -66,14 +67,13 @@ async def test_provider_plan_runs_when_budget_allows(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
-async def test_provider_plan_uses_gateway_real_model_for_matching(monkeypatch) -> None:
-    """Router deployment 注入 gateway_real_model 时，应用其匹配 ProviderPlan（非 LiteLLM model id）。"""
+async def test_provider_quota_uses_gateway_real_model_for_matching(monkeypatch) -> None:
     cred_id = uuid.uuid4()
     captured: dict[str, object] = {}
 
-    async def _capture(**kwargs: object) -> tuple[None, list[object], list[object]]:
+    async def _capture(**kwargs: object) -> list[object]:
         captured.update(kwargs)
-        return None, [], []
+        return []
 
     provider_guard = ppg.get_provider_plan_guard()
     provider_guard.check_and_reserve = AsyncMock(side_effect=_capture)  # type: ignore[method-assign]
@@ -102,13 +102,12 @@ async def test_provider_plan_uses_gateway_real_model_for_matching(monkeypatch) -
 
 
 @pytest.mark.asyncio
-async def test_provider_plan_stamps_metadata_for_callback(monkeypatch) -> None:
+async def test_provider_quota_stamps_metadata_for_callback(monkeypatch) -> None:
     cred_id = uuid.uuid4()
-    plan_id = uuid.uuid4()
-    quota_id = uuid.uuid4()
-    spec = PlanQuotaSpec(quota_id=quota_id, label="24h", window_seconds=86400)
+    rule_id = uuid.uuid4()
+    spec = PlanQuotaSpec(quota_id=rule_id, label="24h", window_seconds=86400)
     reservation = QuotaPlanReservation(
-        plan_id=plan_id,
+        plan_id=rule_id,
         spec=spec,
         minute_unix=42,
         reserved_requests=1,
@@ -116,7 +115,9 @@ async def test_provider_plan_stamps_metadata_for_callback(monkeypatch) -> None:
 
     provider_guard = ppg.get_provider_plan_guard()
     provider_guard.check_and_reserve = AsyncMock(  # type: ignore[method-assign]
-        return_value=(plan_id, [spec], [reservation])
+        return_value=[
+            ProviderQuotaReservation(rule_id=rule_id, spec=spec, reservation=reservation)
+        ]
     )
     monkeypatch.setattr(
         budget_mod, "maybe_reserve_user_credential_budget", AsyncMock(return_value=None)
@@ -134,22 +135,21 @@ async def test_provider_plan_stamps_metadata_for_callback(monkeypatch) -> None:
     await logger.async_pre_call_hook(None, None, data, "completion")
 
     top_meta = data["metadata"]
-    assert top_meta["gateway_provider_plan_id"] == str(plan_id)
-    assert top_meta["user_api_key_auth_metadata"]["gateway_provider_plan_id"] == str(plan_id)
+    assert top_meta["gateway_provider_plan_id"] == str(rule_id)
+    assert top_meta["user_api_key_auth_metadata"]["gateway_provider_plan_id"] == str(rule_id)
     inner_meta = data["litellm_params"]["metadata"]
-    assert inner_meta["gateway_provider_plan_id"] == str(plan_id)
-    assert inner_meta["gateway_provider_plan_reservations"][0]["quota_id"] == str(quota_id)
+    assert inner_meta["gateway_provider_plan_id"] == str(rule_id)
+    assert inner_meta["gateway_provider_quota_reservations"][0]["quota_id"] == str(rule_id)
 
 
 @pytest.mark.asyncio
-async def test_provider_plan_deployment_hook_reads_top_level_model_info(monkeypatch) -> None:
-    """生产 Router 路径：``async_pre_call_deployment_hook`` + 顶层 ``model_info``。"""
+async def test_provider_quota_deployment_hook_reads_top_level_model_info(monkeypatch) -> None:
     cred_id = uuid.uuid4()
     captured: dict[str, object] = {}
 
-    async def _capture(**kwargs: object) -> tuple[None, list[object], list[object]]:
+    async def _capture(**kwargs: object) -> list[object]:
         captured.update(kwargs)
-        return None, [], []
+        return []
 
     provider_guard = ppg.get_provider_plan_guard()
     provider_guard.check_and_reserve = AsyncMock(side_effect=_capture)  # type: ignore[method-assign]

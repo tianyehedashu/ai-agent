@@ -15,7 +15,7 @@ from .metrics_hourly import GatewayMetricsHourly
 from .pricing_downstream import DownstreamModelPricing
 from .pricing_upstream import UpstreamModelPricing
 from .provider_credential import ProviderCredential
-from .provider_plan import ProviderPlan, ProviderPlanQuota
+from .provider_quota import ProviderQuota
 from .request_log import GatewayRequestLog
 from .virtual_key import GatewayVirtualKey
 from .virtual_key_team_grant import GatewayVirtualKeyTeamGrant
@@ -35,7 +35,6 @@ __all__ = [
     "GatewayVirtualKey",
     "GatewayVirtualKeyTeamGrant",
     "ProviderCredential",
-    "ProviderPlan",
-    "ProviderPlanQuota",
+    "ProviderQuota",
     "UpstreamModelPricing",
 ]

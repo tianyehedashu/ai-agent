@@ -164,39 +164,6 @@ async def gateway_request_log_retention_loop() -> None:
         await asyncio.sleep(interval)
 
 
-# =============================================================================
-# Plan Lifecycle (上下游对称 ProviderPlan / EntitlementPlan)
-# =============================================================================
-
-
-async def gateway_plan_lifecycle_loop() -> None:
-    """5 分钟一次，统一处理上下游 plan 过期 + auto_renew。"""
-    interval = settings.gateway_rollup_interval_seconds
-    while True:
-        try:
-            async with get_background_session_context() as session:
-                sql_jobs = GatewaySqlJobsRepository(session)
-                e_off, e_on = await sql_jobs.process_plan_lifecycle_for_table(
-                    table="entitlement_plans",
-                    quota_table="entitlement_plan_quotas",
-                )
-                p_off, p_on = await sql_jobs.process_plan_lifecycle_for_table(
-                    table="provider_plans",
-                    quota_table="provider_plan_quotas",
-                )
-                await session.commit()
-                if e_off or e_on or p_off or p_on:
-                    logger.info(
-                        "gateway_plan_lifecycle: entitlement off=%d renew=%d, provider off=%d renew=%d",
-                        e_off,
-                        e_on,
-                        p_off,
-                        p_on,
-                    )
-        except Exception as exc:  # pragma: no cover
-            logger.warning("gateway_plan_lifecycle error: %s", exc)
-        await asyncio.sleep(interval)
-
 
 def schedule_gateway_jobs(app: Any) -> None:
     """启动后台任务并登记到 app.state"""
@@ -205,14 +172,12 @@ def schedule_gateway_jobs(app: Any) -> None:
     register_app_background_task(app, asyncio.create_task(gateway_partition_loop()))
     register_app_background_task(app, asyncio.create_task(gateway_request_log_retention_loop()))
     register_app_background_task(app, asyncio.create_task(gateway_alert_loop()))
-    register_app_background_task(app, asyncio.create_task(gateway_plan_lifecycle_loop()))
 
 
 __all__ = [
     "gateway_alert_loop",
     "gateway_metrics_repair_loop",
     "gateway_partition_loop",
-    "gateway_plan_lifecycle_loop",
     "gateway_request_log_retention_loop",
     "gateway_rollup_loop",
     "schedule_gateway_jobs",

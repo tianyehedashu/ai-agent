@@ -1,4 +1,4 @@
-"""共享套餐配额值对象 - 上下游 (ProviderPlan / EntitlementPlan) 共用
+"""共享套餐配额值对象 - 上下游 (ProviderQuota / EntitlementPlan) 共用
 
 - ``PlanQuotaSpec`` / ``PlanQuotaSnapshot``：纯值对象。
 - ``QuotaPlanNamespace``：Redis 键空间（"entitlement" / "provider"），由
@@ -44,13 +44,10 @@ ExhaustedReason = Literal["usd", "tokens", "requests"]
 # - rolling: 默认；按 ``window_seconds`` 滚动分钟桶（与原行为一致）。
 # - calendar_daily_utc: 每日 UTC 00:00 重置（OpenAI/Anthropic/Google 通常如此）。
 # - calendar_monthly_utc: 自然月 1 号 UTC 00:00 重置（月套餐）。
-# - plan_anniversary: 从 ``valid_from`` 起每 ``window_seconds`` 切一段，与厂商
-#   订阅锚点对齐（用户合同日不在自然边界上时使用）。
 ResetStrategy = Literal[
     "rolling",
     "calendar_daily_utc",
     "calendar_monthly_utc",
-    "plan_anniversary",
 ]
 RESET_STRATEGY_DEFAULT: Final[ResetStrategy] = "rolling"
 
@@ -59,7 +56,6 @@ _VALID_RESET_STRATEGIES: Final[frozenset[ResetStrategy]] = frozenset(
         "rolling",
         "calendar_daily_utc",
         "calendar_monthly_utc",
-        "plan_anniversary",
     )
 )
 
@@ -96,7 +92,7 @@ def is_sliding_rolling_window(window_seconds: int, reset_strategy: str) -> bool:
 
     仅当 ``window_seconds > 0`` 且策略为 ``rolling`` 时成立。``window_seconds <= 0``
     表示整套餐有效期累计（总额），即便历史上把 ``reset_strategy`` 默认存成了
-    ``rolling``，它也按固定累计处理（窗口起点 = 套餐生效时刻），可正常落桶 / 校正。
+    ``rolling``，它也按固定累计处理（窗口起点 = 规则生效时刻），可正常落桶 / 校正。
     展示读跳桶、落库跳桶、用量校正拒绝等"滚动特判"统一以此为单一真源。
     """
     return window_seconds > 0 and normalize_reset_strategy(reset_strategy) == "rolling"
@@ -109,10 +105,8 @@ class PlanQuotaSpec:
     Attributes:
         quota_id: 仓储行主键，用于 Redis key 唯一性。
         label: UI / 错误文案使用的桶名（"5h" / "weekly" / "total"）。
-        window_seconds: 窗口长度（秒）；``0`` 表示「整套餐有效期作为一个桶」（=
-            走 plan-level TTL，不做"分钟桶滚动")，由调用方按 plan.valid_until 处理。
+        window_seconds: 窗口长度（秒）；``0`` 表示「整规则有效期作为一个桶」。
         reset_strategy: 见 ``ResetStrategy``；默认 ``rolling``，与历史行为一致。
-        plan_valid_from: ``plan_anniversary`` 策略所需的锚点；其他策略可缺省。
         limit_*: 任意一项可为 ``None`` 表示该维度不限。任一非空维度耗尽即整桶耗尽。
     """
 
@@ -123,7 +117,6 @@ class PlanQuotaSpec:
     limit_tokens: int | None = None
     limit_requests: int | None = None
     reset_strategy: ResetStrategy = RESET_STRATEGY_DEFAULT
-    plan_valid_from: datetime | None = None
     period_reset_anchor: PeriodResetAnchor = DEFAULT_PERIOD_RESET_ANCHOR
 
     def has_any_limit(self) -> bool:
@@ -154,8 +147,7 @@ class PlanQuotaSnapshot:
         - ``rolling``：``floor_min(earliest) * 60 + window_seconds``（最早桶到期）。
         - ``calendar_daily_utc``：当前 UTC 日的次日 00:00。
         - ``calendar_monthly_utc``：当前 UTC 月的下月 1 号 00:00。
-        - ``plan_anniversary``：``valid_from + ceil((now-valid_from)/window) * window``。
-        - ``window_seconds == 0``：返回 ``None``，由调用方查 plan.valid_until。
+        - ``window_seconds == 0``：返回 ``None``，由调用方查规则 valid_until。
         """
         when = now or datetime.now(UTC)
         return compute_reset_at(
@@ -163,7 +155,6 @@ class PlanQuotaSnapshot:
             window_seconds=self.spec.window_seconds,
             now=when,
             earliest_minute_in_window=self.earliest_minute_in_window,
-            plan_valid_from=self.spec.plan_valid_from,
             period_reset_anchor=self.spec.period_reset_anchor,
         )
 
@@ -220,21 +211,6 @@ def _calendar_monthly_utc_end(now: datetime) -> datetime:
     return start.replace(month=start.month + 1)
 
 
-def _anniversary_segment_bounds(
-    now: datetime, *, valid_from: datetime, window_seconds: int
-) -> tuple[datetime, datetime]:
-    """以 valid_from 为锚点切片。``now`` 落入第 k 段：[from + k*win, from + (k+1)*win)。"""
-    now = _as_utc(now)
-    valid_from = _as_utc(valid_from)
-    if window_seconds <= 0:
-        return valid_from, valid_from
-    elapsed = (now - valid_from).total_seconds()
-    k = max(int(elapsed // window_seconds), 0)
-    seg_start = valid_from + timedelta(seconds=k * window_seconds)
-    seg_end = valid_from + timedelta(seconds=(k + 1) * window_seconds)
-    return seg_start, seg_end
-
-
 def _calendar_daily_start(now: datetime, anchor: PeriodResetAnchor) -> datetime:
     if anchor.is_default():
         return _calendar_daily_utc_start(now)
@@ -264,15 +240,14 @@ def compute_window_start_minute(
     window_seconds: int,
     *,
     strategy: ResetStrategy = RESET_STRATEGY_DEFAULT,
-    plan_valid_from: datetime | None = None,
+    row_valid_from: datetime | None = None,
     period_reset_anchor: PeriodResetAnchor | None = None,
 ) -> int:
     """根据策略返回当前窗口的"最早有效分钟索引"（含）。
 
     - ``rolling``：``minute(now) - window_seconds//60``（与历史一致）。
     - ``calendar_daily_utc`` / ``calendar_monthly_utc``：当前自然日/月起点。
-    - ``plan_anniversary``：当前段起点（依 ``plan_valid_from``）。
-    - ``window_seconds == 0``：返回 0（累计计量，调用方按 plan TTL 处理）。
+    - ``window_seconds == 0``：返回 0（累计计量，调用方按规则 valid_from 处理）。
     """
     if window_seconds <= 0:
         return 0
@@ -281,13 +256,6 @@ def compute_window_start_minute(
         return compute_minute_index(_calendar_daily_start(now, anchor))
     if strategy == "calendar_monthly_utc":
         return compute_minute_index(_calendar_monthly_start(now, anchor))
-    if strategy == "plan_anniversary":
-        if plan_valid_from is None:
-            return compute_minute_index(now - timedelta(seconds=window_seconds))
-        seg_start, _ = _anniversary_segment_bounds(
-            now, valid_from=plan_valid_from, window_seconds=window_seconds
-        )
-        return compute_minute_index(seg_start)
     return compute_minute_index(now - timedelta(seconds=window_seconds))
 
 
@@ -296,17 +264,17 @@ def compute_window_start_datetime(
     window_seconds: int,
     *,
     strategy: ResetStrategy = RESET_STRATEGY_DEFAULT,
-    plan_valid_from: datetime | None = None,
+    row_valid_from: datetime | None = None,
     period_reset_anchor: PeriodResetAnchor | None = None,
 ) -> datetime:
     """当前配额窗口起点（datetime），与 ``compute_window_start_minute`` 对偶。"""
-    if window_seconds <= 0 and plan_valid_from is not None:
-        return _as_utc(plan_valid_from)
+    if window_seconds <= 0 and row_valid_from is not None:
+        return _as_utc(row_valid_from)
     minute_idx = compute_window_start_minute(
         now,
         window_seconds,
         strategy=strategy,
-        plan_valid_from=plan_valid_from,
+        row_valid_from=row_valid_from,
         period_reset_anchor=period_reset_anchor,
     )
     return datetime.fromtimestamp(minute_idx * 60, tz=UTC)
@@ -318,10 +286,11 @@ def compute_reset_at(
     window_seconds: int,
     now: datetime,
     earliest_minute_in_window: int | None = None,
-    plan_valid_from: datetime | None = None,
+    row_valid_from: datetime | None = None,
     period_reset_anchor: PeriodResetAnchor | None = None,
 ) -> datetime | None:
     """统一的下次重置时刻计算；与 ``compute_window_start_minute`` 对偶。"""
+    _ = row_valid_from
     if window_seconds <= 0:
         return None
     anchor = period_reset_anchor or DEFAULT_PERIOD_RESET_ANCHOR
@@ -329,11 +298,6 @@ def compute_reset_at(
         return _calendar_daily_end(now, anchor)
     if strategy == "calendar_monthly_utc":
         return _calendar_monthly_end(now, anchor)
-    if strategy == "plan_anniversary" and plan_valid_from is not None:
-        _, seg_end = _anniversary_segment_bounds(
-            now, valid_from=plan_valid_from, window_seconds=window_seconds
-        )
-        return seg_end
     if earliest_minute_in_window is None:
         return now
     earliest_dt = datetime.fromtimestamp(earliest_minute_in_window * 60, tz=UTC)

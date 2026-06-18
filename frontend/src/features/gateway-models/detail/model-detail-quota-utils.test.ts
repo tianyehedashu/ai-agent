@@ -38,6 +38,8 @@ function platformRule(overrides: Partial<QuotaRule> = {}): QuotaRule {
     usage: null,
     plan_label: null,
     is_active: true,
+    valid_from: null,
+    valid_until: null,
     ...overrides,
   }
 }
@@ -59,7 +61,7 @@ function upstreamRule(overrides: Partial<QuotaRule> = {}): QuotaRule {
       target_kind: null,
       target_id: null,
     },
-    source_ref: { layer: 'upstream', budget_id: 'budget-up-1', plan_id: null, quota_id: null },
+    source_ref: { layer: 'upstream', budget_id: null, plan_id: null, quota_id: 'quota-up-1' },
     limits: {
       limit_usd: 50,
       soft_limit_usd: null,
@@ -71,6 +73,8 @@ function upstreamRule(overrides: Partial<QuotaRule> = {}): QuotaRule {
     usage: null,
     plan_label: null,
     is_active: true,
+    valid_from: null,
+    valid_until: null,
     ...overrides,
   }
 }
@@ -81,14 +85,14 @@ describe('isModelDetailEditableQuotaRule', () => {
     expect(isModelDetailEditableQuotaRule(upstreamRule())).toBe(true)
   })
 
-  it('allows upstream plan rules with plan_id and quota_id', () => {
+  it('allows upstream rules with quota_id', () => {
     expect(
       isModelDetailEditableQuotaRule(
         upstreamRule({
           source_ref: {
             layer: 'upstream',
             budget_id: null,
-            plan_id: 'plan-1',
+            plan_id: null,
             quota_id: 'quota-1',
           },
         })

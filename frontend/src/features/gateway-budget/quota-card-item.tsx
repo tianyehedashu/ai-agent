@@ -2,8 +2,6 @@
  * 配额规则卡片单项：展示主体、层级、模型、限额与使用率，支持编辑/删除操作。
  */
 
-import { Link } from 'react-router-dom'
-
 import type { QuotaRule } from '@/api/gateway/quota-rules'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -20,7 +18,7 @@ import {
   parseQuotaNumeric,
   quotaUsageHasMetrics,
   resolveQuotaRuleModelLabel,
-  resolveQuotaRulePlanManagementLink,
+  resolveQuotaRuleSourceLabel,
   type QuotaRuleLabelContext,
 } from './quota-rule-utils'
 
@@ -47,10 +45,10 @@ export function QuotaCardItem({
   const limitUsd = rule.limits.limit_usd
   const limitTok = rule.limits.limit_tokens
   const usage = rule.usage
-  const canEdit = rule.source_ref.budget_id !== null
+  const canEdit = rule.source_ref.budget_id !== null || rule.source_ref.quota_id !== null
   const canDelete = isQuotaRuleDeletable(rule)
-  const isPlanRule = rule.source_ref.budget_id === null
   const periodWindow = formatQuotaRulePeriodWindow(rule)
+  const sourceLabel = resolveQuotaRuleSourceLabel(rule)
 
   const layerColor: Record<string, string> = {
     platform: 'bg-blue-500/10 text-blue-600',
@@ -68,15 +66,6 @@ export function QuotaCardItem({
           : rule.key.access_id
             ? (labelContext.keyLabels.get(rule.key.access_id) ?? 'Key')
             : '—'
-
-  const planManagementLink = isPlanRule
-    ? resolveQuotaRulePlanManagementLink(rule, labelContext)
-    : null
-  const planManagementPending =
-    isPlanRule &&
-    rule.key.layer === 'upstream' &&
-    Boolean(rule.key.model_name) &&
-    labelContext.planRuleModelLookupLoading
 
   return (
     <Card
@@ -172,30 +161,15 @@ export function QuotaCardItem({
           </div>
         </div>
         {periodWindow ? <p className="text-[11px] text-muted-foreground">{periodWindow}</p> : null}
-        {isPlanRule ? (
-          <div className="flex items-center justify-between">
+        <div>
+          {sourceLabel !== '自定义' ? (
             <span className="inline-flex items-center rounded-md bg-blue-50 px-1.5 py-0.5 text-[11px] font-medium text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
-              {rule.plan_label ?? '计划'}
+              {sourceLabel}
             </span>
-            {planManagementPending ? (
-              <span className="text-[11px] text-muted-foreground">加载模型…</span>
-            ) : planManagementLink ? (
-              <Link
-                to={planManagementLink.href}
-                className="text-[11px] text-primary hover:underline"
-                onClick={(e) => {
-                  e.stopPropagation()
-                }}
-              >
-                {planManagementLink.label}
-              </Link>
-            ) : null}
-          </div>
-        ) : (
-          <div>
+          ) : (
             <span className="text-[11px] text-muted-foreground">自定义</span>
-          </div>
-        )}
+          )}
+        </div>
       </CardContent>
     </Card>
   )

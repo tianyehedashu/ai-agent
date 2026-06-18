@@ -77,7 +77,7 @@ async def _upsert_quota_plan_usage(
                     settled_at,
                     spec.window_seconds,
                     strategy=spec.reset_strategy,
-                    plan_valid_from=spec.plan_valid_from,
+                    row_valid_from=None,
                     period_reset_anchor=spec.period_reset_anchor,
                 )
                 await repo.increment_bucket(

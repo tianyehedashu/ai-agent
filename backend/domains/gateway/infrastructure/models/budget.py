@@ -11,6 +11,7 @@ from decimal import Decimal
 import uuid
 
 from sqlalchemy import (
+    Boolean,
     DateTime,
     Index,
     Integer,
@@ -56,6 +57,25 @@ class GatewayBudget(BaseModel):
     )
     period: Mapped[str] = mapped_column(String(20), nullable=False)
     model_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+
+    # 启用停用 + 起止时间（按行/规则维度，热路径据此纳入或跳过执法）
+    enabled: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        server_default="true",
+        default=True,
+        comment="停用时该预算行不参与热路径执法",
+    )
+    valid_from: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        comment="生效起（含）；NULL 表示不限",
+    )
+    valid_until: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        comment="生效止（不含）；NULL 表示不限",
+    )
     credential_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         nullable=True,

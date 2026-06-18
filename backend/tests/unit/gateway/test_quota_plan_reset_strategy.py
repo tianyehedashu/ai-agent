@@ -54,7 +54,7 @@ class TestQuotaPlanResetStrategy:
         assert compute_window_start_datetime(
             now, 86400, strategy="calendar_daily_utc"
         ) == datetime(2026, 5, 18, tzinfo=UTC)
-        assert compute_window_start_datetime(now, 0, plan_valid_from=valid_from) == valid_from
+        assert compute_window_start_datetime(now, 0, row_valid_from=valid_from) == valid_from
 
     def test_calendar_daily_utc_uses_current_utc_day_boundary(self) -> None:
         now = datetime(2026, 5, 18, 11, 20, tzinfo=UTC)
@@ -103,24 +103,6 @@ class TestQuotaPlanResetStrategy:
             strategy=spec.reset_strategy,
             period_reset_anchor=anchor,
         ) == datetime(2026, 6, 15, 1, 0, tzinfo=UTC)
-
-    def test_plan_anniversary_uses_valid_from_as_anchor(self) -> None:
-        valid_from = datetime(2026, 5, 15, 10, 0, tzinfo=UTC)
-        now = valid_from + timedelta(days=10, hours=2)
-        window_seconds = 7 * 86400
-
-        assert compute_window_start_minute(
-            now,
-            window_seconds,
-            strategy="plan_anniversary",
-            plan_valid_from=valid_from,
-        ) == compute_minute_index(valid_from + timedelta(days=7))
-        assert compute_reset_at(
-            strategy="plan_anniversary",
-            window_seconds=window_seconds,
-            now=now,
-            plan_valid_from=valid_from,
-        ) == valid_from + timedelta(days=14)
 
     def test_snapshot_reset_at_delegates_strategy(self) -> None:
         now = datetime(2026, 5, 18, 11, 20, tzinfo=UTC)

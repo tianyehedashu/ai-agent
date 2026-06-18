@@ -271,7 +271,7 @@ function useQuotaCenterImpl(): QuotaCenterState {
       keyLabels,
       credentialLabels,
       modelRefByCredentialRealModel: fallbackLookup,
-      planRuleModelLookupLoading:
+      quotaModelLookupLoading:
         needsModelIdentityLookup &&
         !fullLookup &&
         (quotaModelIdentityLookupQuery.isLoading ||
@@ -786,7 +786,7 @@ function useQuotaCenterImpl(): QuotaCenterState {
   const onEditRule = useCallback(
     (rule: QuotaRule) => {
       if (shouldManageQuotaOnModelDetail(rule)) {
-        if (labelContext.planRuleModelLookupLoading) {
+        if (labelContext.quotaModelLookupLoading) {
           toast({
             title: '模型信息加载中',
             description: '请稍候再试。',

@@ -4,13 +4,10 @@ import type { QuotaRule } from '@/api/gateway/quota-rules'
 /** 配额中心读写模式（与 use-quota-center 的 QuotaCenterMode 同义，独立声明避免循环依赖）。 */
 type QuotaDeleteMode = 'admin' | 'member'
 
-/** 该规则是否可删除：平台预算（budget_id）或 plan 配额（plan_id+quota_id）。 */
+/** 该规则是否可删除：平台预算（budget_id）或 plan/upstream 配额（quota_id）。 */
 export function isQuotaRuleDeletable(rule: QuotaRule): boolean {
   const ref = rule.source_ref
-  if (ref.budget_id !== null) return true
-  if (ref.plan_id === null || ref.quota_id === null) return false
-  // 成员自助仅支持删上游 plan 配额；下游（vkey/apikey）由管理员处理。
-  return true
+  return ref.budget_id !== null || ref.quota_id !== null
 }
 
 /**
@@ -28,15 +25,18 @@ export async function deleteQuotaRule(
       ? gatewayApi.deleteSelfQuotaRule(teamId, ref.budget_id)
       : gatewayApi.deleteBudget(teamId, ref.budget_id)
   }
-  if (ref.plan_id !== null && ref.quota_id !== null) {
+  if (ref.quota_id !== null) {
     if (mode === 'member') {
-      return gatewayApi.deleteSelfPlanQuota(teamId, { planId: ref.plan_id, quotaId: ref.quota_id })
+      if (rule.key.layer !== 'upstream') {
+        throw new Error('成员自助仅可删除本人凭据的上游配额')
+      }
+      return gatewayApi.deleteSelfQuotaRuleByQuotaId(teamId, ref.quota_id)
     }
     const layer = rule.key.layer === 'downstream' ? 'downstream' : 'upstream'
-    return gatewayApi.deletePlanQuota(teamId, {
+    return gatewayApi.deleteQuotaRule(teamId, {
       layer,
-      planId: ref.plan_id,
       quotaId: ref.quota_id,
+      ...(layer === 'downstream' && ref.plan_id ? { planId: ref.plan_id } : {}),
     })
   }
   throw new Error('无法定位要删除的配额')

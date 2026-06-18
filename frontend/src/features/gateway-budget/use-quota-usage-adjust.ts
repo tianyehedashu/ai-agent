@@ -8,13 +8,23 @@ import { gatewayQuotaRulesBaseQueryKey } from './use-gateway-quota-rules'
 
 import type { QuotaCenterMode } from './use-quota-center'
 
-export function buildQuotaUsageAdjustmentBody(rule: QuotaRule): QuotaUsageAdjustmentBody {
+export function buildQuotaRuleSourceMutationBody(
+  rule: QuotaRule
+): Pick<QuotaUsageAdjustmentBody, 'layer' | 'budget_id' | 'plan_id' | 'quota_id'> {
   const ref = rule.source_ref
+  const layer = rule.key.layer
+  if (ref.budget_id) {
+    return { layer, budget_id: ref.budget_id }
+  }
+  if (layer === 'upstream') {
+    return { layer, quota_id: ref.quota_id }
+  }
+  return { layer, plan_id: ref.plan_id, quota_id: ref.quota_id }
+}
+
+export function buildQuotaUsageAdjustmentBody(rule: QuotaRule): QuotaUsageAdjustmentBody {
   return {
-    layer: rule.key.layer,
-    budget_id: ref.budget_id,
-    plan_id: ref.plan_id,
-    quota_id: ref.quota_id,
+    ...buildQuotaRuleSourceMutationBody(rule),
     mode: 'set',
     current_usd:
       rule.usage?.current_usd !== null && rule.usage?.current_usd !== undefined
@@ -26,8 +36,8 @@ export function buildQuotaUsageAdjustmentBody(rule: QuotaRule): QuotaUsageAdjust
 }
 
 export function isQuotaRuleUsageAdjustable(rule: QuotaRule): boolean {
-  if (rule.source_ref.budget_id) return true
-  return rule.source_ref.plan_id !== null && rule.source_ref.quota_id !== null
+  const ref = rule.source_ref
+  return ref.budget_id !== null || ref.quota_id !== null
 }
 
 export function useQuotaUsageAdjust(options: {
@@ -60,12 +70,8 @@ export function useQuotaUsageAdjust(options: {
   })
 
   const resetWindow = (rule: QuotaRule): void => {
-    const ref = rule.source_ref
     mutation.mutate({
-      layer: rule.key.layer,
-      budget_id: ref.budget_id,
-      plan_id: ref.plan_id,
-      quota_id: ref.quota_id,
+      ...buildQuotaRuleSourceMutationBody(rule),
       mode: 'reset_window',
     })
   }

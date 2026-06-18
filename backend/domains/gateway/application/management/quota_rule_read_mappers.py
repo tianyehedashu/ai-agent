@@ -6,6 +6,11 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 from uuid import UUID
 
+from domains.gateway.application.management.plan_read_models import (
+    EntitlementPlanReadModel,
+    PlanQuotaReadModel,
+    ProviderQuotaReadModel,
+)
 from domains.gateway.application.management.quota_rule_read_model import (
     QuotaRuleKey,
     QuotaRuleLayer,
@@ -30,11 +35,6 @@ from domains.gateway.domain.quota_plan import (
 if TYPE_CHECKING:
     from typing import Literal
 
-    from domains.gateway.application.management.plan_read_models import (
-        EntitlementPlanReadModel,
-        PlanQuotaReadModel,
-        ProviderPlanReadModel,
-    )
     from domains.gateway.infrastructure.models.budget import GatewayBudget
 
 
@@ -99,7 +99,9 @@ def budget_to_quota_rule(
             budget_reset_at=reset_at,
         ),
         plan_label=None,
-        is_active=True,
+        is_active=budget.enabled,
+        valid_from=budget.valid_from,
+        valid_until=budget.valid_until,
     )
 
 
@@ -125,7 +127,7 @@ def _plan_quota_key_fields(quota: PlanQuotaReadModel) -> dict[str, object]:
 def _plan_quota_period_bounds(
     quota: PlanQuotaReadModel,
     *,
-    plan_valid_from: datetime | None,
+    row_valid_from: datetime | None,
     now: datetime | None = None,
 ) -> tuple[datetime | None, datetime | None]:
     """当前窗口起点与下次重置时刻（只读展示）。"""
@@ -142,19 +144,16 @@ def _plan_quota_period_bounds(
             when,
             window_seconds,
             strategy=strategy,
-            plan_valid_from=plan_valid_from,
+            row_valid_from=row_valid_from or quota.valid_from,
             period_reset_anchor=anchor,
         )
         return window_start, None
     if strategy == "rolling":
-        # 滚动窗口随时间连续滑动、无固定重置时刻。窗口起点 = now - 窗口长度，
-        # reset_at 置空（旧实现误把窗口起点当作最早用量分钟，恒得出 ≈ now，
-        # 在 UI 上永远显示成「刚到期」）。
         window_start = compute_window_start_datetime(
             when,
             window_seconds,
             strategy=strategy,
-            plan_valid_from=plan_valid_from,
+            row_valid_from=row_valid_from or quota.valid_from,
             period_reset_anchor=anchor,
         )
         return window_start, None
@@ -162,14 +161,14 @@ def _plan_quota_period_bounds(
         when,
         window_seconds,
         strategy=strategy,
-        plan_valid_from=plan_valid_from,
+        row_valid_from=row_valid_from or quota.valid_from,
         period_reset_anchor=anchor,
     )
     window_start = compute_window_start_datetime(
         when,
         window_seconds,
         strategy=strategy,
-        plan_valid_from=plan_valid_from,
+        row_valid_from=row_valid_from or quota.valid_from,
         period_reset_anchor=anchor,
     )
     reset_at = compute_reset_at(
@@ -177,7 +176,7 @@ def _plan_quota_period_bounds(
         window_seconds=window_seconds,
         now=when,
         earliest_minute_in_window=minute_idx,
-        plan_valid_from=plan_valid_from,
+        row_valid_from=row_valid_from or quota.valid_from,
         period_reset_anchor=anchor,
     )
     return window_start, reset_at
@@ -186,9 +185,9 @@ def _plan_quota_period_bounds(
 def _plan_quota_usage_hint(
     quota: PlanQuotaReadModel,
     *,
-    plan_valid_from: datetime | None,
+    row_valid_from: datetime | None = None,
 ) -> QuotaRuleUsage | None:
-    window_start, reset_at = _plan_quota_period_bounds(quota, plan_valid_from=plan_valid_from)
+    window_start, reset_at = _plan_quota_period_bounds(quota, row_valid_from=row_valid_from)
     if window_start is None and reset_at is None:
         return None
     return QuotaRuleUsage(
@@ -201,45 +200,58 @@ def _plan_quota_usage_hint(
     )
 
 
-def flatten_provider_plan(
-    plan: ProviderPlanReadModel,
+def provider_quota_to_quota_rule(
+    quota: ProviderQuotaReadModel,
     *,
     team_id: UUID,
-) -> list[QuotaRuleReadModel]:
-    rules: list[QuotaRuleReadModel] = []
-    for quota in plan.quotas:
-        key = QuotaRuleKey(
-            team_id=team_id,
+) -> QuotaRuleReadModel:
+    """扁平上游配额行 → 配额中心读模型（plan_id = quota_id = rule_id）。"""
+    key = QuotaRuleKey(
+        team_id=team_id,
+        layer="upstream",
+        user_id=None,
+        credential_id=quota.credential_id,
+        model_name=quota.real_model,
+        period=None,
+        window_seconds=quota.window_seconds,
+        reset_strategy=quota.reset_strategy,
+        period_timezone=quota.reset_timezone,
+        period_reset_minutes=quota.reset_time_minutes,
+        period_reset_day=quota.reset_day_of_month,
+        access_kind="none",
+        access_id=None,
+        quota_label=quota.label,
+        target_kind=None,
+        target_id=None,
+    )
+    plan_quota = PlanQuotaReadModel(
+        id=quota.id,
+        label=quota.label,
+        window_seconds=quota.window_seconds,
+        reset_strategy=quota.reset_strategy,
+        reset_timezone=quota.reset_timezone,
+        reset_time_minutes=quota.reset_time_minutes,
+        reset_day_of_month=quota.reset_day_of_month,
+        limit_usd=quota.limit_usd,
+        limit_tokens=quota.limit_tokens,
+        limit_requests=quota.limit_requests,
+        enabled=quota.enabled,
+        valid_from=quota.valid_from,
+        valid_until=quota.valid_until,
+    )
+    return QuotaRuleReadModel(
+        key=key,
+        source_ref=QuotaRuleSourceRef(
             layer="upstream",
-            user_id=None,
-            credential_id=plan.credential_id,
-            model_name=plan.real_model,
-            period=None,
-            window_seconds=quota.window_seconds,
-            reset_strategy=quota.reset_strategy,
-            **_plan_quota_key_fields(quota),
-            access_kind="none",
-            access_id=None,
-            quota_label=quota.label,
-            target_kind=None,
-            target_id=None,
-        )
-        rules.append(
-            QuotaRuleReadModel(
-                key=key,
-                source_ref=QuotaRuleSourceRef(
-                    layer="upstream",
-                    plan_id=plan.id,
-                    quota_id=quota.id,
-                ),
-                limits=_plan_quota_limits(quota),
-                usage=_plan_quota_usage_hint(quota, plan_valid_from=plan.valid_from),
-                plan_label=plan.label,
-                is_active=plan.is_active,
-                plan_valid_from=plan.valid_from,
-            )
-        )
-    return rules
+            quota_id=quota.id,
+        ),
+        limits=_plan_quota_limits(plan_quota),
+        usage=_plan_quota_usage_hint(plan_quota, row_valid_from=quota.valid_from),
+        plan_label=None,
+        is_active=quota.enabled,
+        valid_from=quota.valid_from,
+        valid_until=quota.valid_until,
+    )
 
 
 def flatten_entitlement_plan(
@@ -289,10 +301,11 @@ def flatten_entitlement_plan(
                     quota_id=quota.id,
                 ),
                 limits=_plan_quota_limits(quota),
-                usage=_plan_quota_usage_hint(quota, plan_valid_from=plan.valid_from),
+                usage=_plan_quota_usage_hint(quota, row_valid_from=quota.valid_from),
                 plan_label=plan.label,
-                is_active=plan.is_active,
-                plan_valid_from=plan.valid_from,
+                is_active=quota.enabled,
+                valid_from=quota.valid_from,
+                valid_until=quota.valid_until,
             )
         )
     return rules
@@ -334,5 +347,5 @@ __all__ = [
     "budget_to_quota_rule",
     "filter_quota_rules",
     "flatten_entitlement_plan",
-    "flatten_provider_plan",
+    "provider_quota_to_quota_rule",
 ]

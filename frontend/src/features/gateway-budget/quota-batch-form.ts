@@ -18,6 +18,9 @@ export interface QuotaBatchFormValues {
   limit_usd: string
   limit_tokens: string
   limit_requests: string
+  /** 起止时间（datetime-local 字符串）；空表示该侧不限 */
+  validFrom: string
+  validUntil: string
 }
 
 export const DEFAULT_BATCH_FORM: QuotaBatchFormValues = {
@@ -38,6 +41,8 @@ export const DEFAULT_BATCH_FORM: QuotaBatchFormValues = {
   limit_usd: '',
   limit_tokens: '',
   limit_requests: '',
+  validFrom: '',
+  validUntil: '',
 }
 
 /** 切换层级时清理与当前层级无关的字段，避免预览条数异常 */

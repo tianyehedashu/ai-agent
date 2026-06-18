@@ -11,10 +11,7 @@ export function isModelDetailEditableQuotaRule(rule: QuotaRule): boolean {
     return rule.source_ref.budget_id !== null
   }
   if (layer === 'upstream') {
-    return (
-      rule.source_ref.budget_id !== null ||
-      (rule.source_ref.plan_id !== null && rule.source_ref.quota_id !== null)
-    )
+    return rule.source_ref.quota_id !== null || rule.source_ref.budget_id !== null
   }
   return false
 }

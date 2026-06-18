@@ -113,24 +113,21 @@ async def test_apply_upstream_rolling_adjustment_rejected(db_session) -> None:
     from domains.gateway.application.management.quota_usage_adjustment import (
         apply_quota_usage_adjustment,
     )
-    from domains.gateway.infrastructure.repositories.provider_plan_repository import (
-        ProviderPlanRepository,
+    from domains.gateway.infrastructure.repositories.provider_quota_repository import (
+        ProviderQuotaRepository,
     )
 
     now = datetime.now(UTC)
-    repo = ProviderPlanRepository(db_session)
-    plan = await repo.create(
+    repo = ProviderQuotaRepository(db_session)
+    row = await repo.upsert(
         credential_id=uuid.uuid4(),
         real_model=None,
-        label="rolling-pack",
-        valid_from=now,
-        valid_until=now + timedelta(days=30),
-    )
-    quota = await repo.add_quota(
-        plan_id=plan.id,
         label="5h",
         window_seconds=18000,
         reset_strategy="rolling",
+        reset_timezone="UTC",
+        reset_time_minutes=0,
+        reset_day_of_month=1,
         limit_tokens=1_000_000,
     )
 
@@ -139,8 +136,7 @@ async def test_apply_upstream_rolling_adjustment_rejected(db_session) -> None:
             db_session,
             QuotaUsageAdjustmentCommand(
                 layer="upstream",
-                plan_id=plan.id,
-                quota_id=quota.id,
+                quota_id=row.id,
                 mode="set",
                 current_tokens=100,
             ),
@@ -155,24 +151,21 @@ async def test_apply_upstream_total_rolling_adjustment_allowed(db_session) -> No
     from domains.gateway.application.management.quota_usage_adjustment import (
         apply_quota_usage_adjustment,
     )
-    from domains.gateway.infrastructure.repositories.provider_plan_repository import (
-        ProviderPlanRepository,
+    from domains.gateway.infrastructure.repositories.provider_quota_repository import (
+        ProviderQuotaRepository,
     )
 
     now = datetime.now(UTC)
-    repo = ProviderPlanRepository(db_session)
-    plan = await repo.create(
+    repo = ProviderQuotaRepository(db_session)
+    row = await repo.upsert(
         credential_id=uuid.uuid4(),
         real_model=None,
-        label="total-pack",
-        valid_from=now,
-        valid_until=now + timedelta(days=30),
-    )
-    quota = await repo.add_quota(
-        plan_id=plan.id,
         label="total",
         window_seconds=0,
         reset_strategy="rolling",
+        reset_timezone="UTC",
+        reset_time_minutes=0,
+        reset_day_of_month=1,
         limit_tokens=1_000_000,
     )
 
@@ -181,8 +174,7 @@ async def test_apply_upstream_total_rolling_adjustment_allowed(db_session) -> No
         db_session,
         QuotaUsageAdjustmentCommand(
             layer="upstream",
-            plan_id=plan.id,
-            quota_id=quota.id,
+            quota_id=row.id,
             mode="set",
             current_tokens=123,
         ),

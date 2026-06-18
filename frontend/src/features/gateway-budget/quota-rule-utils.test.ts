@@ -11,7 +11,7 @@ import {
   formatQuotaRulePeriod,
   formatQuotaRulePeriodWindow,
   formatQuotaRuleUpstreamNameLabel,
-  hasUpstreamPlanRules,
+  hasUpstreamQuotaRules,
   needsQuotaModelIdentityLookup,
   resolveInvokeNameForCredentialRealModel,
   resolveQuotaModelAlias,
@@ -21,9 +21,11 @@ import {
   quotaListParamsForTeamModelPlatform,
   quotaListParamsForTeamModelUpstream,
   quotaRuleCredentialRealModelKey,
+  quotaRuleRowId,
   resolveQuotaRuleModelDetailHref,
   resolveQuotaRuleModelLabel,
   resolveQuotaRulePlanManagementLink,
+  resolveQuotaRuleSourceLabel,
   type QuotaRuleLabelContext,
 } from './quota-rule-utils'
 
@@ -72,6 +74,8 @@ function platformRule(modelName: string, overrides: Partial<QuotaRule> = {}): Qu
     usage: null,
     plan_label: null,
     is_active: true,
+    valid_from: null,
+    valid_until: null,
     ...overrides,
   }
 }
@@ -100,7 +104,7 @@ function upstreamRule(
     source_ref: {
       layer: 'upstream',
       budget_id: null,
-      plan_id: 'plan-1',
+      plan_id: null,
       quota_id: 'quota-1',
     },
     limits: {
@@ -112,8 +116,10 @@ function upstreamRule(
       unit_price_usd_per_request: null,
     },
     usage: null,
-    plan_label: 'test-plan',
+    plan_label: null,
     is_active: true,
+    valid_from: null,
+    valid_until: null,
     ...overrides,
   }
 }
@@ -254,7 +260,7 @@ describe('resolveQuotaRulePlanManagementLink', () => {
   it('returns null while model lookup is loading and model not yet resolved', () => {
     const link = resolveQuotaRulePlanManagementLink(upstreamRule('cred-a', 'ep-missing'), {
       ...ctx,
-      planRuleModelLookupLoading: true,
+      quotaModelLookupLoading: true,
     })
     expect(link).toBeNull()
   })
@@ -363,17 +369,17 @@ describe('formatQuotaRuleInvokeNameLabel', () => {
         memberLabels: new Map(),
         keyLabels: new Map(),
         credentialLabels: new Map(),
-        planRuleModelLookupLoading: true,
+        quotaModelLookupLoading: true,
       })
     ).toBe('加载中…')
   })
 })
 
-describe('hasUpstreamPlanRules', () => {
-  it('detects upstream plan rules only', () => {
-    expect(hasUpstreamPlanRules([upstreamRule('cred-a', 'm1')])).toBe(true)
+describe('hasUpstreamQuotaRules', () => {
+  it('detects upstream quota rules with quota_id', () => {
+    expect(hasUpstreamQuotaRules([upstreamRule('cred-a', 'm1')])).toBe(true)
     expect(
-      hasUpstreamPlanRules([
+      hasUpstreamQuotaRules([
         {
           ...upstreamRule('cred-a', 'm1'),
           source_ref: { layer: 'upstream', budget_id: 'b1', plan_id: null, quota_id: null },
@@ -449,12 +455,17 @@ describe('mergeQuotaRules', () => {
 
   it('concatenates distinct rules', () => {
     const a = upstreamRule('cred-a', 'ep-1', {
-      source_ref: { layer: 'upstream', budget_id: null, plan_id: 'p1', quota_id: 'q1' },
+      source_ref: { layer: 'upstream', budget_id: null, plan_id: null, quota_id: 'q1' },
     })
     const b = upstreamRule('cred-a', 'ep-2', {
-      source_ref: { layer: 'upstream', budget_id: null, plan_id: 'p1', quota_id: 'q2' },
+      source_ref: { layer: 'upstream', budget_id: null, plan_id: null, quota_id: 'q2' },
     })
     expect(mergeQuotaRules([a], [b]).map((r) => r.key.model_name)).toEqual(['ep-1', 'ep-2'])
+  })
+
+  it('deduplicates by quota row id', () => {
+    const rule = upstreamRule('cred-a', 'ep-1')
+    expect(quotaRuleRowId(rule)).toBe('quota:quota-1')
   })
 })
 
@@ -486,6 +497,28 @@ describe('findQuotaRuleForStatsRow upstream', () => {
         lookup
       )
     ).toBe(platform)
+  })
+})
+
+describe('resolveQuotaRuleSourceLabel', () => {
+  it('prefers key.quota_label over plan_label', () => {
+    expect(
+      resolveQuotaRuleSourceLabel({
+        ...upstreamRule('cred-a', 'ep-1'),
+        key: { ...upstreamRule('cred-a', 'ep-1').key, quota_label: 'daily' },
+        plan_label: 'legacy-plan',
+      })
+    ).toBe('daily')
+  })
+
+  it('falls back to plan_label for downstream', () => {
+    expect(
+      resolveQuotaRuleSourceLabel({
+        ...upstreamRule('cred-a', null),
+        key: { ...upstreamRule('cred-a', null).key, quota_label: null },
+        plan_label: 'vkey-pack',
+      })
+    ).toBe('vkey-pack')
   })
 })
 

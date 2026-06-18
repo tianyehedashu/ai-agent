@@ -4,12 +4,11 @@
 
 import { memo, useMemo, useState } from 'react'
 
-import { Link } from 'react-router-dom'
-
 import type { QuotaRule } from '@/api/gateway/quota-rules'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
+import { Switch } from '@/components/ui/switch'
 import { QuotaCenterResizableHeader } from '@/features/gateway-budget/quota-center-resizable-header'
 import { useQuotaCenterColumnWidths } from '@/features/gateway-budget/use-quota-center-column-widths'
 import { ArrowDown, ArrowUp, CircleDollarSign, Loader2, Pencil, Trash2 } from '@/lib/lucide-icons'
@@ -21,51 +20,23 @@ import {
   formatQuotaRuleInvokeNameLabel,
   formatQuotaRulePeriod,
   formatQuotaRulePeriodWindow,
+  formatQuotaRuleValidityRange,
   formatQuotaRuleUpstreamNameLabel,
   LAYER_LABELS,
   quotaUsageHasMetrics,
   LAYER_ORDER,
   quotaRuleRowId,
   resolveQuotaRuleModelDetailHref,
-  resolveQuotaRulePlanManagementLink,
+  resolveQuotaRuleSourceLabel,
   resolveQuotaRuleCredentialLabel,
   resolveQuotaRuleSubjectLabel,
   type QuotaRuleLabelContext,
 } from './quota-rule-utils'
 import { QuotaUsageAdjustDialog } from './quota-usage-adjust-dialog'
+import { isQuotaRuleEnablementEditable, useQuotaRuleEnablement } from './use-quota-rule-enablement'
 import { isQuotaRuleUsageAdjustable } from './use-quota-usage-adjust'
 
 import type { QuotaCenterMode } from './use-quota-center'
-
-/** 计划类 upstream/downstream 规则的管理页跳转 */
-function PlanRuleManagementHint({
-  rule,
-  labelContext,
-}: {
-  rule: QuotaRule
-  labelContext: QuotaRuleLabelContext
-}): React.JSX.Element | null {
-  if (
-    rule.key.layer === 'upstream' &&
-    rule.key.model_name &&
-    labelContext.planRuleModelLookupLoading
-  ) {
-    return <span className="text-xs text-muted-foreground">加载模型…</span>
-  }
-  const link = resolveQuotaRulePlanManagementLink(rule, labelContext)
-  if (!link) return null
-  return (
-    <Link
-      to={link.href}
-      className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
-      onClick={(e) => {
-        e.stopPropagation()
-      }}
-    >
-      {link.label}
-    </Link>
-  )
-}
 
 export interface QuotaCenterTableProps {
   items: QuotaRule[]
@@ -196,6 +167,8 @@ interface QuotaCenterTableRowProps {
   onEdit: (rule: QuotaRule) => void
   onDelete: (rule: QuotaRule) => void
   onAdjustUsage: (rule: QuotaRule) => void
+  onToggleEnabled: (rule: QuotaRule, enabled: boolean) => void
+  enablementPending: boolean
 }
 
 const QuotaCenterTableRow = memo(function QuotaCenterTableRow({
@@ -210,22 +183,17 @@ const QuotaCenterTableRow = memo(function QuotaCenterTableRow({
   onEdit,
   onDelete,
   onAdjustUsage,
+  onToggleEnabled,
+  enablementPending,
 }: QuotaCenterTableRowProps): React.JSX.Element {
   const { ratio, barColor } = computeQuotaRuleUsageRatio(rule)
+  const canToggleEnabled = isQuotaRuleEnablementEditable(rule)
+  const validityRange = formatQuotaRuleValidityRange(rule)
   const limitUsd = rule.limits.limit_usd
   const limitTok = rule.limits.limit_tokens
   const usage = rule.usage
-  const canEdit =
-    rule.source_ref.budget_id !== null ||
-    (rule.key.layer === 'upstream' && rule.source_ref.plan_id !== null)
+  const canEdit = rule.source_ref.budget_id !== null || rule.source_ref.quota_id !== null
   const canDelete = isQuotaRuleDeletable(rule)
-  const isPlanRule = rule.source_ref.budget_id === null
-  const planLayer =
-    rule.key.layer === 'upstream'
-      ? ('upstream' as const)
-      : rule.key.layer === 'downstream'
-        ? ('downstream' as const)
-        : null
 
   const invokeLabel = formatQuotaRuleInvokeNameLabel(rule, labelContext)
   const upstreamLabel = formatQuotaRuleUpstreamNameLabel(rule, labelContext)
@@ -293,6 +261,11 @@ const QuotaCenterTableRow = memo(function QuotaCenterTableRow({
             {formatQuotaRulePeriodWindow(rule)}
           </div>
         ) : null}
+        {validityRange ? (
+          <div className="mt-0.5 text-[10px] text-amber-600 dark:text-amber-400">
+            起止 {validityRange}
+          </div>
+        ) : null}
       </div>
       <div className={cn(GRID_CELL, 'tabular-nums')} role="cell">
         {usage && quotaUsageHasMetrics(usage) ? (
@@ -324,9 +297,9 @@ const QuotaCenterTableRow = memo(function QuotaCenterTableRow({
         )}
       </div>
       <div className={GRID_CELL} role="cell">
-        {rule.plan_label ? (
+        {resolveQuotaRuleSourceLabel(rule) !== '自定义' ? (
           <span className="inline-flex items-center rounded-md bg-blue-50 px-1.5 py-0.5 text-xs font-medium text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
-            {rule.plan_label}
+            {resolveQuotaRuleSourceLabel(rule)}
           </span>
         ) : (
           <span className="text-muted-foreground">自定义</span>
@@ -340,6 +313,18 @@ const QuotaCenterTableRow = memo(function QuotaCenterTableRow({
         }}
       >
         <div className="flex flex-wrap items-center gap-1">
+          {canToggleEnabled ? (
+            <Switch
+              checked={rule.is_active}
+              disabled={formDisabled || enablementPending}
+              onCheckedChange={(checked) => {
+                onToggleEnabled(rule, checked)
+              }}
+              aria-label={rule.is_active ? '停用配额' : '启用配额'}
+              title={rule.is_active ? '点击停用' : '点击启用'}
+              className="mr-1 scale-90"
+            />
+          ) : null}
           {canEdit ? (
             <Button
               size="icon"
@@ -381,9 +366,6 @@ const QuotaCenterTableRow = memo(function QuotaCenterTableRow({
               <Trash2 className="h-3.5 w-3.5 text-destructive" />
             </Button>
           ) : null}
-          {isPlanRule && planLayer ? (
-            <PlanRuleManagementHint rule={rule} labelContext={labelContext} />
-          ) : null}
         </div>
       </div>
     </div>
@@ -406,6 +388,7 @@ export function QuotaCenterTable({
   const [sort, setSort] = useState<SortState | null>({ key: 'usage', dir: 'desc' })
   const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set())
   const [adjustRule, setAdjustRule] = useState<QuotaRule | null>(null)
+  const { setEnabled, pendingRuleId } = useQuotaRuleEnablement({ teamId, mode })
   const { gridTemplateColumns, tableMinWidth, startResize, resetColumn } =
     useQuotaCenterColumnWidths()
 
@@ -605,6 +588,11 @@ export function QuotaCenterTable({
                   onEdit={onEdit ?? (() => {})}
                   onDelete={onDelete}
                   onAdjustUsage={setAdjustRule}
+                  onToggleEnabled={setEnabled}
+                  enablementPending={
+                    pendingRuleId !== null &&
+                    pendingRuleId === (rule.source_ref.quota_id ?? rule.source_ref.budget_id)
+                  }
                 />
               )
             })}

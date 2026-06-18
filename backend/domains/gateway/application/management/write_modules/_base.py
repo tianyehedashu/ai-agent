@@ -25,7 +25,7 @@ from domains.gateway.domain.team_credential_access import (
 )
 from domains.gateway.domain.types import BudgetScope
 from domains.gateway.infrastructure.models.entitlement_plan import EntitlementPlan
-from domains.gateway.infrastructure.models.provider_plan import ProviderPlan
+from domains.gateway.infrastructure.models.provider_quota import ProviderQuota
 from domains.gateway.infrastructure.repositories.alert_repository import GatewayAlertRepository
 from domains.gateway.infrastructure.repositories.budget_repository import BudgetRepository
 from domains.gateway.infrastructure.repositories.credential_repository import (
@@ -38,8 +38,8 @@ from domains.gateway.infrastructure.repositories.model_repository import (
     GatewayModelRepository,
     GatewayRouteRepository,
 )
-from domains.gateway.infrastructure.repositories.provider_plan_repository import (
-    ProviderPlanRepository,
+from domains.gateway.infrastructure.repositories.provider_quota_repository import (
+    ProviderQuotaRepository,
 )
 from domains.gateway.infrastructure.repositories.system_credential_repository import (
     SystemProviderCredentialRepository,
@@ -71,7 +71,7 @@ class GatewayManagementWriteBaseMixin:
         self._routes = GatewayRouteRepository(session)
         self._budgets = BudgetRepository(session)
         self._alerts = GatewayAlertRepository(session)
-        self._provider_plans = ProviderPlanRepository(session)
+        self._provider_quotas = ProviderQuotaRepository(session)
         self._entitlement_plans = EntitlementPlanRepository(session)
         self._teams = TeamService(session)
         self._access = GatewayManagementAccessAssertions(
@@ -241,13 +241,13 @@ class GatewayManagementWriteBaseMixin:
         """上游配额的 ``real_model`` 须为该凭据下已注册模型的 canonical id。"""
         await self._resolve_registered_real_model(credential_id, real_model)
 
-    async def _assert_provider_plan_in_credential(
-        self, plan_id: uuid.UUID, *, credential_id: uuid.UUID
-    ) -> ProviderPlan:
-        plan = await self._provider_plans.get(plan_id)
-        if plan is None or plan.credential_id != credential_id:
-            raise ManagementEntityNotFoundError("provider_plan", str(plan_id))
-        return plan
+    async def _assert_provider_quota_in_credential(
+        self, rule_id: uuid.UUID, *, credential_id: uuid.UUID
+    ) -> ProviderQuota:
+        row = await self._provider_quotas.get(rule_id)
+        if row is None or row.credential_id != credential_id:
+            raise ManagementEntityNotFoundError("provider_quota", str(rule_id))
+        return row
 
     async def _assert_vkey_in_team(
         self, vkey_id: uuid.UUID, *, tenant_id: uuid.UUID, is_platform_admin: bool
@@ -370,12 +370,12 @@ class GatewayManagementWriteBaseMixin:
         全部 membership 团队的列表缓存，否则其它团队页仍命中旧快照。
         """
         from domains.gateway.application.gateway_cache_invalidation import (
-            invalidate_gateway_provider_plan_config_cache,
+            invalidate_gateway_provider_quota_config_cache,
             invalidate_gateway_quota_rule_cache_for_team,
         )
 
         if upstream_changed:
-            await invalidate_gateway_provider_plan_config_cache()
+            await invalidate_gateway_provider_quota_config_cache()
 
         team_ids: set[uuid.UUID] = {tenant_id}
         if upstream_changed and actor_user_id is not None:
@@ -393,7 +393,7 @@ class GatewayManagementWriteBaseMixin:
         tenant_id: uuid.UUID,
         actor_user_id: uuid.UUID | None,
     ) -> None:
-        """上游 ProviderPlan 变更后失效配额中心列表缓存（含 actor 各 membership 团队）。"""
+        """上游 ProviderQuota 变更后失效配额中心列表缓存（含 actor 各 membership 团队）。"""
         await self._invalidate_quota_rule_list_cache(
             tenant_id=tenant_id,
             actor_user_id=actor_user_id,

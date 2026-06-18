@@ -58,8 +58,20 @@ export interface QuotaRule {
   source_ref: QuotaRuleSourceRef
   limits: QuotaRuleLimits
   usage: QuotaRuleUsage | null
-  plan_label: string | null
+  /** @deprecated 上游已拍平为 key.quota_label；下游可能仍返回 plan_label */
+  plan_label?: string | null
+  /** 启用停用：false 时该规则不参与热路径执法 */
   is_active: boolean
+  /** 起止时间（含/不含）；null 表示该侧不限 */
+  valid_from: string | null
+  valid_until: string | null
+}
+
+/** 下游兼容：读取可能仍返回的 plan_label（避免在 UI 层直接访问 deprecated 字段） */
+export function quotaRuleLegacyPlanLabel(rule: QuotaRule): string | null {
+  const trimmed = (rule as { plan_label?: string | null }).plan_label?.trim()
+  if (!trimmed) return null
+  return trimmed
 }
 
 export interface QuotaRuleUpsertBody {
@@ -88,7 +100,11 @@ export interface QuotaRuleUpsertBody {
   limit_requests?: number | null
   unit_price_usd_per_token?: number | null
   unit_price_usd_per_request?: number | null
-  plan_label?: string | null
+  /** 起止时间（ISO 字符串）；null 表示该侧不限 */
+  valid_from?: string | null
+  valid_until?: string | null
+  /** 启用停用；默认 true */
+  enabled?: boolean
 }
 
 export interface QuotaRuleBatchFailure {
@@ -108,6 +124,14 @@ export interface ListQuotaRulesParams {
   model_name?: string
   period?: 'daily' | 'monthly' | 'total'
   include_usage?: boolean
+}
+
+export interface QuotaRuleEnablementBody {
+  layer: QuotaRuleLayer
+  budget_id?: string | null
+  plan_id?: string | null
+  quota_id?: string | null
+  enabled: boolean
 }
 
 export type QuotaUsageAdjustmentMode = 'set' | 'reset_window'
@@ -149,23 +173,23 @@ export const quotaRulesApi = {
   /** 成员自助：删除本人「user + 本人凭据」的平台配额行 */
   deleteSelfQuotaRule: (teamId: string, budgetId: string) =>
     apiClient.delete<unknown>(teamGatewayPath(teamId, `/quota-rules/self/${budgetId}`)),
-  /** 团队管理员：删除单条上游 / 下游 plan 配额（仅 plan_id+quota_id、无 budget_id） */
-  deletePlanQuota: (
+  /** 团队管理员：删除单条上游 / 下游配额（upstream 仅 quota_id；downstream 需 plan_id） */
+  deleteQuotaRule: (
     teamId: string,
-    params: { layer: 'upstream' | 'downstream'; planId: string; quotaId: string }
+    params: { layer: 'upstream' | 'downstream'; quotaId: string; planId?: string }
   ) => {
     const search = new URLSearchParams({
       layer: params.layer,
-      plan_id: params.planId,
       quota_id: params.quotaId,
     })
+    if (params.planId) search.set('plan_id', params.planId)
     return apiClient.delete<unknown>(
       teamGatewayPath(teamId, `/quota-rules/plan?${search.toString()}`)
     )
   },
-  /** 成员自助：删除本人凭据上的单条上游 plan 配额 */
-  deleteSelfPlanQuota: (teamId: string, params: { planId: string; quotaId: string }) => {
-    const search = new URLSearchParams({ plan_id: params.planId, quota_id: params.quotaId })
+  /** 成员自助：删除本人凭据上的单条上游配额 */
+  deleteSelfQuotaRuleByQuotaId: (teamId: string, quotaId: string) => {
+    const search = new URLSearchParams({ quota_id: quotaId })
     return apiClient.delete<unknown>(
       teamGatewayPath(teamId, `/quota-rules/self/plan?${search.toString()}`)
     )
@@ -174,4 +198,10 @@ export const quotaRulesApi = {
     apiClient.post<QuotaRule>(teamGatewayPath(teamId, '/quota-rules/usage-adjustments'), body),
   adjustSelfQuotaRuleUsage: (teamId: string, body: QuotaUsageAdjustmentBody) =>
     apiClient.post<QuotaRule>(teamGatewayPath(teamId, '/quota-rules/self/usage-adjustments'), body),
+  /** 团队管理员：启用 / 停用单条配额规则 */
+  setQuotaRuleEnablement: (teamId: string, body: QuotaRuleEnablementBody) =>
+    apiClient.post<QuotaRule>(teamGatewayPath(teamId, '/quota-rules/enablement'), body),
+  /** 成员自助：启用 / 停用本人平台或本人凭据上游配额规则 */
+  setSelfQuotaRuleEnablement: (teamId: string, body: QuotaRuleEnablementBody) =>
+    apiClient.post<QuotaRule>(teamGatewayPath(teamId, '/quota-rules/self/enablement'), body),
 } as const

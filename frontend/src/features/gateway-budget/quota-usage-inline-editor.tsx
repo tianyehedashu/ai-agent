@@ -10,6 +10,7 @@ import {
 } from '@/features/gateway-budget/quota-rule-utils'
 import { formatQuotaTokens } from '@/features/gateway-budget/quota-token-display'
 import {
+  buildQuotaRuleSourceMutationBody,
   buildQuotaUsageAdjustmentBody,
   useQuotaUsageAdjust,
 } from '@/features/gateway-budget/use-quota-usage-adjust'
@@ -84,12 +85,8 @@ export function QuotaUsageInlineEditor({
   const limitTokLabel = formatQuotaTokens(limitTok)
 
   const handleSave = (): void => {
-    const ref = rule.source_ref
     adjustUsage({
-      layer: rule.key.layer,
-      budget_id: ref.budget_id,
-      plan_id: ref.plan_id,
-      quota_id: ref.quota_id,
+      ...buildQuotaRuleSourceMutationBody(rule),
       mode: 'set',
       current_usd: Number.parseFloat(usd) || 0,
       current_tokens: Number.parseInt(tokens, 10) || 0,

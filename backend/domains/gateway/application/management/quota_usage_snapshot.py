@@ -108,7 +108,7 @@ async def enrich_quota_rules_with_usage(
                     quota_id=rule.source_ref.quota_id,
                     window_seconds=rule.key.window_seconds or 0,
                     reset_strategy=rule.key.reset_strategy or "rolling",
-                    plan_valid_from=rule.plan_valid_from,
+                    row_valid_from=rule.valid_from,
                     period_reset_anchor=period_reset_anchor_from_plan_quota(
                         reset_timezone=rule.key.period_timezone,
                         reset_time_minutes=rule.key.period_reset_minutes,
@@ -172,7 +172,8 @@ async def enrich_quota_rules_with_usage(
                 usage=usage,
                 plan_label=rule.plan_label,
                 is_active=rule.is_active,
-                plan_valid_from=rule.plan_valid_from,
+                valid_from=rule.valid_from,
+                valid_until=rule.valid_until,
             )
         )
 

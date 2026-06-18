@@ -17,7 +17,6 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
-    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -54,19 +53,6 @@ class EntitlementPlan(BaseModel, PolicyTargetMixin):
         comment="覆盖的 capability，空 = 全部",
     )
     valid_from: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    valid_until: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    is_active: Mapped[bool] = mapped_column(
-        Boolean,
-        nullable=False,
-        default=True,
-        server_default="true",
-    )
-    auto_renew: Mapped[bool] = mapped_column(
-        Boolean,
-        nullable=False,
-        default=False,
-        server_default="false",
-    )
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     extra: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
 
@@ -75,14 +61,7 @@ class EntitlementPlan(BaseModel, PolicyTargetMixin):
             "ix_entitlement_plans_active",
             "target_kind",
             "target_id",
-            "is_active",
             "valid_from",
-            "valid_until",
-        ),
-        Index(
-            "ix_entitlement_plans_lifecycle",
-            "valid_until",
-            postgresql_where=text("is_active IS TRUE"),
         ),
     )
 
@@ -113,8 +92,7 @@ class EntitlementPlanQuota(BaseModel):
         default="rolling",
         server_default="rolling",
         comment=(
-            "重置策略：rolling（默认滚动）| calendar_daily_utc（每日 UTC 重置）|"
-            " calendar_monthly_utc（每月 1 号 UTC 重置）| plan_anniversary（按 valid_from 切片）"
+            "重置策略：rolling（默认滚动）| calendar_daily_utc | calendar_monthly_utc"
         ),
     )
     reset_timezone: Mapped[str] = mapped_column(
@@ -147,6 +125,25 @@ class EntitlementPlanQuota(BaseModel):
         Numeric(12, 6),
         nullable=True,
         comment="按请求计价时的单价；与 unit_price_usd_per_token 互不冲突，分别累加",
+    )
+
+    # 启用停用 + 起止时间（窗口级；热路径据此纳入或跳过该窗口配额）
+    enabled: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        server_default="true",
+        default=True,
+        comment="停用时该窗口配额不参与热路径执法",
+    )
+    valid_from: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        comment="生效起（含）；NULL 表示不限",
+    )
+    valid_until: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        comment="生效止（不含）；NULL 表示不限",
     )
 
     __table_args__ = (UniqueConstraint("plan_id", "label", name="uq_entitlement_plan_quota_label"),)

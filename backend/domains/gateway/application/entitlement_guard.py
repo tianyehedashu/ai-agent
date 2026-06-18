@@ -26,6 +26,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from domains.gateway.application.entitlement_model_status import ENTITLEMENT_RESETTING_SOON_SECONDS
 from domains.gateway.domain.errors import EntitlementPlanExhaustedError
 from domains.gateway.domain.period_reset_anchor import period_reset_anchor_from_plan_quota
+from domains.gateway.domain.policies.quota_window_enforcement import is_quota_row_enforceable
 from domains.gateway.domain.quota_plan import (
     ENTITLEMENT_NS,
     PlanQuotaSnapshot,
@@ -90,7 +91,7 @@ def _status_from_quota_snapshots(
     return "exhausted"
 
 
-def _quota_to_spec(row: EntitlementPlanQuota, *, plan: EntitlementPlan) -> PlanQuotaSpec:
+def _quota_to_spec(row: EntitlementPlanQuota) -> PlanQuotaSpec:
     return PlanQuotaSpec(
         quota_id=row.id,
         label=row.label,
@@ -99,7 +100,6 @@ def _quota_to_spec(row: EntitlementPlanQuota, *, plan: EntitlementPlan) -> PlanQ
         limit_tokens=row.limit_tokens,
         limit_requests=row.limit_requests,
         reset_strategy=normalize_reset_strategy(row.reset_strategy),
-        plan_valid_from=plan.valid_from,
         period_reset_anchor=period_reset_anchor_from_plan_quota(
             reset_timezone=row.reset_timezone,
             reset_time_minutes=row.reset_time_minutes,
@@ -139,8 +139,17 @@ class EntitlementGuard:
                 reservations=[],
                 quota_quotas_unit_prices={},
             )
-        quotas = await self._repo.list_quotas(plan.id)
-        specs = [_quota_to_spec(q, plan=plan) for q in quotas]
+        quotas = [
+            q
+            for q in await self._repo.list_quotas(plan.id)
+            if is_quota_row_enforceable(
+                enabled=q.enabled,
+                valid_from=q.valid_from,
+                valid_until=q.valid_until,
+                now=when,
+            )
+        ]
+        specs = [_quota_to_spec(q) for q in quotas]
         if not specs:
             return EntitlementCheckResult(
                 plan_id=plan.id,
@@ -246,25 +255,29 @@ class EntitlementGuard:
         plans = await self._repo.list_for_scope(scope, scope_id)
         if not plans:
             return dict.fromkeys(virtual_models, "none")
-        active_plans = [p for p in plans if p.is_active and p.valid_from <= when < p.valid_until]
         result: dict[str, EntitlementListStatus] = {}
         for vm in virtual_models:
             matched: EntitlementPlan | None = None
-            for p in active_plans:
+            for p in plans:
                 included = list(p.included_models or [])
                 if included and vm not in included:
                     continue
                 matched = p
                 break
             if matched is None:
-                # 有过期但没活跃
-                if any(p.valid_until <= when for p in plans):
-                    result[vm] = "expired"
-                else:
-                    result[vm] = "none"
+                result[vm] = "none"
                 continue
-            quotas = await self._repo.list_quotas(matched.id)
-            specs = [_quota_to_spec(q, plan=matched) for q in quotas]
+            quotas = [
+                q
+                for q in await self._repo.list_quotas(matched.id)
+                if is_quota_row_enforceable(
+                    enabled=q.enabled,
+                    valid_from=q.valid_from,
+                    valid_until=q.valid_until,
+                    now=when,
+                )
+            ]
+            specs = [_quota_to_spec(q) for q in quotas]
             if not specs:
                 result[vm] = "active"
                 continue

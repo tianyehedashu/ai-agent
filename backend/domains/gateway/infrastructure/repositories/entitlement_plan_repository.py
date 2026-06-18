@@ -54,19 +54,16 @@ class EntitlementPlanRepository:
         capability: str | None = None,
         now: datetime | None = None,
     ) -> EntitlementPlan | None:
-        """返回当前活跃且匹配 model/capability 白名单的套餐；多条取 valid_from 最新。"""
-        when = now or datetime.now(UTC)
+        """返回匹配 model/capability 白名单的套餐；多条取 created_at 最新。"""
+        _ = now
         clauses = [
             EntitlementPlan.target_kind == scope,
             EntitlementPlan.target_id == scope_id,
-            EntitlementPlan.is_active.is_(True),
-            EntitlementPlan.valid_from <= when,
-            EntitlementPlan.valid_until > when,
         ]
         stmt = (
             select(EntitlementPlan)
             .where(and_(*clauses))
-            .order_by(EntitlementPlan.valid_from.desc())
+            .order_by(EntitlementPlan.created_at.desc())
         )
         rows = list((await self._session.execute(stmt)).scalars().all())
         for row in rows:
@@ -142,13 +139,9 @@ class EntitlementPlanRepository:
         return out
 
     async def list_active_due(self, now: datetime | None = None) -> list[EntitlementPlan]:
-        when = now or datetime.now(UTC)
-        stmt = select(EntitlementPlan).where(
-            EntitlementPlan.is_active.is_(True),
-            EntitlementPlan.valid_until <= when,
-        )
-        result = await self._session.execute(stmt)
-        return list(result.scalars().all())
+        """已废弃：plan 头 lifecycle 已移除，保留空实现供兼容。"""
+        _ = now
+        return []
 
     async def create(
         self,
@@ -157,11 +150,8 @@ class EntitlementPlanRepository:
         scope_id: uuid.UUID,
         label: str,
         valid_from: datetime,
-        valid_until: datetime,
         included_models: list[str] | None = None,
         included_capabilities: list[str] | None = None,
-        is_active: bool = True,
-        auto_renew: bool = False,
         notes: str | None = None,
         extra: dict[str, Any] | None = None,
     ) -> EntitlementPlan:
@@ -172,9 +162,6 @@ class EntitlementPlanRepository:
             included_models=list(included_models or []),
             included_capabilities=list(included_capabilities or []),
             valid_from=valid_from,
-            valid_until=valid_until,
-            is_active=is_active,
-            auto_renew=auto_renew,
             notes=notes,
             extra=extra,
         )
@@ -197,6 +184,9 @@ class EntitlementPlanRepository:
         reset_timezone: str = "UTC",
         reset_time_minutes: int = 0,
         reset_day_of_month: int = 1,
+        enabled: bool = True,
+        valid_from: Any | None = None,
+        valid_until: Any | None = None,
     ) -> EntitlementPlanQuota:
         quota = EntitlementPlanQuota(
             plan_id=plan_id,
@@ -211,6 +201,9 @@ class EntitlementPlanRepository:
             limit_requests=limit_requests,
             unit_price_usd_per_token=unit_price_usd_per_token,
             unit_price_usd_per_request=unit_price_usd_per_request,
+            enabled=enabled,
+            valid_from=valid_from,
+            valid_until=valid_until,
         )
         self._session.add(quota)
         await self._session.flush()
@@ -226,6 +219,23 @@ class EntitlementPlanRepository:
             await self._session.delete(row)
         await self._session.flush()
         return [await self.add_quota(plan_id=plan_id, **q) for q in quotas]
+
+    async def set_quota_enabled(
+        self, plan_id: uuid.UUID, quota_id: uuid.UUID, *, enabled: bool
+    ) -> bool:
+        """启用/停用套餐下单条配额；命中返回 True（按 plan 限定避免越权）。"""
+        result = await self._session.execute(
+            select(EntitlementPlanQuota).where(
+                EntitlementPlanQuota.plan_id == plan_id,
+                EntitlementPlanQuota.id == quota_id,
+            )
+        )
+        quota = result.scalar_one_or_none()
+        if quota is None:
+            return False
+        quota.enabled = enabled
+        await self._session.flush()
+        return True
 
     async def delete_quota(self, plan_id: uuid.UUID, quota_id: uuid.UUID) -> bool:
         """删除套餐下单条配额；命中返回 True，否则 False（按 plan 限定避免越权）。"""

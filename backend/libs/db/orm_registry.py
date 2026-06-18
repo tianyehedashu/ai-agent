@@ -59,10 +59,7 @@ def register_all_orm_models() -> None:
     from domains.gateway.infrastructure.models.provider_credential import (  # noqa: F401
         ProviderCredential,
     )
-    from domains.gateway.infrastructure.models.provider_plan import (  # noqa: F401
-        ProviderPlan,
-        ProviderPlanQuota,
-    )
+    from domains.gateway.infrastructure.models.provider_quota import ProviderQuota  # noqa: F401
     from domains.gateway.infrastructure.models.request_log import GatewayRequestLog  # noqa: F401
     from domains.gateway.infrastructure.models.system_gateway import (  # noqa: F401
         SystemGatewayAlertRule,

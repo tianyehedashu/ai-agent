@@ -7,20 +7,13 @@ import uuid
 
 from fastapi import APIRouter, Query, status
 
-from domains.gateway.presentation.deps import CurrentTeam, RequiredTeamAdmin
-from domains.gateway.presentation.plan_response import (
-    entitlement_plan_to_response,
-    provider_plan_to_response,
-)
+from domains.gateway.presentation.deps import RequiredTeamAdmin
+from domains.gateway.presentation.plan_response import entitlement_plan_to_response
 from domains.gateway.presentation.schemas.common import (
     EntitlementPlanCreate,
     EntitlementPlanResponse,
     EntitlementPlanUpdate,
     EntitlementUsageResponse,
-    ProviderPlanCostResponse,
-    ProviderPlanCreate,
-    ProviderPlanResponse,
-    ProviderPlanUpdate,
 )
 from libs.exceptions import AIAgentError, NotFoundError
 from libs.exceptions.codes import INTERNAL_ERROR
@@ -31,149 +24,6 @@ from ._common import (
 )
 
 router = APIRouter()
-
-
-@router.get(
-    "/credentials/{credential_id}/provider-plans",
-    response_model=list[ProviderPlanResponse],
-)
-async def list_provider_plans(
-    credential_id: uuid.UUID,
-    team: CurrentTeam,
-    reads: MgmtReads,
-) -> list[ProviderPlanResponse]:
-    await reads.get_managed_credential_for_team(
-        credential_id,
-        tenant_id=team.team_id,
-        actor_user_id=team.user_id,
-        team_role=team.team_role,
-        is_platform_admin=team.is_platform_admin,
-    )
-    rows = await reads.list_provider_plans_with_quotas_for_credential(credential_id)
-    return [provider_plan_to_response(row) for row in rows]
-
-
-@router.post(
-    "/credentials/{credential_id}/provider-plans",
-    response_model=ProviderPlanResponse,
-    status_code=status.HTTP_201_CREATED,
-)
-async def create_provider_plan(
-    credential_id: uuid.UUID,
-    body: ProviderPlanCreate,
-    team: RequiredTeamAdmin,
-    writes: MgmtWrites,
-    reads: MgmtReads,
-) -> ProviderPlanResponse:
-    plan = await writes.create_provider_plan(
-        credential_id=credential_id,
-        tenant_id=team.team_id,
-        is_platform_admin=team.is_platform_admin,
-        actor_user_id=team.user_id,
-        real_model=body.real_model,
-        label=body.label,
-        valid_from=body.valid_from,
-        valid_until=body.valid_until,
-        is_active=body.is_active,
-        auto_renew=body.auto_renew,
-        notes=body.notes,
-        extra=body.extra,
-        quotas=[q.model_dump(exclude_none=True) for q in body.quotas],
-    )
-    result = await reads.get_provider_plan_with_quotas(plan.id)
-    if result is None:
-        raise AIAgentError("plan not found after create", INTERNAL_ERROR)
-    return provider_plan_to_response(result)
-
-
-@router.patch(
-    "/credentials/{credential_id}/provider-plans/{plan_id}",
-    response_model=ProviderPlanResponse,
-)
-async def update_provider_plan(
-    credential_id: uuid.UUID,
-    plan_id: uuid.UUID,
-    body: ProviderPlanUpdate,
-    team: RequiredTeamAdmin,
-    writes: MgmtWrites,
-    reads: MgmtReads,
-) -> ProviderPlanResponse:
-    fields = body.model_dump(exclude_unset=True, exclude_none=True)
-    quotas_raw = fields.pop("quotas", None)
-    quotas_input = (
-        [q if isinstance(q, dict) else q.model_dump(exclude_none=True) for q in quotas_raw]
-        if quotas_raw is not None
-        else None
-    )
-    await writes.update_provider_plan(
-        plan_id,
-        credential_id=credential_id,
-        tenant_id=team.team_id,
-        is_platform_admin=team.is_platform_admin,
-        actor_user_id=team.user_id,
-        fields=fields,
-        quotas=quotas_input,
-    )
-    result = await reads.get_provider_plan_with_quotas(plan_id)
-    if result is None:
-        raise NotFoundError("provider plan")
-    return provider_plan_to_response(result)
-
-
-@router.delete(
-    "/credentials/{credential_id}/provider-plans/{plan_id}",
-    status_code=status.HTTP_204_NO_CONTENT,
-)
-async def delete_provider_plan(
-    credential_id: uuid.UUID,
-    plan_id: uuid.UUID,
-    team: RequiredTeamAdmin,
-    writes: MgmtWrites,
-) -> None:
-    await writes.delete_provider_plan(
-        plan_id,
-        credential_id=credential_id,
-        tenant_id=team.team_id,
-        is_platform_admin=team.is_platform_admin,
-        actor_user_id=team.user_id,
-    )
-
-
-@router.get(
-    "/credentials/{credential_id}/provider-plan-usage",
-    response_model=list[ProviderPlanCostResponse],
-)
-async def list_provider_plan_usage(
-    credential_id: uuid.UUID,
-    team: CurrentTeam,
-    reads: MgmtReads,
-    days: int = Query(30, ge=1, le=180),
-) -> list[ProviderPlanCostResponse]:
-    await reads.get_managed_credential_for_team(
-        credential_id,
-        tenant_id=team.team_id,
-        actor_user_id=team.user_id,
-        team_role=team.team_role,
-        is_platform_admin=team.is_platform_admin,
-    )
-    rows = await reads.list_provider_plans_with_quotas_for_credential(credential_id)
-    end = datetime.now(UTC)
-    start = end - timedelta(days=days)
-    out: list[ProviderPlanCostResponse] = []
-    for plan in rows:
-        usage = await reads.get_provider_plan_cost(plan.id, since=start, until=end)
-        out.append(
-            ProviderPlanCostResponse(
-                plan_id=usage.plan_id,
-                period_start=usage.period_start,
-                period_end=usage.period_end,
-                requests=usage.requests,
-                input_tokens=usage.input_tokens,
-                output_tokens=usage.output_tokens,
-                cost_usd=usage.cost_usd,
-            )
-        )
-    return out
 
 
 @router.get(
@@ -213,11 +63,8 @@ async def create_vkey_entitlement(
         is_platform_admin=team.is_platform_admin,
         label=body.label,
         valid_from=body.valid_from,
-        valid_until=body.valid_until,
         included_models=body.included_models,
         included_capabilities=body.included_capabilities,
-        is_active=body.is_active,
-        auto_renew=body.auto_renew,
         notes=body.notes,
         extra=body.extra,
         quotas=[q.model_dump(exclude_none=True) for q in body.quotas],
@@ -342,11 +189,8 @@ async def create_apikey_grant_entitlement(
         is_platform_admin=team.is_platform_admin,
         label=body.label,
         valid_from=body.valid_from,
-        valid_until=body.valid_until,
         included_models=body.included_models,
         included_capabilities=body.included_capabilities,
-        is_active=body.is_active,
-        auto_renew=body.auto_renew,
         notes=body.notes,
         extra=body.extra,
         quotas=[q.model_dump(exclude_none=True) for q in body.quotas],

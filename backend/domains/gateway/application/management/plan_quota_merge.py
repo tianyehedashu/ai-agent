@@ -30,6 +30,9 @@ def merge_plan_quotas_by_label(
             "limit_usd": q.limit_usd,
             "limit_tokens": q.limit_tokens,
             "limit_requests": q.limit_requests,
+            "enabled": getattr(q, "enabled", True),
+            "valid_from": getattr(q, "valid_from", None),
+            "valid_until": getattr(q, "valid_until", None),
         }
         for field in extra_fields:
             row[field] = getattr(q, field, None)

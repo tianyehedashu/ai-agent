@@ -1007,6 +1007,8 @@ class QuotaRuleResponse(BaseModel):
     usage: QuotaRuleUsageResponse | None = None
     plan_label: str | None = None
     is_active: bool = True
+    valid_from: datetime | None = None
+    valid_until: datetime | None = None
 
 
 class QuotaRuleUpsert(BaseModel):
@@ -1041,6 +1043,7 @@ class QuotaRuleUpsert(BaseModel):
     plan_label: str | None = Field(default=None, max_length=100)
     valid_from: datetime | None = None
     valid_until: datetime | None = None
+    enabled: bool = True
 
 
 class QuotaRuleBatchUpsertRequest(BaseModel):
@@ -1066,6 +1069,16 @@ class QuotaUsageAdjustmentRequest(BaseModel):
     current_usd: Decimal | None = None
     current_tokens: int | None = Field(default=None, ge=0)
     current_requests: int | None = Field(default=None, ge=0)
+
+
+class QuotaRuleEnablementRequest(BaseModel):
+    """启用 / 停用单条配额规则（按 source_ref 定位）。"""
+
+    layer: Literal["platform", "upstream", "downstream"]
+    budget_id: uuid.UUID | None = None
+    plan_id: uuid.UUID | None = None
+    quota_id: uuid.UUID | None = None
+    enabled: bool
 
 
 # =============================================================================
@@ -1306,27 +1319,15 @@ class EntitlementPlanQuotaUpsert(PlanQuotaUpsert):
 
 
 class ProviderPlanCreate(BaseModel):
-    real_model: str | None = None
-    label: str = Field(..., min_length=1, max_length=100)
-    valid_from: datetime
-    valid_until: datetime
-    is_active: bool = True
-    auto_renew: bool = False
-    notes: str | None = None
-    extra: dict[str, Any] | None = None
-    quotas: list[PlanQuotaUpsert] = Field(default_factory=list)
+    """已废弃：上游 provider-plans CRUD 已移除，请使用配额中心 batch upsert。"""
+
+    model_config = ConfigDict(extra="forbid")
 
 
 class ProviderPlanUpdate(BaseModel):
-    real_model: str | None = None
-    label: str | None = None
-    valid_from: datetime | None = None
-    valid_until: datetime | None = None
-    is_active: bool | None = None
-    auto_renew: bool | None = None
-    notes: str | None = None
-    extra: dict[str, Any] | None = None
-    quotas: list[PlanQuotaUpsert] | None = None
+    """已废弃：上游 provider-plans CRUD 已移除。"""
+
+    model_config = ConfigDict(extra="forbid")
 
 
 class PlanQuotaResponse(BaseModel):
@@ -1351,28 +1352,11 @@ class EntitlementPlanQuotaResponse(PlanQuotaResponse):
     model_config = ConfigDict(from_attributes=True)
 
 
-class ProviderPlanResponse(BaseModel):
-    id: uuid.UUID
-    credential_id: uuid.UUID
-    real_model: str | None = None
-    label: str
-    valid_from: datetime
-    valid_until: datetime
-    is_active: bool
-    auto_renew: bool
-    notes: str | None = None
-    extra: dict[str, Any] | None = None
-    quotas: list[PlanQuotaResponse] = Field(default_factory=list)
-
-
 class EntitlementPlanCreate(BaseModel):
     label: str = Field(..., min_length=1, max_length=100)
     valid_from: datetime
-    valid_until: datetime
     included_models: list[str] = Field(default_factory=list)
     included_capabilities: list[str] = Field(default_factory=list)
-    is_active: bool = True
-    auto_renew: bool = False
     notes: str | None = None
     extra: dict[str, Any] | None = None
     quotas: list[EntitlementPlanQuotaUpsert] = Field(default_factory=list)
@@ -1381,11 +1365,8 @@ class EntitlementPlanCreate(BaseModel):
 class EntitlementPlanUpdate(BaseModel):
     label: str | None = None
     valid_from: datetime | None = None
-    valid_until: datetime | None = None
     included_models: list[str] | None = None
     included_capabilities: list[str] | None = None
-    is_active: bool | None = None
-    auto_renew: bool | None = None
     notes: str | None = None
     extra: dict[str, Any] | None = None
     quotas: list[EntitlementPlanQuotaUpsert] | None = None
@@ -1419,13 +1400,9 @@ class EntitlementUsageResponse(BaseModel):
 
 
 class ProviderPlanCostResponse(BaseModel):
-    plan_id: uuid.UUID
-    period_start: datetime
-    period_end: datetime
-    requests: int
-    input_tokens: int
-    output_tokens: int
-    cost_usd: Decimal
+    """已废弃：上游 provider-plan 用量 API 已移除。"""
+
+    model_config = ConfigDict(extra="forbid")
 
 
 class MarginGroupItemResponse(BaseModel):
@@ -1501,9 +1478,9 @@ __all__ = [
     "PlanResetStrategy",
     "PlatformCredentialStatItem",
     "PlatformCredentialStatListResponse",
-    "ProviderPlanCostResponse",
     "ProviderPlanCreate",
-    "ProviderPlanResponse",
+    "ProviderPlanUpdate",
+    "ProviderPlanCostResponse",
     "QuotaRuleBatchFailureItem",
     "QuotaRuleBatchUpsertRequest",
     "QuotaRuleBatchUpsertResponse",

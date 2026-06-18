@@ -76,7 +76,7 @@ def ensure_gateway_callbacks() -> None:
     # warning 日志；此处只兜底未来上游新增/客户端自创但未纳入策略清单的字段。
     litellm.drop_params = True
 
-    from domains.gateway.application.provider_plan_guard import (
+    from domains.gateway.application.provider_quota_guard import (
         build_provider_plan_pre_call_logger,
     )
     from domains.gateway.infrastructure.callbacks.custom_logger import (

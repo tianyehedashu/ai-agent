@@ -24,6 +24,16 @@ function numberToStr(n: number | null | undefined): string {
   return String(n)
 }
 
+/** ISO 字符串 → datetime-local 输入值（本地时区，分钟精度）；空返回空串。 */
+function isoToLocalDateTime(iso: string | null | undefined): string {
+  if (!iso) return ''
+  const parsed = new Date(iso)
+  if (Number.isNaN(parsed.getTime())) return ''
+  const pad = (n: number): string => String(n).padStart(2, '0')
+  const year = String(parsed.getFullYear()).padStart(4, '0')
+  return `${year}-${pad(parsed.getMonth() + 1)}-${pad(parsed.getDate())}T${pad(parsed.getHours())}:${pad(parsed.getMinutes())}`
+}
+
 /** 将现有 QuotaRule 反解为批量表单值，用于单条编辑预填。 */
 export function quotaRuleToBatchFormValues(
   rule: QuotaRule
@@ -52,6 +62,8 @@ export function quotaRuleToBatchFormValues(
       limit_usd: numberToStr(rule.limits.limit_usd),
       limit_tokens: numberToStr(rule.limits.limit_tokens),
       limit_requests: numberToStr(rule.limits.limit_requests),
+      validFrom: isoToLocalDateTime(rule.valid_from),
+      validUntil: isoToLocalDateTime(rule.valid_until),
     }
 
     let values: QuotaBatchFormValues
@@ -95,9 +107,7 @@ export function quotaRuleToBatchFormValues(
   }
 
   if (layer === 'upstream') {
-    const hasPlanRef = rule.source_ref.plan_id !== null && rule.source_ref.quota_id !== null
-    const hasBudgetRef = rule.source_ref.budget_id !== null
-    if (!hasPlanRef && !hasBudgetRef) return null
+    if (rule.source_ref.quota_id === null && rule.source_ref.budget_id === null) return null
 
     const values = patchQuotaBatchFormForLayer(
       {
@@ -115,6 +125,8 @@ export function quotaRuleToBatchFormValues(
         limit_usd: numberToStr(rule.limits.limit_usd),
         limit_tokens: numberToStr(rule.limits.limit_tokens),
         limit_requests: numberToStr(rule.limits.limit_requests),
+        validFrom: isoToLocalDateTime(rule.valid_from),
+        validUntil: isoToLocalDateTime(rule.valid_until),
       },
       'upstream'
     )

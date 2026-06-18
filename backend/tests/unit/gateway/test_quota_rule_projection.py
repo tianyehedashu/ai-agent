@@ -6,13 +6,10 @@ from datetime import UTC, datetime
 from decimal import Decimal
 import uuid
 
-from domains.gateway.application.management.plan_read_models import (
-    PlanQuotaReadModel,
-    ProviderPlanReadModel,
-)
+from domains.gateway.application.management.plan_read_models import ProviderQuotaReadModel
 from domains.gateway.application.management.quota_rule_read_mappers import (
     budget_to_quota_rule,
-    flatten_provider_plan,
+    provider_quota_to_quota_rule,
 )
 from domains.gateway.infrastructure.models.budget import GatewayBudget
 
@@ -53,49 +50,28 @@ def test_budget_to_quota_rule_total_has_window_start_only() -> None:
     assert rule.usage.reset_at is None
 
 
-def test_flatten_provider_plan_expands_quotas() -> None:
+def test_provider_quota_to_quota_rule_maps_flat_row() -> None:
     team_id = uuid.uuid4()
     cred_id = uuid.uuid4()
-    plan_id = uuid.uuid4()
-    plan = ProviderPlanReadModel(
-        id=plan_id,
+    rule_id = uuid.uuid4()
+    quota = ProviderQuotaReadModel(
+        id=rule_id,
         credential_id=cred_id,
         real_model="claude-3",
-        label="Pro",
-        valid_from=__import__("datetime").datetime.now(__import__("datetime").UTC),
-        valid_until=__import__("datetime").datetime.now(__import__("datetime").UTC),
-        is_active=True,
-        auto_renew=False,
-        notes=None,
-        extra=None,
-        quotas=(
-            PlanQuotaReadModel(
-                id=uuid.uuid4(),
-                label="5h",
-                window_seconds=18000,
-                reset_strategy="rolling",
-                limit_usd=Decimal("10"),
-                limit_tokens=None,
-                limit_requests=None,
-            ),
-            PlanQuotaReadModel(
-                id=uuid.uuid4(),
-                label="total",
-                window_seconds=0,
-                reset_strategy="rolling",
-                limit_usd=Decimal("100"),
-                limit_tokens=None,
-                limit_requests=None,
-            ),
-        ),
+        label="5h",
+        window_seconds=18000,
+        reset_strategy="rolling",
+        limit_usd=Decimal("10"),
+        limit_tokens=None,
+        limit_requests=None,
     )
-    rules = flatten_provider_plan(plan, team_id=team_id)
-    assert len(rules) == 2
-    assert {r.key.quota_label for r in rules} == {"5h", "total"}
-    assert all(r.key.layer == "upstream" for r in rules)
-    assert all(r.key.credential_id == cred_id for r in rules)
-    rolling = next(r for r in rules if r.key.quota_label == "5h")
-    assert rolling.usage is not None
-    assert rolling.usage.window_start is not None
-    # 滚动窗口无固定重置时刻：window_start = now - 窗口，reset_at 置空。
-    assert rolling.usage.reset_at is None
+    rule = provider_quota_to_quota_rule(quota, team_id=team_id)
+    assert rule.key.layer == "upstream"
+    assert rule.key.credential_id == cred_id
+    assert rule.key.quota_label == "5h"
+    assert rule.source_ref.quota_id == rule_id
+    assert rule.source_ref.plan_id is None
+    assert rule.plan_label is None
+    assert rule.usage is not None
+    assert rule.usage.window_start is not None
+    assert rule.usage.reset_at is None

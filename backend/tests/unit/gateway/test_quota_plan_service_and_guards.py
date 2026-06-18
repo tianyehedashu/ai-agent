@@ -13,16 +13,16 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from domains.gateway.application import entitlement_guard as entitlement_guard_module
-from domains.gateway.application import provider_plan_guard as provider_plan_guard_module
+from domains.gateway.application import provider_quota_guard as provider_quota_guard_module
 from domains.gateway.application import quota_plan_service as quota_plan_service_module
-from domains.gateway.application.provider_plan_config_cache import (
-    clear_provider_plan_config_cache_for_tests,
+from domains.gateway.application.provider_quota_config_cache import (
+    clear_provider_quota_config_cache_for_tests,
 )
 from domains.gateway.application.entitlement_guard import (
     EntitlementContext,
     EntitlementGuard,
 )
-from domains.gateway.application.provider_plan_guard import ProviderPlanGuard
+from domains.gateway.application.provider_quota_guard import ProviderQuotaGuard
 from domains.gateway.application.quota_plan_service import QuotaPlanService
 from domains.gateway.domain.errors import (
     EntitlementPlanExhaustedError,
@@ -335,6 +335,9 @@ class _FakeEntitlementQuota:
     reset_timezone: str = "UTC"
     reset_time_minutes: int = 0
     reset_day_of_month: int = 1
+    enabled: bool = True
+    valid_from: datetime | None = None
+    valid_until: datetime | None = None
 
 
 class _FakeEntitlementRepo:
@@ -480,19 +483,10 @@ async def test_entitlement_guard_exhaustion_is_hard_429_semantics(
 
 
 @dataclass
-class _FakeProviderPlan:
+class _FakeProviderQuotaRow:
     id: uuid.UUID
     credential_id: uuid.UUID
     real_model: str | None
-    label: str
-    valid_from: datetime
-    valid_until: datetime
-    is_active: bool = True
-
-
-@dataclass
-class _FakeProviderQuota:
-    id: uuid.UUID
     label: str
     window_seconds: int
     limit_usd: Decimal | None = None
@@ -502,6 +496,9 @@ class _FakeProviderQuota:
     reset_timezone: str = "UTC"
     reset_time_minutes: int = 0
     reset_day_of_month: int = 1
+    enabled: bool = True
+    valid_from: datetime | None = None
+    valid_until: datetime | None = None
 
 
 class _FakeSessionCM:
@@ -513,22 +510,18 @@ class _FakeSessionCM:
 
 
 class _FakeProviderRepo:
-    plan: _FakeProviderPlan | None = None
-    quotas: ClassVar[list[_FakeProviderQuota]] = []
+    rules: ClassVar[list[_FakeProviderQuotaRow]] = []
 
     def __init__(self, _session: object) -> None:
         pass
 
-    async def get_active_for_credential_model(
+    async def list_active_for_credential_model(
         self, *_args: object, **_kwargs: object
-    ) -> _FakeProviderPlan | None:
-        return self.plan
+    ) -> list[_FakeProviderQuotaRow]:
+        return self.rules
 
-    async def get(self, _plan_id: uuid.UUID) -> _FakeProviderPlan | None:
-        return self.plan
-
-    async def list_quotas(self, _plan_id: uuid.UUID) -> list[_FakeProviderQuota]:
-        return self.quotas
+    async def get(self, rule_id: uuid.UUID) -> _FakeProviderQuotaRow | None:
+        return next((r for r in self.rules if r.id == rule_id), None)
 
 
 class _RecordingProviderQuota(_AllowedQuota):
@@ -552,96 +545,92 @@ class _RecordingProviderQuota(_AllowedQuota):
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_provider_plan_guard_exhaustion_raises_router_cooldown_signal(
+async def test_provider_quota_guard_exhaustion_raises_router_cooldown_signal(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    clear_provider_plan_config_cache_for_tests()
+    clear_provider_quota_config_cache_for_tests()
     now = datetime(2026, 5, 18, tzinfo=UTC)
-    _FakeProviderRepo.plan = _FakeProviderPlan(
-        id=uuid.uuid4(),
-        credential_id=uuid.uuid4(),
-        real_model="openai/gpt-4o-mini",
-        label="vendor-plan",
-        valid_from=now - timedelta(days=1),
-        valid_until=now + timedelta(days=1),
-    )
-    _FakeProviderRepo.quotas = [
-        _FakeProviderQuota(id=uuid.uuid4(), label="daily", window_seconds=86400, limit_requests=1)
+    rule_id = uuid.uuid4()
+    cred_id = uuid.uuid4()
+    _FakeProviderRepo.rules = [
+        _FakeProviderQuotaRow(
+            id=rule_id,
+            credential_id=cred_id,
+            real_model="openai/gpt-4o-mini",
+            label="daily",
+            window_seconds=86400,
+            limit_requests=1,
+        )
     ]
-    monkeypatch.setattr(provider_plan_guard_module, "ProviderPlanRepository", _FakeProviderRepo)
-    monkeypatch.setattr(provider_plan_guard_module, "get_session_context", lambda: _FakeSessionCM())
+    monkeypatch.setattr(provider_quota_guard_module, "ProviderQuotaRepository", _FakeProviderRepo)
+    monkeypatch.setattr(provider_quota_guard_module, "get_session_context", lambda: _FakeSessionCM())
 
-    guard = ProviderPlanGuard(quota_service=cast("QuotaPlanService", _ExhaustedQuota()))
+    guard = ProviderQuotaGuard(quota_service=cast("QuotaPlanService", _ExhaustedQuota()))
     with pytest.raises(ProviderPlanExhaustedError) as exc_info:
         await guard.check_and_reserve(
-            credential_id=_FakeProviderRepo.plan.credential_id,
+            credential_id=cred_id,
             real_model="openai/gpt-4o-mini",
             now=now,
         )
 
-    assert exc_info.value.plan_id == str(_FakeProviderRepo.plan.id)
+    assert exc_info.value.plan_id == str(rule_id)
     assert exc_info.value.cooldown_seconds == 86400
 
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_provider_plan_guard_mark_upstream_exhausted_forces_quota(
+async def test_provider_quota_guard_mark_upstream_exhausted_forces_quota(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    clear_provider_plan_config_cache_for_tests()
+    clear_provider_quota_config_cache_for_tests()
     now = datetime(2026, 5, 18, tzinfo=UTC)
-    plan_id = uuid.uuid4()
-    _FakeProviderRepo.plan = _FakeProviderPlan(
-        id=plan_id,
-        credential_id=uuid.uuid4(),
-        real_model=None,
-        label="vendor-plan",
-        valid_from=now - timedelta(days=1),
-        valid_until=now + timedelta(days=1),
-    )
-    _FakeProviderRepo.quotas = [
-        _FakeProviderQuota(
-            id=uuid.uuid4(),
+    rule_id = uuid.uuid4()
+    _FakeProviderRepo.rules = [
+        _FakeProviderQuotaRow(
+            id=rule_id,
+            credential_id=uuid.uuid4(),
+            real_model=None,
             label="daily",
             window_seconds=86400,
             limit_requests=100,
             reset_strategy="calendar_daily_utc",
         )
     ]
-    monkeypatch.setattr(provider_plan_guard_module, "ProviderPlanRepository", _FakeProviderRepo)
-    monkeypatch.setattr(provider_plan_guard_module, "get_session_context", lambda: _FakeSessionCM())
+    monkeypatch.setattr(provider_quota_guard_module, "ProviderQuotaRepository", _FakeProviderRepo)
+    monkeypatch.setattr(provider_quota_guard_module, "get_session_context", lambda: _FakeSessionCM())
     quota = _RecordingProviderQuota()
 
-    guard = ProviderPlanGuard(quota_service=cast("QuotaPlanService", quota))
-    await guard.mark_upstream_exhausted(plan_id, reason="upstream_signal:RateLimitError")
+    guard = ProviderQuotaGuard(quota_service=cast("QuotaPlanService", quota))
+    await guard.mark_upstream_exhausted(rule_id, reason="upstream_signal:RateLimitError")
 
     assert quota.forced
-    ns, forced_plan_id, specs, reason = quota.forced[0]
+    ns, forced_rule_id, specs, reason = quota.forced[0]
     assert ns == PROVIDER_NS
-    assert forced_plan_id == plan_id
+    assert forced_rule_id == rule_id
     assert specs[0].reset_strategy == "calendar_daily_utc"
     assert reason == "upstream_signal:RateLimitError"
 
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_provider_plan_guard_skips_db_on_config_cache_hit(
+async def test_provider_quota_guard_skips_db_on_config_cache_hit(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    clear_provider_plan_config_cache_for_tests()
+    clear_provider_quota_config_cache_for_tests()
     now = datetime(2026, 5, 18, tzinfo=UTC)
-    _FakeProviderRepo.plan = _FakeProviderPlan(
-        id=uuid.uuid4(),
-        credential_id=uuid.uuid4(),
-        real_model="openai/gpt-4o-mini",
-        label="vendor-plan",
-        valid_from=now - timedelta(days=1),
-        valid_until=now + timedelta(days=1),
-    )
-    _FakeProviderRepo.quotas = [
-        _FakeProviderQuota(id=uuid.uuid4(), label="daily", window_seconds=86400, limit_requests=10)
+    rule_id = uuid.uuid4()
+    cred_id = uuid.uuid4()
+    _FakeProviderRepo.rules = [
+        _FakeProviderQuotaRow(
+            id=rule_id,
+            credential_id=cred_id,
+            real_model="openai/gpt-4o-mini",
+            label="daily",
+            window_seconds=86400,
+            limit_requests=10,
+        )
     ]
-    monkeypatch.setattr(provider_plan_guard_module, "ProviderPlanRepository", _FakeProviderRepo)
+    monkeypatch.setattr(provider_quota_guard_module, "ProviderQuotaRepository", _FakeProviderRepo)
     session_entries = 0
 
     class _CountingSessionCM:
@@ -654,21 +643,20 @@ async def test_provider_plan_guard_skips_db_on_config_cache_hit(
             return None
 
     monkeypatch.setattr(
-        provider_plan_guard_module,
+        provider_quota_guard_module,
         "get_session_context",
         lambda: _CountingSessionCM(),
     )
     monkeypatch.setattr(
-        "domains.gateway.application.provider_plan_config_cache._get_version",
+        "domains.gateway.application.provider_quota_config_cache._get_version",
         AsyncMock(return_value="11"),
     )
     monkeypatch.setattr(
-        "domains.gateway.application.provider_plan_config_cache._get_redis_client",
+        "domains.gateway.application.provider_quota_config_cache._get_redis_client",
         AsyncMock(return_value=None),
     )
 
-    guard = ProviderPlanGuard(quota_service=cast("QuotaPlanService", _AllowedQuota()))
-    cred_id = _FakeProviderRepo.plan.credential_id
+    guard = ProviderQuotaGuard(quota_service=cast("QuotaPlanService", _AllowedQuota()))
     first = await guard.check_and_reserve(
         credential_id=cred_id,
         real_model="openai/gpt-4o-mini",
@@ -681,8 +669,8 @@ async def test_provider_plan_guard_skips_db_on_config_cache_hit(
     )
 
     assert session_entries == 1
-    assert first[0] == _FakeProviderRepo.plan.id
-    assert second[0] == _FakeProviderRepo.plan.id
+    assert first[0].rule_id == rule_id
+    assert second[0].rule_id == rule_id
 
 
 @pytest.mark.unit
