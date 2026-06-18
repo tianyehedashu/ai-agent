@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
   computeQuotaRuleUsageRatio,
+  isSlidingRollingWindow,
   quotaUsageHasMetrics,
 } from '@/features/gateway-budget/quota-rule-utils'
 import { formatQuotaTokens } from '@/features/gateway-budget/quota-token-display'
@@ -70,10 +71,7 @@ export function QuotaUsageInlineEditor({
   }, [requests, rule, tokens, usd])
 
   // 滚动窗口用量由请求日志实时统计，桶写入不反映到展示，故不提供手工校正/清零。
-  const isRolling =
-    rule.key.reset_strategy === 'rolling' &&
-    rule.key.window_seconds !== null &&
-    rule.key.window_seconds > 0
+  const isRolling = isSlidingRollingWindow(rule)
   const effectiveCanEdit = canEdit && !isRolling
 
   const { ratio, barColor } = computeQuotaRuleUsageRatio(previewRule)

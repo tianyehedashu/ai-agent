@@ -658,6 +658,21 @@ function formatRollingWindowLabel(windowSeconds: number): string {
   return `${String(windowSeconds)}s`
 }
 
+/**
+ * 是否为「真正的滚动窗口」（用量随时间连续滑动、无固定重置时刻）。
+ *
+ * 与后端 `is_sliding_rolling_window` 口径一致：仅 `window_seconds > 0` 且策略为 `rolling`
+ * 才成立；`window_seconds <= 0` 的累计（总额）即便策略名是 `rolling` 也按固定累计处理
+ * （可手工校正 / 清零）。展示判断、内联编辑器禁用等滚动特判统一以此为单一真源。
+ */
+export function isSlidingRollingWindow(rule: QuotaRule): boolean {
+  return (
+    rule.key.reset_strategy === 'rolling' &&
+    rule.key.window_seconds !== null &&
+    rule.key.window_seconds > 0
+  )
+}
+
 /** 当前配额窗口起止（或累计/下次重置说明）。 */
 export function formatQuotaRulePeriodWindow(rule: QuotaRule): string | null {
   const usage = rule.usage
@@ -666,11 +681,7 @@ export function formatQuotaRulePeriodWindow(rule: QuotaRule): string | null {
     return '累计额度（不自动重置）'
   }
   // 滚动窗口随时间连续滑动、无固定重置时刻，不能渲染成「本周期 X—Y / 下次重置」。
-  if (
-    rule.key.reset_strategy === 'rolling' &&
-    rule.key.window_seconds !== null &&
-    rule.key.window_seconds > 0
-  ) {
+  if (isSlidingRollingWindow(rule) && rule.key.window_seconds !== null) {
     return `滚动窗口 · 近 ${formatRollingWindowLabel(rule.key.window_seconds)}（随时间滚动，无固定重置）`
   }
   const start = usage.window_start

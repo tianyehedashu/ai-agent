@@ -31,6 +31,7 @@ import { BudgetModelCombobox } from './budget-model-combobox'
 import { QuotaCardGrid } from './quota-card-grid'
 import { QuotaCenterTable } from './quota-center-table'
 import { QuotaOverviewCards } from './quota-overview-cards'
+import { isQuotaRuleDeletable } from './quota-rule-delete'
 import { LAYER_LABELS } from './quota-rule-utils'
 import { useQuotaCenter } from './use-quota-center'
 
@@ -49,12 +50,12 @@ export function QuotaCenterWorkspace(): React.JSX.Element {
   const [batchDeleteTargets, setBatchDeleteTargets] = useState<QuotaRule[] | null>(null)
 
   const handleDelete = (rule: QuotaRule): void => {
-    if (rule.source_ref.budget_id === null) return
+    if (!isQuotaRuleDeletable(rule)) return
     setDeleteTarget(rule)
   }
 
   const handleBatchDelete = (rules: QuotaRule[]): void => {
-    const deletable = rules.filter((r) => r.source_ref.budget_id !== null)
+    const deletable = rules.filter(isQuotaRuleDeletable)
     if (deletable.length === 0) return
     setBatchDeleteTargets(deletable)
   }

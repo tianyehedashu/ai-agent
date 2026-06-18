@@ -15,6 +15,7 @@ import { useQuotaCenterColumnWidths } from '@/features/gateway-budget/use-quota-
 import { ArrowDown, ArrowUp, CircleDollarSign, Loader2, Pencil, Trash2 } from '@/lib/lucide-icons'
 import { cn } from '@/lib/utils'
 
+import { isQuotaRuleDeletable } from './quota-rule-delete'
 import {
   computeQuotaRuleUsageRatio,
   formatQuotaRuleInvokeNameLabel,
@@ -217,7 +218,7 @@ const QuotaCenterTableRow = memo(function QuotaCenterTableRow({
   const canEdit =
     rule.source_ref.budget_id !== null ||
     (rule.key.layer === 'upstream' && rule.source_ref.plan_id !== null)
-  const canDelete = rule.source_ref.budget_id !== null
+  const canDelete = isQuotaRuleDeletable(rule)
   const isPlanRule = rule.source_ref.budget_id === null
   const planLayer =
     rule.key.layer === 'upstream'

@@ -11,6 +11,7 @@ import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Pencil, Trash2 } from '@/lib/lucide-icons'
 import { cn } from '@/lib/utils'
 
+import { isQuotaRuleDeletable } from './quota-rule-delete'
 import {
   computeQuotaRuleUsageRatio,
   formatQuotaRulePeriod,
@@ -47,8 +48,9 @@ export function QuotaCardItem({
   const limitTok = rule.limits.limit_tokens
   const usage = rule.usage
   const canEdit = rule.source_ref.budget_id !== null
-  const canDelete = rule.source_ref.budget_id !== null
+  const canDelete = isQuotaRuleDeletable(rule)
   const isPlanRule = rule.source_ref.budget_id === null
+  const periodWindow = formatQuotaRulePeriodWindow(rule)
 
   const layerColor: Record<string, string> = {
     platform: 'bg-blue-500/10 text-blue-600',
@@ -169,9 +171,7 @@ export function QuotaCardItem({
             </span>
           </div>
         </div>
-        {formatQuotaRulePeriodWindow(rule) ? (
-          <p className="text-[11px] text-muted-foreground">{formatQuotaRulePeriodWindow(rule)}</p>
-        ) : null}
+        {periodWindow ? <p className="text-[11px] text-muted-foreground">{periodWindow}</p> : null}
         {isPlanRule ? (
           <div className="flex items-center justify-between">
             <span className="inline-flex items-center rounded-md bg-blue-50 px-1.5 py-0.5 text-[11px] font-medium text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
