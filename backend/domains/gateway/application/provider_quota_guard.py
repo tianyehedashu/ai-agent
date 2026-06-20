@@ -17,9 +17,11 @@ from domains.gateway.application.provider_quota_config_cache import (
 )
 from domains.gateway.application.quota_plan_callback_settlement_shared import to_plan_uuid
 from domains.gateway.application.quota_plan_service import QuotaPlanService
+from domains.gateway.domain.deployment_cooldown_port import DeploymentCooldownPort
 from domains.gateway.domain.errors import ProviderPlanExhaustedError
 from domains.gateway.domain.litellm_deployment_attribution import (
     gateway_deployment_credential_id,
+    gateway_deployment_id,
     gateway_deployment_real_model,
 )
 from domains.gateway.domain.quota_plan import PROVIDER_NS, PlanQuotaSpec, QuotaPlanReservation
@@ -42,8 +44,14 @@ class ProviderQuotaReservation:
 
 
 class ProviderQuotaGuard:
-    def __init__(self, *, quota_service: QuotaPlanService) -> None:
+    def __init__(
+        self,
+        *,
+        quota_service: QuotaPlanService,
+        cooldown: DeploymentCooldownPort | None = None,
+    ) -> None:
         self._quota = quota_service
+        self._cooldown = cooldown
 
     async def check_and_reserve(
         self,
@@ -52,6 +60,7 @@ class ProviderQuotaGuard:
         real_model: str | None,
         estimate_tokens: int = 0,
         now: datetime | None = None,
+        deployment_id: str | None = None,
     ) -> list[ProviderQuotaReservation]:
         when = now or datetime.now(UTC)
 
@@ -109,10 +118,24 @@ class ProviderQuotaGuard:
                             reservation=result.reservations[0],
                         )
                     )
-        except ProviderPlanExhaustedError:
+        except ProviderPlanExhaustedError as exc:
             await self._release_all(reserved)
+            await self._maybe_cooldown_deployment(deployment_id, exc)
             raise
         return reserved
+
+    async def _maybe_cooldown_deployment(
+        self,
+        deployment_id: str | None,
+        exc: ProviderPlanExhaustedError,
+    ) -> None:
+        """配额耗尽时把当前 deployment 加入 Router cooldown，避免反复选中。"""
+        if self._cooldown is None or not deployment_id:
+            return
+        await self._cooldown.cooldown_deployment(
+            deployment_id=deployment_id,
+            reason=f"provider_quota_exhausted:{exc.reason}",
+        )
 
     async def _release_all(self, reserved: list[ProviderQuotaReservation]) -> None:
         for item in reserved:
@@ -215,8 +238,14 @@ def get_provider_quota_guard() -> ProviderQuotaGuard:
     global _provider_quota_guard_singleton
     if _provider_quota_guard_singleton is None:
         from domains.gateway.application.quota_plan_service import get_quota_plan_service
+        from domains.gateway.infrastructure.litellm_router_deployment_cooldown_adapter import (
+            LiteLLMRouterDeploymentCooldownAdapter,
+        )
 
-        _provider_quota_guard_singleton = ProviderQuotaGuard(quota_service=get_quota_plan_service())
+        _provider_quota_guard_singleton = ProviderQuotaGuard(
+            quota_service=get_quota_plan_service(),
+            cooldown=LiteLLMRouterDeploymentCooldownAdapter(),
+        )
     return _provider_quota_guard_singleton
 
 
@@ -298,7 +327,11 @@ async def _apply_provider_quota_pre_call(data: dict[str, Any]) -> None:
     cred_id, real_model = _extract_credential_and_model(data)
     if cred_id is None:
         return
-    reserved = await guard.check_and_reserve(credential_id=cred_id, real_model=real_model)
+    reserved = await guard.check_and_reserve(
+        credential_id=cred_id,
+        real_model=real_model,
+        deployment_id=gateway_deployment_id(data),
+    )
     if reserved:
         _stamp_provider_quotas_on_call(data, reserved=reserved)
 

@@ -50,8 +50,25 @@ def gateway_deployment_credential_id(kwargs: dict[str, Any]) -> uuid.UUID | None
     return None
 
 
+def gateway_deployment_id(kwargs: dict[str, Any]) -> str | None:
+    """从 LiteLLM callback kwargs 提取当前 deployment 的 stable id。
+
+    该 id 与 ``router_singleton._build_deployment`` 写入的
+    ``model_info.id = str(GatewayModel.id)`` 一致，可用于 Router cooldown。
+    """
+    model_info = litellm_model_info_from_kwargs(kwargs)
+    if model_info is None:
+        return None
+    raw = model_info.get("id")
+    if raw is None:
+        return None
+    stripped = str(raw).strip()
+    return stripped or None
+
+
 __all__ = [
     "gateway_deployment_credential_id",
+    "gateway_deployment_id",
     "gateway_deployment_real_model",
     "litellm_model_info_from_kwargs",
 ]

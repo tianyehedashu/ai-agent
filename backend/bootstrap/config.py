@@ -401,10 +401,37 @@ class Settings(BaseSettings):
     # 大模型首 token（TTFB）可能较长（coding/reasoning 常见 60s+），
     # 默认 120s；若仍偶发超时，可通过 GATEWAY_UPSTREAM_STREAM_TIMEOUT_SECONDS 调大。
     gateway_upstream_stream_timeout_seconds: int = Field(default=120, ge=0)
+    # 上游直连 httpx 连接池：每个 provider 独立池的最大连接数。
+    # LLM 响应时间长，连接占用久，默认值需支持较高并发；单 worker 200 连接，
+    # 4 workers 时总上限 800，可覆盖多数生产场景（可配合 HTTP/2 进一步降低）。
+    gateway_upstream_httpx_max_connections: int = Field(default=200, ge=1)
+    # 上游直连 httpx 连接池：每个 provider 保留的最大空闲（keepalive）连接数。
+    # 接近最大连接数，提高高并发后的连接复用率，减少 TCP 握手。
+    gateway_upstream_httpx_max_keepalive_connections: int = Field(default=100, ge=1)
+    # 上游直连 httpx 连接池：空闲连接保持秒数。
+    # 60s 在稳定云上游场景下可显著减少 reconnect，同时避免长期占用。
+    gateway_upstream_httpx_keepalive_expiry: float = Field(default=60.0, ge=0.0)
+    # 同一 team+model 维度允许同时进行的最多上游调用数（背压/连接保护）。
+    # 超过该值的请求会在 Semaphore 上排队等待；为 0 时按 1 处理。
+    gateway_max_concurrent_per_team_model: int = Field(default=10, ge=0)
+    # 断路器：连续失败多少次后打开。
+    gateway_circuit_failure_threshold: int = Field(default=5, ge=1)
+    # 断路器：60 秒内失败率超过该比例也打开。
+    gateway_circuit_failure_rate: float = Field(default=0.5, ge=0.0, le=1.0)
+    # 断路器打开后冷却多少秒进入半开状态。
+    gateway_circuit_cooldown_seconds: float = Field(default=30.0, ge=0.0)
     # Router 启用 cooldown 的失败次数阈值（与 LiteLLM 默认一致）
     gateway_router_cooldown_threshold: int = 5
     # Router 单次 cooldown 时长（秒）
     gateway_router_cooldown_seconds: int = 60
+    # ProviderQuotaGuard 预扣配额失败时，是否把对应 deployment 加入 Router cooldown。
+    # 目的是避免 Router 反复选中一个本地已知已耗尽的 deployment。
+    gateway_quota_cooldown_enabled: bool = True
+    # ProviderQuotaGuard cooldown 默认时长（秒）；当配额规则未提供 window_seconds 时使用。
+    gateway_quota_cooldown_default_seconds: int = Field(default=60, ge=0)
+    # ProviderQuotaGuard cooldown 时长上限（秒），防止长期/月度配额规则产生过长的 cooldown。
+    # 设为 0 表示不设置上限（完全使用配额规则的 window_seconds）。
+    gateway_quota_cooldown_max_seconds: int = Field(default=300, ge=0)
     # 跨进程 cooldown / TPM-RPM 共享 Redis URL（默认复用主 redis）
     gateway_router_redis_url: str | None = None
     # 热路径：``resolve_model_or_route`` 进程内 LRU+TTL（管理面写路径会失效）

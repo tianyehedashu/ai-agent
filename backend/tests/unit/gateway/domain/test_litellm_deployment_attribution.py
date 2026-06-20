@@ -6,6 +6,7 @@ import uuid
 
 from domains.gateway.domain.litellm_deployment_attribution import (
     gateway_deployment_credential_id,
+    gateway_deployment_id,
     gateway_deployment_real_model,
 )
 
@@ -48,3 +49,32 @@ def test_gateway_deployment_credential_id() -> None:
         }
     }
     assert gateway_deployment_credential_id(kwargs) == cred_id
+
+
+def test_gateway_deployment_id_from_model_info() -> None:
+    deployment_id = str(uuid.uuid4())
+    kwargs = {
+        "litellm_params": {
+            "model_info": {"id": deployment_id},
+        }
+    }
+    assert gateway_deployment_id(kwargs) == deployment_id
+
+
+def test_gateway_deployment_id_from_top_level_model_info() -> None:
+    deployment_id = str(uuid.uuid4())
+    kwargs = {
+        "model_info": {"id": deployment_id},
+        "litellm_params": {"model": "ep-abc"},
+    }
+    assert gateway_deployment_id(kwargs) == deployment_id
+
+
+def test_gateway_deployment_id_missing_returns_none() -> None:
+    kwargs = {"litellm_params": {"model_info": {"gateway_real_model": "ep-abc"}}}
+    assert gateway_deployment_id(kwargs) is None
+
+
+def test_gateway_deployment_id_empty_returns_none() -> None:
+    kwargs = {"litellm_params": {"model_info": {"id": "   "}}}
+    assert gateway_deployment_id(kwargs) is None
