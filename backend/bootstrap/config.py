@@ -392,12 +392,15 @@ class Settings(BaseSettings):
     # 跨团队 vkey：``<slug>/<model>`` 前缀未命中 grants 时拒绝（默认 False=落主属）
     gateway_vkey_strict_team_prefix: bool = False
     # 上游 LLM 调用总超时（秒）。大模型推理可能较慢（如 extended thinking 100s+），
-    # 默认 300s 覆盖绝大部分场景；视频/图像生成因耗时更长建议通过环境变量单独调大。
+    # 默认 300s 覆盖绝大部分场景；视频/图像生成、coding/reasoning 因耗时更长，
+    # 建议通过环境变量 GATEWAY_UPSTREAM_TIMEOUT_SECONDS 单独调大。
     # 设为 0 关闭超时（仅调试时使用）。
     gateway_upstream_timeout_seconds: int = Field(default=300, ge=0)
     # 流式调用每个 chunk 间最大等待时间（秒）。上游若在此时间内未产出任何 chunk，
-    # 视为连接断开。基于 LiteLLM stream_timeout，默认 60s。
-    gateway_upstream_stream_timeout_seconds: int = Field(default=60, ge=0)
+    # 视为连接断开。基于 LiteLLM stream_timeout。
+    # 大模型首 token（TTFB）可能较长（coding/reasoning 常见 60s+），
+    # 默认 120s；若仍偶发超时，可通过 GATEWAY_UPSTREAM_STREAM_TIMEOUT_SECONDS 调大。
+    gateway_upstream_stream_timeout_seconds: int = Field(default=120, ge=0)
     # Router 启用 cooldown 的失败次数阈值（与 LiteLLM 默认一致）
     gateway_router_cooldown_threshold: int = 5
     # Router 单次 cooldown 时长（秒）

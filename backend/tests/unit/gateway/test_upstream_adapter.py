@@ -150,7 +150,22 @@ def test_coding_agent_ua_injected_for_coding_plan_profile() -> None:
         ),
         credential_profile_id="moonshot.coding_plan",
     )
-    assert out["extra_headers"]["User-Agent"] == "claude-code/1.0"
+    assert out["extra_headers"]["User-Agent"] == "Claude Code/1.0"
+
+
+def test_coding_agent_ua_fallback_by_real_model_when_profile_is_default() -> None:
+    """profile 为 default 但 real_model 是 kimi-for-coding，仍应注入 UA。"""
+    out = UpstreamAdapter().adapt(
+        {"max_tokens": 100},
+        client_model="my-kimi-code-alias",
+        resolved=ResolvedModelName(
+            record=_FakeRecord(provider="moonshot", real_model="kimi-for-coding"),
+            route=None,
+            via_route=None,
+        ),
+        credential_profile_id="moonshot.default",
+    )
+    assert out["extra_headers"]["User-Agent"] == "Claude Code/1.0"
 
 
 def test_coding_agent_ua_not_injected_for_default_profile() -> None:
@@ -158,7 +173,7 @@ def test_coding_agent_ua_not_injected_for_default_profile() -> None:
         {"max_tokens": 100},
         client_model="moonshot-v1-8k",
         resolved=ResolvedModelName(
-            record=_FakeRecord(provider="moonshot"),
+            record=_FakeRecord(provider="moonshot", real_model="moonshot-v1-8k"),
             route=None,
             via_route=None,
         ),

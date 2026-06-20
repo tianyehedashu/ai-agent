@@ -208,6 +208,8 @@ def _build_litellm_params(
         params,
         credential_profile_id=profile_id,
         provider=provider,
+        credential=credential,
+        real_model=real_model,
     )
 
 

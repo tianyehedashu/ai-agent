@@ -127,20 +127,34 @@ async def adapt_anthropic_stream(
     """Anthropic 原生 SSE 流；流末按 usage 兜底结算成本。"""
     _ = downstream_custom
     last_usage: dict[str, Any] | None = None
-    async for chunk in stream:
-        if isinstance(chunk, dict):
-            usage_patch = extract_usage_from_anthropic_stream_event(chunk)
-            if usage_patch is not None:
-                # Anthropic 流式 usage 分散在 message_start（input / cache）
-                # 和 message_delta（output）中；必须累积而非覆盖，
-                # 否则 cache_read_input_tokens 和 input_tokens 会丢失。
-                if last_usage is None:
-                    last_usage = {}
-                last_usage.update(usage_patch)
-                apply_gateway_cache_hit_to_metadata(metadata, usage_patch)
-        out = anthropic_stream_chunk_to_bytes(chunk)
-        if out is not None:
-            yield out
+    try:
+        async for chunk in stream:
+            if isinstance(chunk, dict):
+                usage_patch = extract_usage_from_anthropic_stream_event(chunk)
+                if usage_patch is not None:
+                    # Anthropic 流式 usage 分散在 message_start（input / cache）
+                    # 和 message_delta（output）中；必须累积而非覆盖，
+                    # 否则 cache_read_input_tokens 和 input_tokens 会丢失。
+                    if last_usage is None:
+                        last_usage = {}
+                    last_usage.update(usage_patch)
+                    apply_gateway_cache_hit_to_metadata(metadata, usage_patch)
+            out = anthropic_stream_chunk_to_bytes(chunk)
+            if out is not None:
+                yield out
+    except Exception as exc:
+        logger.warning(
+            "adapt_anthropic_stream upstream error: request_id=%s team_id=%s "
+            "timeout=%s stream_timeout=%s ttfb_ms=%s stream=true error=%s",
+            ctx.request_id,
+            ctx.team_id,
+            metadata.get("gateway_upstream_timeout_seconds"),
+            metadata.get("gateway_upstream_stream_timeout_seconds"),
+            metadata.get("gateway_ttfb_ms"),
+            exc,
+            exc_info=True,
+        )
+        raise
     await finalize_deferred_stream_settlement(
         ctx,
         budget,
@@ -226,21 +240,35 @@ async def adapt_stream(
 ) -> AsyncGenerator[dict[str, Any], None]:
     """转为 SSE 友好的 dict 流；流末按 usage 兜底结算成本。"""
     last_usage: dict[str, Any] | None = None
-    async for chunk in stream:
-        data = to_response_dict(chunk)
-        usage = data.get("usage")
-        if isinstance(usage, dict):
-            last_usage = usage
-            apply_gateway_cache_hit_to_metadata(metadata, usage)
-            if usage.get("total_tokens"):
-                data = enrich_openai_compat_response_cost(
-                    data,
-                    source_obj=chunk,
-                    metadata=metadata,
-                    downstream_custom=downstream_custom,
-                    model=ctx.budget_model,
-                )
-        yield data
+    try:
+        async for chunk in stream:
+            data = to_response_dict(chunk)
+            usage = data.get("usage")
+            if isinstance(usage, dict):
+                last_usage = usage
+                apply_gateway_cache_hit_to_metadata(metadata, usage)
+                if usage.get("total_tokens"):
+                    data = enrich_openai_compat_response_cost(
+                        data,
+                        source_obj=chunk,
+                        metadata=metadata,
+                        downstream_custom=downstream_custom,
+                        model=ctx.budget_model,
+                    )
+            yield data
+    except Exception as exc:
+        logger.warning(
+            "adapt_stream upstream error: request_id=%s team_id=%s "
+            "timeout=%s stream_timeout=%s ttfb_ms=%s stream=true error=%s",
+            ctx.request_id,
+            ctx.team_id,
+            metadata.get("gateway_upstream_timeout_seconds"),
+            metadata.get("gateway_upstream_stream_timeout_seconds"),
+            metadata.get("gateway_ttfb_ms"),
+            exc,
+            exc_info=True,
+        )
+        raise
     if last_usage:
         apply_gateway_cache_hit_to_metadata(metadata, last_usage)
     await finalize_deferred_stream_settlement(
@@ -316,11 +344,7 @@ async def settle_usage(
                 )
 
                 await record_proxy_entitlement_commit(request_id)
-        if (
-            entitlement_committed
-            and request_id
-            and (tokens > 0 or cost > 0)
-        ):
+        if entitlement_committed and request_id and (tokens > 0 or cost > 0):
             schedule_quota_plan_usage_upsert(
                 ns=ENTITLEMENT_NS,
                 plan_id=state.plan_id,

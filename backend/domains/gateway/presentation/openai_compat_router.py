@@ -97,8 +97,15 @@ async def chat_completions(
                 yield b"data: [DONE]\n\n"
             except asyncio.CancelledError:
                 logger.debug("SSE client disconnected; aborting upstream stream")
-                # 客户端断开时结束生成器，LiteLLM 会通过 stream_timeout 感知
-                # 并关闭底层 HTTP 连接，避免上游连接泄漏。
+                raise
+            except Exception as exc:
+                logger.warning(
+                    "SSE upstream stream error: request_id=%s team_id=%s error=%s",
+                    ctx.request_id,
+                    ctx.team_id,
+                    exc,
+                    exc_info=True,
+                )
                 raise
 
         return StreamingResponse(
@@ -305,18 +312,14 @@ async def list_models(
 ) -> dict[str, object]:
     allowed = resolve_proxy_allowed_model_names(
         vkey_allowed=principal.vkey.allowed_models if principal.vkey else None,
-        grant_allowed=(
-            principal.api_key_grant.allowed_models if principal.api_key_grant else None
-        ),
+        grant_allowed=(principal.api_key_grant.allowed_models if principal.api_key_grant else None),
     )
     data = await list_openai_proxy_models(
         db,
         team_id=principal.team_id,
         user_id=principal.user_id,
         vkey=principal.vkey,
-        api_key_grant_id=(
-            principal.api_key_grant.grant_id if principal.api_key_grant else None
-        ),
+        api_key_grant_id=(principal.api_key_grant.grant_id if principal.api_key_grant else None),
         allowed=allowed,
     )
     return {"object": "list", "data": data}

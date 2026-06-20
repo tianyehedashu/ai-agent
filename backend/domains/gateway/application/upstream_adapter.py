@@ -66,6 +66,7 @@ class UpstreamAdapter:
             adapted,
             provider=record.provider,
             credential_profile_id=credential_profile_id,
+            real_model=record.real_model,
         )
         return adapted
 
@@ -75,12 +76,14 @@ class UpstreamAdapter:
         *,
         provider: str,
         credential_profile_id: str | None,
+        real_model: str | None = None,
     ) -> dict[str, Any]:
         """若 profile 声明 ``coding_agent_ua``，注入到 ``extra_headers["User-Agent"]``。"""
         return apply_coding_agent_ua_litellm_params(
             kwargs,
             credential_profile_id=credential_profile_id,
             provider=provider,
+            real_model=real_model,
         )
 
 

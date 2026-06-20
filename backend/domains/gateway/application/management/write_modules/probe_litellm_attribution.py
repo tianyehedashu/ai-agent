@@ -82,6 +82,7 @@ def merge_probe_litellm_kwargs(
         merged,
         credential_profile_id=credential_profile_id,
         provider=target.provider,
+        real_model=target.real_model,
     )
 
 

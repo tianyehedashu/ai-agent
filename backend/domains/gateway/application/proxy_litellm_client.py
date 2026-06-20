@@ -57,13 +57,19 @@ if TYPE_CHECKING:
 
 
 def apply_upstream_timeout(kwargs: dict[str, Any]) -> dict[str, Any]:
-    """向 LiteLLM kwargs 注入上游超时配置。"""
+    """向 LiteLLM kwargs 注入上游超时配置，并把实际生效值回写 metadata 供日志落库。"""
     timeout = settings.gateway_upstream_timeout_seconds
     stream_timeout = settings.gateway_upstream_stream_timeout_seconds
+    metadata = kwargs.setdefault("metadata", {})
+    if not isinstance(metadata, dict):
+        metadata = {}
+        kwargs["metadata"] = metadata
     if timeout > 0 and "timeout" not in kwargs:
         kwargs["timeout"] = timeout
+        metadata["gateway_upstream_timeout_seconds"] = timeout
     if stream_timeout > 0 and "stream_timeout" not in kwargs:
         kwargs["stream_timeout"] = stream_timeout
+        metadata["gateway_upstream_stream_timeout_seconds"] = stream_timeout
     return kwargs
 
 
@@ -96,12 +102,13 @@ class ProxyLiteLLMClient:
         if model_resolved is None:
             # 跨团队聚合 vkey：仅主属 grant 时保留 personal team fallback
             enable_fb = (
-                ctx.vkey is None
-                or ctx.vkey.is_system
-                or len(ctx.vkey.granted_team_ids) <= 1
+                ctx.vkey is None or ctx.vkey.is_system or len(ctx.vkey.granted_team_ids) <= 1
             )
             model_resolved = await resolve_model_or_route(
-                self._session, ctx.team_id, model, user_id=ctx.user_id,
+                self._session,
+                ctx.team_id,
+                model,
+                user_id=ctx.user_id,
                 enable_personal_fallback=enable_fb,
             )
         if model_resolved is None:

@@ -70,7 +70,10 @@ def test_build_litellm_params_anthropic_native_uses_anthropic_root_and_prefix(
     assert "custom_llm_provider" not in params
 
 
-def test_build_litellm_params_moonshot_coding_plan_injects_user_agent(monkeypatch) -> None:
+def test_build_litellm_params_moonshot_default_profile_with_coding_api_base_injects_ua(
+    monkeypatch,
+) -> None:
+    """凭据 profile 为 default 但 api_base 命中 Kimi Code endpoint，仍应注入 Coding Agent UA。"""
     monkeypatch.setattr(
         "domains.gateway.infrastructure.router_singleton.decrypt_value",
         lambda _enc, _key: "sk-test",
@@ -83,7 +86,7 @@ def test_build_litellm_params_moonshot_coding_plan_injects_user_agent(monkeypatc
     cred.id = "cred-1"
     cred.api_key_encrypted = "enc"
     cred.api_base = "https://api.kimi.com/coding/v1"
-    cred.profile_id = "moonshot.coding_plan"
+    cred.profile_id = "moonshot.default"
     cred.extra = {}
 
     params = _build_litellm_params(
@@ -94,4 +97,35 @@ def test_build_litellm_params_moonshot_coding_plan_injects_user_agent(monkeypatc
         tpm_limit=None,
         tags=None,
     )
-    assert params["extra_headers"]["User-Agent"] == "claude-code/1.0"
+    assert params["api_base"] == "https://api.kimi.com/coding/v1"
+    assert params["extra_headers"]["User-Agent"] == "Claude Code/1.0"
+
+
+def test_build_litellm_params_moonshot_default_profile_and_api_base_no_ua(
+    monkeypatch,
+) -> None:
+    """默认 profile + 默认 api_base + 非 Coding 模型，不应注入 UA。"""
+    monkeypatch.setattr(
+        "domains.gateway.infrastructure.router_singleton.decrypt_value",
+        lambda _enc, _key: "sk-test",
+    )
+    monkeypatch.setattr(
+        "domains.gateway.infrastructure.router_singleton._get_encryption_key",
+        lambda: "key",
+    )
+    cred = MagicMock()
+    cred.id = "cred-1"
+    cred.api_key_encrypted = "enc"
+    cred.api_base = "https://api.moonshot.ai/v1"
+    cred.profile_id = "moonshot.default"
+    cred.extra = {}
+
+    params = _build_litellm_params(
+        real_model="moonshot-v1-8k",
+        provider="moonshot",
+        credential=cred,
+        rpm_limit=None,
+        tpm_limit=None,
+        tags=None,
+    )
+    assert "User-Agent" not in params.get("extra_headers", {})

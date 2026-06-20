@@ -112,6 +112,15 @@ async def create_message(
             except asyncio.CancelledError:
                 logger.debug("Anthropic SSE client disconnected; aborting upstream stream")
                 raise
+            except Exception as exc:
+                logger.warning(
+                    "Anthropic SSE upstream stream error: request_id=%s team_id=%s error=%s",
+                    ctx.request_id,
+                    ctx.team_id,
+                    exc,
+                    exc_info=True,
+                )
+                raise
 
         return StreamingResponse(
             _sse(),
