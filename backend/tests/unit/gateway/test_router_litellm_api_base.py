@@ -98,7 +98,7 @@ def test_build_litellm_params_moonshot_default_profile_with_coding_api_base_inje
         tags=None,
     )
     assert params["api_base"] == "https://api.kimi.com/coding/v1"
-    assert params["extra_headers"]["User-Agent"] == "claude-code/1.0.0"
+    assert params["extra_headers"]["User-Agent"] == "claude-cli/2.1.161"
 
 
 def test_build_litellm_params_moonshot_default_profile_and_api_base_no_ua(
