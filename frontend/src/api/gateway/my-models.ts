@@ -61,6 +61,7 @@ export interface PersonalGatewayModelCreateBody {
 
 /** PATCH /my-models/{id} 请求体 */
 export interface PersonalGatewayModelUpdateBody {
+  name?: string
   display_name?: string
   model_id?: string
   credential_id?: string

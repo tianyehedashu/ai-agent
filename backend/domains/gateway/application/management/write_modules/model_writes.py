@@ -322,10 +322,26 @@ class ModelWritesMixin:
         incoming = dict(fields)
         resync_capabilities = bool(incoming.pop("resync_capabilities", False))
         model_types_raw = incoming.pop("model_types", None)
+        new_name_raw = incoming.pop("name", None)
         if resync_capabilities and is_config_managed_system_gateway_model(tags=existing.tags):
             raise ValidationError("配置托管的系统模型不可从 LiteLLM 同步能力")
 
         update_fields: dict[str, Any] = {}
+        if new_name_raw is not None:
+            new_name = str(new_name_raw).strip()
+            if not new_name:
+                raise ValidationError("调用名称不能为空")
+            if new_name != existing.name:
+                if await self._models.name_exists_in_scope(tenant_id, new_name, exclude_id=model_id):
+                    raise ValidationError(f"调用名称已存在: {new_name}")
+                await rename_gateway_model_name_references(
+                    self._session,
+                    tenant_id=tenant_id,
+                    old_name=existing.name,
+                    new_name=new_name,
+                )
+                update_fields["name"] = new_name
+            # 如果 new_name 与 existing.name 相同，无需加入 update_fields，避免无意义的 UPDATE 与 router reload
         if "credential_id" in incoming and incoming["credential_id"] is not None:
             await self._assert_user_owns_credential(user_id, incoming["credential_id"])
             nrow = await self._creds.get(incoming["credential_id"])

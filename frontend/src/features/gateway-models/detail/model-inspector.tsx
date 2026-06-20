@@ -231,7 +231,7 @@ const ModelInspectorPanel = memo(function ModelInspectorPanel({
   const tok = (slice?.input_tokens ?? 0) + (slice?.output_tokens ?? 0)
   const cost = coalesceNumber(slice?.cost_usd)
   const daysLabel = usageDays === 1 ? '24 小时' : usageDays === 7 ? '7 天' : '30 天'
-  const nameDirty = !isPersonal && modelName.trim() !== model.name
+  const nameDirty = modelName.trim() !== model.name
   const displayNameDirty =
     isPersonal && displayName.trim() !== (personalContext?.displayName ?? '').trim()
   const capabilityPatch = modelCapabilityPatchFromEditor(capabilityValues, capabilityBaseline)
@@ -263,11 +263,14 @@ const ModelInspectorPanel = memo(function ModelInspectorPanel({
 
     if (isPersonal) {
       const trimmedDisplayName = displayName.trim()
-      if (!trimmedDisplayName) return
+      if (!trimmedName || !trimmedDisplayName) return
       const body: PersonalGatewayModelUpdateBody = {
         display_name: trimmedDisplayName,
         model_id: realModel.trim(),
         credential_id: credentialId,
+      }
+      if (trimmedName !== model.name) {
+        body.name = trimmedName
       }
       if (capabilityPatch.model_types) {
         body.model_types = capabilityPatch.model_types
@@ -312,7 +315,9 @@ const ModelInspectorPanel = memo(function ModelInspectorPanel({
                     ? displayName.trim() || personalContext?.displayName
                     : personalContext?.displayName}
                 </p>
-                <p className="mt-1 font-mono text-sm text-muted-foreground">{model.name}</p>
+                <p className="mt-1 font-mono text-sm text-muted-foreground">
+                  {nameDirty ? modelName.trim() || model.name : model.name}
+                </p>
               </>
             ) : (
               <p className="font-mono text-base font-semibold leading-tight">
@@ -524,13 +529,13 @@ const ModelInspectorPanel = memo(function ModelInspectorPanel({
               配置
             </h3>
             <p className="text-xs text-muted-foreground">
-              对外 API 与虚拟 Key 白名单使用「注册别名」；实际上游厂商模型由「上游模型 ID」决定。
+              对外 API 与虚拟 Key 白名单使用「调用名称」；实际上游厂商模型由「上游模型 ID」决定。
             </p>
             {nameDirty && referencingRoutes.length > 0 ? (
               <Alert>
                 <AlertTitle>将同步更新虚拟路由引用</AlertTitle>
                 <AlertDescription>
-                  保存后，下列虚拟路由中的模型名将自动从「{model.name}」改为「
+                  保存后，下列虚拟路由中的调用名称将自动从「{model.name}」改为「
                   {modelName.trim() || '…'}」。
                 </AlertDescription>
               </Alert>
@@ -551,10 +556,10 @@ const ModelInspectorPanel = memo(function ModelInspectorPanel({
               ) : null}
               <div className="sm:col-span-2">
                 <div className="mb-1 flex items-center gap-1">
-                  <Label className="text-xs">注册别名</Label>
+                  <Label className="text-xs">调用名称</Label>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <button type="button" aria-label="注册别名说明" className="inline-flex">
+                      <button type="button" aria-label="调用名称说明" className="inline-flex">
                         <Info className="h-3.5 w-3.5 text-muted-foreground" />
                       </button>
                     </TooltipTrigger>
@@ -567,7 +572,7 @@ const ModelInspectorPanel = memo(function ModelInspectorPanel({
                 <Input
                   className="mt-0 font-mono text-sm"
                   value={modelName}
-                  readOnly={!canManage || isPersonal}
+                  readOnly={!canManage}
                   onChange={(e) => {
                     setModelName(e.target.value)
                   }}
@@ -693,7 +698,8 @@ const ModelInspectorPanel = memo(function ModelInspectorPanel({
                   isSaving ||
                   !realModel.trim() ||
                   !credentialId ||
-                  (isPersonal ? !displayName.trim() : !modelName.trim())
+                  !modelName.trim() ||
+                  (isPersonal ? !displayName.trim() : false)
                 }
                 onClick={handleSave}
               >
@@ -770,7 +776,7 @@ export const ModelInspector = memo(function ModelInspector({
       emptyDescription ??
       (emptyReason === 'filter'
         ? '请调整搜索或健康筛选，或从左侧列表选择模型。'
-        : '可在此编辑注册别名与上游配置、查看健康状态、用量与被哪些虚拟路由引用。')
+        : '可在此编辑调用名称与上游配置、查看健康状态、用量与被哪些虚拟路由引用。')
 
     return (
       <div className="rounded-lg border border-dashed bg-muted/10 px-6 py-10 text-center">

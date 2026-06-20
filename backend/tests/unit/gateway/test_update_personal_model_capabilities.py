@@ -158,3 +158,105 @@ async def test_update_personal_model_rejects_non_positive_weight(
         await writes.update_personal_model(user_uuid, model_id, fields={"weight": 0})
     with pytest.raises(ValidationError):
         await writes.update_personal_model(user_uuid, model_id, fields={"weight": "abc"})
+
+
+@pytest.mark.asyncio
+async def test_update_personal_model_renames_name(
+    db_session, test_user, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """个人模型应支持修改调用名称，并同步更新 vkey / 路由引用。"""
+    tenant_id, model_id, user_uuid = await _seed_personal_model(db_session, test_user)
+    repo = GatewayModelRepository(db_session)
+    existing = await repo.get_for_tenant(model_id, tenant_id)
+    assert existing is not None
+    writes = GatewayManagementWriteService(db_session)
+
+    monkeypatch.setattr(
+        writes,
+        "_ensure_personal_tenant_id",
+        AsyncMock(return_value=tenant_id),
+    )
+    monkeypatch.setattr(writes, "reload_litellm_router", AsyncMock(return_value=None))
+
+    rename_spy = AsyncMock(return_value=(0, 0))
+    monkeypatch.setattr(
+        "domains.gateway.application.management.write_modules.model_writes.rename_gateway_model_name_references",
+        rename_spy,
+    )
+
+    updated = await writes.update_personal_model(
+        user_uuid, model_id, fields={"name": "my-new-call-name"}
+    )
+    assert updated.name == "my-new-call-name"
+    rename_spy.assert_awaited_once()
+    assert rename_spy.await_args.kwargs.get("tenant_id") == tenant_id
+    assert rename_spy.await_args.kwargs.get("old_name") == existing.name
+    assert rename_spy.await_args.kwargs.get("new_name") == "my-new-call-name"
+
+
+@pytest.mark.asyncio
+async def test_update_personal_model_same_name_skips_rename_and_reload(
+    db_session, test_user, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """传入相同调用名称时不应触发引用重命名，也不应产生无意义的 UPDATE。"""
+    tenant_id, model_id, user_uuid = await _seed_personal_model(db_session, test_user)
+    repo = GatewayModelRepository(db_session)
+    existing = await repo.get_for_tenant(model_id, tenant_id)
+    assert existing is not None
+    writes = GatewayManagementWriteService(db_session)
+
+    monkeypatch.setattr(
+        writes,
+        "_ensure_personal_tenant_id",
+        AsyncMock(return_value=tenant_id),
+    )
+    reload_spy = AsyncMock(return_value=None)
+    monkeypatch.setattr(writes, "reload_litellm_router", reload_spy)
+    rename_spy = AsyncMock(return_value=(0, 0))
+    monkeypatch.setattr(
+        "domains.gateway.application.management.write_modules.model_writes.rename_gateway_model_name_references",
+        rename_spy,
+    )
+
+    updated = await writes.update_personal_model(
+        user_uuid, model_id, fields={"name": existing.name}
+    )
+    assert updated.name == existing.name
+    rename_spy.assert_not_awaited()
+    reload_spy.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_update_personal_model_rejects_duplicate_name(
+    db_session, test_user, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """个人模型调用名称在同一租户内须唯一。"""
+    tenant_id, model_id, user_uuid = await _seed_personal_model(db_session, test_user)
+    repo = GatewayModelRepository(db_session)
+    existing = await repo.get_for_tenant(model_id, tenant_id)
+    assert existing is not None
+    await repo.create(
+        tenant_id=tenant_id,
+        name="existing-name",
+        capability="chat",
+        real_model="volcengine/kimi-k2.6",
+        credential_id=existing.credential_id,
+        provider=existing.provider,
+        tags={"display_name": "Existing"},
+    )
+    await db_session.flush()
+
+    writes = GatewayManagementWriteService(db_session)
+    monkeypatch.setattr(
+        writes,
+        "_ensure_personal_tenant_id",
+        AsyncMock(return_value=tenant_id),
+    )
+    monkeypatch.setattr(writes, "reload_litellm_router", AsyncMock(return_value=None))
+
+    from libs.exceptions import ValidationError
+
+    with pytest.raises(ValidationError):
+        await writes.update_personal_model(
+            user_uuid, model_id, fields={"name": "existing-name"}
+        )

@@ -644,6 +644,12 @@ class PersonalModelCreate(BaseModel):
 
 
 class PersonalModelUpdate(BaseModel):
+    name: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=200,
+        description="调用名称（model 参数）；同一租户内唯一",
+    )
     display_name: str | None = Field(None, min_length=1, max_length=100)
     model_id: str | None = Field(None, min_length=1, max_length=200)
     credential_id: uuid.UUID | None = None
