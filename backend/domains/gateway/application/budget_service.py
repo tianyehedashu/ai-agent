@@ -73,6 +73,53 @@ end
 return {1, 0}
 """
 
+_RATE_LIMIT_RPM_LUA_SCRIPT = """
+local key = KEYS[1]
+local now = tonumber(ARGV[1])
+local window_start = tonumber(ARGV[2])
+local rpm_limit = tonumber(ARGV[3])
+local expire_seconds = tonumber(ARGV[4])
+
+redis.call('zremrangebyscore', key, 0, window_start)
+local count = redis.call('zcard', key)
+if count >= rpm_limit then
+    return {-1, count}
+end
+redis.call('zadd', key, now, now .. ':' .. redis.call('incr', 'gateway:rate:seq'))
+redis.call('expire', key, expire_seconds)
+return {1, count}
+"""
+
+_RATE_LIMIT_TPM_LUA_SCRIPT = """
+local key = KEYS[1]
+local now = tonumber(ARGV[1])
+local window_start = tonumber(ARGV[2])
+local tpm_limit = tonumber(ARGV[3])
+local estimate_tokens = tonumber(ARGV[4])
+local expire_seconds = tonumber(ARGV[5])
+
+redis.call('zremrangebyscore', key, 0, window_start)
+local members = redis.call('zrange', key, 0, -1)
+local current_tokens = 0
+for i = 1, #members do
+    local payload = members[i]
+    local colon_pos = string.find(payload, ':')
+    if colon_pos then
+        local token_str = string.sub(payload, 1, colon_pos - 1)
+        local tokens = tonumber(token_str)
+        if tokens then
+            current_tokens = current_tokens + tokens
+        end
+    end
+end
+if current_tokens + estimate_tokens > tpm_limit then
+    return {0, current_tokens}
+end
+redis.call('zadd', key, now, estimate_tokens .. ':' .. redis.call('incr', 'gateway:rate:seq'))
+redis.call('expire', key, expire_seconds)
+return {1, current_tokens}
+"""
+
 
 def _model_segment_hash(model_name: str) -> str:
     return hashlib.sha256(model_name.encode("utf-8")).hexdigest()[:16]
@@ -225,41 +272,53 @@ class BudgetService:
     ) -> None:
         """检查 rpm/tpm 是否超限；不通过抛 RateLimitExceededError
 
-        采用 60s 滚动窗口（Redis Sorted Set）：
-        - rpm: 每个请求加一条 timestamp
-        - tpm: 每个请求加 estimate_tokens
+        采用 60s 滚动窗口（Redis Sorted Set），rpm/tpm 均通过 Lua 脚本原子化执行，
+        避免多步命令之间的竞态条件与 Python 端 O(N) 遍历。
         """
+        if not (rpm_limit and rpm_limit > 0) and not (tpm_limit and tpm_limit > 0):
+            return
+
         client = await get_redis_client()
         now = datetime.now(UTC).timestamp()
         window_start = now - 60
+        expire_seconds = 90
 
         if rpm_limit and rpm_limit > 0:
-            key = _rate_key(target_kind, target_id, "rpm")
-            await client.zremrangebyscore(key, 0, window_start)
-            count = await client.zcard(key)
-            if count >= rpm_limit:
-                raise RateLimitExceededError(scope=f"{target_kind}:rpm", retry_after=60)
-            await client.zadd(key, {f"{now}:{uuid.uuid4()}": now})
-            await client.expire(key, 90)
+            rpm_key = _rate_key(target_kind, target_id, "rpm")
+            rpm_result = await client.eval(
+                _RATE_LIMIT_RPM_LUA_SCRIPT,
+                1,
+                rpm_key,
+                now,
+                window_start,
+                int(rpm_limit),
+                expire_seconds,
+            )
+            status = int(rpm_result[0])
+            if status == -1:
+                raise RateLimitExceededError(
+                    scope=f"{target_kind}:rpm",
+                    retry_after=60,
+                )
 
         if tpm_limit and tpm_limit > 0 and estimate_tokens > 0:
-            key = _rate_key(target_kind, target_id, "tpm")
-            await client.zremrangebyscore(key, 0, window_start)
-            # 累加目前窗口内 token 数（成员名形如 "<tokens>:<uuid>"）
-            current_tokens = 0
-            members = await client.zrange(key, 0, -1, withscores=True)
-            for member, _score in members:
-                try:
-                    payload = member.decode() if isinstance(member, bytes) else str(member)
-                    parts = payload.split(":", 1)
-                    if len(parts) == 2:
-                        current_tokens += int(parts[0])
-                except (ValueError, AttributeError):
-                    continue
-            if current_tokens + estimate_tokens > tpm_limit:
-                raise RateLimitExceededError(scope=f"{target_kind}:tpm", retry_after=60)
-            await client.zadd(key, {f"{estimate_tokens}:{uuid.uuid4()}": now})
-            await client.expire(key, 90)
+            tpm_key = _rate_key(target_kind, target_id, "tpm")
+            tpm_result = await client.eval(
+                _RATE_LIMIT_TPM_LUA_SCRIPT,
+                1,
+                tpm_key,
+                now,
+                window_start,
+                int(tpm_limit),
+                int(estimate_tokens),
+                expire_seconds,
+            )
+            status = int(tpm_result[0])
+            if status == 0:
+                raise RateLimitExceededError(
+                    scope=f"{target_kind}:tpm",
+                    retry_after=60,
+                )
 
     # ---------------------------------------------------------------------
     # 预算预扣 / 结算

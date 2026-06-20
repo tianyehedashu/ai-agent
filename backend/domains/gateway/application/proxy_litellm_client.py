@@ -41,6 +41,9 @@ from domains.gateway.infrastructure.router_singleton import (
 from domains.gateway.infrastructure.upstream.dashscope_embedding_client import (
     perform_dashscope_embedding,
 )
+from domains.gateway.infrastructure.upstream.upstream_concurrency_control import (
+    get_concurrency_controller,
+)
 from domains.gateway.infrastructure.upstream.volcengine_image_client import (
     perform_volcengine_image_generation,
 )
@@ -81,6 +84,28 @@ class ProxyLiteLLMClient:
 
     async def _release_session_before_upstream(self) -> None:
         await release_request_db_connection(self._session)
+
+    async def _run_with_concurrency_control(
+        self,
+        kwargs: dict[str, Any],
+        upstream_call: Callable[[], Awaitable[Any]],
+    ) -> Any:
+        """按 team+model 维度获取并发许可后执行上游调用，并更新断路器状态。"""
+        metadata = kwargs.get("metadata")
+        metadata = metadata if isinstance(metadata, dict) else {}
+        team_id = str(metadata.get("gateway_team_id") or "")
+        model = str(kwargs.get("model") or "")
+        controller = get_concurrency_controller()
+        await controller.acquire(team_id, model)
+        try:
+            result = await upstream_call()
+            await controller.record_success(team_id, model)
+            return result
+        except Exception:
+            await controller.record_failure(team_id, model)
+            raise
+        finally:
+            await controller.release(team_id, model)
 
     async def should_use_internal_direct_litellm(
         self,
@@ -127,7 +152,9 @@ class ProxyLiteLLMClient:
         ensure_gateway_callbacks()
         apply_upstream_timeout(kwargs)
         await self._release_session_before_upstream()
-        return await acompletion(**kwargs)
+        return await self._run_with_concurrency_control(
+            kwargs, lambda: acompletion(**kwargs)
+        )
 
     async def probe_deployment_upstream_error(
         self,
@@ -203,7 +230,9 @@ class ProxyLiteLLMClient:
         ensure_gateway_callbacks()
         apply_upstream_timeout(kwargs)
         await self._release_session_before_upstream()
-        return await aembedding(**kwargs)
+        return await self._run_with_concurrency_control(
+            kwargs, lambda: aembedding(**kwargs)
+        )
 
     async def router_embedding(self, kwargs: dict[str, Any]) -> Any:
         return await self._invoke_router_or_direct(
@@ -281,7 +310,9 @@ class ProxyLiteLLMClient:
         ensure_gateway_callbacks()
         apply_upstream_timeout(kwargs)
         await self._release_session_before_upstream()
-        return await litellm_anthropic_messages(**kwargs)
+        return await self._run_with_concurrency_control(
+            kwargs, lambda: litellm_anthropic_messages(**kwargs)
+        )
 
     async def router_anthropic_messages(self, kwargs: dict[str, Any]) -> Any:
         return await self._invoke_router_or_direct(
@@ -300,7 +331,9 @@ class ProxyLiteLLMClient:
         ensure_gateway_callbacks()
         apply_upstream_timeout(kwargs)
         await self._release_session_before_upstream()
-        return await aspeech(**kwargs)
+        return await self._run_with_concurrency_control(
+            kwargs, lambda: aspeech(**kwargs)
+        )
 
     async def router_speech(self, kwargs: dict[str, Any]) -> Any:
         return await self._invoke_router_or_direct(
@@ -319,7 +352,9 @@ class ProxyLiteLLMClient:
         ensure_gateway_callbacks()
         apply_upstream_timeout(kwargs)
         await self._release_session_before_upstream()
-        return await arerank(**kwargs)
+        return await self._run_with_concurrency_control(
+            kwargs, lambda: arerank(**kwargs)
+        )
 
     async def router_rerank(self, kwargs: dict[str, Any]) -> Any:
         return await self._invoke_router_or_direct(
@@ -338,7 +373,9 @@ class ProxyLiteLLMClient:
         ensure_gateway_callbacks()
         apply_upstream_timeout(kwargs)
         await self._release_session_before_upstream()
-        return await amoderation(**kwargs)
+        return await self._run_with_concurrency_control(
+            kwargs, lambda: amoderation(**kwargs)
+        )
 
     async def router_moderation(self, kwargs: dict[str, Any]) -> Any:
         return await self._invoke_router_or_direct(
@@ -357,7 +394,9 @@ class ProxyLiteLLMClient:
         ensure_gateway_callbacks()
         apply_upstream_timeout(kwargs)
         await self._release_session_before_upstream()
-        return await aimage_generation(**kwargs)
+        return await self._run_with_concurrency_control(
+            kwargs, lambda: aimage_generation(**kwargs)
+        )
 
     async def router_image_generation(self, kwargs: dict[str, Any]) -> Any:
         return await self._invoke_router_or_direct(
@@ -376,7 +415,9 @@ class ProxyLiteLLMClient:
         ensure_gateway_callbacks()
         apply_upstream_timeout(kwargs)
         await self._release_session_before_upstream()
-        return await atranscription(**kwargs)
+        return await self._run_with_concurrency_control(
+            kwargs, lambda: atranscription(**kwargs)
+        )
 
     async def router_transcription(self, kwargs: dict[str, Any]) -> Any:
         return await self._invoke_router_or_direct(
@@ -469,7 +510,9 @@ class ProxyLiteLLMClient:
         ensure_gateway_callbacks()
         apply_upstream_timeout(kwargs)
         await self._release_session_before_upstream()
-        return await avideo_generation(**kwargs)
+        return await self._run_with_concurrency_control(
+            kwargs, lambda: avideo_generation(**kwargs)
+        )
 
     async def router_video_generation(self, kwargs: dict[str, Any]) -> Any:
         return await self._invoke_router_or_direct(
@@ -512,12 +555,16 @@ class ProxyLiteLLMClient:
                 if dep is not None:
                     self._merge_deployment_params_into_kwargs(kwargs, dep)
             await self._release_session_before_upstream()
-            return await direct_call()
+            return await self._run_with_concurrency_control(kwargs, direct_call)
         await self._release_session_before_upstream()
-        result = router_fn(**kwargs)
-        if isinstance(result, Awaitable):
-            return await result
-        return result
+
+        async def _router_call() -> Any:
+            result = router_fn(**kwargs)
+            if isinstance(result, Awaitable):
+                return await result
+            return result
+
+        return await self._run_with_concurrency_control(kwargs, _router_call)
 
 
 __all__ = ["ProxyLiteLLMClient", "apply_upstream_timeout"]

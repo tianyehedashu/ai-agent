@@ -269,3 +269,31 @@ def test_non_moonshot_empty_user_message_left_unchanged() -> None:
     out = UpstreamAdapter().adapt(kwargs, client_model="deepseek-chat", resolved=resolved)
     assert out["messages"][0]["content"] == ""
     assert out["messages"][1]["content"] == "ok"
+
+
+def test_adapt_returns_original_when_resolved_is_none_and_no_ua() -> None:
+    """resolved=None 且无 coding_agent UA 注入时返回原 kwargs 引用。"""
+    kwargs = {"model": "gpt-4", "messages": []}
+    out = UpstreamAdapter().adapt(kwargs, client_model="gpt-4", resolved=None)
+    assert out is kwargs
+
+
+def test_adapt_returns_new_object_when_changes_needed() -> None:
+    """需要改写时返回新对象，且不污染原 kwargs。"""
+    kwargs = {"response_format": {"type": "json_object"}, "max_tokens": 100}
+    out = UpstreamAdapter().adapt(
+        kwargs,
+        client_model="gpt-4",
+        resolved=ResolvedModelName(
+            record=_FakeRecord(
+                provider="openai",
+                real_model="gpt-4",
+                tags={"supports_json_mode": False},
+            ),
+            route=None,
+            via_route=None,
+        ),
+    )
+    assert out is not kwargs
+    assert "response_format" in kwargs
+    assert "response_format" not in out

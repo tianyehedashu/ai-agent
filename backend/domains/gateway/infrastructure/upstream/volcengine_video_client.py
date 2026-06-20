@@ -6,8 +6,20 @@ from typing import TYPE_CHECKING, Any
 
 import httpx
 
+from domains.gateway.infrastructure.upstream.httpx_client_singleton import (
+    get_upstream_httpx_client,
+    track_upstream_request,
+)
+
 if TYPE_CHECKING:
     from domains.gateway.domain.policies.volcengine_video import VolcengineVideoCreateRequest
+
+
+_PROVIDER = "volcengine"
+
+
+def _request_timeout(total: float) -> httpx.Timeout:
+    return httpx.Timeout(connect=10.0, read=total, write=30.0, pool=5.0)
 
 
 async def perform_volcengine_video_create(
@@ -16,7 +28,8 @@ async def perform_volcengine_video_create(
     timeout: float = 120.0,
 ) -> dict[str, Any]:
     """创建视频生成任务并解析 JSON 响应；非 2xx 抛 ``httpx.HTTPStatusError``。"""
-    async with httpx.AsyncClient(timeout=timeout) as client:
+    client = await get_upstream_httpx_client(_PROVIDER)
+    async with track_upstream_request():
         resp = await client.post(
             request.url,
             headers={
@@ -24,8 +37,13 @@ async def perform_volcengine_video_create(
                 "Content-Type": "application/json",
             },
             json=request.json_body,
+            timeout=_request_timeout(timeout),
         )
-        resp.raise_for_status()
+        try:
+            resp.raise_for_status()
+        except httpx.HTTPStatusError:
+            await resp.aread()
+            raise
         data = resp.json()
     if not isinstance(data, dict):
         raise ValueError("volcengine video create returned non-object JSON")

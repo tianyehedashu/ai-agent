@@ -178,3 +178,36 @@ def test_client_thinking_fields_deepseek_v4() -> None:
     assert fields == {"extra_body": {"thinking": {"type": "enabled"}}}
     disabled = client_thinking_request_fields(snap, enabled=False)
     assert disabled == {"extra_body": {"thinking": {"type": "disabled"}}}
+
+
+def test_apply_invocation_kwargs_returns_original_when_no_changes_needed() -> None:
+    """当 capability、thinking、temperature 均无需改写时，应返回原 kwargs 引用。"""
+    snap = ModelCapabilitySnapshot(
+        thinking_param=THINKING_PARAM_NONE,
+        temperature_policy=TEMPERATURE_POLICY_CLIENT,
+        temperature_default=0.7,
+        supports_tools=True,
+        supports_reasoning=False,
+        supports_json_mode=True,
+    )
+    kwargs = {"model": "gpt-4", "temperature": 0.7, "messages": []}
+    out = apply_invocation_kwargs(snap, kwargs, validate=False)
+    assert out is kwargs
+
+
+def test_apply_invocation_kwargs_returns_new_object_when_changes_needed() -> None:
+    """需要改写时返回新对象，且不污染原 kwargs。"""
+    snap = ModelCapabilitySnapshot(
+        thinking_param=THINKING_PARAM_NONE,
+        temperature_policy=TEMPERATURE_POLICY_FIXED_1,
+        supports_tools=True,
+        supports_reasoning=False,
+        supports_json_mode=True,
+    )
+    kwargs = {"model": "gpt-4", "temperature": 0.5, "enable_thinking": True}
+    out = apply_invocation_kwargs(snap, kwargs, validate=False)
+    assert out is not kwargs
+    assert "enable_thinking" in kwargs  # 原对象未被污染
+    assert "enable_thinking" not in out
+    assert out["temperature"] == 1.0
+    assert kwargs["temperature"] == 0.5

@@ -191,3 +191,29 @@ def test_deepseek_backward_compat_without_supports_reasoning() -> None:
     ]
     out = preprocess_messages_for_reasoner("deepseek-reasoner", "deepseek-reasoner", messages)
     assert out[0].get("reasoning_content") == ""
+
+
+def test_preprocess_messages_for_reasoner_returns_original_when_no_change() -> None:
+    """无需回填 reasoning_content 时返回原列表引用。"""
+    messages = [{"role": "user", "content": "hello"}]
+    out = preprocess_messages_for_reasoner(
+        "gpt-4o",
+        "gpt-4o",
+        messages,
+        supports_reasoning=False,
+    )
+    assert out is messages
+
+
+def test_clamp_max_tokens_returns_original_when_within_range() -> None:
+    kwargs = {"max_tokens": 100, "messages": []}
+    out = clamp_max_tokens(kwargs, 8192)
+    assert out is kwargs
+
+
+def test_clamp_max_tokens_returns_new_object_when_out_of_range() -> None:
+    kwargs = {"max_tokens": 99999, "messages": []}
+    out = clamp_max_tokens(kwargs, 8192)
+    assert out is not kwargs
+    assert out["max_tokens"] == 8192
+    assert kwargs["max_tokens"] == 99999

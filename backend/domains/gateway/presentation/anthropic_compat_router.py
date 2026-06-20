@@ -17,6 +17,7 @@ import orjson
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from domains.gateway.application.proxy_use_case import ProxyUseCase
+from domains.gateway.domain.stream_utils import safe_aclose_stream
 from domains.gateway.domain.types import GatewayCapability
 from domains.gateway.presentation.deps import (
     VkeyOrApikeyPrincipal,
@@ -121,6 +122,8 @@ async def create_message(
                     exc_info=True,
                 )
                 raise
+            finally:
+                await safe_aclose_stream(stream)
 
         return StreamingResponse(
             _sse(),

@@ -38,7 +38,12 @@ class UpstreamAdapter:
         credential_profile_id: str | None = None,
     ) -> dict[str, Any]:
         if resolved is None:
-            return dict(kwargs)
+            # Fast path：无 resolved 时仅可能注入 coding_agent UA，其余字段不变。
+            return self._inject_coding_agent_ua(
+                kwargs,
+                provider="",
+                credential_profile_id=credential_profile_id,
+            )
         record = resolved.record
         tags = record.tags if isinstance(record.tags, dict) else {}
         snap = tags_to_capability_snapshot(

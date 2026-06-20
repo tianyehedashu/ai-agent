@@ -244,6 +244,77 @@ def client_thinking_request_fields(
     return {}
 
 
+def _needs_capability_strips(kwargs: dict[str, Any], snap: ModelCapabilitySnapshot) -> bool:
+    """判断 _apply_capability_strips 是否真的会修改 kwargs。"""
+    may_strip_response_format = (
+        snap.supports_reasoning
+        or snap.thinking_param != THINKING_PARAM_NONE
+        or not snap.supports_json_mode
+    )
+    if may_strip_response_format and "response_format" in kwargs:
+        return True
+    return not snap.supports_tools and ("tools" in kwargs or "tool_choice" in kwargs)
+
+
+def _needs_thinking_rewrite(kwargs: dict[str, Any], snap: ModelCapabilitySnapshot) -> bool:
+    """判断 _apply_thinking_kwargs 是否真的会修改 kwargs。"""
+    if snap.thinking_param == THINKING_PARAM_NONE:
+        if kwargs.get("enable_thinking") is not None:
+            return True
+        if kwargs.get("thinking") is not None:
+            return True
+        extra = _extra_body_dict(kwargs)
+        return extra is not None and ("enable_thinking" in extra or "thinking" in extra)
+
+    if snap.thinking_param in (
+        THINKING_PARAM_BUILTIN,
+        THINKING_PARAM_ANTHROPIC,
+        THINKING_PARAM_DEEPSEEK_V4,
+    ):
+        return kwargs.get("enable_thinking") is not None
+
+    if snap.thinking_param == THINKING_PARAM_DASHSCOPE:
+        if not _enable_thinking_requested(kwargs):
+            if kwargs.get("enable_thinking") is not None:
+                return True
+            extra = _extra_body_dict(kwargs)
+            return extra is not None and "enable_thinking" in extra
+        return False
+
+    if snap.thinking_param == THINKING_PARAM_DEEPSEEK_V4:
+        if _top_level_thinking_type(kwargs) in ("enabled", "disabled"):
+            return True
+        extra = _extra_body_dict(kwargs)
+        return extra is not None and "thinking" in extra
+
+    if snap.thinking_param == THINKING_PARAM_BUILTIN:
+        if kwargs.get("thinking") is not None:
+            return True
+        extra = _extra_body_dict(kwargs)
+        return extra is not None and "thinking" in extra
+
+    return False
+
+
+def _needs_temperature_rewrite(kwargs: dict[str, Any], snap: ModelCapabilitySnapshot) -> bool:
+    """判断 _apply_temperature_kwargs 是否真的会修改 kwargs。"""
+    policy = snap.temperature_policy
+    if policy == TEMPERATURE_POLICY_FIXED_1:
+        return kwargs.get("temperature") != 1.0
+    if policy == TEMPERATURE_POLICY_PROBE_0:
+        return kwargs.get("temperature") != 0.0
+    if policy == TEMPERATURE_POLICY_CLIENT:
+        raw = kwargs.get("temperature")
+        if raw is None:
+            return True
+        try:
+            temp = float(raw)
+        except (TypeError, ValueError):
+            return True
+        return temp != _clamp_temperature_value(temp)
+    return kwargs.get("temperature") != snap.temperature_default
+
+
 def apply_invocation_kwargs(
     snap: ModelCapabilitySnapshot,
     kwargs: dict[str, Any],
@@ -253,6 +324,12 @@ def apply_invocation_kwargs(
     """校验并改写出站 kwargs（返回副本）。"""
     if validate:
         validate_invocation_kwargs(snap, kwargs)
+    if not (
+        _needs_capability_strips(kwargs, snap)
+        or _needs_thinking_rewrite(kwargs, snap)
+        or _needs_temperature_rewrite(kwargs, snap)
+    ):
+        return kwargs
     adapted = copy.deepcopy(kwargs)
     _apply_capability_strips(adapted, snap)
     _apply_thinking_kwargs(adapted, snap)

@@ -77,6 +77,21 @@ def preprocess_messages_for_reasoner(
     """
     if not supports_reasoning and not _needs_reasoning_content(client_model, real_model):
         return messages
+
+    # 先扫描是否真有消息需要修改；没有则返回原引用，避免整列表拷贝。
+    needs_modify = False
+    for msg in messages:
+        if (
+            isinstance(msg, dict)
+            and msg.get("role") == "assistant"
+            and msg.get("tool_calls")
+            and "reasoning_content" not in msg
+        ):
+            needs_modify = True
+            break
+    if not needs_modify:
+        return messages
+
     processed: list[dict[str, Any]] = []
     for msg in messages:
         msg_copy = dict(msg)
@@ -122,17 +137,19 @@ def max_output_tokens_limit(tags: dict[str, Any], provider: str) -> int:
 
 def clamp_max_tokens(kwargs: dict[str, Any], limit: int) -> dict[str, Any]:
     """返回可能调整过 ``max_tokens`` 的 kwargs 副本。"""
-    adapted = dict(kwargs)
-    raw = adapted.get("max_tokens")
+    raw = kwargs.get("max_tokens")
     if raw is None:
-        return adapted
+        return kwargs
     try:
         max_tokens = int(raw)
     except (TypeError, ValueError):
-        return adapted
+        return kwargs
+    if 1 <= max_tokens <= limit:
+        return kwargs
+    adapted = dict(kwargs)
     if max_tokens > limit:
         adapted["max_tokens"] = limit
-    elif max_tokens < 1:
+    else:
         adapted["max_tokens"] = 1
     return adapted
 

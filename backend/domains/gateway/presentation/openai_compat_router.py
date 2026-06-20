@@ -28,6 +28,7 @@ from domains.gateway.application.proxy_allowed_models import resolve_proxy_allow
 from domains.gateway.application.proxy_timing import timing_response_headers
 from domains.gateway.application.proxy_use_case import ProxyUseCase
 from domains.gateway.application.vkey_proxy_model_list import list_openai_proxy_models
+from domains.gateway.domain.stream_utils import safe_aclose_stream
 from domains.gateway.domain.types import GatewayCapability
 from domains.gateway.presentation.deps import (
     VkeyOrApikeyPrincipal,
@@ -107,6 +108,8 @@ async def chat_completions(
                     exc_info=True,
                 )
                 raise
+            finally:
+                await safe_aclose_stream(stream)
 
         return StreamingResponse(
             _sse(),

@@ -59,6 +59,10 @@ from domains.gateway.application.listing_studio_image_port_registry import (
     register_listing_studio_local_image_port_factory,
 )
 from domains.gateway.application.startup import run_gateway_shutdown, run_gateway_startup
+from domains.gateway.infrastructure.upstream.httpx_client_singleton import (
+    close_upstream_httpx_client,
+    init_upstream_httpx_client,
+)
 from domains.gateway.presentation.anthropic_compat_router import router as anthropic_compat_router
 from domains.gateway.presentation.management_router import router as gateway_mgmt_router
 from domains.gateway.presentation.openai_compat_router import router as openai_compat_router
@@ -153,6 +157,12 @@ async def lifespan(_fastapi_app: FastAPI) -> AsyncGenerator[None, None]:  # pyli
 
     await run_agent_startup(_fastapi_app)
 
+    # 初始化上游直连 httpx client（连接池复用）
+    try:
+        await init_upstream_httpx_client()
+    except Exception as e:
+        logger.warning("Failed to init upstream httpx client: %s", e)
+
     init_background_tasks(_fastapi_app)
 
     async with agent_streamable_http_lifespan():
@@ -177,6 +187,12 @@ async def lifespan(_fastapi_app: FastAPI) -> AsyncGenerator[None, None]:  # pyli
         logger.warning("Error closing LiteLLM async clients: %s", e)
 
     await close_redis()
+
+    # 关闭上游直连 httpx client（先尽量等待活跃请求完成）
+    try:
+        await close_upstream_httpx_client(wait_timeout_seconds=30.0)
+    except Exception as e:
+        logger.warning("Error closing upstream httpx client: %s", e)
 
 
 # 创建 FastAPI 应用

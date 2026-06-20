@@ -79,16 +79,18 @@ class PromptCacheMiddleware:
         model: str,
         tags: dict[str, Any] | None,
     ) -> dict[str, Any]:
-        adapted = dict(kwargs)
-        meta = adapted.get("metadata")
+        meta = kwargs.get("metadata")
         metadata: dict[str, Any] = meta if isinstance(meta, dict) else {}
         if not _prompt_cache_enabled(tags, metadata):
-            return adapted
+            return kwargs
 
         provider = infer_provider_name(model)
         config = _PROVIDER_CACHE_CONFIG.get(provider, {})
         if not config.get("enabled"):
-            return adapted
+            return kwargs
+
+        # Anthropic 只需要加 header，也是轻量修改；但为保持接口简单仍走拷贝。
+        adapted = dict(kwargs)
 
         if provider == "anthropic":
             headers = dict(adapted.get("extra_headers") or {})
@@ -111,19 +113,24 @@ class PromptCacheMiddleware:
         max_points = int(config.get("max_cache_points", 1))
         cache_points = 0
         new_messages: list[dict[str, Any]] = []
+        any_changed = False
         for msg in messages:
-            msg_copy = dict(msg) if isinstance(msg, dict) else msg
+            if not isinstance(msg, dict):
+                new_messages.append(msg)
+                continue
             if (
-                isinstance(msg_copy, dict)
-                and msg_copy.get("role") == "system"
+                msg.get("role") == "system"
                 and cache_points < max_points
             ):
-                content = msg_copy.get("content", "")
+                content = msg.get("content", "")
                 if isinstance(content, str) and len(content) >= min_chars:
-                    msg_copy["cache_control"] = {"type": "ephemeral"}
+                    new_messages.append({**msg, "cache_control": {"type": "ephemeral"}})
                     cache_points += 1
-            new_messages.append(msg_copy)
-        adapted["messages"] = new_messages
+                    any_changed = True
+                    continue
+            new_messages.append(msg)
+        if any_changed:
+            adapted["messages"] = new_messages
         return adapted
 
     def outbound_usage_stats(

@@ -47,6 +47,7 @@ from domains.gateway.domain.proxy_policy import (
     budget_targets,
 )
 from domains.gateway.domain.quota_plan import ENTITLEMENT_NS
+from domains.gateway.domain.stream_utils import safe_aclose_stream
 from domains.gateway.infrastructure.repositories.budget_repository import BudgetRepository
 from libs.db.database import get_session_context
 from utils.logging import get_logger
@@ -155,6 +156,8 @@ async def adapt_anthropic_stream(
             exc_info=True,
         )
         raise
+    finally:
+        await safe_aclose_stream(stream)
     await finalize_deferred_stream_settlement(
         ctx,
         budget,
@@ -269,6 +272,8 @@ async def adapt_stream(
             exc_info=True,
         )
         raise
+    finally:
+        await safe_aclose_stream(stream)
     if last_usage:
         apply_gateway_cache_hit_to_metadata(metadata, last_usage)
     await finalize_deferred_stream_settlement(

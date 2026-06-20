@@ -10,6 +10,12 @@ from domains.gateway.application.management.ports import (
     RawUpstreamListResult,
     UpstreamModelListPort,
 )
+from domains.gateway.infrastructure.upstream.httpx_client_singleton import (
+    get_upstream_httpx_client,
+    track_upstream_request,
+)
+
+_PROVIDER = "openai-compatible"
 
 
 class OpenAICompatibleModelListAdapter(UpstreamModelListPort):
@@ -27,42 +33,50 @@ class OpenAICompatibleModelListAdapter(UpstreamModelListPort):
         }
         if user_agent:
             headers["User-Agent"] = user_agent
-        try:
-            async with httpx.AsyncClient(timeout=timeout_seconds) as client:
-                resp = await client.get(list_url, headers=headers)
-        except httpx.TimeoutException:
-            return RawUpstreamListResult(
-                ok=False,
-                http_status=None,
-                items=(),
-                error_message="连接上游超时，请检查网络或稍后重试。",
-            )
-        except httpx.RequestError as exc:
-            return RawUpstreamListResult(
-                ok=False,
-                http_status=None,
-                items=(),
-                error_message=f"无法连接上游：{type(exc).__name__}",
-            )
 
-        if resp.status_code != 200:
-            detail = _safe_error_detail(resp)
-            return RawUpstreamListResult(
-                ok=False,
-                http_status=resp.status_code,
-                items=(),
-                error_message=detail or f"上游返回 HTTP {resp.status_code}",
-            )
+        client = await get_upstream_httpx_client(_PROVIDER)
+        async with track_upstream_request():
+            try:
+                resp = await client.get(
+                    list_url,
+                    headers=headers,
+                    timeout=httpx.Timeout(
+                        connect=10.0, read=timeout_seconds, write=30.0, pool=5.0
+                    ),
+                )
+            except httpx.TimeoutException:
+                return RawUpstreamListResult(
+                    ok=False,
+                    http_status=None,
+                    items=(),
+                    error_message="连接上游超时，请检查网络或稍后重试。",
+                )
+            except httpx.RequestError as exc:
+                return RawUpstreamListResult(
+                    ok=False,
+                    http_status=None,
+                    items=(),
+                    error_message=f"无法连接上游：{type(exc).__name__}",
+                )
 
-        try:
-            payload: dict[str, Any] = resp.json()
-        except ValueError:
-            return RawUpstreamListResult(
-                ok=False,
-                http_status=resp.status_code,
-                items=(),
-                error_message="上游响应不是合法 JSON。",
-            )
+            if resp.status_code != 200:
+                detail = _safe_error_detail(resp)
+                return RawUpstreamListResult(
+                    ok=False,
+                    http_status=resp.status_code,
+                    items=(),
+                    error_message=detail or f"上游返回 HTTP {resp.status_code}",
+                )
+
+            try:
+                payload: dict[str, Any] = resp.json()
+            except ValueError:
+                return RawUpstreamListResult(
+                    ok=False,
+                    http_status=resp.status_code,
+                    items=(),
+                    error_message="上游响应不是合法 JSON。",
+                )
 
         raw_data = payload.get("data")
         if not isinstance(raw_data, list):

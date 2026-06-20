@@ -7,6 +7,39 @@ from unittest.mock import patch
 import pytest
 
 from domains.gateway.application.proxy_litellm_client import apply_upstream_timeout
+from domains.gateway.domain.stream_utils import safe_aclose_stream
+
+
+class MockStream:
+    def __init__(self) -> None:
+        self.aclose_called = False
+
+    async def aclose(self) -> None:
+        self.aclose_called = True
+
+
+class TestSafeAcloseStream:
+    @pytest.mark.asyncio
+    async def test_calls_aclose_when_present(self) -> None:
+        stream = MockStream()
+        await safe_aclose_stream(stream)
+        assert stream.aclose_called is True
+
+    @pytest.mark.asyncio
+    async def test_noop_when_no_aclose(self) -> None:
+        await safe_aclose_stream(object())
+
+    @pytest.mark.asyncio
+    async def test_noop_when_stream_is_none(self) -> None:
+        await safe_aclose_stream(None)
+
+    @pytest.mark.asyncio
+    async def test_swallows_aclose_exception(self) -> None:
+        class BadStream:
+            async def aclose(self) -> None:
+                raise RuntimeError("boom")
+
+        await safe_aclose_stream(BadStream())
 
 
 class TestApplyUpstreamTimeout:
@@ -102,11 +135,11 @@ class TestTimeoutConfigDefaults:
         s = Settings()
         assert s.gateway_upstream_timeout_seconds == 300
 
-    def test_default_stream_timeout_is_60(self) -> None:
+    def test_default_stream_timeout_is_120(self) -> None:
         from bootstrap.config import Settings
 
         s = Settings()
-        assert s.gateway_upstream_stream_timeout_seconds == 60
+        assert s.gateway_upstream_stream_timeout_seconds == 120
 
     def test_zero_disables_timeout(self) -> None:
         from bootstrap.config import Settings
