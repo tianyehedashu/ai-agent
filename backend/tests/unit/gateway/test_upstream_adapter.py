@@ -150,7 +150,7 @@ def test_coding_agent_ua_injected_for_coding_plan_profile() -> None:
         ),
         credential_profile_id="moonshot.coding_plan",
     )
-    assert out["extra_headers"]["User-Agent"] == "claude-code/1.0"
+    assert out["extra_headers"]["User-Agent"] == "claude-code/1.0.0"
 
 
 def test_coding_agent_ua_fallback_by_real_model_when_profile_is_default() -> None:
@@ -165,7 +165,7 @@ def test_coding_agent_ua_fallback_by_real_model_when_profile_is_default() -> Non
         ),
         credential_profile_id="moonshot.default",
     )
-    assert out["extra_headers"]["User-Agent"] == "claude-code/1.0"
+    assert out["extra_headers"]["User-Agent"] == "claude-code/1.0.0"
 
 
 def test_coding_agent_ua_not_injected_for_default_profile() -> None:
