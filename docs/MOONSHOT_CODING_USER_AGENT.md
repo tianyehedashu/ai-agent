@@ -101,6 +101,27 @@ curl -s -X POST "https://api.kimi.com/coding/v1/chat/completions" \
 - `backend/tests/unit/gateway/test_router_litellm_api_base.py`
 - `backend/tests/unit/gateway/test_upstream_adapter.py`
 
+## 另一个常见问题：空 `user` 消息导致 400
+
+通过白名单后，如果对话中某条 `role="user"` 消息的 `content` 为空字符串或仅空白字符，Moonshot 会返回：
+
+```text
+MoonshotException - the message at position X with role 'user' must not be empty
+```
+
+### 解决方案
+
+Gateway 在 `UpstreamAdapter` 中对 Moonshot 请求做了兜底：将空 `user` 消息内容替换为单个空格 `" "`，保留消息轮次结构，避免破坏对话上下文。
+
+相关代码：
+
+- `backend/domains/gateway/domain/policies/moonshot_message_sanitize.py`
+- `backend/domains/gateway/application/upstream_adapter.py`
+
+### 为什么只处理 Moonshot
+
+该限制是 Moonshot 端点特有的（OpenAI 兼容端点通常允许空 content）。因此兜底逻辑通过 `is_moonshot_provider()` 限定，不会影响 deepseek、openai 等其他 provider。
+
 ## 注意事项
 
 - Moonshot 的白名单规则可能随时调整。若未来 `claude-cli/2.1.161` 失效，可更新 `upstream_profile_registry.py` 中的 `coding_agent_ua`。

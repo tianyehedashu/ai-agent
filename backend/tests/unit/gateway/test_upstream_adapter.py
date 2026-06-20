@@ -232,3 +232,40 @@ def test_skip_flatten_for_vision_provider() -> None:
     }
     out = UpstreamAdapter().adapt(kwargs, client_model="gpt-4o", resolved=resolved)
     assert isinstance(out["messages"][0]["content"], list)
+
+
+def test_moonshot_empty_user_message_padded_to_space() -> None:
+    """Moonshot 拒绝空 user content，应填充为单个空格保留轮次。"""
+    record = _FakeRecord(provider="moonshot", real_model="kimi-for-coding")
+    resolved = ResolvedModelName(record=record, route=None, via_route=None)
+    kwargs = {
+        "messages": [
+            {"role": "user", "content": ""},
+            {"role": "assistant", "content": "ok"},
+            {"role": "user", "content": "   "},
+            {"role": "user", "content": None},
+        ],
+        "max_tokens": 100,
+    }
+    out = UpstreamAdapter().adapt(kwargs, client_model="kimi-for-coding", resolved=resolved)
+    messages = out["messages"]
+    assert messages[0]["content"] == " "
+    assert messages[1]["content"] == "ok"
+    assert messages[2]["content"] == " "
+    assert messages[3]["content"] == " "
+
+
+def test_non_moonshot_empty_user_message_left_unchanged() -> None:
+    """非 Moonshot provider 不应用该兜底，避免意外修改请求体。"""
+    record = _FakeRecord(provider="deepseek", real_model="deepseek-chat")
+    resolved = ResolvedModelName(record=record, route=None, via_route=None)
+    kwargs = {
+        "messages": [
+            {"role": "user", "content": ""},
+            {"role": "assistant", "content": "ok"},
+        ],
+        "max_tokens": 100,
+    }
+    out = UpstreamAdapter().adapt(kwargs, client_model="deepseek-chat", resolved=resolved)
+    assert out["messages"][0]["content"] == ""
+    assert out["messages"][1]["content"] == "ok"

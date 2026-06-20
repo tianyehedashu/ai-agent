@@ -7,6 +7,10 @@ from typing import TYPE_CHECKING, Any
 from domains.gateway.domain.coding_agent_ua import apply_coding_agent_ua_litellm_params
 from domains.gateway.domain.model_capability import tags_to_capability_snapshot
 from domains.gateway.domain.policies.invocation_policy import apply_invocation_kwargs
+from domains.gateway.domain.policies.moonshot_message_sanitize import (
+    is_moonshot_provider,
+    sanitize_messages_for_moonshot,
+)
 from domains.gateway.domain.policies.volcengine_message_sanitize import (
     is_volcengine_provider,
     sanitize_messages_for_volcengine,
@@ -62,6 +66,10 @@ class UpstreamAdapter:
             volcengine_messages = adapted.get("messages")
             if isinstance(volcengine_messages, list):
                 adapted["messages"] = sanitize_messages_for_volcengine(volcengine_messages)
+        if is_moonshot_provider(record.provider):
+            moonshot_messages = adapted.get("messages")
+            if isinstance(moonshot_messages, list):
+                adapted["messages"] = sanitize_messages_for_moonshot(moonshot_messages)
         adapted = self._inject_coding_agent_ua(
             adapted,
             provider=record.provider,
