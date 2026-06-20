@@ -18,7 +18,7 @@ def test_resolve_coding_agent_ua_for_moonshot_coding_plan() -> None:
             credential_profile_id="moonshot.coding_plan",
             provider="moonshot",
         )
-        == "Claude Code/1.0"
+        == "claude-code/1.0"
     )
 
 
@@ -40,7 +40,7 @@ def test_resolve_coding_agent_ua_infers_from_credential_api_base() -> None:
             provider="moonshot",
             credential=_FakeCredential(api_base="https://api.kimi.com/coding/v1"),
         )
-        == "Claude Code/1.0"
+        == "claude-code/1.0"
     )
 
 
@@ -53,7 +53,7 @@ def test_resolve_coding_agent_ua_infers_from_api_bases_json() -> None:
                 api_bases={"openai_compat": "https://api.kimi.com/coding/v1"}
             ),
         )
-        == "Claude Code/1.0"
+        == "claude-code/1.0"
     )
 
 
@@ -66,7 +66,7 @@ def test_resolve_coding_agent_ua_fallback_by_real_model() -> None:
             credential=_FakeCredential(),
             real_model="kimi-for-coding",
         )
-        == "Claude Code/1.0"
+        == "claude-code/1.0"
     )
 
 
@@ -88,4 +88,4 @@ def test_apply_coding_agent_ua_litellm_params_merges_headers() -> None:
         credential_profile_id="moonshot.coding_plan",
         provider="moonshot",
     )
-    assert params["extra_headers"]["User-Agent"] == "Claude Code/1.0"
+    assert params["extra_headers"]["User-Agent"] == "claude-code/1.0"

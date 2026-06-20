@@ -129,7 +129,8 @@ _PROFILES: tuple[UpstreamProfile, ...] = (
         provider="moonshot",
         label="Kimi Code",
         api_bases={UpstreamProtocol.OPENAI_COMPAT: "https://api.kimi.com/coding/v1"},
-        coding_agent_ua="Claude Code/1.0",
+        # Moonshot 对 Coding 端点按 User-Agent 白名单放行，实测 claude-code/* 可通过。
+        coding_agent_ua="claude-code/1.0",
         fixed_outbound_temperature=1.0,
     ),
     UpstreamProfile(
