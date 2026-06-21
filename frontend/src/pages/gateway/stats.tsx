@@ -690,7 +690,7 @@ export default function GatewayStatsPage(): React.JSX.Element {
           </>
         }
         actions={
-          <div className="flex flex-wrap items-center gap-2">
+          <>
             <UsageAggregationToggle
               value={usageAggregation}
               onChange={setUsageAggregation}
@@ -757,7 +757,7 @@ export default function GatewayStatsPage(): React.JSX.Element {
               ariaLabel="刷新统计"
               onRefresh={() => statsQuery.refetch()}
             />
-          </div>
+          </>
         }
       />
 
