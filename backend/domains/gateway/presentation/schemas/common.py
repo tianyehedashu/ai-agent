@@ -1127,6 +1127,7 @@ class RequestLogResponse(BaseModel):
     prompt_hash: str | None = None
     user_email_snapshot: str | None = None
     vkey_name_snapshot: str | None = None
+    client_type: str | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -1471,8 +1472,8 @@ __all__ = [
     "QuotaRuleBatchUpsertResponse",
     "QuotaRuleKeyResponse",
     "QuotaRuleLimitsResponse",
-    "QuotaRuleResponse",
     "QuotaRuleListResponse",
+    "QuotaRuleResponse",
     "QuotaRuleSourceRefResponse",
     "QuotaRuleUpsert",
     "QuotaRuleUsageResponse",

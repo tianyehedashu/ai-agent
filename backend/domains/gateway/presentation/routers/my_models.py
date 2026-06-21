@@ -44,6 +44,7 @@ from domains.tenancy.presentation.team_dependencies import merge_optional_gatewa
 from libs.api.pagination import PageParams, page_query_params
 from libs.db.database import get_db
 from libs.exceptions import NotFoundError
+from libs.rate_limit import check_probe_rate_limit
 
 from ._common import (
     MgmtReads,
@@ -223,7 +224,12 @@ async def test_my_model(
     current_user: RequiredAuthUser,
     writes: MgmtWrites,
 ) -> GatewayModelTestResponse:
+    """对个人 Gateway 模型发起最小连通性测试。
+
+    频率限制：同一用户同一模型每分钟只允许 1 次测试。
+    """
     user_id = get_user_uuid(current_user)
+    await check_probe_rate_limit(user_id, model_id)
     result = await writes.test_personal_model(user_id, model_id)
     return GatewayModelTestResponse.model_validate(result)
 

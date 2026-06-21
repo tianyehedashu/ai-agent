@@ -95,6 +95,7 @@ class GatewayUsageLogReadMixin:
         credential_id: UUID | None = None,
         user_id: UUID | None = None,
         model: str | None = None,
+        client_type: str | None = None,
     ) -> tuple[list[Any], int]:
         axis = self._resolve_usage_axis(ctx, usage_aggregation, vkey_id=vkey_id)
         return await self._logs.list_by_axis(
@@ -107,6 +108,7 @@ class GatewayUsageLogReadMixin:
             credential_id=credential_id,
             user_id=user_id,
             model=model,
+            client_type=client_type,
             page=page,
             page_size=page_size,
         )
@@ -165,6 +167,7 @@ class GatewayUsageLogReadMixin:
         credential_id: UUID | None = None,
         user_id: UUID | None = None,
         model: str | None = None,
+        client_type: str | None = None,
     ) -> dict[str, Any]:
         axis = self._resolve_usage_axis(ctx, usage_aggregation)
         summary = await self._usage_metrics.aggregate_summary(
@@ -177,6 +180,7 @@ class GatewayUsageLogReadMixin:
             credential_id=credential_id,
             user_id=user_id,
             model=model,
+            client_type=client_type,
         )
         return summary
 
@@ -387,9 +391,7 @@ class GatewayUsageLogReadMixin:
         if group_by == UsageStatisticsGroupBy.USER_MODEL_CREDENTIAL:
             items = await self._build_user_model_credential_items(rows)
         else:
-            labels = await self._usage_statistics_labels(
-                rows, group_by, viewer_user_id=ctx.user_id
-            )
+            labels = await self._usage_statistics_labels(rows, group_by, viewer_user_id=ctx.user_id)
             items = [
                 self._item_from_row(row, labels.get(self._group_key_to_str(row.group_key), "未知"))
                 for row in rows

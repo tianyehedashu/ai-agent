@@ -9,6 +9,7 @@
  */
 
 import { apiClient } from '@/api/client'
+import type { GatewayClientType } from '@/features/gateway-usage/client-types'
 import type { PaginatedList } from '@/types'
 
 import { teamGatewayPath } from './_base'
@@ -49,6 +50,7 @@ export interface GatewayLogItem {
   prompt_hash?: string | null
   user_email_snapshot: string | null
   vkey_name_snapshot: string | null
+  client_type: string | null
 }
 
 /** GET /logs/{id} 详情：含脱敏 prompt / 响应摘要等 */
@@ -95,6 +97,7 @@ export type GatewayLogsQuery = {
   credential_id?: string
   user_id?: string
   model?: string
+  client_type?: GatewayClientType
 }
 
 /** GET /logs 响应 */
@@ -122,6 +125,7 @@ export const logsApi = {
       credential_id?: string
       user_id?: string
       model?: string
+      client_type?: GatewayClientType
     }
   ) => apiClient.get<DashboardSummary>(teamGatewayPath(teamId, '/dashboard/summary'), params),
 } as const

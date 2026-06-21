@@ -36,6 +36,7 @@ import {
 } from '@/components/ui/sheet'
 import { GATEWAY_DISPLAY_CURRENCY } from '@/features/gateway-pricing/display-currency'
 import { GatewayRefreshButton } from '@/features/gateway-shared/gateway-refresh-button'
+import { GATEWAY_CLIENT_TYPES, type GatewayClientType } from '@/features/gateway-usage/client-types'
 import {
   credentialDisplayText,
   credentialDisplayTitle,
@@ -109,6 +110,12 @@ const CAPABILITY_FILTERS: readonly { value: string; label: string }[] = [
   { value: 'audio_transcription', label: 'Audio STT' },
   { value: 'audio_speech', label: 'Audio TTS' },
   { value: 'rerank', label: 'Rerank' },
+]
+
+const CLIENT_TYPE_FILTERS: readonly { value: GatewayClientType | 'all'; label: string }[] = [
+  { value: 'all', label: '全部来源' },
+  { value: GATEWAY_CLIENT_TYPES.MODEL_CONNECTIVITY_PROBE, label: '模型探活' },
+  { value: GATEWAY_CLIENT_TYPES.UNKNOWN, label: '普通调用' },
 ]
 
 const DATE_RANGE_FILTERS: readonly { value: DateRangeValue; label: string }[] = [
@@ -189,6 +196,11 @@ export default function GatewayLogsPage(): React.JSX.Element {
     const v = searchParams.get('model')
     return v && v !== GATEWAY_FILTER_ALL ? v : GATEWAY_FILTER_ALL
   })
+  const [clientTypeFilter, setClientTypeFilter] = useState<GatewayClientType | 'all'>(() => {
+    const v = searchParams.get('client_type')
+    const found = CLIENT_TYPE_FILTERS.find((f) => f.value === v)
+    return found ? found.value : 'all'
+  })
 
   // 筛选目录数据
   const { credentialOptions, keyOptions, modelOptions, modelCatalogIndex } = useLogFilterCatalog({
@@ -230,6 +242,7 @@ export default function GatewayLogsPage(): React.JSX.Element {
           'credential',
           'vkey',
           'model',
+          'client_type',
           'size',
         ]
         for (const key of logKeys) {
@@ -243,6 +256,7 @@ export default function GatewayLogsPage(): React.JSX.Element {
         if (credentialFilter !== GATEWAY_FILTER_ALL) next.set('credential', credentialFilter)
         if (vkeyFilter !== GATEWAY_FILTER_ALL) next.set('vkey', vkeyFilter)
         if (modelFilter !== GATEWAY_FILTER_ALL) next.set('model', modelFilter)
+        if (clientTypeFilter !== 'all') next.set('client_type', clientTypeFilter)
         if (pageSize !== 100) next.set('size', String(pageSize))
         if (page > 1) next.set('page', String(page))
         return next
@@ -259,6 +273,7 @@ export default function GatewayLogsPage(): React.JSX.Element {
     credentialFilter,
     vkeyFilter,
     modelFilter,
+    clientTypeFilter,
     pageSize,
     page,
   ])
@@ -299,6 +314,11 @@ export default function GatewayLogsPage(): React.JSX.Element {
     const vModel = searchParams.get('model')
     const nextModel = vModel && vModel !== GATEWAY_FILTER_ALL ? vModel : GATEWAY_FILTER_ALL
     if (nextModel !== modelFilter) setModelFilter(nextModel)
+
+    const vClientType = searchParams.get('client_type')
+    const foundClientType = CLIENT_TYPE_FILTERS.find((f) => f.value === vClientType)
+    const nextClientType = foundClientType ? foundClientType.value : 'all'
+    if (nextClientType !== clientTypeFilter) setClientTypeFilter(nextClientType)
 
     const vSize = Number(searchParams.get('size'))
     const nextSize = PAGE_SIZE_OPTIONS.includes(vSize as (typeof PAGE_SIZE_OPTIONS)[number])
@@ -364,7 +384,8 @@ export default function GatewayLogsPage(): React.JSX.Element {
     (showCallerColumn && userFilter !== GATEWAY_FILTER_ALL) ||
     credentialFilter !== GATEWAY_FILTER_ALL ||
     vkeyFilter !== GATEWAY_FILTER_ALL ||
-    modelFilter !== GATEWAY_FILTER_ALL
+    modelFilter !== GATEWAY_FILTER_ALL ||
+    clientTypeFilter !== 'all'
 
   const queryFilters = useMemo(
     () => ({
@@ -377,6 +398,7 @@ export default function GatewayLogsPage(): React.JSX.Element {
       credential_id: credentialFilter === GATEWAY_FILTER_ALL ? undefined : credentialFilter,
       vkey_id: vkeyFilter === GATEWAY_FILTER_ALL ? undefined : vkeyFilter,
       model: modelFilter === GATEWAY_FILTER_ALL ? undefined : modelFilter,
+      client_type: clientTypeFilter === 'all' ? undefined : clientTypeFilter,
     }),
     [
       usageAggregation,
@@ -389,6 +411,7 @@ export default function GatewayLogsPage(): React.JSX.Element {
       credentialFilter,
       vkeyFilter,
       modelFilter,
+      clientTypeFilter,
     ]
   )
 
@@ -467,6 +490,7 @@ export default function GatewayLogsPage(): React.JSX.Element {
     setCredentialFilter(GATEWAY_FILTER_ALL)
     setVkeyFilter(GATEWAY_FILTER_ALL)
     setModelFilter(GATEWAY_FILTER_ALL)
+    setClientTypeFilter('all')
     resetListPosition()
   }
 
@@ -614,6 +638,28 @@ export default function GatewayLogsPage(): React.JSX.Element {
             </SelectTrigger>
             <SelectContent>
               {CAPABILITY_FILTERS.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select
+            value={clientTypeFilter}
+            onValueChange={(next) => {
+              const value = next as GatewayClientType | 'all'
+              const found = CLIENT_TYPE_FILTERS.find((f) => f.value === value)
+              if (!found) return
+              setClientTypeFilter(found.value)
+              resetListPosition()
+            }}
+          >
+            <SelectTrigger className="h-9 w-[140px]" aria-label="按调用来源筛选">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {CLIENT_TYPE_FILTERS.map((option) => (
                 <SelectItem key={option.value} value={option.value}>
                   {option.label}
                 </SelectItem>
@@ -975,6 +1021,11 @@ export default function GatewayLogsPage(): React.JSX.Element {
                     <DetailField label="统计口径">
                       {usageAggregation === 'user' ? '我（跨团队）' : '团队'}
                     </DetailField>
+                    <DetailField label="调用来源">
+                      {activeLog.client_type === GATEWAY_CLIENT_TYPES.MODEL_CONNECTIVITY_PROBE
+                        ? '模型探活'
+                        : (activeLog.client_type ?? '—')}
+                    </DetailField>
                     <DetailField label="用户">
                       {activeLog.user_email_snapshot ?? activeLog.user_id ?? '—'}
                     </DetailField>
@@ -1073,8 +1124,13 @@ const LogRow = memo(function LogRow({
       <div>
         <CapabilityBadge capability={item.capability} />
       </div>
-      <div>
+      <div className="flex items-center gap-1">
         <StatusBadge status={item.status} />
+        {item.client_type === GATEWAY_CLIENT_TYPES.MODEL_CONNECTIVITY_PROBE ? (
+          <Badge variant="outline" className="h-5 px-1 text-[10px]">
+            探活
+          </Badge>
+        ) : null}
       </div>
       <div className="text-right tabular-nums">
         {(item.input_tokens + item.output_tokens).toLocaleString()}

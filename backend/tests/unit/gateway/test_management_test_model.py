@@ -11,6 +11,7 @@ from domains.gateway.application.management.writes import GatewayManagementWrite
 from domains.gateway.domain.errors import ManagementEntityNotFoundError
 from domains.gateway.infrastructure.repositories.model_repository import GatewayModelRepository
 from domains.tenancy.application.team_service import TeamService
+from libs.exceptions import PermissionDeniedError
 from tests.unit.gateway.credential_test_helpers import (
     create_tenant_test_credential,
     team_owner_actor_kw,
@@ -417,8 +418,10 @@ async def test_volcengine_video_probe_uses_direct_task_api(db_session, test_user
 
 
 @pytest.mark.asyncio
-async def test_system_model_from_merged_list_can_be_probed(db_session, test_user) -> None:
-    """``list_for_tenant`` 合并的系统模型 id 应能走 test_gateway_model（写 system_gateway_models）。"""
+async def test_system_model_from_merged_list_can_be_probed_by_platform_admin(
+    db_session, test_user
+) -> None:
+    """``list_for_tenant`` 合并的系统模型 id 仅允许 platform_admin 走 test_gateway_model。"""
     from domains.gateway.application.config_catalog_sync import sync_app_config_gateway_catalog
 
     await sync_app_config_gateway_catalog(db_session)
@@ -438,7 +441,10 @@ async def test_system_model_from_merged_list_can_be_probed(db_session, test_user
     )()
     with patch("litellm.acompletion", new=AsyncMock(return_value=fake)):
         result = await writes.test_gateway_model(
-            system_model.id, tenant_id=team.id, **team_owner_actor_kw(test_user)
+            system_model.id,
+            tenant_id=team.id,
+            **team_owner_actor_kw(test_user),
+            is_platform_admin=True,
         )
 
     assert result["success"] is True
@@ -446,6 +452,27 @@ async def test_system_model_from_merged_list_can_be_probed(db_session, test_user
     assert refreshed is not None
     assert refreshed.last_test_status == "success"
     assert refreshed.last_tested_at is not None
+
+
+@pytest.mark.asyncio
+async def test_system_model_probe_rejects_non_platform_admin(db_session, test_user) -> None:
+    """非 platform_admin 测试 system 模型应抛出 PermissionDeniedError。"""
+    from domains.gateway.application.config_catalog_sync import sync_app_config_gateway_catalog
+
+    await sync_app_config_gateway_catalog(db_session)
+    await db_session.flush()
+    repo = GatewayModelRepository(db_session)
+    system_rows = await repo.list_system(only_enabled=True, capability="chat")
+    if not system_rows:
+        pytest.skip("catalog sync produced no chat system models")
+    system_model = system_rows[0]
+    team = await TeamService(db_session).ensure_personal_team(test_user.id)
+    writes = GatewayManagementWriteService(db_session)
+
+    with pytest.raises(PermissionDeniedError):
+        await writes.test_gateway_model(
+            system_model.id, tenant_id=team.id, **team_owner_actor_kw(test_user)
+        )
 
 
 @pytest.mark.asyncio
@@ -478,9 +505,7 @@ async def test_chat_probe_resolves_temperature_before_session_release(
         return await orig_release(session)  # type: ignore[arg-type]
 
     monkeypatch.setattr(probe_module, "resolve_probe_chat_temperature", tracked_resolve)
-    monkeypatch.setattr(
-        session_lifecycle, "release_session_before_blocking_io", tracked_release
-    )
+    monkeypatch.setattr(session_lifecycle, "release_session_before_blocking_io", tracked_release)
 
     fake = type(
         "Resp",

@@ -59,7 +59,7 @@ from domains.gateway.infrastructure.upstream.volcengine_video_client import (
     perform_volcengine_video_create,
 )
 from libs.crypto import decrypt_value, derive_encryption_key
-from libs.exceptions import ValidationError
+from libs.exceptions import PermissionDeniedError, ValidationError
 from utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -136,6 +136,10 @@ class ProbeWritesMixin:
         is_platform_admin: bool = False,
     ) -> dict[str, Any]:
         target = await self._resolve_probe_target(model_id, tenant_id=tenant_id)
+        # system 模型使用平台级 system 凭据，没有 tenant 凭据上下文，
+        # 因此不能复用针对 tenant 凭据的 _assert_team_model_mutation_allowed。
+        if target.is_system and not is_platform_admin:
+            raise PermissionDeniedError("system model probe requires platform admin")
         if not target.is_system:
             # 探活会消耗上游 API 额度并产生真实请求，视为对凭据的「写副作用」；
             # 因此复用 update 权限策略，确保只有凭据 owner / team_admin / platform_admin 可执行。

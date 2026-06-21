@@ -199,6 +199,7 @@ class RequestLogRepository:
         credential_id: UUID | None = None,
         user_id: UUID | None = None,
         model: str | None = None,
+        client_type: str | None = None,
         page: int = 1,
         page_size: int = 50,
     ) -> tuple[list[GatewayRequestLog], int]:
@@ -215,6 +216,7 @@ class RequestLogRepository:
                 credential_id=credential_id,
                 user_id=user_id,
                 model=model,
+                client_type=client_type,
             )
         )
 
@@ -261,6 +263,7 @@ class RequestLogRepository:
         credential_id: UUID | None = None,
         user_id: UUID | None = None,
         model: str | None = None,
+        client_type: str | None = None,
     ) -> list[ColumnElement[bool]]:
         """构建日志列表/汇总通用的筛选条件子句（与 ``list_by_axis`` 保持一致）。"""
         clauses: list[ColumnElement[bool]] = []
@@ -282,6 +285,8 @@ class RequestLogRepository:
                     GatewayRequestLog.real_model == model,
                 )
             )
+        if client_type:
+            clauses.append(GatewayRequestLog.client_type == client_type)
         return clauses
 
     async def aggregate_summary_by_axis(
@@ -296,6 +301,7 @@ class RequestLogRepository:
         credential_id: UUID | None = None,
         user_id: UUID | None = None,
         model: str | None = None,
+        client_type: str | None = None,
     ) -> dict[str, Any]:
         clauses = [
             *usage_axis_base_clauses(axis),
@@ -308,6 +314,7 @@ class RequestLogRepository:
                 credential_id=credential_id,
                 user_id=user_id,
                 model=model,
+                client_type=client_type,
             ),
         ]
         stmt = select(
@@ -348,6 +355,7 @@ class RequestLogRepository:
         credential_id: UUID | None = None,
         user_id: UUID | None = None,
         model: str | None = None,
+        client_type: str | None = None,
     ) -> list[dict[str, Any]]:
         clauses = [
             *usage_axis_base_clauses(axis),
@@ -360,6 +368,7 @@ class RequestLogRepository:
                 credential_id=credential_id,
                 user_id=user_id,
                 model=model,
+                client_type=client_type,
             ),
         ]
         client_type_expr = func.coalesce(GatewayRequestLog.client_type, "unknown")
@@ -817,10 +826,7 @@ class RequestLogRepository:
             .group_by(*group_exprs)
             .subquery("usage_grouped")
         )
-        rows_stmt = (
-            select(grouped_subq)
-            .order_by(grouped_subq.c.requests.desc())
-        )
+        rows_stmt = select(grouped_subq).order_by(grouped_subq.c.requests.desc())
         if not fetch_all_groups:
             rows_stmt = rows_stmt.offset(offset).limit(page_size)
         result = await self._session.execute(rows_stmt)

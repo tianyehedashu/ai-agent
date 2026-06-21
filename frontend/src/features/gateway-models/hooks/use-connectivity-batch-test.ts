@@ -39,6 +39,7 @@ export function useConnectivityBatchTest(
   const abortRef = useRef<AbortController | null>(null)
   const failedIdsRef = useRef<string[]>([])
   const lastRunItemsRef = useRef<ModelWithConnectivityStatus[]>([])
+  const isRunningRef = useRef(false)
 
   const [running, setRunning] = useState(false)
   const [total, setTotal] = useState(0)
@@ -63,9 +64,11 @@ export function useConnectivityBatchTest(
 
   const runTests = useCallback(
     async (items: readonly ModelWithConnectivityStatus[]): Promise<void> => {
+      if (isRunningRef.current) return
       const testable = filterTestableConnectivityModels(items)
       if (testable.length === 0) return
 
+      isRunningRef.current = true
       abortRef.current?.abort()
       const controller = new AbortController()
       abortRef.current = controller
@@ -103,6 +106,7 @@ export function useConnectivityBatchTest(
         if (abortRef.current === controller) {
           abortRef.current = null
         }
+        isRunningRef.current = false
         setRunning(false)
       }
     },
@@ -111,12 +115,14 @@ export function useConnectivityBatchTest(
 
   const start = useCallback(
     (items: readonly ModelWithConnectivityStatus[]): void => {
+      if (isRunningRef.current) return
       void runTests(items)
     },
     [runTests]
   )
 
   const retestFailed = useCallback((): void => {
+    if (isRunningRef.current) return
     const failedSet = new Set(failedIdsRef.current)
     const items = lastRunItemsRef.current.filter((m) => failedSet.has(m.id))
     if (items.length === 0) return

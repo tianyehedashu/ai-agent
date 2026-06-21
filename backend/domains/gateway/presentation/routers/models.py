@@ -57,6 +57,7 @@ from domains.identity.presentation.deps import AdminUser
 from libs.api.pagination import PageParams, page_query_params
 from libs.db.database import get_db
 from libs.exceptions import ConflictError, NotFoundError, PermissionDeniedError
+from libs.rate_limit import check_probe_rate_limit
 
 from ._common import (
     MgmtReads,
@@ -493,7 +494,10 @@ async def test_model(
 
     成功/失败均返回 200 + ``success`` 字段，结果同步落库（``last_test_status``
     / ``last_tested_at``），列表页可直接通过 invalidate ``GET /models`` 刷新。
+
+    频率限制：同一用户同一模型每分钟只允许 1 次测试。
     """
+    await check_probe_rate_limit(team.user_id, model_id)
     result = await writes.test_gateway_model(
         model_id,
         tenant_id=team.team_id,

@@ -142,6 +142,7 @@ async def dashboard_summary(
     credential_id: uuid.UUID | None = None,
     user_id: uuid.UUID | None = None,
     model: str | None = Query(default=None, min_length=1, max_length=200),
+    client_type: str | None = Query(default=None, min_length=1, max_length=100),
 ) -> DashboardSummaryResponse:
     start, end = _resolve_dashboard_time_range(days=days, start=start, end=end)
     summary = await reads.aggregate_request_log_summary(
@@ -155,6 +156,7 @@ async def dashboard_summary(
         credential_id=credential_id,
         user_id=user_id,
         model=model.strip() if model else None,
+        client_type=client_type.strip() if client_type else None,
     )
     total = summary["total"]
     success = summary["success"]

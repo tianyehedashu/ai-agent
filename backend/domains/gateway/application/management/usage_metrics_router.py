@@ -138,18 +138,31 @@ class UsageMetricsRouter:
         credential_id: UUID | None = None,
         user_id: UUID | None = None,
         model: str | None = None,
+        client_type: str | None = None,
     ) -> dict[str, Any]:
+        filters = UsageStatisticsFilters(
+            credential_id=credential_id,
+            user_id=user_id,
+            model=model,
+            capability=capability,
+            status=status_filter,
+            vkey_id=vkey_id,
+            client_type=client_type,
+        )
         list_kwargs = {
-            "status": status_filter,
-            "capability": capability,
-            "vkey_id": vkey_id,
-            "credential_id": credential_id,
-            "user_id": user_id,
-            "model": model,
+            "status": filters.status,
+            "capability": filters.capability,
+            "vkey_id": filters.vkey_id,
+            "credential_id": filters.credential_id,
+            "user_id": filters.user_id,
+            "model": filters.model,
+            "client_type": filters.client_type,
         }
+        # client_type 过滤暂不支持小时级 rollup，直接走明细
         if (
             not self._hybrid_enabled()
-            or status_filter is not None
+            or filters.status is not None
+            or filters.client_type is not None
             or not self._hourly_supported_for_axis(axis)
         ):
             return await self._logs_summary_with_client_type(axis, start, end, list_kwargs)
@@ -168,11 +181,11 @@ class UsageMetricsRouter:
                 axis,
                 bucket_start,
                 bucket_end,
-                capability=capability,
-                vkey_id=vkey_id,
-                credential_id=credential_id,
-                user_id=user_id,
-                model=model,
+                capability=filters.capability,
+                vkey_id=filters.vkey_id,
+                credential_id=filters.credential_id,
+                user_id=filters.user_id,
+                model=filters.model,
             )
             await self._attach_cold_client_type(axis, split, merged, list_kwargs)
             return merged
@@ -191,11 +204,11 @@ class UsageMetricsRouter:
             axis,
             bucket_start,
             bucket_end,
-            capability=capability,
-            vkey_id=vkey_id,
-            credential_id=credential_id,
-            user_id=user_id,
-            model=model,
+            capability=filters.capability,
+            vkey_id=filters.vkey_id,
+            credential_id=filters.credential_id,
+            user_id=filters.user_id,
+            model=filters.model,
         )
         hot_summary = await self._logs_summary_with_client_type(
             axis, split.hot_start, split.hot_end, list_kwargs
@@ -244,10 +257,7 @@ class UsageMetricsRouter:
             page_size=0,
             parent_scope=parent_scope,
         )
-        if (
-            cold_group_total + hot_group_total
-            > settings.gateway_metrics_hybrid_merge_max_groups
-        ):
+        if cold_group_total + hot_group_total > settings.gateway_metrics_hybrid_merge_max_groups:
             return await self._logs.aggregate_usage_statistics_by_axis(
                 axis,
                 start,

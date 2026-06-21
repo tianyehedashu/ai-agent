@@ -114,8 +114,16 @@ def test_list_filter_clauses_builds_expected_clauses() -> None:
         capability="chat",
         user_id=uuid.uuid4(),
         model="gpt-4",
+        client_type="model_connectivity_probe",
     )
-    assert len(clauses) == 4
+    assert len(clauses) == 5
+
+
+def test_list_filter_clauses_with_client_type() -> None:
+    """client_type 筛选生成等值子句。"""
+    repo = RequestLogRepository.__new__(RequestLogRepository)
+    clauses = repo._list_filter_clauses(client_type="model_connectivity_probe")
+    assert len(clauses) == 1
 
 
 def test_list_filter_clauses_returns_empty_when_no_filters() -> None:
@@ -160,6 +168,32 @@ async def test_aggregate_summary_by_axis_passes_filter_clauses() -> None:
     assert summary["total"] == 5
     assert summary["success"] == 4
     assert summary["failure"] == 1
+
+
+@pytest.mark.asyncio
+async def test_aggregate_by_client_type_accepts_client_type_filter() -> None:
+    """aggregate_by_client_type 支持 client_type 筛选且不引发 TypeError。"""
+    session = AsyncMock()
+    row = SimpleNamespace(
+        client_type="model_connectivity_probe",
+        requests=1,
+        cost_usd=Decimal("0.01"),
+    )
+    result = MagicMock()
+    result.all.return_value = [row]
+    session.execute = AsyncMock(return_value=result)
+
+    repo = RequestLogRepository(session)
+    now = datetime.now(UTC)
+    out = await repo.aggregate_by_client_type(
+        UsageAxis.workspace(uuid.uuid4()),
+        now - timedelta(days=1),
+        now,
+        client_type="model_connectivity_probe",
+    )
+
+    assert len(out) == 1
+    assert out[0]["client_type"] == "model_connectivity_probe"
 
 
 @pytest.mark.asyncio

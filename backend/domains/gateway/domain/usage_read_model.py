@@ -75,6 +75,7 @@ class UsageStatisticsFilters:
     capability: str | None = None
     status: str | None = None
     vkey_id: UUID | None = None
+    client_type: str | None = None
 
 
 @dataclass(frozen=True)
