@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from domains.gateway.domain.coding_agent_ua import apply_coding_agent_ua_litellm_params
@@ -23,7 +24,43 @@ from domains.gateway.domain.upstream_policy import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from domains.gateway.application.model_or_route_resolution import ResolvedModelName
+
+
+@dataclass(frozen=True, slots=True)
+class _MessageSanitizePolicy:
+    """Provider 消息清洗策略注册项。"""
+
+    is_match: Callable[[str | None], bool]
+    sanitize: Callable[[list[Any]], list[Any]]
+
+
+_MESSAGE_SANITIZE_POLICIES: tuple[_MessageSanitizePolicy, ...] = (
+    _MessageSanitizePolicy(
+        is_match=is_volcengine_provider,
+        sanitize=sanitize_messages_for_volcengine,
+    ),
+    _MessageSanitizePolicy(
+        is_match=is_moonshot_provider,
+        sanitize=sanitize_messages_for_moonshot,
+    ),
+)
+
+
+def _apply_message_sanitize_policy(
+    provider: str | None,
+    adapted: dict[str, Any],
+    policies: tuple[_MessageSanitizePolicy, ...],
+) -> None:
+    """若 provider 匹配注册策略，则对 ``adapted["messages"]`` 执行对应清洗。"""
+    for policy in policies:
+        if policy.is_match(provider):
+            messages = adapted.get("messages")
+            if isinstance(messages, list):
+                adapted["messages"] = policy.sanitize(messages)
+            return
 
 
 class UpstreamAdapter:
@@ -67,14 +104,7 @@ class UpstreamAdapter:
             messages = adapted.get("messages")
             if isinstance(messages, list):
                 adapted["messages"] = flatten_text_only_content_arrays(messages)
-        if is_volcengine_provider(record.provider):
-            volcengine_messages = adapted.get("messages")
-            if isinstance(volcengine_messages, list):
-                adapted["messages"] = sanitize_messages_for_volcengine(volcengine_messages)
-        if is_moonshot_provider(record.provider):
-            moonshot_messages = adapted.get("messages")
-            if isinstance(moonshot_messages, list):
-                adapted["messages"] = sanitize_messages_for_moonshot(moonshot_messages)
+        _apply_message_sanitize_policy(record.provider, adapted, _MESSAGE_SANITIZE_POLICIES)
         adapted = self._inject_coding_agent_ua(
             adapted,
             provider=record.provider,

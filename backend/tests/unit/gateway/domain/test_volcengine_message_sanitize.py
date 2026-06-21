@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from typing import Any
 
-import pytest
-
 from domains.gateway.domain.policies.volcengine_message_sanitize import (
     is_volcengine_provider,
     sanitize_messages_for_volcengine,
@@ -60,9 +58,17 @@ class TestSanitizeMessagesForVolcengine:
         """Cursor 多轮 tool_call：assistant content:null + tool_calls → content:"" """
         messages: list[Any] = [
             {"role": "user", "content": "Read file"},
-            {"role": "assistant", "content": None, "tool_calls": [
-                {"id": "call_1", "type": "function", "function": {"name": "read", "arguments": "{}"}}
-            ]},
+            {
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [
+                    {
+                        "id": "call_1",
+                        "type": "function",
+                        "function": {"name": "read", "arguments": "{}"},
+                    }
+                ],
+            },
             {"role": "tool", "tool_call_id": "call_1", "content": "file content"},
         ]
         result = sanitize_messages_for_volcengine(messages)
@@ -120,9 +126,17 @@ class TestSanitizeMessagesForVolcengine:
             {"role": "system", "content": "System prompt"},
             None,
             {"role": "user", "content": "Do something"},
-            {"role": "assistant", "content": None, "tool_calls": [
-                {"id": "call_1", "type": "function", "function": {"name": "act", "arguments": "{}"}}
-            ]},
+            {
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [
+                    {
+                        "id": "call_1",
+                        "type": "function",
+                        "function": {"name": "act", "arguments": "{}"},
+                    }
+                ],
+            },
             {"role": "tool", "tool_call_id": "call_1", "content": "done"},
             {"role": "assistant", "content": None},
             {"role": "user", "content": "Continue"},

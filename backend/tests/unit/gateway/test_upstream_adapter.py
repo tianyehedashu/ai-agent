@@ -271,6 +271,35 @@ def test_non_moonshot_empty_user_message_left_unchanged() -> None:
     assert out["messages"][1]["content"] == "ok"
 
 
+def test_volcengine_null_assistant_content_normalized() -> None:
+    """Volcengine 策略通过统一注册表调度，null content 归一为空字符串。"""
+    record = _FakeRecord(provider="volcengine", real_model="doubao-coding")
+    resolved = ResolvedModelName(record=record, route=None, via_route=None)
+    kwargs = {
+        "messages": [
+            {"role": "user", "content": "Hi"},
+            {
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [
+                    {
+                        "id": "call_1",
+                        "type": "function",
+                        "function": {"name": "act", "arguments": "{}"},
+                    }
+                ],
+            },
+        ],
+        "max_tokens": 100,
+    }
+    out = UpstreamAdapter().adapt(kwargs, client_model="doubao-coding", resolved=resolved)
+    messages = out["messages"]
+    assert len(messages) == 2
+    assert messages[0] == {"role": "user", "content": "Hi"}
+    assert messages[1]["content"] == ""
+    assert messages[1]["tool_calls"] == kwargs["messages"][1]["tool_calls"]
+
+
 def test_adapt_returns_original_when_resolved_is_none_and_no_ua() -> None:
     """resolved=None 且无 coding_agent UA 注入时返回原 kwargs 引用。"""
     kwargs = {"model": "gpt-4", "messages": []}
