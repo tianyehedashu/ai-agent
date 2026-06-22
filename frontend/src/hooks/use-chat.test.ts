@@ -59,7 +59,7 @@ test('useChat tracks process timeline and attaches runId', async () => {
   })
 })
 
-test.skip('session isolation: events from old stream are not applied after view session changes', async () => {
+test('background stream keeps session state when view switches away', async () => {
   let resolveFirst!: () => void
   let resolveContinue!: () => void
   const firstEventFired = new Promise<void>((r) => {
@@ -72,7 +72,7 @@ test.skip('session isolation: events from old stream are not applied after view 
   /* eslint-disable-next-line @typescript-eslint/unbound-method -- vi.mocked().mockImplementationOnce(callback) is safe */
   vi.mocked(chatApi.sendMessage).mockImplementationOnce(
     vi.fn(async (_req, onEvent) => {
-      onEvent({ type: 'thinking', data: { iteration: 1, status: 'start' }, timestamp: 't1' })
+      onEvent({ type: 'thinking', data: { iteration: 1, status: 'processing' }, timestamp: 't1' })
       resolveFirst()
       await continueStream
       onEvent({
@@ -102,17 +102,22 @@ test.skip('session isolation: events from old stream are not applied after view 
   act(() => {
     rerender({ sessionId: 'session-b' })
   })
+  expect(result.current.messages).toHaveLength(0)
+
   resolveContinue()
   await sendPromise
 
-  expect(result.current.messages).toHaveLength(1)
-  expect(result.current.messages[0].role).toBe('user')
-  expect(result.current.streamingContent).toBe('')
-})
+  act(() => {
+    rerender({ sessionId: 'session-a' })
+  })
 
-// Session isolation: effect (viewSessionIdRef) must run before stream events;
-// in the test env the mock's onEvent can run before the effect updates the ref.
-// Behavior is correct in the app (ChatPage effect runs on navigation). Prefer E2E.
+  await waitFor(() => {
+    const assistant = result.current.messages.find((m) => m.role === 'assistant')
+    expect(assistant?.content).toBe('done')
+    const runId = assistant?.metadata?.runId as string
+    expect(result.current.processRuns[runId].length).toBeGreaterThanOrEqual(3)
+  })
+})
 
 test('useChat clears loading state and persists run timeline on stream error', async () => {
   /* eslint-disable-next-line @typescript-eslint/unbound-method -- vi.mocked().mockImplementationOnce(callback) is safe */
