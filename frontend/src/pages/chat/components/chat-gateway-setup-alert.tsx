@@ -53,10 +53,9 @@ export function ChatGatewaySetupAlert({
   }
 
   if (readiness === 'needs_model') {
-    const modelsHref =
-      workspaceTeamId !== null && workspaceTeamId !== ''
-        ? personalModelsIndexHref(workspaceTeamId)
-        : '/gateway/credentials'
+    const modelsHref = workspaceTeamId
+      ? personalModelsIndexHref(workspaceTeamId)
+      : '/gateway/credentials'
     return (
       <Alert variant="destructive" className="mx-auto max-w-3xl">
         <AlertTitle>凭据已就绪，还缺对话模型</AlertTitle>
