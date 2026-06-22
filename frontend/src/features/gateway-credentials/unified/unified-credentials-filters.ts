@@ -3,6 +3,7 @@
  */
 
 import type { CredentialSummary, ProviderCredential } from '@/api/gateway'
+import { credentialProviderLabel } from '@/features/gateway-credentials/credential-provider-display'
 import { credentialTeamLabel } from '@/features/gateway-credentials/credential-scope-labels'
 import { providerLabel } from '@/features/gateway-credentials/provider-schemas'
 import { DEFAULT_PAGE_SIZE } from '@/lib/pagination'
@@ -67,20 +68,24 @@ export function matchesCredentialSearch(
   if (entry.kind === 'full') {
     const c = entry.credential
     const affiliation = affiliationLabel(entry, teamNameById)
+    const contributor = credentialProviderLabel(c)
     return (
       c.name.toLowerCase().includes(q) ||
       c.provider.toLowerCase().includes(q) ||
       providerLabel(c.provider).toLowerCase().includes(q) ||
       affiliation.toLowerCase().includes(q) ||
+      contributor.toLowerCase().includes(q) ||
       c.api_key_masked.toLowerCase().includes(q)
     )
   }
 
   const s = entry.summary
+  const contributor = credentialProviderLabel(s)
   return (
     s.name.toLowerCase().includes(q) ||
     s.provider.toLowerCase().includes(q) ||
     providerLabel(s.provider).toLowerCase().includes(q) ||
+    contributor.toLowerCase().includes(q) ||
     '系统'.includes(q)
   )
 }

@@ -1,6 +1,8 @@
 import type React from 'react'
 import type { ComponentType } from 'react'
 
+import { compactCredentialTableColCount } from '@/features/gateway-credentials/credential-table-layout'
+
 export interface CredentialTableGroupRowProps {
   icon: ComponentType<{ className?: string }>
   title: React.ReactNode
@@ -14,7 +16,7 @@ export function CredentialTableGroupRow({
   title,
   badges,
   actions,
-  colSpan = 5,
+  colSpan = compactCredentialTableColCount(false),
 }: CredentialTableGroupRowProps): React.JSX.Element {
   return (
     <tr className="border-b bg-muted/30">

@@ -10,6 +10,7 @@ import type { GatewayCredentialUpdateBody, ProviderCredential } from '@/api/gate
 import { Badge } from '@/components/ui/badge'
 import { Switch } from '@/components/ui/switch'
 import { CredentialAffiliationCell } from '@/features/gateway-credentials/components/credential-affiliation-cell'
+import { CredentialProviderCell } from '@/features/gateway-credentials/components/credential-provider-cell'
 import { isConfigManagedSystemCredential } from '@/features/gateway-credentials/config-managed-credential'
 import { displayApiBaseForCredential } from '@/features/gateway-credentials/credential-api-bases-utils'
 import {
@@ -185,6 +186,9 @@ export function ManagedCredentialRow({
             />
           </td>
         ) : null}
+        <td className="px-4 py-2">
+          <CredentialProviderCell credential={c} />
+        </td>
         <td className="px-4 py-2">{activeCell}</td>
         <td className="px-4 py-2">
           <CredentialRowActions
@@ -258,6 +262,9 @@ export function ManagedCredentialRow({
           )}
         </td>
       ) : null}
+      <td className="px-4 py-2">
+        <CredentialProviderCell credential={c} />
+      </td>
       <td className="px-4 py-2 text-xs">
         <CredentialApiBaseCell credential={c} />
       </td>

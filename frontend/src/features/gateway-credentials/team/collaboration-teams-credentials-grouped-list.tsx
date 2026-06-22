@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { CredentialTableGroupRow } from '@/features/gateway-credentials/components/credential-table-group-row'
 import { GatewayCredentialsPanelFallback } from '@/features/gateway-credentials/components/gateway-credentials-panel-fallback'
+import { compactCredentialTableColCount } from '@/features/gateway-credentials/credential-table-layout'
 import { ManagedCredentialRow } from '@/features/gateway-credentials/managed-credential-row'
 import { ManagedCredentialsTableHead } from '@/features/gateway-credentials/managed-credentials-table-head'
 import {
@@ -154,7 +155,10 @@ export function CollaborationTeamsCredentialsGroupedList({
           })}
           {visibleTeams.length === 0 ? (
             <tr>
-              <td colSpan={5} className="px-4 py-8 text-center text-sm text-muted-foreground">
+              <td
+                colSpan={compactCredentialTableColCount(false)}
+                className="px-4 py-8 text-center text-sm text-muted-foreground"
+              >
                 没有匹配的团队
               </td>
             </tr>
@@ -224,7 +228,10 @@ function TeamGroupSection({
         : null}
       {teamCredentials.length === 0 ? (
         <tr>
-          <td colSpan={5} className="px-4 py-2 text-sm text-muted-foreground">
+          <td
+            colSpan={compactCredentialTableColCount(false)}
+            className="px-4 py-2 text-sm text-muted-foreground"
+          >
             {showOffPageHint
               ? '该团队已有凭据，请翻页查看。'
               : hasCredentialsOnServer

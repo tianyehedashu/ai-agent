@@ -100,6 +100,7 @@ def build_credential_response(
     cred: CredentialReadModel,
     *,
     encryption_key: str,
+    creator_label: str | None = None,
 ) -> CredentialResponse:
     if cred.api_key_masked is not None:
         api_key_masked = cred.api_key_masked
@@ -143,13 +144,18 @@ def build_credential_response(
         ),
         visibility=vis,
         created_by_user_id=cred.created_by_user_id,
+        created_by_label=creator_label,
         created_at=cred.created_at,
         api_key_masked=api_key_masked,
         management_access="full",
     )
 
 
-def build_credential_metadata_response(cred: CredentialReadModel) -> CredentialResponse:
+def build_credential_metadata_response(
+    cred: CredentialReadModel,
+    *,
+    creator_label: str | None = None,
+) -> CredentialResponse:
     """团队 member 可见：展示名/通道/endpoint 等，不含密钥与 extra。"""
     api_scope = credential_api_scope(scope=cred.scope, tenant_id=cred.tenant_id)
     profile_label = (
@@ -181,6 +187,7 @@ def build_credential_metadata_response(cred: CredentialReadModel) -> CredentialR
         if api_scope == "system"
         else None,
         created_by_user_id=cred.created_by_user_id,
+        created_by_label=creator_label,
         created_at=cred.created_at,
         api_key_masked=METADATA_ONLY_API_KEY_MASKED,
         management_access="metadata",
@@ -194,6 +201,7 @@ def build_credential_response_for_team_workspace_list(
     actor_user_id: uuid.UUID | None,
     team_role: str,
     is_platform_admin: bool,
+    creator_label: str | None = None,
 ) -> CredentialResponse:
     """团队凭据 Tab / 跨团队聚合列表：成员可见团队内全部凭据，敏感字段按管理权限分级。"""
     access = team_credential_management_access(
@@ -205,11 +213,19 @@ def build_credential_response_for_team_workspace_list(
         is_platform_admin=is_platform_admin,
     )
     if access == "full":
-        return build_credential_response(cred, encryption_key=encryption_key)
-    return build_credential_metadata_response(cred)
+        return build_credential_response(
+            cred,
+            encryption_key=encryption_key,
+            creator_label=creator_label,
+        )
+    return build_credential_metadata_response(cred, creator_label=creator_label)
 
 
-def build_credential_summary_response(cred: CredentialReadModel) -> CredentialSummaryResponse:
+def build_credential_summary_response(
+    cred: CredentialReadModel,
+    *,
+    creator_label: str | None = None,
+) -> CredentialSummaryResponse:
     """凭据摘要 DTO（无密钥）；读/写侧均应先映射为 CredentialReadModel。"""
     return CredentialSummaryResponse(
         id=cred.id,
@@ -224,6 +240,7 @@ def build_credential_summary_response(cred: CredentialReadModel) -> CredentialSu
             extra=cred.extra,
         ),
         created_by_user_id=cred.created_by_user_id,
+        created_by_label=creator_label,
     )
 
 
@@ -231,10 +248,11 @@ def build_playground_credential_summary_response(
     cred: CredentialReadModel,
     *,
     context_team_id: uuid.UUID | None,
+    creator_label: str | None = None,
 ) -> PlaygroundCredentialSummaryResponse:
     """Playground 凭据摘要（含 context_team_id）。"""
     return PlaygroundCredentialSummaryResponse(
-        **build_credential_summary_response(cred).model_dump(),
+        **build_credential_summary_response(cred, creator_label=creator_label).model_dump(),
         context_team_id=context_team_id,
     )
 

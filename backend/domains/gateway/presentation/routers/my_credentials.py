@@ -46,7 +46,15 @@ async def list_my_credentials(
 ) -> list[CredentialResponse]:
     user_id = get_user_uuid(current_user)
     creds = await reads.list_user_credentials(user_id, encryption_key=encryption_key())
-    return [build_credential_response(c, encryption_key=encryption_key()) for c in creds]
+    creator_labels = await reads.credential_creator_labels_for(creds)
+    return [
+        build_credential_response(
+            c,
+            encryption_key=encryption_key(),
+            creator_label=creator_labels.get(c.id),
+        )
+        for c in creds
+    ]
 
 
 @router.get("/my-credentials/{credential_id}/reveal", response_model=dict[str, str])

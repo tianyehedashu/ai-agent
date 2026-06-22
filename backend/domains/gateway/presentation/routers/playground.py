@@ -31,10 +31,13 @@ async def list_playground_credential_summaries(
         user_id,
         is_platform_admin=is_platform_admin,
     )
+    creds = [item.credential for item in rows]
+    creator_labels = await reads.credential_creator_labels_for(creds)
     return [
         build_playground_credential_summary_response(
             item.credential,
             context_team_id=item.context_team_id,
+            creator_label=creator_labels.get(item.credential.id),
         )
         for item in rows
     ]

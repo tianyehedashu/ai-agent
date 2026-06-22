@@ -28,6 +28,7 @@ export interface CredentialSummary {
   is_active: boolean
   is_config_managed: boolean
   created_by_user_id?: string | null
+  created_by_label?: string | null
   management_access?: 'full' | 'metadata'
 }
 
@@ -67,6 +68,8 @@ export interface ProviderCredential {
   api_key_masked: string
   /** 团队 scope 凭据创建者 */
   created_by_user_id?: string | null
+  /** 提供者展示名（平台 / 用户 / 团队凭据创建者） */
+  created_by_label?: string | null
   /** full=可管理；metadata=团队内仅展示非敏感字段 */
   management_access?: 'full' | 'metadata'
 }

@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { GatewayCredentialsPanelFallback } from '@/features/gateway-credentials/components/gateway-credentials-panel-fallback'
+import { fullCredentialTableColCount } from '@/features/gateway-credentials/credential-table-layout'
 import { ManagedCredentialRow } from '@/features/gateway-credentials/managed-credential-row'
 import { ManagedCredentialsTableHead } from '@/features/gateway-credentials/managed-credentials-table-head'
 import type { CredentialsListTab } from '@/features/gateway-models/paths'
@@ -67,7 +68,7 @@ export function ManagedCredentialsTable({
   const teamNameById = useGatewayTeamNameMap()
   const showAdd = canWrite || isPlatformAdmin
   const showAffiliation = showAffiliationColumn || listVariant === 'system'
-  const colCount = showAffiliation ? 8 : 7
+  const colCount = fullCredentialTableColCount(showAffiliation)
   const itemCount = items?.length ?? 0
   const isEmpty = !isLoading && itemCount === 0
   const showEmptyPanel = isEmpty && emptyState !== undefined

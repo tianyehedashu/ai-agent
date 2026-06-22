@@ -62,6 +62,7 @@ async def list_credentials(
         include_system=team.is_platform_admin,
         encryption_key=enc_key,
     )
+    creator_labels = await reads.credential_creator_labels_for(creds)
     return [
         build_credential_response_for_team_workspace_list(
             c,
@@ -69,6 +70,7 @@ async def list_credentials(
             actor_user_id=team.user_id,
             team_role=team.team_role,
             is_platform_admin=team.is_platform_admin,
+            creator_label=creator_labels.get(c.id),
         )
         for c in creds
     ]
@@ -86,7 +88,11 @@ async def list_credential_summaries(
         team_role=team.team_role,
         is_platform_admin=team.is_platform_admin,
     )
-    return [build_credential_summary_response(r) for r in rows]
+    creator_labels = await reads.credential_creator_labels_for(rows)
+    return [
+        build_credential_summary_response(r, creator_label=creator_labels.get(r.id))
+        for r in rows
+    ]
 
 
 @router.get("/credentials/{credential_id}", response_model=CredentialResponse)
@@ -102,7 +108,12 @@ async def get_credential(
         team_role=team.team_role,
         is_platform_admin=team.is_platform_admin,
     )
-    return build_credential_response(row, encryption_key=encryption_key())
+    creator_labels = await reads.credential_creator_labels_for([row])
+    return build_credential_response(
+        row,
+        encryption_key=encryption_key(),
+        creator_label=creator_labels.get(row.id),
+    )
 
 
 @router.get("/credentials/{credential_id}/reveal", response_model=dict[str, str])

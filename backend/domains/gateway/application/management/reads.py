@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any
@@ -953,6 +954,22 @@ class GatewayManagementReadService(GatewayUsageLogReadMixin):
             page=page,
             page_size=page_size,
         )
+
+    async def credential_creator_labels_for(
+        self,
+        creds: Sequence[CredentialReadModel],
+    ) -> dict[UUID, str | None]:
+        """批量解析凭据「提供者」展示标签（join users 摘要）。"""
+        from domains.gateway.application.management.credential_creator_labels import (
+            collect_creator_user_ids,
+            credential_creator_labels_for_read_models,
+        )
+
+        if not creds:
+            return {}
+        user_ids = collect_creator_user_ids(creds)
+        summaries = await self._user_summaries.list_summary_views_by_ids(user_ids)
+        return credential_creator_labels_for_read_models(creds, summaries)
 
 
 __all__ = ["GatewayManagementReadService"]

@@ -194,6 +194,10 @@ class CredentialResponse(BaseModel):
         default=None,
         description="团队 scope 凭据创建者",
     )
+    created_by_label: str | None = Field(
+        default=None,
+        description="提供者展示名（平台 / 用户邮箱或姓名 / 团队凭据创建者）",
+    )
     created_at: datetime
     api_key_masked: str = Field(
         description="解密后仅用于展示的掩码，不包含完整密钥",
@@ -221,6 +225,10 @@ class CredentialSummaryResponse(BaseModel):
     created_by_user_id: uuid.UUID | None = Field(
         default=None,
         description="团队 scope 凭据创建者",
+    )
+    created_by_label: str | None = Field(
+        default=None,
+        description="提供者展示名（平台 / 用户邮箱或姓名 / 团队凭据创建者）",
     )
 
     model_config = ConfigDict(from_attributes=False)

@@ -7,6 +7,7 @@ import type React from 'react'
 import type { CredentialSummary } from '@/api/gateway'
 import { Badge } from '@/components/ui/badge'
 import { CredentialAffiliationCell } from '@/features/gateway-credentials/components/credential-affiliation-cell'
+import { CredentialProviderCell } from '@/features/gateway-credentials/components/credential-provider-cell'
 import { providerLabel } from '@/features/gateway-credentials/provider-schemas'
 
 export interface CredentialSummaryTableRowProps {
@@ -46,6 +47,9 @@ export function CredentialSummaryTableRow({
       </td>
       <td className="px-4 py-2">
         <CredentialAffiliationCell scope={summary.scope} teamNameById={teamNameById} compact />
+      </td>
+      <td className="px-4 py-2">
+        <CredentialProviderCell credential={summary} />
       </td>
       <td className="px-4 py-2">
         <Badge

@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from domains.gateway.application.management.managed_team_credential_reads import (
     list_managed_team_credentials_for_actor,
 )
+from domains.gateway.application.management.reads import GatewayManagementReadService
 from domains.gateway.presentation.credential_response import (
     build_credential_response_for_team_workspace_list,
 )
@@ -46,6 +47,8 @@ async def list_managed_team_credentials(
         search=search,
         encryption_key=enc_key,
     )
+    reads = GatewayManagementReadService(db)
+    creator_labels = await reads.credential_creator_labels_for(result.page.items)
     return ManagedTeamCredentialListResponse(
         items=[
             build_credential_response_for_team_workspace_list(
@@ -56,6 +59,7 @@ async def list_managed_team_credentials(
                 if item.tenant_id
                 else "member",
                 is_platform_admin=is_platform_admin,
+                creator_label=creator_labels.get(item.id),
             )
             for item in result.page.items
         ],

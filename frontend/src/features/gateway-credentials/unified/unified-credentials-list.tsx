@@ -8,6 +8,7 @@ import type { GatewayCredentialUpdateBody, ProviderCredential } from '@/api/gate
 import type { GatewayTeam } from '@/api/gateway/teams'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { CredentialSummaryTableRow } from '@/features/gateway-credentials/credential-summary-table-row'
+import { compactCredentialTableColCount } from '@/features/gateway-credentials/credential-table-layout'
 import {
   listTabForCredential,
   listVariantForCredential,
@@ -105,7 +106,10 @@ export function UnifiedCredentialsList({
             })
           ) : (
             <tr>
-              <td colSpan={6} className="px-4 py-8 text-center text-sm text-muted-foreground">
+              <td
+                colSpan={compactCredentialTableColCount(true)}
+                className="px-4 py-8 text-center text-sm text-muted-foreground"
+              >
                 {hasActiveFilters && filteredTotal === 0
                   ? '无匹配的凭据，请调整筛选条件'
                   : '暂无凭据'}

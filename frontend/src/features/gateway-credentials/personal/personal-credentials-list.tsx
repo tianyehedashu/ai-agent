@@ -6,6 +6,7 @@ import type React from 'react'
 
 import type { ProviderCredential } from '@/api/gateway'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { compactCredentialTableColCount } from '@/features/gateway-credentials/credential-table-layout'
 import { ManagedCredentialRow } from '@/features/gateway-credentials/managed-credential-row'
 import { ManagedCredentialsTableHead } from '@/features/gateway-credentials/managed-credentials-table-head'
 
@@ -53,7 +54,10 @@ export function PersonalCredentialsList({
             ))
           ) : (
             <tr>
-              <td colSpan={5} className="px-4 py-8 text-center text-sm text-muted-foreground">
+              <td
+                colSpan={compactCredentialTableColCount(false)}
+                className="px-4 py-8 text-center text-sm text-muted-foreground"
+              >
                 暂无凭据
               </td>
             </tr>
