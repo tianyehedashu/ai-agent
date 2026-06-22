@@ -40,6 +40,13 @@ class TestChatUseCase:
         catalog.list_visible_models = AsyncMock(
             return_value=[{"id": "deepseek/deepseek-chat", "display_name": "DeepSeek"}]
         )
+        catalog.list_requestable_text_model_ids = AsyncMock(
+            return_value=frozenset(["deepseek/deepseek-chat"])
+        )
+        catalog.resolve_chat_default_text_model = AsyncMock(
+            return_value="deepseek/deepseek-chat"
+        )
+        catalog.list_personal_models_for_selector = AsyncMock(return_value=[])
         from domains.agent.infrastructure.memory.vector_store_factory import (
             build_memory_indexing_service,
         )
@@ -252,7 +259,7 @@ class TestChatUseCase:
                 model="gpt-4",
             )
 
-            config = await service._get_agent_config(str(agent.id))
+            config = await service._get_agent_config(str(agent.id), fallback_model="gpt-4")
 
             assert config.name == "Test Agent"
             assert config.model == "gpt-4"
@@ -266,11 +273,11 @@ class TestChatUseCase:
 
         picked = await service._pick_chat_model_ref(None, session, agent_id=None)
 
-        assert picked == "deepseek/deepseek-chat"
+        assert picked is None
 
     @pytest.mark.asyncio
     async def test_get_agent_config_default(self, service):
-        config = await service._get_agent_config(None)
+        config = await service._get_agent_config(None, fallback_model="deepseek/deepseek-chat")
 
         assert config.name == "Default Agent"
         assert len(config.tools) > 0

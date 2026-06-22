@@ -13,9 +13,6 @@ if TYPE_CHECKING:
 import uuid
 
 from bootstrap.config import settings
-from domains.agent.application.chat_model_resolution_use_case import (
-    _NO_VISIBLE_TEXT_MODELS_MSG,
-)
 from domains.agent.domain.sandbox_runtime_policy import (
     should_pre_create_persistent_sandbox,
     wants_persistent_docker_sandbox,
@@ -35,7 +32,6 @@ from domains.agent.infrastructure.tools.registry import ConfiguredToolRegistry
 from domains.gateway.application.model_or_route_resolution import resolve_model_or_route
 from domains.gateway.application.ports import InvocationOverrides
 from libs.db.database import get_session_context
-from libs.exceptions import ValidationError
 from utils.logging import get_logger
 
 if TYPE_CHECKING:
@@ -59,14 +55,17 @@ class ChatAgentRunMixin:
         thinking_enabled: bool | None = None,
     ) -> tuple[LangGraphAgentEngine, AgentEvent | None, str | None]:
         """准备 Agent 引擎"""
-        allowed = await self._visible_text_system_ids()
-        picked = await self._pick_chat_model_ref(request_model_ref, session, agent_id)
+        billing = await self._resolve_billing_context()
+        allowed = await self._requestable_text_model_ids(billing)
+        picked = await self._pick_chat_model_ref(request_model_ref, session, agent_id, billing)
         resolved = await self._model_resolution.resolve_text_chat_model(
             picked,
+            billing_team_id=billing.team_id,
+            user_id=billing.user_id,
             allowed_text_system_ids=allowed,
         )
-        team_id = await self._billing_team_id_for_catalog()
-        catalog_user_id = self._model_resolution._resolve_user_id()
+        team_id = billing.team_id
+        catalog_user_id = billing.user_id
         if team_id is not None and await resolve_model_or_route(
             self.db,
             team_id,
@@ -80,6 +79,8 @@ class ChatAgentRunMixin:
             )
             resolved = await self._model_resolution.resolve_text_chat_model(
                 None,
+                billing_team_id=billing.team_id,
+                user_id=billing.user_id,
                 allowed_text_system_ids=allowed,
             )
             if await resolve_model_or_route(
@@ -88,9 +89,12 @@ class ChatAgentRunMixin:
                 resolved.model,
                 user_id=catalog_user_id,
             ) is None:
-                raise ValidationError(_NO_VISIBLE_TEXT_MODELS_MSG)
+                await self._model_resolution._raise_text_model_unavailable(
+                    billing_team_id=billing.team_id,
+                    user_id=billing.user_id,
+                )
 
-        agent_config = await self._get_agent_config(agent_id)
+        agent_config = await self._get_agent_config(agent_id, fallback_model=resolved.model)
         agent_config = agent_config.model_copy(update={"model": resolved.model})
 
         execution_config = self.config_service.load_for_agent(agent_id=agent_id or "default")
@@ -305,26 +309,20 @@ class ChatAgentRunMixin:
                 exc_info=True,
             )
 
-    async def _get_agent_config(self: ChatUseCase, agent_id: str | None) -> AgentConfig:
-        """获取 Agent 配置"""
+    async def _get_agent_config(
+        self: ChatUseCase,
+        agent_id: str | None,
+        *,
+        fallback_model: str,
+    ) -> AgentConfig:
+        """获取 Agent 配置；对话路径的模型已由 Chat 解析，此处不再重复 require 场景默认。"""
         if agent_id:
             agent = await self.agent_service.get_agent(agent_id)
             if agent:
                 return self._build_config_from_agent(agent)
 
-        default_model = settings.default_model
-        catalog = getattr(self, "_model_catalog", None)
-        if catalog is not None:
-            from domains.gateway.application.scenario_defaults import require_scenario_default
-
-            default_model = await require_scenario_default(
-                catalog,
-                scenario="default",
-                env_override=settings.default_model,
-            )
-
         return AgentConfig.create_default(
-            model=default_model,
+            model=fallback_model,
             checkpoint_enabled=settings.checkpoint_enabled,
             hitl_enabled=settings.hitl_enabled,
         )

@@ -128,7 +128,7 @@ class ProxyNonChatMixin:
             await self.guard.release_budget_reservations(reservations)
             await self.guard.release_entitlement_reservations(ctx)
             raise
-        return adapt_response(
+        return await adapt_response(
             response,
             ctx,
             self.budget_service,
@@ -174,7 +174,7 @@ class ProxyNonChatMixin:
             await self.guard.release_budget_reservations(reservations)
             await self.guard.release_entitlement_reservations(ctx)
             raise
-        return adapt_response(
+        return await adapt_response(
             response,
             ctx,
             self.budget_service,
@@ -209,7 +209,7 @@ class ProxyNonChatMixin:
             await self.guard.release_budget_reservations(reservations)
             await self.guard.release_entitlement_reservations(ctx)
             raise
-        return adapt_response(
+        return await adapt_response(
             response,
             ctx,
             self.budget_service,
@@ -245,7 +245,7 @@ class ProxyNonChatMixin:
             await self.guard.release_entitlement_reservations(ctx)
             raise
         if isinstance(result, bytes):
-            return adapt_binary_response(
+            return await adapt_binary_response(
                 result,
                 ctx,
                 self.budget_service,
@@ -253,7 +253,7 @@ class ProxyNonChatMixin:
                 metadata=meta,
                 upstream_custom=up_c,
             )
-        return adapt_binary_response(
+        return await adapt_binary_response(
             bytes(result) if result is not None else b"",
             ctx,
             self.budget_service,
@@ -282,7 +282,7 @@ class ProxyNonChatMixin:
             router_call=lambda: self.litellm.router_rerank(kwargs),
             direct_call=lambda: self.litellm.direct_rerank(kwargs),
         )
-        return adapt_response(
+        return await adapt_response(
             response,
             ctx,
             self.budget_service,
@@ -314,7 +314,7 @@ class ProxyNonChatMixin:
             router_call=lambda: self.litellm.router_moderation(kwargs),
             direct_call=lambda: self.litellm.direct_moderation(kwargs),
         )
-        return adapt_response(
+        return await adapt_response(
             response,
             ctx,
             self.budget_service,
@@ -366,7 +366,7 @@ class ProxyNonChatMixin:
             await self.guard.release_budget_reservations(reservations)
             await self.guard.release_entitlement_reservations(ctx)
             raise
-        return adapt_response(
+        return await adapt_response(
             response,
             ctx,
             self.budget_service,

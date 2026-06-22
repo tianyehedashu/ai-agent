@@ -585,6 +585,9 @@ class AvailableModelsListResponse(BaseModel):
     default_for_vision: dict[str, str] | None = None
     default_for_image_gen: dict[str, str] | None = None
     connectivity_summary: ModelConnectivitySummary | None = None
+    chat_readiness: Literal["ready", "needs_model", "needs_connectivity_fix", "needs_credential"] | None = (
+        None
+    )
 
 
 class GatewayModelRouteUsageSlice(BaseModel):
@@ -1154,7 +1157,10 @@ class RequestLogDetailResponse(RequestLogResponse):
 
 
 class RequestLogListResponse(PaginatedListResponse[RequestLogResponse]):
-    pass
+    total_exact: bool = Field(
+        default=True,
+        description="False 表示 total 仅为下界（仍有下一页），勿用于展示「共 N 条/总页数」。",
+    )
 
 
 # =============================================================================

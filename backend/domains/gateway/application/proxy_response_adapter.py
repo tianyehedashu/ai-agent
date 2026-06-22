@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 from collections.abc import AsyncGenerator, AsyncIterator
 from contextlib import suppress
 from datetime import UTC, datetime
@@ -26,6 +25,7 @@ from domains.gateway.application.budget_usage_persist import (
     PlatformBudgetUpsertItem,
     schedule_platform_budget_usage_upsert,
 )
+from domains.gateway.application.deferred_task_runner import proxy_deferred_runner
 from domains.gateway.application.entitlement_guard import EntitlementGuard
 from domains.gateway.application.pricing.pricing_proxy_metadata import (
     downstream_custom_from_metadata,
@@ -35,7 +35,6 @@ from domains.gateway.application.prompt_cache_middleware import (
     apply_gateway_cache_hit_to_metadata,
 )
 from domains.gateway.application.proxy_context import BudgetAnchorCoord, ProxyContext
-from domains.gateway.application.proxy_deferred_tasks import register_proxy_deferred_task
 from domains.gateway.application.proxy_stream_settlement import (
     finalize_deferred_stream_settlement,
 )
@@ -49,7 +48,7 @@ from domains.gateway.domain.proxy_policy import (
 from domains.gateway.domain.quota_plan import ENTITLEMENT_NS
 from domains.gateway.domain.stream_utils import safe_aclose_stream
 from domains.gateway.infrastructure.repositories.budget_repository import BudgetRepository
-from libs.db.database import get_session_context
+from libs.db.database import get_session_context, prefer_background_pool
 from utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -78,7 +77,7 @@ def pricing_kwargs_from_litellm(
     )
 
 
-def adapt_anthropic_response(
+async def adapt_anthropic_response(
     response: Any,
     ctx: ProxyContext,
     budget: BudgetService,
@@ -98,7 +97,7 @@ def adapt_anthropic_response(
     from domains.gateway.application.pricing.pricing_budget_cost import proxy_budget_cost_usd
 
     cost = proxy_budget_cost_usd(metadata, upstream)
-    schedule_settle_usage(
+    await schedule_settle_usage(
         ctx,
         budget,
         tokens=tokens,
@@ -167,7 +166,7 @@ async def adapt_anthropic_stream(
     )
 
 
-def adapt_binary_response(
+async def adapt_binary_response(
     response: bytes,
     ctx: ProxyContext,
     budget: BudgetService,
@@ -182,7 +181,7 @@ def adapt_binary_response(
 
     upstream = _calc_upstream_cost(None, metadata=metadata, model=ctx.budget_model, requests=1)
     cost = proxy_budget_cost_usd(metadata, upstream)
-    schedule_settle_usage(
+    await schedule_settle_usage(
         ctx,
         budget,
         tokens=0,
@@ -194,7 +193,7 @@ def adapt_binary_response(
     return response
 
 
-def adapt_response(
+async def adapt_response(
     response: Any,
     ctx: ProxyContext,
     budget: BudgetService,
@@ -214,7 +213,7 @@ def adapt_response(
 
     upstream = _calc_upstream_cost(response, metadata=metadata, model=ctx.budget_model)
     cost = proxy_budget_cost_usd(metadata, upstream)
-    schedule_settle_usage(
+    await schedule_settle_usage(
         ctx,
         budget,
         tokens=tokens,
@@ -350,7 +349,7 @@ async def settle_usage(
 
                 await record_proxy_entitlement_commit(request_id)
         if entitlement_committed and request_id and (tokens > 0 or cost > 0):
-            schedule_quota_plan_usage_upsert(
+            await schedule_quota_plan_usage_upsert(
                 ns=ENTITLEMENT_NS,
                 plan_id=state.plan_id,
                 specs=state.specs,
@@ -430,7 +429,7 @@ async def settle_usage(
         )
 
     if request_id and (cost > 0 or tokens > 0) and platform_upsert_items:
-        schedule_platform_budget_usage_upsert(
+        await schedule_platform_budget_usage_upsert(
             items=platform_upsert_items,
             delta_tokens=tokens,
             delta_cost_usd=cost,
@@ -496,7 +495,7 @@ def _uuid_or_none(value: object) -> uuid.UUID | None:
         return None
 
 
-def schedule_settle_usage(
+async def schedule_settle_usage(
     ctx: ProxyContext,
     budget: BudgetService,
     *,
@@ -506,22 +505,29 @@ def schedule_settle_usage(
     entitlement_guard: EntitlementGuard | None = None,
     request_id: str | None = None,
 ) -> None:
-    """异步结算；任务登记以便测试/进程退出时收口。"""
+    """登记响应后结算到 **有界执行器**（不阻塞响应返回）。
+
+    结算走 **后台连接池**，与 ``/v1/*`` 热路径物理隔离；有界队列 + 固定 worker 池消除
+    无上限 fire-and-forget 占满后台池、拖垮事件循环（与 vkey 回写、桶 upsert 同策略）。
+    队列满载时由 ``submit`` 背压（阻塞短超时→inline 降级），不丢结算。
+    流式路径的 ``finalize_deferred_stream_settlement`` 仍在请求 task 内直接 await，
+    属请求生命周期，沿用主池，不受此影响。
+    """
 
     async def _settle() -> None:
-        await settle_usage(
-            ctx,
-            budget,
-            tokens=tokens,
-            cost=cost,
-            requests=requests,
-            entitlement_guard=entitlement_guard,
-            request_id=request_id,
-        )
+        with prefer_background_pool():
+            await settle_usage(
+                ctx,
+                budget,
+                tokens=tokens,
+                cost=cost,
+                requests=requests,
+                entitlement_guard=entitlement_guard,
+                request_id=request_id,
+            )
 
     with suppress(RuntimeError):
-        settle_task = asyncio.create_task(_settle())
-        register_proxy_deferred_task(settle_task)
+        await proxy_deferred_runner.submit(_settle)
 
 
 def _calc_upstream_cost(

@@ -5,7 +5,7 @@ from __future__ import annotations
 from decimal import Decimal
 from types import SimpleNamespace
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 import uuid
 
 import pytest
@@ -87,7 +87,7 @@ async def test_audio_speech_settles_per_request_cost(
 ) -> None:
     settled: dict[str, Decimal] = {}
 
-    def capture_settle(
+    async def capture_settle(
         _ctx: ProxyContext,
         _budget: object,
         *,
@@ -117,7 +117,7 @@ async def test_audio_speech_settles_per_request_cost(
     )
     metadata = {"gateway_pricing_upstream": {"per_request_usd": 0.012}}
 
-    result = adapt_binary_response(
+    result = await adapt_binary_response(
         b"audio",
         ctx,
         _NoopBudget(),
@@ -163,7 +163,7 @@ async def test_audio_speech_proxy_uses_adapt_binary(
     monkeypatch.setattr(use_case.guard, "check_entitlement", AsyncMock())
     _patch_preflight_model_resolution(use_case, monkeypatch)
 
-    adapt_mock = MagicMock(side_effect=lambda data, *_a, **_k: data)
+    adapt_mock = AsyncMock(side_effect=lambda data, *_a, **_k: data)
     monkeypatch.setattr(
         "domains.gateway.application.proxy_non_chat_pipeline.adapt_binary_response",
         adapt_mock,

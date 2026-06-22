@@ -32,7 +32,9 @@ def build_probe_gateway_metadata(
         "gateway_capability": target.capability,
         "gateway_provider": target.provider,
         "gateway_client_type": GATEWAY_PROBE_CLIENT_TYPE,
-        "gateway_route_name": target.real_model,
+        # route_name = 客户端调用名（GatewayModel.name），与真实代理请求语义一致；
+        # 上游 real_model 经 gateway_real_model（见 probe_litellm_model_info）单独落库。
+        "gateway_route_name": target.model_name,
     }
     if user_email_snapshot:
         meta["gateway_user_email_snapshot"] = user_email_snapshot
@@ -46,7 +48,8 @@ def probe_litellm_model_info(target: ProbeTarget, credential_name: str) -> dict[
     """供 ``_deployment_from_model_info_kwargs`` / ``_credential_from_model_info_kwargs`` 解析。"""
     return {
         "id": str(target.model_id),
-        "gateway_model_name": target.real_model,
+        # 注册别名快照 = 调用名；上游 canonical id 用 gateway_real_model。
+        "gateway_model_name": target.model_name,
         "gateway_real_model": target.real_model,
         "gateway_credential_id": str(target.credential_id),
         "gateway_credential_name": credential_name,

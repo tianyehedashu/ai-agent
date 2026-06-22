@@ -7,9 +7,8 @@ from decimal import Decimal
 import logging
 from types import SimpleNamespace
 from typing import Any
-import uuid
-
 from unittest.mock import AsyncMock
+import uuid
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -505,25 +504,26 @@ async def test_anthropic_messages_keeps_fields_for_anthropic_upstream(
     assert captured.get("thinking") == body["thinking"]
 
 
-def test_adapt_anthropic_response_sets_cache_hit(
+@pytest.mark.asyncio
+async def test_adapt_anthropic_response_sets_cache_hit(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Anthropic 非流式响应：usage 含 cache_read_input_tokens 时 metadata 应标记 gateway_cache_hit。"""
     monkeypatch.setattr(
         "domains.gateway.application.proxy_response_adapter.schedule_settle_usage",
-        lambda *args, **kwargs: None,
+        AsyncMock(),
     )
     monkeypatch.setattr(
         "domains.gateway.application.proxy_response_adapter._calc_upstream_cost",
-        lambda *args, **kwargs: Decimal("0"),
+        lambda *_a, **_k: Decimal("0"),
     )
     monkeypatch.setattr(
         "domains.gateway.application.pricing.pricing_budget_cost.proxy_budget_cost_usd",
-        lambda *args, **kwargs: Decimal("0"),
+        lambda *_a, **_k: Decimal("0"),
     )
     monkeypatch.setattr(
         "domains.gateway.application.pricing.pricing_display_cost.resolve_downstream_display_cost_usd",
-        lambda *args, **kwargs: Decimal("0"),
+        lambda *_a, **_k: Decimal("0"),
     )
 
     team_id = uuid.uuid4()
@@ -545,7 +545,7 @@ def test_adapt_anthropic_response_sets_cache_hit(
             "cache_read_input_tokens": 2000,
         },
     }
-    adapt_anthropic_response(
+    await adapt_anthropic_response(
         response,
         ctx,
         _NoopBudget(),
@@ -556,25 +556,26 @@ def test_adapt_anthropic_response_sets_cache_hit(
     assert metadata.get("gateway_cache_hit") is True
 
 
-def test_adapt_anthropic_response_no_cache_hit(
+@pytest.mark.asyncio
+async def test_adapt_anthropic_response_no_cache_hit(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Anthropic 非流式响应：usage 不含缓存时 gateway_cache_hit 不应为 True。"""
     monkeypatch.setattr(
         "domains.gateway.application.proxy_response_adapter.schedule_settle_usage",
-        lambda *args, **kwargs: None,
+        AsyncMock(),
     )
     monkeypatch.setattr(
         "domains.gateway.application.proxy_response_adapter._calc_upstream_cost",
-        lambda *args, **kwargs: Decimal("0"),
+        lambda *_a, **_k: Decimal("0"),
     )
     monkeypatch.setattr(
         "domains.gateway.application.pricing.pricing_budget_cost.proxy_budget_cost_usd",
-        lambda *args, **kwargs: Decimal("0"),
+        lambda *_a, **_k: Decimal("0"),
     )
     monkeypatch.setattr(
         "domains.gateway.application.pricing.pricing_display_cost.resolve_downstream_display_cost_usd",
-        lambda *args, **kwargs: Decimal("0"),
+        lambda *_a, **_k: Decimal("0"),
     )
 
     team_id = uuid.uuid4()
@@ -595,7 +596,7 @@ def test_adapt_anthropic_response_no_cache_hit(
             "output_tokens": 5,
         },
     }
-    adapt_anthropic_response(
+    await adapt_anthropic_response(
         response,
         ctx,
         _NoopBudget(),
@@ -617,19 +618,19 @@ async def test_adapt_anthropic_stream_sets_cache_hit(
     )
     monkeypatch.setattr(
         "domains.gateway.application.proxy_response_adapter.schedule_settle_usage",
-        lambda *args, **kwargs: None,
+        lambda *_a, **_k: None,
     )
     monkeypatch.setattr(
         "domains.gateway.application.proxy_response_adapter._calc_upstream_cost",
-        lambda *args, **kwargs: Decimal("0"),
+        lambda *_a, **_k: Decimal("0"),
     )
     monkeypatch.setattr(
         "domains.gateway.application.pricing.pricing_budget_cost.proxy_budget_cost_usd",
-        lambda *args, **kwargs: Decimal("0"),
+        lambda *_a, **_k: Decimal("0"),
     )
     monkeypatch.setattr(
         "domains.gateway.application.pricing.pricing_display_cost.resolve_downstream_display_cost_usd",
-        lambda *args, **kwargs: Decimal("0"),
+        lambda *_a, **_k: Decimal("0"),
     )
 
     async def fake_stream() -> AsyncIterator[dict[str, Any]]:
@@ -673,7 +674,7 @@ async def test_adapt_anthropic_stream_accumulates_usage_across_events(
     """
     monkeypatch.setattr(
         "domains.gateway.application.proxy_response_adapter.schedule_settle_usage",
-        lambda *args, **kwargs: None,
+        lambda *_a, **_k: None,
     )
     captured_usage: dict[str, Any] = {}
 

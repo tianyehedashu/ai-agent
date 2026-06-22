@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { History, Wrench } from 'lucide-react'
@@ -20,6 +20,7 @@ import { useToast } from '@/hooks/use-toast'
 import { useChatStore } from '@/stores/chat'
 import type { SessionCreativeMode } from '@/types'
 
+import { ChatGatewaySetupAlert, isChatReady } from './components/chat-gateway-setup-alert'
 import ChatMessages from './components/chat-messages'
 import { MCPSessionConfig } from './components/mcp-session-config'
 import ChatSessionVideoTasks from './components/session-video-tasks'
@@ -123,7 +124,11 @@ export default function ChatPage(): React.JSX.Element {
     [toast, navigate]
   )
 
-  const { data: availableTextModels } = useQuery({
+  const {
+    data: availableTextModels,
+    isPending,
+    isFetching,
+  } = useQuery({
     queryKey: ['gateway-models-available', 'text', '', '', workspaceTeamId ?? ''],
     queryFn: () =>
       gatewayApi.listAvailableModels('text', undefined, {
@@ -132,6 +137,25 @@ export default function ChatPage(): React.JSX.Element {
     staleTime: 30_000,
     enabled: workspaceTeamId !== null,
   })
+
+  const chatModelsLoaded = availableTextModels !== undefined
+  const chatReadiness = availableTextModels?.chat_readiness
+  const chatModelsLoading =
+    workspaceTeamId !== null && !chatModelsLoaded && (isPending || isFetching)
+  const chatModelsReady = isChatReady(chatReadiness)
+
+  const firstSelectablePersonalModelId = useMemo(() => {
+    const items = availableTextModels?.user_models.items ?? []
+    for (const model of items) {
+      if (model.is_active && model.last_test_status !== 'failed') return model.id
+    }
+    return undefined
+  }, [availableTextModels?.user_models.items])
+
+  const resolveChatModelRef = useCallback((): string | undefined => {
+    const defaultId = availableTextModels?.default_for_text?.id
+    return selectedModelRef ?? defaultId ?? firstSelectablePersonalModelId ?? undefined
+  }, [availableTextModels?.default_for_text?.id, selectedModelRef, firstSelectablePersonalModelId])
 
   // 侧栏「新建对话」已在 /chat 时 sessionId 不变，需单独重置消息与进行中的流
   useEffect(() => {
@@ -238,6 +262,14 @@ export default function ChatPage(): React.JSX.Element {
 
   const handleSend = async (): Promise<void> => {
     if (!input.trim() || isLoading) return
+    if (creativeMode === 'chat' && !chatModelsReady) {
+      toast({
+        title: '无法发送',
+        description: '请先在 Gateway 完成凭据与对话模型配置。',
+        variant: 'destructive',
+      })
+      return
+    }
     const message = input.trim()
     setInput('')
     const refLines = referenceImageUrls
@@ -271,8 +303,7 @@ export default function ChatPage(): React.JSX.Element {
       return
     }
 
-    const defaultId = availableTextModels?.default_for_text?.id
-    const modelRef = selectedModelRef ?? defaultId ?? undefined
+    const modelRef = resolveChatModelRef()
     await sendMessage(message, {
       modelRef,
       gatewayTeamId: workspaceTeamId ?? undefined,
@@ -358,6 +389,16 @@ export default function ChatPage(): React.JSX.Element {
         </div>
       )}
 
+      {creativeMode === 'chat' && workspaceTeamId !== null ? (
+        <div className="px-4 pt-4 sm:px-6">
+          <ChatGatewaySetupAlert
+            readiness={chatReadiness}
+            workspaceTeamId={workspaceTeamId}
+            modelsLoaded={chatModelsLoaded}
+          />
+        </div>
+      ) : null}
+
       {/* Messages Area - Centered with max width */}
       <div className="flex-1 overflow-hidden">
         <ChatMessages
@@ -387,7 +428,9 @@ export default function ChatPage(): React.JSX.Element {
             chatValue={input}
             chatOnChange={setInput}
             chatOnSend={handleSend}
-            chatIsLoading={isLoading}
+            chatIsLoading={
+              isLoading || (creativeMode === 'chat' && (!chatModelsReady || chatModelsLoading))
+            }
             referenceImageUrls={referenceImageUrls}
             onReferenceImageUrlsChange={setReferenceImageUrls}
             toolbarLeftExtra={

@@ -5,6 +5,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 import uuid
 
+from domains.gateway.application.billing_context import resolve_billing_context
+from domains.gateway.application.chat_model_selector_reads import compute_chat_readiness
 from domains.gateway.application.config_catalog_sync import gateway_model_to_selector_item
 from domains.gateway.application.entitlement_model_status import (
     annotate_items_entitlement_status,
@@ -90,7 +92,8 @@ async def list_available_models_page(
     entitlement_scope: str | None = None,
     entitlement_scope_id: uuid.UUID | None = None,
 ) -> dict[str, Any]:
-    team_id = resolve_internal_gateway_team_id()
+    billing = await resolve_billing_context(session, user_id=user_id)
+    team_id = billing.team_id if billing.team_id is not None else resolve_internal_gateway_team_id()
     system_rows = await _system_selector_rows(
         session,
         billing_team_id=team_id,
@@ -179,9 +182,23 @@ async def list_available_models_page(
         page_size=query.page_params.page_size,
     )
 
-    default_for_text = await get_default_for_model_type(catalog, "text")
-    default_for_vision = await get_default_for_model_type(catalog, "image")
-    default_for_image_gen = await get_default_for_model_type(catalog, "image_gen")
+    default_for_text = await get_default_for_model_type(
+        catalog, "text", billing_team_id=team_id, user_id=user_id
+    )
+    default_for_vision = await get_default_for_model_type(
+        catalog, "image", billing_team_id=team_id, user_id=user_id
+    )
+    default_for_image_gen = await get_default_for_model_type(
+        catalog, "image_gen", billing_team_id=team_id, user_id=user_id
+    )
+
+    all_items = [*system_items, *personal_items]
+    connectivity_summary = summarize_selector_items(all_items)
+    chat_readiness = await compute_chat_readiness(
+        session,
+        catalog,
+        billing=billing,
+    )
 
     return {
         "system_models": build_page(
@@ -199,7 +216,8 @@ async def list_available_models_page(
         "default_for_text": default_for_text,
         "default_for_vision": default_for_vision,
         "default_for_image_gen": default_for_image_gen,
-        "connectivity_summary": summarize_selector_items([*system_items, *personal_items]),
+        "connectivity_summary": connectivity_summary,
+        "chat_readiness": chat_readiness,
     }
 
 

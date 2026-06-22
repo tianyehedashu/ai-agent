@@ -22,7 +22,7 @@ async def test_commit_entitlement_plan_on_success(monkeypatch) -> None:
     quota = MagicMock()
     quota.commit = AsyncMock()
     quota.release = AsyncMock()
-    schedule = MagicMock()
+    schedule = AsyncMock()
     monkeypatch.setattr(mod, "get_quota_plan_service", lambda: quota)
     monkeypatch.setattr(mod, "_load_plan_specs", AsyncMock(return_value={quota_id: spec}))
     monkeypatch.setattr(mod, "schedule_quota_plan_usage_upsert", schedule)
@@ -70,7 +70,7 @@ async def test_skips_commit_when_proxy_already_settled(monkeypatch) -> None:
 
     quota = MagicMock()
     quota.commit = AsyncMock()
-    schedule = MagicMock()
+    schedule = AsyncMock()
     monkeypatch.setattr(mod, "get_quota_plan_service", lambda: quota)
     monkeypatch.setattr(mod, "_load_plan_specs", AsyncMock(return_value={quota_id: spec}))
     monkeypatch.setattr(mod, "schedule_quota_plan_usage_upsert", schedule)

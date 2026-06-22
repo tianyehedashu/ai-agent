@@ -57,6 +57,34 @@ class ModelCatalogPort(Protocol):
     ) -> list[dict[str, Any]]:
         """个人团队 gateway_models，供聊天选择器 personal_models 段使用。"""
 
+    async def list_requestable_text_model_ids(
+        self,
+        *,
+        billing_team_id: uuid.UUID | None,
+        user_id: uuid.UUID | None = None,
+    ) -> frozenset[str]:
+        """可请求 text 模型 id 集（合并目录 virtual name + personal UUID）。"""
+
+    async def resolve_chat_default_text_model(
+        self,
+        *,
+        billing_team_id: uuid.UUID | None,
+        user_id: uuid.UUID | None = None,
+    ) -> str | None:
+        """解析聊天默认 text 模型（env 优先，否则可见集首个，再 personal UUID）。"""
+
+    async def count_registered_text_models(
+        self,
+        *,
+        billing_team_id: uuid.UUID | None,
+        user_id: uuid.UUID | None = None,
+    ) -> int:
+        """统计已注册且凭据可部署的 text 模型数（**含连通性失败项**）。
+
+        与 ``list_requestable_text_model_ids`` 互补：后者按连通性过滤，本计数不过滤，
+        供就绪分档区分『未注册模型』(needs_model) 与『连通性待修复』
+        (needs_connectivity_fix)。"""
+
     async def resolve_registered_model(
         self,
         user_id: uuid.UUID,

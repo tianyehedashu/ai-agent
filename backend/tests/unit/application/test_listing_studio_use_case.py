@@ -209,12 +209,14 @@ class TestListingStudioUseCase:
             async def _mock_runner(_inputs, _prompt, _gateway, model_override=None):
                 return {"product_info": {"category": "test", "selling_points": []}}
 
+            from domains.agent.application.chat_model_resolution_use_case import ResolvedModel
+
             with (
                 patch.object(
                     use_case._model_resolution,
-                    "visible_text_system_model_ids",
+                    "resolve_text_chat_model",
                     new_callable=AsyncMock,
-                    return_value=frozenset(["deepseek/deepseek-chat"]),
+                    return_value=ResolvedModel(model="deepseek/deepseek-chat"),
                 ),
                 patch.dict(
                     "domains.agent.application.listing_studio_use_case.RUNNERS",
@@ -328,12 +330,14 @@ class TestListingStudioUseCase:
             async def _mock_runner(_inputs, _prompt, _gateway, model_override=None):
                 return {"product_info": {"category": "test", "selling_points": []}}
 
+            from domains.agent.application.chat_model_resolution_use_case import ResolvedModel
+
             with (
                 patch.object(
                     use_case._model_resolution,
-                    "visible_text_system_model_ids",
+                    "resolve_text_chat_model",
                     new_callable=AsyncMock,
-                    return_value=frozenset(["deepseek/deepseek-chat"]),
+                    return_value=ResolvedModel(model="deepseek/deepseek-chat"),
                 ),
                 patch.dict(
                     "domains.agent.application.listing_studio_use_case.RUNNERS",

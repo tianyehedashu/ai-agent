@@ -241,7 +241,7 @@ async def commit_budget_from_callback(
                             )
 
         if request_id and platform_upsert_items:
-            schedule_platform_budget_usage_upsert(
+            await schedule_platform_budget_usage_upsert(
                 items=platform_upsert_items,
                 delta_tokens=delta_tokens,
                 delta_cost_usd=delta,

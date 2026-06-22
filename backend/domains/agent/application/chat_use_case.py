@@ -28,13 +28,12 @@ from domains.agent.infrastructure.llm.agent_llm_facade import AgentLlmFacade
 from domains.agent.infrastructure.memory.langgraph_store import LongTermMemoryStore
 from domains.agent.infrastructure.memory.simplemem_client import SimpleMemAdapter, SimpleMemConfig
 from domains.agent.infrastructure.tools.registry import ToolRegistry
+from domains.gateway.application.billing_context import BillingContext, resolve_billing_context
 from domains.gateway.application.gateway_internal_log_context import (
     reset_internal_store_full_override,
     resolve_internal_store_full_messages,
     set_internal_store_full_override,
 )
-from domains.gateway.application.internal_bridge_actor import resolve_internal_gateway_team_id
-from domains.tenancy.application.team_service import TeamService
 from libs.config import get_execution_config_service
 from libs.db.database import get_session_context
 from libs.exceptions import NotFoundError, ValidationError
@@ -385,37 +384,37 @@ class ChatUseCase(ChatImageGenMixin, ChatAgentRunMixin):
                 exc_info=True,
             )
 
-    async def _billing_team_id_for_catalog(self) -> uuid.UUID | None:
-        """与 GatewayBridge 对齐：PermissionContext 无 team 时回退 personal team。"""
-        team_id = resolve_internal_gateway_team_id()
-        if team_id is not None:
-            return team_id
-        user_id = self._model_resolution._resolve_user_id()
-        if user_id is None:
-            return None
-        personal = await TeamService(self.db).ensure_personal_team(user_id)
-        return personal.id
+    async def _resolve_billing_context(self) -> BillingContext:
+        return await resolve_billing_context(
+            self.db,
+            user_id=self._model_resolution._resolve_user_id(),
+        )
 
-    async def _visible_text_system_ids(self) -> frozenset[str]:
+    async def _billing_team_id_for_catalog(self) -> uuid.UUID | None:
+        billing = await self._resolve_billing_context()
+        return billing.team_id
+
+    async def _requestable_text_model_ids(
+        self,
+        billing: BillingContext | None = None,
+    ) -> frozenset[str]:
         if self._model_catalog is None:
             return frozenset()
-        team_id = await self._billing_team_id_for_catalog()
-        user_id = self._model_resolution._resolve_user_id()
-        rows = await self._model_catalog.list_visible_models(
-            billing_team_id=team_id,
-            model_type="text",
-            user_id=user_id,
+        ctx = billing or await self._resolve_billing_context()
+        return await self._model_catalog.list_requestable_text_model_ids(
+            billing_team_id=ctx.team_id,
+            user_id=ctx.user_id,
         )
-        return frozenset(str(r["id"]) for r in rows if r.get("id") is not None)
 
     async def _pick_chat_model_ref(
         self,
         request_model_ref: str | None,
         session: object,
         agent_id: str | None,
+        billing: BillingContext | None = None,
     ) -> str | None:
         """解析用户可见的 model_ref：请求 > 会话存储 > Agent（须合法）> 默认（None）。"""
-        allowed = await self._visible_text_system_ids()
+        allowed = await self._requestable_text_model_ids(billing)
 
         async def _accept_ref(ref: str) -> str | None:
             cleaned = normalize_model_ref(ref)
@@ -446,9 +445,12 @@ class ChatUseCase(ChatImageGenMixin, ChatAgentRunMixin):
                     stored.strip(),
                 )
 
-        base = await self._get_agent_config(agent_id)
-        agent_litellm = base.model
-        if agent_litellm in allowed:
+        agent_litellm: str | None = None
+        if agent_id:
+            agent = await self.agent_service.get_agent(agent_id)
+            if agent is not None:
+                agent_litellm = agent.model
+        if agent_litellm and agent_litellm in allowed:
             return agent_litellm
         agent_uuid = parse_personal_model_uuid(str(agent_litellm))
         if agent_uuid is not None and await self._model_resolution.is_valid_text_personal_model_ref(

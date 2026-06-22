@@ -198,7 +198,7 @@ class ProxyChatMixin:
                 metadata=prepared.metadata,
                 downstream_custom=prepared.downstream_custom,
             )
-        return adapt_response(
+        return await adapt_response(
             response,
             ctx,
             self.budget_service,
@@ -308,7 +308,7 @@ class ProxyChatMixin:
                 metadata=prepared.metadata,
                 downstream_custom=prepared.downstream_custom,
             )
-        return adapt_anthropic_response(
+        return await adapt_anthropic_response(
             response,
             ctx,
             self.budget_service,

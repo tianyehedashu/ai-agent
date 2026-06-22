@@ -27,6 +27,7 @@ from sqlalchemy import (
     String,
     Text,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -198,6 +199,18 @@ class GatewayRequestLog(Base):
             "ix_gateway_request_logs_created_at_brin",
             "created_at",
             postgresql_using="brin",
+        ),
+        Index(
+            "ix_gateway_request_logs_user_platform_inbound",
+            "user_id",
+            "created_at",
+            postgresql_where=text("vkey_id IS NULL"),
+        ),
+        Index(
+            "ix_gateway_request_logs_vkey_time_notnull",
+            "vkey_id",
+            "created_at",
+            postgresql_where=text("vkey_id IS NOT NULL"),
         ),
         # 分区配置（在 alembic 中显式声明 PARTITION BY RANGE (created_at)）
         {"postgresql_partition_by": "RANGE (created_at)"},

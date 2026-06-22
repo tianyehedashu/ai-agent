@@ -132,7 +132,7 @@ async def settle_provider_quota_from_callback(
                 delta_usd=cost_usd,
             )
             if request_id:
-                schedule_quota_plan_usage_upsert(
+                await schedule_quota_plan_usage_upsert(
                     ns=PROVIDER_NS,
                     plan_id=res.plan_id,
                     specs=[res.spec],

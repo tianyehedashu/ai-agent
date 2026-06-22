@@ -35,6 +35,10 @@ server {
         proxy_buffering off;
     }
 
+    location = /index.html {
+        add_header Cache-Control "no-cache, no-store, must-revalidate" always;
+    }
+
     location ^~ /ai-agent/assets/ {
         rewrite ^/ai-agent/(.*)$ /$1 break;
         expires 1y;
@@ -45,7 +49,6 @@ server {
     location ^~ /ai-agent/ {
         rewrite ^/ai-agent/(.*)$ /$1 break;
         try_files $uri $uri/ /index.html;
-        add_header Cache-Control "no-cache, no-store, must-revalidate" always;
     }
 
     location = / {

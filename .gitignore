@@ -3,6 +3,14 @@
 # 含敏感 Redis 凭证的临时 patch，勿提交
 deploy/k8s/patch-redis-iam-align-live.json
 
+# 一次性运维/调试脚本与产物（勿提交；文件保留在本地）
+tmp_prod_*.py
+das_slowlog*.csv
+quota_backup_*.json
+/exports/
+# Java / MPS 构建产物（非本项目源码）
+/target/
+
 # ============================================
 # Python
 # ============================================

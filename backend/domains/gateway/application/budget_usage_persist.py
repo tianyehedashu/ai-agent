@@ -1,26 +1,24 @@
-"""Platform 预算窗口用量异步落库（proxy / callback 成功后 fire-and-forget）。"""
+"""Platform 预算窗口用量落库（proxy / callback 成功后异步合并刷写）。
+
+跨路径 / 跨 worker 去重经 Redis ``SET NX``（每个 ``(request_id, source)`` 仅一次），
+通过去重后的增量按桶键合并、批量 upsert（见 ``usage_bucket_flusher``），消除热桶行锁串行化。
+"""
 
 from __future__ import annotations
 
-import asyncio
-from contextlib import suppress
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Literal
 import uuid
 
-from domains.gateway.application.proxy_deferred_tasks import register_proxy_deferred_task
+from domains.gateway.application.usage_bucket_flusher import record_bucket_usage
 from domains.gateway.domain.period_reset_anchor import (
     DEFAULT_PERIOD_RESET_ANCHOR,
     PeriodResetAnchor,
     compute_period_window_start,
 )
 from domains.gateway.domain.quota_plan import PLATFORM_NS, UsageBucketNamespace
-from domains.gateway.infrastructure.repositories.quota_plan_usage_bucket_repository import (
-    QuotaPlanUsageBucketRepository,
-)
-from libs.db.database import get_session_context, prefer_background_pool
 from libs.db.redis import get_redis_client
 from utils.logging import get_logger
 
@@ -62,61 +60,7 @@ async def _acquire_bucket_upsert_once(
     return bool(acquired)
 
 
-async def _release_bucket_upsert_once(
-    ns: UsageBucketNamespace,
-    request_id: str,
-    source: PlatformBucketUpsertSource,
-) -> None:
-    client = await get_redis_client()
-    await client.delete(_bucket_upserted_key(ns, request_id, source))
-
-
-async def _upsert_platform_budget_usage(
-    *,
-    items: list[PlatformBudgetUpsertItem],
-    delta_tokens: int,
-    delta_cost_usd: Decimal,
-    delta_requests: int,
-    request_id: str,
-    source: PlatformBucketUpsertSource,
-    settled_at: datetime,
-) -> None:
-    if not items:
-        return
-    if not await _acquire_bucket_upsert_once(PLATFORM_NS, request_id, source):
-        return
-    try:
-        with prefer_background_pool():
-            async with get_session_context() as session:
-                repo = QuotaPlanUsageBucketRepository(session)
-                for item in items:
-                    window_start = compute_period_window_start(
-                        settled_at,
-                        item.period,
-                        item.period_reset_anchor,
-                    )
-                    await repo.increment_bucket(
-                        PLATFORM_NS,
-                        item.budget_id,
-                        item.budget_id,
-                        window_start,
-                        delta_tokens=delta_tokens,
-                        delta_requests=delta_requests,
-                        delta_cost_usd=delta_cost_usd,
-                    )
-                await session.commit()
-    except Exception:
-        logger.exception(
-            "Async platform budget usage bucket upsert failed request=%s source=%s items=%d",
-            request_id,
-            source,
-            len(items),
-        )
-        with suppress(Exception):
-            await _release_bucket_upsert_once(PLATFORM_NS, request_id, source)
-
-
-def schedule_platform_budget_usage_upsert(
+async def schedule_platform_budget_usage_upsert(
     *,
     items: list[PlatformBudgetUpsertItem],
     delta_tokens: int,
@@ -126,22 +70,27 @@ def schedule_platform_budget_usage_upsert(
     source: PlatformBucketUpsertSource = "proxy",
     settled_at: datetime | None = None,
 ) -> None:
-    """登记后台任务 upsert platform 窗口用量汇总（不阻塞 proxy / callback）。"""
+    """去重后把 platform 窗口用量增量记入合并刷写器（不阻塞 proxy / callback）。"""
     if not items or not request_id:
         return
+    if not await _acquire_bucket_upsert_once(PLATFORM_NS, request_id, source):
+        return
     when = settled_at or datetime.now(UTC)
-    task = asyncio.create_task(
-        _upsert_platform_budget_usage(
-            items=items,
+    for item in items:
+        window_start = compute_period_window_start(
+            when,
+            item.period,
+            item.period_reset_anchor,
+        )
+        record_bucket_usage(
+            PLATFORM_NS,
+            item.budget_id,
+            item.budget_id,
+            window_start,
             delta_tokens=delta_tokens,
             delta_cost_usd=delta_cost_usd,
             delta_requests=delta_requests,
-            request_id=request_id,
-            source=source,
-            settled_at=when,
         )
-    )
-    register_proxy_deferred_task(task)
 
 
 __all__ = [

@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any
 import uuid
 
 from bootstrap.config import settings
+from domains.gateway.application.chat_model_selector_reads import count_active_credentials_for_team
 from domains.gateway.application.entitlement_model_status import is_connectivity_requestable
 from domains.gateway.application.internal_bridge_actor import resolve_internal_gateway_team_id
 from domains.gateway.application.model_selector_reads import (
@@ -19,7 +20,11 @@ from domains.gateway.application.model_selector_reads import (
 from domains.gateway.application.model_selector_reads import (
     list_available_system_models as list_system_models_for_selector,
 )
-from domains.gateway.domain.scenario_defaults_policy import pick_scenario_from_visible
+from domains.gateway.domain.policies.chat_model_readiness import (
+    chat_readiness_error_code,
+    chat_readiness_message,
+    classify_chat_readiness,
+)
 from domains.gateway.domain.types import PERSONAL_MODEL_TYPES
 from libs.exceptions import ValidationError
 from libs.iam.permission_context import get_permission_context
@@ -29,9 +34,8 @@ if TYPE_CHECKING:
 
     from domains.agent.application.ports.model_catalog_port import ModelCatalogPort
 
-_NO_VISIBLE_TEXT_MODELS_MSG = "无可用文本模型。请先在 Gateway 配置凭据并同步目录（POST /api/v1/gateway/catalog/reload-from-config）。"
-_NO_VISIBLE_VISION_MODELS_MSG = "无可用视觉模型。请先在 Gateway 配置支持 vision 的模型并同步目录。"
-_NO_VISIBLE_IMAGE_GEN_MODELS_MSG = "无可用图像生成模型。请先在 Gateway 配置凭据并同步目录（POST /api/v1/gateway/catalog/reload-from-config）。"
+_NO_VISIBLE_VISION_MODELS_MSG = "无可用视觉模型。请先在 Gateway 配置支持 vision 的模型。"
+_NO_VISIBLE_IMAGE_GEN_MODELS_MSG = "无可用图像生成模型。请先在 Gateway 配置凭据并注册图像生成模型。"
 
 VALID_MODEL_TYPES = PERSONAL_MODEL_TYPES
 
@@ -192,34 +196,98 @@ class ChatModelResolutionUseCase:
             is_system=False,
         )
 
-    async def visible_text_system_model_ids(self) -> frozenset[str]:
-        team_id = resolve_internal_gateway_team_id()
-        items = await self._catalog.list_visible_models(
+    async def visible_text_system_model_ids(
+        self,
+        *,
+        billing_team_id: uuid.UUID | None = None,
+        user_id: uuid.UUID | None = None,
+    ) -> frozenset[str]:
+        uid = self._resolve_user_id(user_id)
+        team_id = billing_team_id if billing_team_id is not None else resolve_internal_gateway_team_id()
+        return await self._catalog.list_requestable_text_model_ids(
             billing_team_id=team_id,
-            model_type="text",
+            user_id=uid,
         )
-        return frozenset(str(m["id"]) for m in items if m.get("id") is not None)
 
-    async def visible_image_system_model_ids(self) -> frozenset[str]:
-        team_id = resolve_internal_gateway_team_id()
+    async def visible_image_system_model_ids(
+        self,
+        *,
+        billing_team_id: uuid.UUID | None = None,
+        user_id: uuid.UUID | None = None,
+    ) -> frozenset[str]:
+        uid = self._resolve_user_id(user_id)
+        # 与 visible_text_system_model_ids 对齐：未显式指定计费团队时回退到当前权限上下文团队，
+        # 否则 billing_team_id=None 会按「未限定团队」的系统目录解析，漏掉团队可见的 image 模型。
+        team_id = (
+            billing_team_id if billing_team_id is not None else resolve_internal_gateway_team_id()
+        )
         items = await self._catalog.list_visible_models(
             billing_team_id=team_id,
             model_type="image",
+            user_id=uid,
         )
         return frozenset(str(m["id"]) for m in items if m.get("id") is not None)
 
-    def _resolve_default_text_model(self, allowed_text_system_ids: frozenset[str]) -> ResolvedModel:
-        picked = pick_scenario_from_visible(
-            env_override=settings.default_model,
-            visible_ids=allowed_text_system_ids,
+    async def _raise_text_model_unavailable(
+        self,
+        *,
+        billing_team_id: uuid.UUID | None,
+        user_id: uuid.UUID | None,
+    ) -> None:
+        uid = self._resolve_user_id(user_id)
+        requestable = await self._catalog.list_requestable_text_model_ids(
+            billing_team_id=billing_team_id,
+            user_id=uid,
+        )
+        # 计数须含连通性失败模型，否则永远落到 needs_model 而非 needs_connectivity_fix。
+        total_model_count = await self._catalog.count_registered_text_models(
+            billing_team_id=billing_team_id,
+            user_id=uid,
+        )
+        active_creds = await count_active_credentials_for_team(self.db, billing_team_id)
+        readiness = classify_chat_readiness(
+            active_credential_count=active_creds,
+            requestable_model_count=len(requestable),
+            total_model_count=total_model_count,
+        )
+        raise ValidationError(
+            chat_readiness_message(readiness),
+            code=chat_readiness_error_code(readiness),
+        )
+
+    async def _resolve_default_text_model(
+        self,
+        *,
+        billing_team_id: uuid.UUID | None,
+        user_id: uuid.UUID | None,
+    ) -> ResolvedModel:
+        uid = self._resolve_user_id(user_id)
+        picked = await self._catalog.resolve_chat_default_text_model(
+            billing_team_id=billing_team_id,
+            user_id=uid,
         )
         if picked is None:
-            raise ValidationError(_NO_VISIBLE_TEXT_MODELS_MSG)
-        return ResolvedModel(model=picked)
+            await self._raise_text_model_unavailable(
+                billing_team_id=billing_team_id,
+                user_id=uid,
+            )
+        try:
+            personal_id = uuid.UUID(picked)
+        except ValueError:
+            return ResolvedModel(model=picked)
+        resolved = await self._resolve_personal_text(personal_id)
+        if resolved is not None:
+            return resolved
+        await self._raise_text_model_unavailable(
+            billing_team_id=billing_team_id,
+            user_id=uid,
+        )
 
     def _resolve_default_vision_model(
         self, allowed_image_system_ids: frozenset[str]
     ) -> ResolvedModel:
+        from domains.gateway.domain.scenario_defaults_policy import pick_scenario_from_visible
+
         picked = pick_scenario_from_visible(
             env_override=settings.vision_model,
             visible_ids=allowed_image_system_ids,
@@ -232,16 +300,33 @@ class ChatModelResolutionUseCase:
         self,
         model_ref: str | None,
         *,
-        allowed_text_system_ids: frozenset[str],
+        billing_team_id: uuid.UUID | None = None,
+        user_id: uuid.UUID | None = None,
+        allowed_text_system_ids: frozenset[str] | None = None,
     ) -> ResolvedModel:
+        uid = self._resolve_user_id(user_id)
+        # 与 visible_*_system_model_ids 对齐：未显式指定计费团队时回退到当前权限上下文团队，
+        # 否则 listing studio 等不传 billing_team_id 的调用方会按「未限定团队」目录解析默认模型。
+        team_id = (
+            billing_team_id if billing_team_id is not None else resolve_internal_gateway_team_id()
+        )
+        allowed = allowed_text_system_ids
+        if allowed is None:
+            allowed = await self._catalog.list_requestable_text_model_ids(
+                billing_team_id=team_id,
+                user_id=uid,
+            )
         if not model_ref or not str(model_ref).strip():
-            return self._resolve_default_text_model(allowed_text_system_ids)
+            return await self._resolve_default_text_model(
+                billing_team_id=team_id,
+                user_id=uid,
+            )
 
         ref = str(model_ref).strip()
         try:
             personal_id = uuid.UUID(ref)
         except ValueError:
-            if ref not in allowed_text_system_ids:
+            if ref not in allowed:
                 raise ValidationError(f"模型不在可用列表中: {ref}") from None
             return ResolvedModel(model=ref)
 

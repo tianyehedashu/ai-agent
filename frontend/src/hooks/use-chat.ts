@@ -142,6 +142,46 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
     [streamingSessionRef]
   )
 
+  const resetActiveRunState = useCallback(() => {
+    setStreamingContent('')
+    streamingContentRef.current = ''
+    setPendingToolCalls([])
+    currentToolCallsRef.current = []
+    currentRunIdRef.current = null
+    setCurrentRunId(null)
+    setIsLoading(false)
+  }, [])
+
+  const persistRunTimelineMessage = useCallback((runId: string) => {
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: generateId(),
+        role: 'assistant',
+        content: '',
+        metadata: { runId },
+        createdAt: new Date().toISOString(),
+      },
+    ])
+  }, [])
+
+  const finalizeFailedRun = useCallback(
+    (errorMessage: string, timestamp?: string) => {
+      const runId = currentRunIdRef.current
+      if (runId) {
+        appendProcessEvent(runId, {
+          id: generateId(),
+          kind: 'error',
+          timestamp: timestamp ?? new Date().toISOString(),
+          payload: { error: errorMessage },
+        })
+        persistRunTimelineMessage(runId)
+      }
+      resetActiveRunState()
+    },
+    [appendProcessEvent, persistRunTimelineMessage, resetActiveRunState]
+  )
+
   const handleEvent = useCallback(
     (event: ChatEvent) => {
       // 视图隔离：仅当「当前视图会话」与「本流所属会话」一致时才更新 state；session_created 始终执行
@@ -385,16 +425,8 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
         case 'error': {
           const errorData = event.data as { error: string }
           onErrorRef.current?.(new Error(errorData.error))
-          setIsLoading(false)
+          finalizeFailedRun(errorData.error, event.timestamp)
           finishStream(sessionIdRef.current)
-          if (currentRunIdRef.current) {
-            appendProcessEvent(currentRunIdRef.current, {
-              id: generateId(),
-              kind: 'error',
-              timestamp: event.timestamp,
-              payload: errorData as unknown as Record<string, unknown>,
-            })
-          }
           break
         }
 
@@ -405,7 +437,7 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
         }
       }
     },
-    [appendProcessEvent, finishStream, markStreamActive, queryClient]
+    [appendProcessEvent, finalizeFailedRun, finishStream, markStreamActive, queryClient]
   )
 
   const cancelRequest = useCallback(() => {
@@ -493,12 +525,14 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
             // 忽略取消导致的错误
             if (error.name !== 'AbortError') {
               onErrorRef.current?.(error)
+              finalizeFailedRun(error.message)
+            } else {
+              resetActiveRunState()
             }
-            setIsLoading(false)
             finishStream(sessionIdRef.current)
           },
           () => {
-            setIsLoading(false)
+            resetActiveRunState()
             abortControllerRef.current = null
             finishStream(sessionIdRef.current)
           },
@@ -508,13 +542,23 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
         // 忽略取消导致的错误
         if ((error as Error).name !== 'AbortError') {
           onErrorRef.current?.(error as Error)
+          finalizeFailedRun((error as Error).message)
+        } else {
+          resetActiveRunState()
         }
-        setIsLoading(false)
         abortControllerRef.current = null
         finishStream(sessionIdRef.current)
       }
     },
-    [isLoading, agentId, handleEvent, finishStream, markStreamActive]
+    [
+      isLoading,
+      agentId,
+      handleEvent,
+      finishStream,
+      markStreamActive,
+      finalizeFailedRun,
+      resetActiveRunState,
+    ]
   )
 
   const resumeExecution = useCallback(

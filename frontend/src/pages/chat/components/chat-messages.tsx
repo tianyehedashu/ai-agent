@@ -78,6 +78,11 @@ export default function ChatMessages({
     )
   }
 
+  const activeRunEvents =
+    currentRunId && currentRunId in processRuns ? processRuns[currentRunId] : undefined
+  const isActiveRunCompleted =
+    activeRunEvents?.some((event) => event.kind === 'done' || event.kind === 'error') ?? false
+
   return (
     <ScrollArea className="h-full">
       <div className="mx-auto max-w-3xl space-y-6 px-4 py-6 sm:px-6 sm:py-8">
@@ -152,7 +157,7 @@ export default function ChatMessages({
                   </div>
                 )}
 
-              {!streamingContent && pendingToolCalls.length === 0 && (
+              {!streamingContent && pendingToolCalls.length === 0 && !isActiveRunCompleted && (
                 <div className="flex items-center gap-2 py-2 text-sm text-muted-foreground">
                   <span className="relative flex h-2 w-2">
                     <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-75"></span>

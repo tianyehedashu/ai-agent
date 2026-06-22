@@ -3,6 +3,38 @@ import { expect, test } from 'vitest'
 
 import ChatMessages from './chat-messages'
 
+test('does not show thinking indicator when active run already failed', () => {
+  render(
+    <ChatMessages
+      messages={[
+        {
+          id: 'u1',
+          role: 'user',
+          content: 'hello',
+          createdAt: 't',
+        },
+      ]}
+      streamingContent=""
+      isLoading={false}
+      pendingToolCalls={[]}
+      currentRunId="r1"
+      processRuns={{
+        r1: [
+          {
+            id: 'e1',
+            kind: 'error',
+            timestamp: '2025-01-01T00:00:00Z',
+            payload: { error: '无可用文本模型' },
+          },
+        ],
+      }}
+    />
+  )
+
+  expect(screen.queryByText('思考中...')).not.toBeInTheDocument()
+  expect(screen.getByText('执行完成')).toBeInTheDocument()
+})
+
 test('renders process panel with events (collapsed by default)', () => {
   render(
     <ChatMessages

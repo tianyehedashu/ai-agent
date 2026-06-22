@@ -24,6 +24,33 @@ class _FakeCatalog:
             return self._items
         return [i for i in self._items if model_type in (i.get("model_types") or [])]
 
+    async def list_personal_models_for_selector(self, user_id, model_type, provider=None):
+        _ = user_id, model_type, provider
+        return []
+
+    async def list_requestable_text_model_ids(self, *, billing_team_id, user_id=None):
+        items = await self.list_visible_models(
+            billing_team_id=billing_team_id,
+            model_type="text",
+            user_id=user_id,
+        )
+        return frozenset(str(i["id"]) for i in items if i.get("id") is not None)
+
+    async def resolve_chat_default_text_model(self, *, billing_team_id, user_id=None):
+        from bootstrap.config import settings
+        from domains.gateway.domain.scenario_defaults_policy import pick_scenario_from_visible
+
+        items = await self.list_visible_models(
+            billing_team_id=billing_team_id,
+            model_type="text",
+            user_id=user_id,
+        )
+        visible = frozenset(str(i["id"]) for i in items if i.get("id") is not None)
+        return pick_scenario_from_visible(
+            env_override=settings.default_model,
+            visible_ids=visible,
+        )
+
 
 @pytest.mark.asyncio
 async def test_resolve_scenario_default_env_valid(monkeypatch) -> None:

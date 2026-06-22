@@ -183,6 +183,7 @@ async def test_update_personal_model_renames_name(
         "domains.gateway.application.management.write_modules.model_writes.rename_gateway_model_name_references",
         rename_spy,
     )
+    original_name = existing.name
 
     updated = await writes.update_personal_model(
         user_uuid, model_id, fields={"name": "my-new-call-name"}
@@ -190,7 +191,7 @@ async def test_update_personal_model_renames_name(
     assert updated.name == "my-new-call-name"
     rename_spy.assert_awaited_once()
     assert rename_spy.await_args.kwargs.get("tenant_id") == tenant_id
-    assert rename_spy.await_args.kwargs.get("old_name") == existing.name
+    assert rename_spy.await_args.kwargs.get("old_name") == original_name
     assert rename_spy.await_args.kwargs.get("new_name") == "my-new-call-name"
 
 

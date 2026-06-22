@@ -66,6 +66,59 @@ def _bucket_ttl_seconds(spec: PlanQuotaSpec) -> int:
     return spec.window_seconds + 120
 
 
+# 原子预扣 requests（硬计数维度）：窗口内对所有分钟桶求和后判定 limit，通过才写入当前分钟桶。
+# 单脚本单往返、无显式锁，消除「读快照→判断→写预扣」之间的 TOCTOU 超额放行。
+# token/usd 维度允许一定漂移，仍由 check_and_reserve 的 snapshot 预检负责，不在此处强一致。
+# 注：脚本经 base 派生 bucket key（未在 KEYS 声明），与 _compute_snapshot 的多键 pipeline
+# 读取同源，依赖单实例 Redis（本部署为单实例阿里云 Redis，非 Cluster）。
+_RESERVE_REQUESTS_LUA_SCRIPT = """
+local ikey = KEYS[1]
+local base = ARGV[1]
+local current_minute = ARGV[2]
+local window_start_minute = tonumber(ARGV[3])
+local request_count = tonumber(ARGV[4])
+local limit_requests = tonumber(ARGV[5])
+local bucket_ttl = tonumber(ARGV[6])
+local index_ttl = tonumber(ARGV[7])
+
+if window_start_minute >= 0 then
+    redis.call('zremrangebyscore', ikey, 0, window_start_minute - 1)
+end
+
+local used = 0
+local minutes = redis.call('zrange', ikey, 0, -1)
+for i = 1, #minutes do
+    local r = redis.call('hget', base .. ':b:' .. minutes[i], 'requests')
+    if r then
+        used = used + tonumber(r)
+    end
+end
+
+if limit_requests > 0 and used + request_count > limit_requests then
+    return {0, used}
+end
+
+local bkey = base .. ':b:' .. current_minute
+redis.call('hincrby', bkey, 'requests', request_count)
+redis.call('zadd', ikey, tonumber(current_minute), current_minute)
+redis.call('expire', bkey, bucket_ttl)
+redis.call('expire', ikey, index_ttl)
+return {1, used}
+"""
+
+
+# release 回滚 requests 并钳制下限为 0，避免分钟桶被减成负值（双重 release / 桶过期重建）
+# 导致后续窗口求和偏低、变相放行。
+_RELEASE_REQUESTS_LUA_SCRIPT = """
+local v = redis.call('hincrby', KEYS[1], 'requests', -tonumber(ARGV[1]))
+if v < 0 then
+    redis.call('hset', KEYS[1], 'requests', 0)
+    v = 0
+end
+return v
+"""
+
+
 class QuotaPlanService:
     """通用 Plan 配额管理 - 上下游共用。"""
 
@@ -142,22 +195,61 @@ class QuotaPlanService:
                     ),
                 )
 
-        # 通过：对每个 spec 同时预扣 request_count 到当前分钟桶
+        # 逐 spec 原子预扣 requests（硬计数维度）：Lua 在窗口求和后判定 limit 并写当前分钟桶，
+        # 关闭并发下「快照预检通过 → 写入」之间的超额窗口。token/usd 仍由上方预检兜底（可容忍漂移）。
         minute_unix = compute_minute_index(when)
         client = await get_redis_client()
         reservations: list[QuotaPlanReservation] = []
         try:
             for spec in specs:
                 base = _quota_key_base(ns, plan_id, spec.quota_id)
-                bkey = _bucket_key(base, minute_unix)
                 ikey = _index_key(base)
-                pipe = client.pipeline()
-                pipe.hincrby(bkey, "requests", request_count)
-                pipe.zadd(ikey, {str(minute_unix): minute_unix})
+                if spec.window_seconds and spec.window_seconds > 0:
+                    window_start_minute = compute_window_start_minute(
+                        when,
+                        spec.window_seconds,
+                        strategy=spec.reset_strategy,
+                        row_valid_from=None,
+                        period_reset_anchor=spec.period_reset_anchor,
+                    )
+                else:
+                    window_start_minute = -1
                 ttl = _bucket_ttl_seconds(spec)
-                pipe.expire(bkey, ttl)
-                pipe.expire(ikey, ttl)
-                await pipe.execute()
+                limit_requests = (
+                    spec.limit_requests
+                    if spec.limit_requests and spec.limit_requests > 0
+                    else 0
+                )
+                result = await client.eval(
+                    _RESERVE_REQUESTS_LUA_SCRIPT,
+                    1,
+                    ikey,
+                    base,
+                    str(minute_unix),
+                    str(int(window_start_minute)),
+                    str(int(request_count)),
+                    str(int(limit_requests)),
+                    str(int(ttl)),
+                    str(int(ttl)),
+                )
+                status = int(result[0])
+                if status == 0:
+                    # 并发下原子拒绝：回滚已预扣项，返回 requests 耗尽快照（重算以填齐 reset 锚点）
+                    for r in reservations:
+                        await self._release_one(ns, plan_id, r)
+                    exhausted = await self._compute_snapshot(ns, plan_id, spec, when)
+                    return QuotaPlanCheckResult(
+                        allowed=False,
+                        snapshots=snapshots,
+                        exhausted_snapshot=PlanQuotaSnapshot(
+                            spec=spec,
+                            used_usd=exhausted.used_usd,
+                            used_tokens=exhausted.used_tokens,
+                            used_requests=max(exhausted.used_requests, int(result[1])),
+                            exhausted_reason="requests",
+                            earliest_minute_in_window=exhausted.earliest_minute_in_window,
+                        ),
+                    )
                 reservations.append(
                     QuotaPlanReservation(
                         plan_id=plan_id,
@@ -232,7 +324,12 @@ class QuotaPlanService:
         base = _quota_key_base(ns, plan_id, reservation.spec.quota_id)
         bkey = _bucket_key(base, reservation.minute_unix)
         try:
-            await client.hincrby(bkey, "requests", -reservation.reserved_requests)
+            await client.eval(
+                _RELEASE_REQUESTS_LUA_SCRIPT,
+                1,
+                bkey,
+                str(int(reservation.reserved_requests)),
+            )
         except Exception as exc:  # pragma: no cover - 不影响主路径
             logger.warning("QuotaPlanService.release failed for %s: %s", bkey, exc)
 

@@ -445,6 +445,27 @@ class Settings(BaseSettings):
     gateway_team_cache_enabled: bool = True
     # SQLAlchemy 慢查询日志阈值（毫秒）；0 = 关闭
     gateway_slow_sql_threshold_ms: int = Field(default=50, ge=0)
+    # 虚拟 Key 用量回写（last_used_at / usage_count）合并刷写间隔（秒）。
+    # 进程内累加增量、按窗口批量落库，消除单行 UPDATE 写热点；0 = 关闭合并、退回即时单条写。
+    gateway_vkey_usage_flush_interval_seconds: float = Field(default=5.0, ge=0.0)
+    # 待刷 vkey 数量上限：超过则立即触发一次刷写，限制内存与单批规模。
+    gateway_vkey_usage_flush_max_pending: int = Field(default=2000, ge=1)
+    # 刷写事务 server 端 statement_timeout（毫秒）；事件循环饥饿时由 PG 自行掐断，0 = 不设置。
+    gateway_vkey_usage_flush_statement_timeout_ms: int = Field(default=15000, ge=0)
+    # 预算/配额窗口桶用量合并刷写间隔（秒）：与 vkey 同策略，进程内按桶键累加 tokens/cost/requests
+    # 后按窗口批量 upsert，消除「当期热桶被每请求 UPDATE」的行锁串行化；0 = 关闭合并、退回即时写。
+    gateway_usage_bucket_flush_interval_seconds: float = Field(default=5.0, ge=0.0)
+    # 待刷桶键数量上限：超过则立即补刷一次，限制内存与单批规模。
+    gateway_usage_bucket_flush_max_pending: int = Field(default=2000, ge=1)
+    # 桶刷写事务 server 端 statement_timeout（毫秒）；0 = 不设置。
+    gateway_usage_bucket_flush_statement_timeout_ms: int = Field(default=15000, ge=0)
+    # 响应后 fire-and-forget 结算（settle_usage 等不可合并任务）的有界执行器配置：
+    # 固定 worker 数（建议略小于后台池，留余量给桶/vkey 刷写），消除无界 create_task 占满后台池。
+    gateway_deferred_task_max_workers: int = Field(default=12, ge=1)
+    # 有界队列容量：限制内存驻留;满载时由 submit 背压(阻塞短超时→inline 降级)兜底,不丢账。
+    gateway_deferred_task_max_queue: int = Field(default=5000, ge=1)
+    # 队列满时 submit 的阻塞等待上限（毫秒）；超时仍满则当场 inline await 执行，保证不丢结算。
+    gateway_deferred_task_submit_block_timeout_ms: int = Field(default=500, ge=0)
     # rollup 任务间隔（秒）
     gateway_rollup_interval_seconds: int = 300
     # 告警检查间隔（秒）

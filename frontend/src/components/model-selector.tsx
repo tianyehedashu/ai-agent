@@ -20,6 +20,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { PROVIDER_CHANNEL_FILTER_HINT_LONG } from '@/lib/provider-channel-hint'
+import { chatReadinessLabel } from '@/pages/chat/components/chat-gateway-setup-alert'
 import type { ModelType, SystemModel, UserModel } from '@/types/user-model'
 import { MODEL_PROVIDERS } from '@/types/user-model'
 
@@ -167,7 +168,7 @@ export function ModelSelector({
     ? `默认（${defaultDisplayName}）`
     : hasModels
       ? placeholder
-      : '暂无可用模型'
+      : chatReadinessLabel(defaultPage?.chat_readiness)
 
   const handleChange = (v: string): void => {
     onChange(v === '__default__' ? null : v)

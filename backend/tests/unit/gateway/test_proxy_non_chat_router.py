@@ -266,7 +266,7 @@ async def test_volcengine_image_generation_uses_direct_not_router(
     monkeypatch.setattr(use_case.litellm, "router_image_generation", router_image)
     monkeypatch.setattr(
         "domains.gateway.application.proxy_response_adapter.schedule_settle_usage",
-        lambda *_a, **_k: None,
+        AsyncMock(),
     )
 
     result = await use_case.image_generation(ctx, body)
@@ -391,7 +391,7 @@ async def test_audio_speech_uses_router_aspeech(
     monkeypatch.setattr(use_case.guard, "check_entitlement", AsyncMock())
     monkeypatch.setattr(
         "domains.gateway.application.proxy_response_adapter.schedule_settle_usage",
-        lambda *_a, **_k: None,
+        AsyncMock(),
     )
 
     with patch(

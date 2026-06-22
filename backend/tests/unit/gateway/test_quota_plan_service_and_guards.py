@@ -162,6 +162,41 @@ class _FakeRedis:
             zset.pop(member, None)
         return len(doomed)
 
+    async def eval(self, script: str, numkeys: int, *args: Any) -> Any:
+        """同步执行脚本逻辑，建模 Redis 单线程原子 eval（脚本内不让出事件循环）。"""
+        keys = list(args[:numkeys])
+        argv = list(args[numkeys:])
+        if script == quota_plan_service_module._RESERVE_REQUESTS_LUA_SCRIPT:
+            ikey = keys[0]
+            base = str(argv[0])
+            current_minute = str(argv[1])
+            window_start_minute = int(argv[2])
+            request_count = int(argv[3])
+            limit_requests = int(argv[4])
+            zset = self.zsets.setdefault(ikey, {})
+            if window_start_minute >= 0:
+                for member in [m for m, s in list(zset.items()) if s <= window_start_minute - 1]:
+                    zset.pop(member, None)
+            used = 0
+            for member in zset:
+                raw = self.hashes.get(f"{base}:b:{member}", {}).get("requests")
+                if raw:
+                    used += int(raw)
+            if limit_requests > 0 and used + request_count > limit_requests:
+                return [0, used]
+            row = self.hashes.setdefault(f"{base}:b:{current_minute}", {})
+            row["requests"] = str(int(row.get("requests", "0")) + request_count)
+            zset[current_minute] = float(current_minute)
+            return [1, used]
+        if script == quota_plan_service_module._RELEASE_REQUESTS_LUA_SCRIPT:
+            row = self.hashes.setdefault(keys[0], {})
+            value = int(row.get("requests", "0")) - int(argv[0])
+            if value < 0:
+                value = 0
+            row["requests"] = str(value)
+            return value
+        raise NotImplementedError("FakeRedis.eval: unsupported script")
+
 
 @pytest.fixture
 def fake_redis(monkeypatch: pytest.MonkeyPatch) -> _FakeRedis:
@@ -217,6 +252,76 @@ async def test_quota_plan_service_reserve_commit_release_and_exhaustion(
     await service.release(PROVIDER_NS, plan_id, first.reservations)
     after_release = await service.check_and_reserve(PROVIDER_NS, plan_id, [spec], now=now)
     assert after_release.allowed
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_quota_plan_service_concurrent_reserve_never_exceeds_request_limit(
+    fake_redis: _FakeRedis,
+) -> None:
+    """并发预扣不得突破 requests 硬上限（原子 Lua 关闭 TOCTOU 超额窗口）。"""
+    _ = fake_redis
+    service = QuotaPlanService()
+    plan_id = uuid.uuid4()
+    spec = PlanQuotaSpec(
+        quota_id=uuid.uuid4(),
+        label="minute",
+        window_seconds=60,
+        limit_requests=5,
+    )
+    now = datetime(2026, 5, 18, 3, 0, tzinfo=UTC)
+
+    import asyncio
+
+    results = await asyncio.gather(
+        *[service.check_and_reserve(PROVIDER_NS, plan_id, [spec], now=now) for _ in range(20)]
+    )
+
+    allowed = [r for r in results if r.allowed]
+    rejected = [r for r in results if not r.allowed]
+    assert len(allowed) == 5
+    assert len(rejected) == 15
+    assert all(r.exhausted_snapshot is not None for r in rejected)
+    assert all(r.exhausted_snapshot.exhausted_reason == "requests" for r in rejected)
+
+    snap = (await service.snapshot(PROVIDER_NS, plan_id, [spec], now=now))[0]
+    assert snap.used_requests == 5
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_quota_plan_service_release_clamps_requests_at_zero(
+    fake_redis: _FakeRedis,
+) -> None:
+    """重复 release 不得把 requests 桶减成负值，避免后续窗口求和偏低而误放行。"""
+    _ = fake_redis
+    service = QuotaPlanService()
+    plan_id = uuid.uuid4()
+    spec = PlanQuotaSpec(
+        quota_id=uuid.uuid4(),
+        label="minute",
+        window_seconds=60,
+        limit_requests=1,
+    )
+    now = datetime(2026, 5, 18, 3, 0, tzinfo=UTC)
+
+    reserved = await service.check_and_reserve(PROVIDER_NS, plan_id, [spec], now=now)
+    assert reserved.allowed
+
+    # 双重 release（异常路径 + 上层兜底）
+    await service.release(PROVIDER_NS, plan_id, reserved.reservations)
+    await service.release(PROVIDER_NS, plan_id, reserved.reservations)
+
+    snap = (await service.snapshot(PROVIDER_NS, plan_id, [spec], now=now))[0]
+    assert snap.used_requests == 0  # 钳制在 0，未转负
+
+    # 计数未被打负后，限额仍精确：连续预扣到上限即拒绝
+    first = await service.check_and_reserve(PROVIDER_NS, plan_id, [spec], now=now)
+    assert first.allowed
+    second = await service.check_and_reserve(PROVIDER_NS, plan_id, [spec], now=now)
+    assert not second.allowed
+    assert second.exhausted_snapshot is not None
+    assert second.exhausted_snapshot.exhausted_reason == "requests"
 
 
 @pytest.mark.unit

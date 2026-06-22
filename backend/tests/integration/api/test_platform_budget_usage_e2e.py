@@ -42,14 +42,16 @@ def _quota_rule_list_items(body: dict | list) -> list:
 def _bind_platform_settlement_to_test_db(
     monkeypatch: pytest.MonkeyPatch, db_session: AsyncSession
 ) -> None:
-    from domains.gateway.application import budget_usage_persist as persist_mod
+    # 用量落库已收敛到合并刷写器（usage_bucket_flusher._flush_buckets），故 DB 写入点在此绑定；
+    # 同步刷写由 shutdown_proxy_deferred_tasks 触发（排空有界执行器 → 取消 flusher → finally 落库）。
+    from domains.gateway.application import usage_bucket_flusher as bucket_mod
     import libs.db.database as db_mod
 
     @asynccontextmanager
     async def _ctx():
         yield db_session
 
-    monkeypatch.setattr(persist_mod, "get_session_context", _ctx)
+    monkeypatch.setattr(bucket_mod, "get_session_context", _ctx)
     monkeypatch.setattr(db_mod, "get_session_context", _ctx)
 
 

@@ -281,6 +281,7 @@ async def list_available_models_for_chat(
         connectivity_summary=(
             ModelConnectivitySummary.model_validate(summary) if summary is not None else None
         ),
+        chat_readiness=raw.get("chat_readiness"),
     )
 
 

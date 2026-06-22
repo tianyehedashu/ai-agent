@@ -22,7 +22,12 @@ def register_proxy_deferred_task(task: asyncio.Task[Any]) -> None:
 
 
 async def shutdown_proxy_deferred_tasks() -> None:
-    """取消并等待所有已登记的代理延迟任务。"""
+    """收口代理延迟任务：先排空有界执行器（剩余结算任务会记入合并 flusher），
+    再取消并等待已登记的 flusher / 一次性刷写任务（取消触发其 finally 排空）。
+    """
+    from domains.gateway.application.deferred_task_runner import proxy_deferred_runner
+
+    await proxy_deferred_runner.shutdown()
     pending = [t for t in list(_proxy_deferred_tasks) if not t.done()]
     for task in pending:
         task.cancel()

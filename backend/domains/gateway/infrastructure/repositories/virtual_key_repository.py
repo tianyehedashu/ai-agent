@@ -286,6 +286,27 @@ class VirtualKeyRepository:
             )
         )
 
+    async def bulk_increment_usage(
+        self,
+        entries: Sequence[tuple[uuid.UUID, int, datetime]],
+    ) -> None:
+        """批量回写用量：``usage_count += delta``、``last_used_at = GREATEST(...)``。
+
+        采用相对自增（而非绝对赋值），跨 worker 与多次刷写叠加仍得到正确累计值；
+        ``GREATEST`` 避免较旧时间戳回退覆盖其它 worker 写入的较新值（PG 的 ``GREATEST`` 忽略 NULL）。
+        """
+        for key_id, delta, last_used_at in entries:
+            if delta <= 0:
+                continue
+            await self._session.execute(
+                update(GatewayVirtualKey)
+                .where(GatewayVirtualKey.id == key_id)
+                .values(
+                    last_used_at=func.greatest(GatewayVirtualKey.last_used_at, last_used_at),
+                    usage_count=GatewayVirtualKey.usage_count + delta,
+                )
+            )
+
     async def remove_model_names_from_all_allowed_lists(self, model_names: frozenset[str]) -> int:
         """从所有激活 vkey 的 ``allowed_models`` 中移除给定虚拟模型名（配置下线托管模型后修剪）。"""
         if not model_names:

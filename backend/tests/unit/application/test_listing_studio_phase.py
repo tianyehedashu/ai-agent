@@ -422,11 +422,15 @@ class TestRunStep:
 
     @staticmethod
     def _mock_visible_text_models(uc):
+        # 默认文本模型解析已集中到目录（resolve_chat_default_text_model）；空测试库无注册模型，
+        # 故直接桩 resolve_text_chat_model，本组用例聚焦 run_step 渲染/执行而非模型解析。
+        from domains.agent.application.chat_model_resolution_use_case import ResolvedModel
+
         return patch.object(
             uc._model_resolution,
-            "visible_text_system_model_ids",
+            "resolve_text_chat_model",
             new_callable=AsyncMock,
-            return_value=frozenset(["deepseek/deepseek-chat"]),
+            return_value=ResolvedModel(model="deepseek/deepseek-chat"),
         )
 
     async def _create_user(self, db_session) -> User:

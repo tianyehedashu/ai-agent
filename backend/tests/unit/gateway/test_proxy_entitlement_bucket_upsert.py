@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from decimal import Decimal
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 import uuid
 
 import pytest
@@ -58,7 +58,7 @@ async def test_settle_usage_schedules_entitlement_bucket_upsert(monkeypatch) -> 
         ),
     )
     guard = _CommitRecordingEntitlementGuard()
-    schedule = MagicMock()
+    schedule = AsyncMock()
     monkeypatch.setattr(mod, "schedule_quota_plan_usage_upsert", schedule)
     monkeypatch.setattr(mod, "get_session_context", lambda: _DummySessionCM())
     monkeypatch.setattr(mod, "BudgetRepository", _FakeEmptyRepo)

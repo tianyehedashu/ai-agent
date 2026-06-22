@@ -131,7 +131,7 @@ async def settle_entitlement_plan_from_callback(
                 delta_usd=cost_usd,
             )
             if request_id:
-                schedule_quota_plan_usage_upsert(
+                await schedule_quota_plan_usage_upsert(
                     ns=ENTITLEMENT_NS,
                     plan_id=plan_id,
                     specs=specs,

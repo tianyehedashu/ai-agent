@@ -26,6 +26,7 @@ from domains.gateway.application.model_catalog_port import (
 from domains.gateway.application.personal_models import gateway_model_to_selector_user_item
 from domains.gateway.domain.litellm_model_id import build_litellm_model_id
 from domains.gateway.domain.model_capability import tags_to_capability_snapshot
+from domains.gateway.domain.scenario_defaults_policy import pick_scenario_from_visible
 from domains.gateway.infrastructure.models.gateway_model import GatewayModel
 from domains.gateway.infrastructure.repositories.credential_repository import (
     ProviderCredentialRepository,
@@ -92,6 +93,8 @@ class SqlModelCatalogAdapter:
         )
         items: list[dict[str, Any]] = []
         for row in rows:
+            if not await _registry_row_deployable(self._session, row):
+                continue
             if not is_connectivity_requestable(row.last_test_status):
                 continue
             item = gateway_model_to_selector_user_item(row)
@@ -99,6 +102,55 @@ class SqlModelCatalogAdapter:
                 continue
             items.append(item)
         return items
+
+    async def list_requestable_text_model_ids(
+        self,
+        *,
+        billing_team_id: uuid.UUID | None,
+        user_id: uuid.UUID | None = None,
+    ) -> frozenset[str]:
+        ids: set[str] = set()
+        for item in await self.list_visible_models(
+            billing_team_id=billing_team_id,
+            model_type="text",
+            user_id=user_id,
+        ):
+            model_id = item.get("id")
+            if model_id is not None:
+                ids.add(str(model_id))
+        if user_id is not None:
+            for item in await self.list_personal_models_for_selector(user_id, "text", None):
+                model_id = item.get("id")
+                if model_id is not None:
+                    ids.add(str(model_id))
+        return frozenset(ids)
+
+    async def resolve_chat_default_text_model(
+        self,
+        *,
+        billing_team_id: uuid.UUID | None,
+        user_id: uuid.UUID | None = None,
+    ) -> str | None:
+        visible = await self.list_visible_models(
+            billing_team_id=billing_team_id,
+            model_type="text",
+            user_id=user_id,
+        )
+        visible_ids = frozenset(str(m["id"]) for m in visible if m.get("id") is not None)
+        picked = pick_scenario_from_visible(
+            env_override=settings.default_model,
+            visible_ids=visible_ids,
+        )
+        if picked is not None:
+            return picked
+        if user_id is None:
+            return None
+        personal = await self.list_personal_models_for_selector(user_id, "text", None)
+        for item in personal:
+            model_id = item.get("id")
+            if model_id is not None:
+                return str(model_id)
+        return None
 
     async def resolve_registered_model(
         self,
@@ -145,6 +197,44 @@ class SqlModelCatalogAdapter:
             last_test_status=row.last_test_status,
             model_types=tuple(types),
         )
+
+    async def count_registered_text_models(
+        self,
+        *,
+        billing_team_id: uuid.UUID | None,
+        user_id: uuid.UUID | None = None,
+    ) -> int:
+        """与 ``list_visible_models``/``list_personal_models_for_selector`` 同构，但**不**按
+        连通性过滤——用于就绪分档区分『未注册模型』与『连通性待修复』。"""
+        rows = await list_merged_models_for_tenant(
+            self._session,
+            billing_team_id,
+            only_enabled=True,
+            user_id=user_id,
+        )
+        by_name: dict[str, GatewayModel] = {}
+        for row in rows:
+            if row.name not in by_name:
+                by_name[row.name] = row
+        count = 0
+        for row in by_name.values():
+            if not await _registry_row_deployable(self._session, row):
+                continue
+            if "text" in gateway_model_to_selector_item(row)["model_types"]:
+                count += 1
+        if user_id is not None:
+            personal_team = await self._teams.ensure_personal_team(user_id)
+            personal_rows = await self._models.list_tenant_owned(
+                personal_team.id,
+                only_enabled=True,
+                provider=None,
+            )
+            for row in personal_rows:
+                if not await _registry_row_deployable(self._session, row):
+                    continue
+                if "text" in gateway_model_to_selector_user_item(row)["model_types"]:
+                    count += 1
+        return count
 
     async def resolve_capabilities(
         self,

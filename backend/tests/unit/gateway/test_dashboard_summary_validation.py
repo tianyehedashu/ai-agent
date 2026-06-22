@@ -106,6 +106,7 @@ async def test_dashboard_summary_rejects_inverted_date_range(fake_team, fake_rea
             days=7,
             start=start,
             end=end,
+            client_type=None,
         )
     assert "start must be before or equal to end" in str(exc_info.value)
 
@@ -123,6 +124,7 @@ async def test_dashboard_summary_accepts_equal_dates(fake_team, fake_reads) -> N
         status_filter=None,
         capability=None,
         model=None,
+        client_type=None,
     )
     assert result.total_requests == 10
 
@@ -137,6 +139,7 @@ async def test_dashboard_summary_strips_whitespace_from_status(fake_team, fake_r
         status_filter="  success  ",
         capability=None,
         model=None,
+        client_type=None,
     )
     call_kwargs = fake_reads.aggregate_request_log_summary.await_args.kwargs
     assert call_kwargs["status_filter"] == "success"
@@ -152,6 +155,7 @@ async def test_dashboard_summary_strips_whitespace_from_capability(fake_team, fa
         capability="  chat  ",
         status_filter=None,
         model=None,
+        client_type=None,
     )
     call_kwargs = fake_reads.aggregate_request_log_summary.await_args.kwargs
     assert call_kwargs["capability"] == "chat"
@@ -167,6 +171,7 @@ async def test_dashboard_summary_strips_whitespace_from_model(fake_team, fake_re
         model="  gpt-4  ",
         status_filter=None,
         capability=None,
+        client_type=None,
     )
     call_kwargs = fake_reads.aggregate_request_log_summary.await_args.kwargs
     assert call_kwargs["model"] == "gpt-4"
@@ -192,6 +197,7 @@ async def test_dashboard_summary_passes_all_filter_params(fake_team, fake_reads)
         credential_id=cid,
         user_id=uid,
         model="gpt-4",
+        client_type=None,
     )
     call_kwargs = fake_reads.aggregate_request_log_summary.await_args.kwargs
     assert call_kwargs["status_filter"] == "failed"

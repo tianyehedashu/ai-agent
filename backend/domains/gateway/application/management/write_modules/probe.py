@@ -93,6 +93,7 @@ class ProbeWritesMixin:
                 real_model=tenant_row.real_model,
                 credential_id=tenant_row.credential_id,
                 is_system=False,
+                model_name=tenant_row.name,
             )
         system_row = await self._models.get_system(model_id)
         if system_row is None:
@@ -104,6 +105,7 @@ class ProbeWritesMixin:
             real_model=system_row.real_model,
             credential_id=system_row.credential_id,
             is_system=True,
+            model_name=system_row.name,
         )
 
     async def _load_probe_credential(

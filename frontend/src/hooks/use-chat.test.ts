@@ -114,6 +114,38 @@ test.skip('session isolation: events from old stream are not applied after view 
 // in the test env the mock's onEvent can run before the effect updates the ref.
 // Behavior is correct in the app (ChatPage effect runs on navigation). Prefer E2E.
 
+test('useChat clears loading state and persists run timeline on stream error', async () => {
+  /* eslint-disable-next-line @typescript-eslint/unbound-method -- vi.mocked().mockImplementationOnce(callback) is safe */
+  vi.mocked(chatApi.sendMessage).mockImplementationOnce(
+    vi.fn((_req, onEvent) => {
+      onEvent({
+        type: 'error',
+        data: { error: '无可用文本模型。请配置 DEFAULT_MODEL 或执行 make seed-gateway 同步目录。' },
+        timestamp: 't1',
+      })
+      return Promise.resolve()
+    })
+  )
+
+  const onError = vi.fn()
+  const { result } = renderHook(() => useChat({ onError }), { wrapper: createWrapper() })
+
+  await act(async () => {
+    await result.current.sendMessage('hi')
+  })
+
+  expect(onError).toHaveBeenCalled()
+  expect(result.current.isLoading).toBe(false)
+  expect(result.current.currentRunId).toBeNull()
+
+  const assistant = result.current.messages.find((m) => m.role === 'assistant')
+  expect(assistant?.metadata?.runId).toBeTruthy()
+  const runId = assistant?.metadata?.runId as string
+  expect(result.current.processRuns[runId]).toEqual(
+    expect.arrayContaining([expect.objectContaining({ kind: 'error' })])
+  )
+})
+
 test('first message with session_created: subsequent events still apply to view', async () => {
   /* eslint-disable-next-line @typescript-eslint/unbound-method -- vi.mocked().mockImplementationOnce(callback) is safe */
   vi.mocked(chatApi.sendMessage).mockImplementationOnce(

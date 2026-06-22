@@ -2,7 +2,7 @@
  * 配额中心：统一展示 platform / upstream / downstream 规则，支持批量设置。
  */
 
-import { lazy, Suspense, useState } from 'react'
+import { Suspense, useState } from 'react'
 
 import type { QuotaRule } from '@/api/gateway/quota-rules'
 import { PaginationControls } from '@/components/pagination-controls'
@@ -33,6 +33,7 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet'
 import { GatewayRefreshButton } from '@/features/gateway-shared/gateway-refresh-button'
+import { lazyWithReload } from '@/lib/lazy-with-reload'
 import { LayoutGrid, List } from '@/lib/lucide-icons'
 
 import { BudgetModelCombobox } from './budget-model-combobox'
@@ -43,7 +44,7 @@ import { isQuotaRuleDeletable } from './quota-rule-delete'
 import { LAYER_LABELS } from './quota-rule-utils'
 import { useQuotaCenter } from './use-quota-center'
 
-const QuotaBatchWizard = lazy(async () => {
+const QuotaBatchWizard = lazyWithReload(async () => {
   const mod = await import('./quota-batch-wizard')
   return { default: mod.QuotaBatchWizard }
 })

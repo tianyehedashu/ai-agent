@@ -6,6 +6,13 @@ import type { PaginatedList } from '@/types'
 
 export type ModelType = 'text' | 'image' | 'image_gen' | 'video'
 
+/** 聊天模型就绪分档（与后端 chat_readiness 对齐） */
+export type ChatModelReadiness =
+  | 'ready'
+  | 'needs_model'
+  | 'needs_connectivity_fix'
+  | 'needs_credential'
+
 export interface UserModelConfig {
   context_window?: number
   supports_vision?: boolean
@@ -94,6 +101,7 @@ export interface AvailableModelsResponse {
   /** 图像生成默认模型（未选时展示） */
   default_for_image_gen?: DefaultModelInfo
   connectivity_summary?: ModelConnectivitySummary
+  chat_readiness?: ChatModelReadiness
 }
 
 export interface TestConnectionResult {

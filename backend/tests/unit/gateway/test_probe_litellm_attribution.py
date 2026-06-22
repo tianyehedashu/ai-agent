@@ -20,6 +20,7 @@ def _target() -> ProbeTarget:
         real_model="doubao-test",
         credential_id=uuid.uuid4(),
         is_system=False,
+        model_name="doubao-test-chat",
     )
 
 
@@ -40,6 +41,8 @@ def test_build_probe_gateway_metadata_includes_attribution_keys() -> None:
     assert meta["gateway_credential_name_snapshot"] == "火山-company"
     assert meta["gateway_client_type"] == GATEWAY_PROBE_CLIENT_TYPE
     assert meta["gateway_user_email_snapshot"] == "ops@example.com"
+    # 调用名（route_name）须为 GatewayModel.name，而非上游 real_model
+    assert meta["gateway_route_name"] == target.model_name
     assert isinstance(meta.get("user_api_key_auth_metadata"), dict)
 
 
@@ -58,7 +61,8 @@ def test_merge_probe_litellm_kwargs_sets_metadata_and_model_info() -> None:
     assert merged["metadata"]["gateway_team_id"] == str(tenant_id)
     mi = merged["litellm_params"]["model_info"]
     assert mi["id"] == str(target.model_id)
-    assert mi["gateway_model_name"] == "doubao-test"
+    # 注册别名 = 调用名（GatewayModel.name）；上游 canonical id 单列 gateway_real_model
+    assert mi["gateway_model_name"] == "doubao-test-chat"
     assert mi["gateway_real_model"] == "doubao-test"
     assert mi["gateway_credential_id"] == str(target.credential_id)
     assert mi["gateway_credential_name"] == "cred-a"

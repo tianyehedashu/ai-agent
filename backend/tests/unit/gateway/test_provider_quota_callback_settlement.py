@@ -28,7 +28,7 @@ async def test_commit_provider_quota_on_success(monkeypatch) -> None:
     monkeypatch.setattr(mod, "get_provider_quota_guard", lambda: guard)
     monkeypatch.setattr(mod, "_load_rule_specs", AsyncMock(return_value={rule_id: spec}))
     monkeypatch.setattr(mod, "acquire_settlement_once", AsyncMock(return_value=True))
-    schedule = MagicMock()
+    schedule = AsyncMock()
     monkeypatch.setattr(mod, "schedule_quota_plan_usage_upsert", schedule)
 
     await mod.settle_provider_quota_from_callback(

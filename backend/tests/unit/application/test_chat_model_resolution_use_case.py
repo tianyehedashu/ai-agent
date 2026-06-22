@@ -103,8 +103,14 @@ class TestResolveTextChatModelLegacyPaths:
     async def test_none_picks_default_from_allowed(self):
         from bootstrap.config import settings
 
+        self.catalog.resolve_chat_default_text_model = AsyncMock(
+            side_effect=[settings.default_model, "other/model"]
+        )
         allowed = frozenset([settings.default_model, "deepseek/deepseek-chat"])
-        resolved = await self.uc.resolve_text_chat_model(None, allowed_text_system_ids=allowed)
+        resolved = await self.uc.resolve_text_chat_model(
+            None,
+            allowed_text_system_ids=allowed,
+        )
         assert resolved.model == settings.default_model
 
     @pytest.mark.asyncio
@@ -227,16 +233,44 @@ class TestVisibleTextSystemModelIds:
                 )
             )
             catalog = AsyncMock()
-            catalog.list_visible_models = AsyncMock(
-                return_value=[{"id": "team-chat-model", "display_name": "Team Chat"}]
+            catalog.list_requestable_text_model_ids = AsyncMock(
+                return_value=frozenset(["team-chat-model"])
             )
             uc = ChatModelResolutionUseCase(db_session, catalog=catalog)
             ids = await uc.visible_text_system_model_ids()
-            catalog.list_visible_models.assert_awaited_once_with(
+            catalog.list_requestable_text_model_ids.assert_awaited_once_with(
                 billing_team_id=team_id,
-                model_type="text",
+                user_id=user_id,
             )
             assert ids == frozenset(["team-chat-model"])
+        finally:
+            clear_permission_context()
+
+    @pytest.mark.asyncio
+    async def test_default_text_resolution_falls_back_to_permission_team(self, db_session):
+        """未传 billing_team_id 时默认模型解析应按权限上下文团队作用域。"""
+        team_id = uuid.uuid4()
+        user_id = uuid.uuid4()
+        try:
+            set_permission_context(
+                PermissionContext(
+                    user_id=user_id,
+                    role="user",
+                    team_id=team_id,
+                    team_role="owner",
+                )
+            )
+            catalog = AsyncMock()
+            catalog.resolve_chat_default_text_model = AsyncMock(
+                return_value="deepseek/deepseek-chat"
+            )
+            uc = ChatModelResolutionUseCase(db_session, catalog=catalog)
+            resolved = await uc.resolve_text_chat_model(None)
+            assert resolved.model == "deepseek/deepseek-chat"
+            catalog.resolve_chat_default_text_model.assert_awaited_once_with(
+                billing_team_id=team_id,
+                user_id=user_id,
+            )
         finally:
             clear_permission_context()
 
@@ -263,19 +297,26 @@ class TestResolveTextChatModel:
 
     @pytest.mark.asyncio
     async def test_none_raises_when_no_visible_models(self, db_session):
-        uc = ChatModelResolutionUseCase(db_session, catalog=AsyncMock())
-        with pytest.raises(ValidationError, match="无可用文本模型"):
+        catalog = AsyncMock()
+        catalog.resolve_chat_default_text_model = AsyncMock(return_value=None)
+        catalog.list_requestable_text_model_ids = AsyncMock(return_value=frozenset())
+        catalog.count_registered_text_models = AsyncMock(return_value=0)
+        uc = ChatModelResolutionUseCase(db_session, catalog=catalog)
+        with pytest.raises(ValidationError, match="凭据"):
             await uc.resolve_text_chat_model(None, allowed_text_system_ids=frozenset())
 
     @pytest.mark.asyncio
     async def test_none_picks_first_visible(self, db_session):
-        from bootstrap.config import settings
-
-        uc = ChatModelResolutionUseCase(db_session, catalog=AsyncMock())
+        catalog = AsyncMock()
+        catalog.resolve_chat_default_text_model = AsyncMock(return_value="deepseek/deepseek-chat")
+        uc = ChatModelResolutionUseCase(db_session, catalog=catalog)
         allowed = frozenset(["deepseek/deepseek-chat"])
         r = await uc.resolve_text_chat_model(None, allowed_text_system_ids=allowed)
         assert r.model == "deepseek/deepseek-chat"
 
+        from bootstrap.config import settings
+
+        catalog.resolve_chat_default_text_model = AsyncMock(return_value=settings.default_model)
         allowed_with_default = frozenset([settings.default_model, "other/model"])
         r2 = await uc.resolve_text_chat_model(None, allowed_text_system_ids=allowed_with_default)
         assert r2.model == settings.default_model

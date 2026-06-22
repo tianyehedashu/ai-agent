@@ -24,6 +24,9 @@ class ProbeTarget:
     real_model: str
     credential_id: uuid.UUID
     is_system: bool
+    # 客户端调用名（GatewayModel.name / SystemGatewayModel.name）；
+    # 探活日志归因须与真实客户端请求一致（route_name = 调用名，而非上游 real_model）。
+    model_name: str
 
 
 @dataclass(frozen=True, slots=True)
