@@ -7,6 +7,8 @@ export interface PaginationControlsProps {
   total: number
   has_next: boolean
   has_prev: boolean
+  /** false 时 total 仅为下界，不展示「共 N 条 / 总页数」 */
+  total_exact?: boolean
   onPageChange: (page: number) => void
   className?: string
 }
@@ -23,14 +25,20 @@ export function PaginationControls({
   total,
   has_next,
   has_prev,
+  total_exact = true,
   onPageChange,
   className,
 }: PaginationControlsProps): React.JSX.Element | null {
-  if (total <= 0) return null
+  if (total <= 0 && total_exact) return null
 
-  const pages = totalPages(total, page_size)
-  const start = (page - 1) * page_size + 1
-  const end = Math.min(page * page_size, total)
+  const start = total > 0 ? (page - 1) * page_size + 1 : 0
+  const end = total > 0 ? Math.min(page * page_size, total) : 0
+  const rangeLabel =
+    total > 0
+      ? total_exact
+        ? `第 ${String(start)}–${String(end)} 条，共 ${String(total)} 条 · 第 ${String(page)}/${String(totalPages(total, page_size))} 页`
+        : `第 ${String(start)}–${String(end)} 条${has_next ? '（还有更多）' : ''} · 第 ${String(page)} 页`
+      : '暂无数据'
 
   return (
     <div
@@ -39,9 +47,7 @@ export function PaginationControls({
         className
       )}
     >
-      <span className="tabular-nums">
-        第 {start}–{end} 条，共 {total} 条 · 第 {page}/{pages} 页
-      </span>
+      <span className="tabular-nums">{rangeLabel}</span>
       <div className="flex items-center gap-1">
         <Button
           type="button"

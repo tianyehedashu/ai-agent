@@ -20,8 +20,6 @@ from domains.gateway.infrastructure.repositories.request_log_repository import (
 async def test_list_by_axis_passes_user_id_and_model_to_clauses() -> None:
     """list_by_axis 将 user_id 与 model 参数正确传递给 _list_filter_clauses。"""
     session = AsyncMock()
-    count_result = MagicMock()
-    count_result.scalar_one.return_value = 1
     row = SimpleNamespace(
         id=uuid.uuid4(),
         created_at=datetime.now(UTC),
@@ -30,12 +28,12 @@ async def test_list_by_axis_passes_user_id_and_model_to_clauses() -> None:
     )
     list_result = MagicMock()
     list_result.scalars.return_value.all.return_value = [row]
-    session.execute = AsyncMock(side_effect=[count_result, list_result])
+    session.execute = AsyncMock(return_value=list_result)
 
     repo = RequestLogRepository(session)
     uid = uuid.uuid4()
     now = datetime.now(UTC)
-    items, total = await repo.list_by_axis(
+    page = await repo.list_by_axis(
         UsageAxis.workspace(uuid.uuid4()),
         start=now - timedelta(days=1),
         end=now,
@@ -45,25 +43,22 @@ async def test_list_by_axis_passes_user_id_and_model_to_clauses() -> None:
         page_size=20,
     )
 
-    assert total == 1
-    assert len(items) == 1
-    # 验证执行了 2 次查询（count + list）
-    assert session.execute.await_count == 2
+    assert len(page.items) == 1
+    assert page.has_next is False
+    assert session.execute.await_count == 1
 
 
 @pytest.mark.asyncio
 async def test_list_by_axis_with_model_none_ignores_model_filter() -> None:
     """model 为 None 时不应附加 model 相关 OR 子句。"""
     session = AsyncMock()
-    count_result = MagicMock()
-    count_result.scalar_one.return_value = 0
     list_result = MagicMock()
     list_result.scalars.return_value.all.return_value = []
-    session.execute = AsyncMock(side_effect=[count_result, list_result])
+    session.execute = AsyncMock(return_value=list_result)
 
     repo = RequestLogRepository(session)
     now = datetime.now(UTC)
-    items, total = await repo.list_by_axis(
+    page = await repo.list_by_axis(
         UsageAxis.workspace(uuid.uuid4()),
         start=now - timedelta(days=1),
         end=now,
@@ -72,19 +67,17 @@ async def test_list_by_axis_with_model_none_ignores_model_filter() -> None:
         page_size=20,
     )
 
-    assert total == 0
-    assert items == []
+    assert page.items == []
+    assert page.has_next is False
 
 
 @pytest.mark.asyncio
 async def test_list_by_axis_uses_list_filter_clauses_for_all_filters() -> None:
     """list_by_axis 通过 _list_filter_clauses 统一处理所有筛选条件。"""
     session = AsyncMock()
-    count_result = MagicMock()
-    count_result.scalar_one.return_value = 0
     list_result = MagicMock()
     list_result.scalars.return_value.all.return_value = []
-    session.execute = AsyncMock(side_effect=[count_result, list_result])
+    session.execute = AsyncMock(return_value=list_result)
 
     repo = RequestLogRepository(session)
     now = datetime.now(UTC)
@@ -102,8 +95,7 @@ async def test_list_by_axis_uses_list_filter_clauses_for_all_filters() -> None:
         page_size=20,
     )
 
-    # 验证执行了 2 次查询
-    assert session.execute.await_count == 2
+    assert session.execute.await_count == 1
 
 
 def test_list_filter_clauses_builds_expected_clauses() -> None:

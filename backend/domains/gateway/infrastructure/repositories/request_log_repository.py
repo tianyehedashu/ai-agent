@@ -20,7 +20,10 @@ from domains.gateway.domain.usage_read_model import (
     UsageStatisticsParentScope,
 )
 from domains.gateway.infrastructure.models.request_log import GatewayRequestLog
-from domains.gateway.infrastructure.repositories.usage_axis_sql import usage_axis_base_clauses
+from domains.gateway.infrastructure.repositories.usage_axis_sql import (
+    usage_axis_base_clauses,
+    usage_axis_count_disjuncts,
+)
 
 if TYPE_CHECKING:
     from sqlalchemy.sql import ColumnElement
@@ -81,6 +84,14 @@ class RequestLogUsageAggregateRow:
 
 
 @dataclass(frozen=True)
+class RequestLogListPage:
+    """日志列表分页（probe 模式，无精确 COUNT）。"""
+
+    items: list[GatewayRequestLog]
+    has_next: bool
+
+
+@dataclass(frozen=True)
 class RequestLogUsageTotals:
     """调用统计总计。"""
 
@@ -100,6 +111,28 @@ class RequestLogUsageTotals:
 class RequestLogRepository:
     def __init__(self, session: AsyncSession):
         self._session = session
+
+    async def _count_logs(
+        self,
+        axis: UsageAxis,
+        clauses: list[ColumnElement[bool]],
+    ) -> int:
+        """COUNT 热路径：user / workspace-member 轴拆成两段互斥子查询再相加，便于走部分索引。"""
+        split = usage_axis_count_disjuncts(axis)
+        if split is None:
+            stmt = select(func.count()).select_from(GatewayRequestLog).where(_sql_and(*clauses))
+            return int((await self._session.execute(stmt)).scalar_one())
+
+        disjuncts, visibility_idx = split
+        prefix = clauses[:visibility_idx]
+        suffix = clauses[visibility_idx + 1 :]
+        total = 0
+        for disjunct in disjuncts:
+            stmt = select(func.count()).select_from(GatewayRequestLog).where(
+                _sql_and(*prefix, disjunct, *suffix)
+            )
+            total += int((await self._session.execute(stmt)).scalar_one())
+        return total
 
     async def insert(
         self,
@@ -202,7 +235,7 @@ class RequestLogRepository:
         client_type: str | None = None,
         page: int = 1,
         page_size: int = 50,
-    ) -> tuple[list[GatewayRequestLog], int]:
+    ) -> RequestLogListPage:
         clauses = list(usage_axis_base_clauses(axis))
         if start:
             clauses.append(GatewayRequestLog.created_at >= start)
@@ -220,20 +253,20 @@ class RequestLogRepository:
             )
         )
 
-        count_stmt = select(func.count()).select_from(GatewayRequestLog).where(_sql_and(*clauses))
-        total = (await self._session.execute(count_stmt)).scalar_one()
-
         offset = max(0, (page - 1) * page_size)
+        probe_limit = page_size + 1
         stmt = (
             select(GatewayRequestLog)
             .options(*_request_log_list_defer_options())
             .where(_sql_and(*clauses))
             .order_by(GatewayRequestLog.created_at.desc())
             .offset(offset)
-            .limit(page_size)
+            .limit(probe_limit)
         )
         result = await self._session.execute(stmt)
-        return list(result.scalars().all()), total
+        rows = list(result.scalars().all())
+        has_next = len(rows) > page_size
+        return RequestLogListPage(items=rows[:page_size], has_next=has_next)
 
     async def get_by_axis(
         self,
@@ -759,8 +792,7 @@ class RequestLogRepository:
         ]
         if parent_scope is not None:
             clauses.append(self._usage_statistics_parent_clause(parent_scope))
-        stmt = select(func.count(GatewayRequestLog.id)).where(_sql_and(*clauses))
-        return int((await self._session.execute(stmt)).scalar_one())
+        return await self._count_logs(axis, clauses)
 
     @staticmethod
     def _group_key_to_str(value: object) -> str:
@@ -896,6 +928,7 @@ class RequestLogRepository:
 
 
 __all__ = [
+    "RequestLogListPage",
     "RequestLogRepository",
     "RequestLogUsageAggregateRow",
     "RequestLogUsageTotals",

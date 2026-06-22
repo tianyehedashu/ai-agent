@@ -437,7 +437,17 @@ export default function GatewayLogsPage(): React.JSX.Element {
   })
 
   const items = useMemo(() => data?.items ?? [], [data?.items])
-  const totalCount = data?.total ?? 0
+  const listTotalExact = data?.total_exact !== false
+  const listSubtitle = useMemo(() => {
+    const scope = usageAggregationScopeLabel(usageAggregation)
+    if (summary && summary.total_requests > 0) {
+      return `${scope} · 筛选范围内约 ${summary.total_requests.toLocaleString()} 次请求`
+    }
+    if (items.length > 0) {
+      return `${scope} · 本页 ${String(items.length)} 条${data?.has_next ? '（还有更多）' : ''}`
+    }
+    return scope
+  }, [usageAggregation, summary, items.length, data?.has_next])
 
   const {
     gridTemplateColumns: logGridTemplateColumns,
@@ -512,9 +522,7 @@ export default function GatewayLogsPage(): React.JSX.Element {
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div className="min-w-0">
           <h2 className="text-2xl font-semibold tracking-tight">调用日志</h2>
-          <p className="text-sm text-muted-foreground">
-            {usageAggregationScopeLabel(usageAggregation)} · 共 {totalCount.toLocaleString()} 条
-          </p>
+          <p className="text-sm text-muted-foreground">{listSubtitle}</p>
         </div>
         <UsageAggregationToggle
           value={usageAggregation}
@@ -901,7 +909,8 @@ export default function GatewayLogsPage(): React.JSX.Element {
           <PaginationControls
             page={data?.page ?? page}
             page_size={pageSize}
-            total={totalCount}
+            total={data?.total ?? items.length}
+            total_exact={listTotalExact}
             has_next={data?.has_next ?? false}
             has_prev={data?.has_prev ?? false}
             onPageChange={(next) => {

@@ -101,7 +101,9 @@ export type GatewayLogsQuery = {
 }
 
 /** GET /logs 响应 */
-export type GatewayLogsPage = PaginatedList<GatewayLogItem>
+export type GatewayLogsPage = PaginatedList<GatewayLogItem> & {
+  total_exact?: boolean
+}
 
 /** Logs / Dashboard 资源 API */
 export const logsApi = {

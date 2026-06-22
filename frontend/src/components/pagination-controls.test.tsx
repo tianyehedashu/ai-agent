@@ -40,6 +40,22 @@ describe('PaginationControls', () => {
     expect(onPageChange).toHaveBeenCalledWith(3)
   })
 
+  it('total_exact 为 false 时不展示总条数与总页数', () => {
+    render(
+      <PaginationControls
+        page={1}
+        page_size={20}
+        total={20}
+        total_exact={false}
+        has_next
+        has_prev={false}
+        onPageChange={vi.fn()}
+      />
+    )
+
+    expect(screen.getByText('第 1–20 条（还有更多） · 第 1 页')).toBeInTheDocument()
+  })
+
   it('首/末页时禁用对应按钮', () => {
     render(
       <PaginationControls

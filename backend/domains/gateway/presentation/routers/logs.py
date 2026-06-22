@@ -52,7 +52,7 @@ async def list_logs(
     model: str | None = Query(default=None, min_length=1, max_length=200),
     client_type: str | None = Query(default=None, min_length=1, max_length=100),
 ) -> RequestLogListResponse:
-    items, total = await reads.list_request_logs(
+    page_result = await reads.list_request_logs(
         team,
         usage_aggregation=usage_aggregation,
         page=page.page,
@@ -67,12 +67,14 @@ async def list_logs(
         model=model.strip() if model else None,
         client_type=client_type.strip() if client_type else None,
     )
-    log_items = [RequestLogResponse.model_validate(request_log_to_dict(i, team)) for i in items]
+    log_items = [
+        RequestLogResponse.model_validate(request_log_to_dict(i, team)) for i in page_result.items
+    ]
     return build_request_log_list_response(
         items=log_items,
-        total=total,
         page=page.page,
         page_size=page.page_size,
+        has_next=page_result.has_next,
     )
 
 

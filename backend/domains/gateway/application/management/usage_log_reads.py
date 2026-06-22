@@ -40,6 +40,7 @@ from libs.api.pagination import slice_page
 
 if TYPE_CHECKING:
     from domains.gateway.infrastructure.repositories.request_log_repository import (
+        RequestLogListPage,
         RequestLogUsageAggregateRow,
         RequestLogUsageTotals,
     )
@@ -96,7 +97,7 @@ class GatewayUsageLogReadMixin:
         user_id: UUID | None = None,
         model: str | None = None,
         client_type: str | None = None,
-    ) -> tuple[list[Any], int]:
+    ) -> RequestLogListPage:
         axis = self._resolve_usage_axis(ctx, usage_aggregation, vkey_id=vkey_id)
         return await self._logs.list_by_axis(
             axis,

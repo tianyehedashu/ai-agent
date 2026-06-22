@@ -40,18 +40,22 @@ async def test_list_request_logs_member_workspace_keeps_own_vkey_and_own_platfor
     log_own_vkey = SimpleNamespace(vkey_id=my_vkey_id, user_id=other_user)
     log_platform_own = SimpleNamespace(vkey_id=None, user_id=member_id)
 
-    async def _list_by_axis(axis: UsageAxis, *_args: Any, **_kwargs: Any) -> tuple[list[Any], int]:
+    async def _list_by_axis(axis: UsageAxis, *_args: Any, **_kwargs: Any):
+        from domains.gateway.infrastructure.repositories.request_log_repository import (
+            RequestLogListPage,
+        )
+
         assert axis.is_workspace()
         assert axis.team_id == team_id
         assert axis.member_user_id == member_id
-        return [log_own_vkey, log_platform_own], 2
+        return RequestLogListPage(items=[log_own_vkey, log_platform_own], has_next=False)
 
     svc._logs.list_by_axis = AsyncMock(side_effect=_list_by_axis)
     svc._vkeys.list_for_tenant = AsyncMock(
         side_effect=AssertionError("member list must not list vkeys")
     )
 
-    items, total = await svc.list_request_logs(
+    page = await svc.list_request_logs(
         ctx,
         usage_aggregation=UsageAggregation.WORKSPACE,
         page=1,
@@ -63,10 +67,10 @@ async def test_list_request_logs_member_workspace_keeps_own_vkey_and_own_platfor
         vkey_id=None,
         credential_id=None,
     )
-    assert total == 2
-    assert len(items) == 2
-    assert log_own_vkey in items
-    assert log_platform_own in items
+    assert len(page.items) == 2
+    assert page.has_next is False
+    assert log_own_vkey in page.items
+    assert log_platform_own in page.items
 
 
 @pytest.mark.asyncio
@@ -84,18 +88,22 @@ async def test_list_request_logs_admin_no_extra_filter() -> None:
     )
     rows: list[Any] = [SimpleNamespace(vkey_id=None, user_id=uuid.uuid4())]
 
-    async def _list_by_axis(axis: UsageAxis, *_args: Any, **_kwargs: Any) -> tuple[list[Any], int]:
+    async def _list_by_axis(axis: UsageAxis, *_args: Any, **_kwargs: Any):
+        from domains.gateway.infrastructure.repositories.request_log_repository import (
+            RequestLogListPage,
+        )
+
         assert axis.is_workspace()
         assert axis.team_id == team_id
         assert axis.member_user_id is None
-        return rows, 1
+        return RequestLogListPage(items=rows, has_next=False)
 
     svc._logs.list_by_axis = AsyncMock(side_effect=_list_by_axis)
     svc._vkeys.list_for_tenant = AsyncMock(
         side_effect=AssertionError("admin path must not list vkeys")
     )
 
-    items, total = await svc.list_request_logs(
+    page = await svc.list_request_logs(
         ctx,
         usage_aggregation=UsageAggregation.WORKSPACE,
         page=1,
@@ -106,8 +114,8 @@ async def test_list_request_logs_admin_no_extra_filter() -> None:
         capability=None,
         vkey_id=None,
     )
-    assert items == rows
-    assert total == 1
+    assert page.items == rows
+    assert page.has_next is False
 
 
 @pytest.mark.asyncio
@@ -126,9 +134,13 @@ async def test_list_request_logs_user_aggregation_uses_user_axis() -> None:
 
     captured: dict[str, Any] = {}
 
-    async def _list_by_axis(axis: UsageAxis, *_args: Any, **_kwargs: Any) -> tuple[list[Any], int]:
+    async def _list_by_axis(axis: UsageAxis, *_args: Any, **_kwargs: Any):
+        from domains.gateway.infrastructure.repositories.request_log_repository import (
+            RequestLogListPage,
+        )
+
         captured["axis"] = axis
-        return [], 0
+        return RequestLogListPage(items=[], has_next=False)
 
     svc._logs.list_by_axis = AsyncMock(side_effect=_list_by_axis)
 
