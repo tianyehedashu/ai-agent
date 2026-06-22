@@ -116,6 +116,11 @@ describe('buildCopyModelsToTeamBody', () => {
 })
 
 describe('isCopyModelsPlanValid', () => {
+  it('returns false when plan is missing', () => {
+    const groups = groupSelectedModelsForCopy([personalItem('m1', 'c1')])
+    expect(isCopyModelsPlanValid(groups, {})).toBe(false)
+  })
+
   it('requires destination credential for existing mode', () => {
     const groups = groupSelectedModelsForCopy([personalItem('m1', 'c1')])
     expect(

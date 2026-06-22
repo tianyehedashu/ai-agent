@@ -78,7 +78,7 @@ export function CopyModelsToTeamDialog({
   )
 
   const [destinationTeamId, setDestinationTeamId] = useState(() => destinationTeams[0]?.id ?? '')
-  const [groupPlans, setGroupPlans] = useState<Record<string, ModelCopyGroupPlanState>>({})
+  const [planOverrides, setPlanOverrides] = useState<Record<string, ModelCopyGroupPlanState>>({})
   const [result, setResult] = useState<CopyModelsToTeamResponse | null>(null)
 
   const teamCredentialsQuery = useQuery({
@@ -103,12 +103,22 @@ export function CopyModelsToTeamDialog({
     }
   }, [destinationTeamId, destinationTeams])
 
+  const defaultGroupPlans = useMemo(
+    () =>
+      destinationTeamId
+        ? buildDefaultGroupPlans(groups, destinationTeamId, fullTeamCredentials, viewerUserId)
+        : {},
+    [groups, destinationTeamId, fullTeamCredentials, viewerUserId]
+  )
+
   useEffect(() => {
-    if (!destinationTeamId) return
-    setGroupPlans(
-      buildDefaultGroupPlans(groups, destinationTeamId, fullTeamCredentials, viewerUserId)
-    )
-  }, [groups, destinationTeamId, fullTeamCredentials, viewerUserId])
+    setPlanOverrides({})
+  }, [destinationTeamId, groups])
+
+  const groupPlans = useMemo(
+    () => ({ ...defaultGroupPlans, ...planOverrides }),
+    [defaultGroupPlans, planOverrides]
+  )
 
   const planValid = useMemo(() => isCopyModelsPlanValid(groups, groupPlans), [groups, groupPlans])
 
@@ -141,7 +151,7 @@ export function CopyModelsToTeamDialog({
 
   const handlePlanModeChange = useCallback(
     (group: ModelCopyCredentialGroup, mode: ModelCopyCredentialMode): void => {
-      setGroupPlans((prev) => {
+      setPlanOverrides((prev) => {
         if (mode === 'copy_credential') {
           return {
             ...prev,
@@ -171,7 +181,7 @@ export function CopyModelsToTeamDialog({
 
   const handleDestCredentialChange = useCallback(
     (sourceCredentialId: string, credentialId: string): void => {
-      setGroupPlans((prev) => ({
+      setPlanOverrides((prev) => ({
         ...prev,
         [sourceCredentialId]: {
           mode: 'existing',

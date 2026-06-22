@@ -102,21 +102,21 @@ export function buildDefaultGroupPlans(
 export function buildCopyModelsToTeamBody(
   selectedItems: readonly GatewayModelListItem[],
   destinationTeamId: string,
-  groupPlans: Record<string, ModelCopyGroupPlanState>
+  groupPlans: Partial<Record<string, ModelCopyGroupPlanState>>
 ): CopyModelsToTeamBody {
   const groups = groupSelectedModelsForCopy(selectedItems)
   const credential_plans: ModelCopyCredentialPlanBody[] = groups.map((group) => {
     const plan = groupPlans[group.sourceCredentialId]
-    if (plan.mode === 'existing') {
+    if (!plan || plan.mode === 'copy_credential') {
       return {
         source_credential_id: group.sourceCredentialId,
-        mode: 'existing',
-        destination_credential_id: plan.destinationCredentialId ?? undefined,
+        mode: 'copy_credential',
       }
     }
     return {
       source_credential_id: group.sourceCredentialId,
-      mode: 'copy_credential',
+      mode: 'existing',
+      destination_credential_id: plan.destinationCredentialId ?? undefined,
     }
   })
   return {
@@ -128,11 +128,12 @@ export function buildCopyModelsToTeamBody(
 
 export function isCopyModelsPlanValid(
   groups: readonly ModelCopyCredentialGroup[],
-  groupPlans: Record<string, ModelCopyGroupPlanState>
+  groupPlans: Partial<Record<string, ModelCopyGroupPlanState>>
 ): boolean {
   if (groups.length === 0) return false
   return groups.every((group) => {
     const plan = groupPlans[group.sourceCredentialId]
+    if (!plan) return false
     if (plan.mode === 'existing') {
       return plan.destinationCredentialId !== null && plan.destinationCredentialId !== ''
     }
