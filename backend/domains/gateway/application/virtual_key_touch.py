@@ -9,7 +9,7 @@ from domains.gateway.application.proxy_deferred_tasks import register_proxy_defe
 from domains.gateway.infrastructure.repositories.virtual_key_repository import (
     VirtualKeyRepository,
 )
-from libs.db.database import get_session_context
+from libs.db.database import get_session_context, prefer_background_pool
 from utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -17,8 +17,9 @@ logger = get_logger(__name__)
 
 async def _touch_virtual_key_used(vkey_id: uuid.UUID) -> None:
     try:
-        async with get_session_context() as session:
-            await VirtualKeyRepository(session).touch_used(vkey_id)
+        with prefer_background_pool():
+            async with get_session_context() as session:
+                await VirtualKeyRepository(session).touch_used(vkey_id)
     except Exception:
         logger.exception("Async vkey touch_used failed for %s", vkey_id)
 

@@ -108,7 +108,6 @@ async def test_apply_platform_usage_adjustment(db_session, test_user) -> None:
 @pytest.mark.asyncio
 async def test_apply_upstream_rolling_adjustment_rejected(db_session) -> None:
     """滚动窗口配额展示读走日志、忽略桶，手工校正应被拒绝并给出引导。"""
-    from datetime import timedelta
 
     from domains.gateway.application.management.quota_usage_adjustment import (
         apply_quota_usage_adjustment,
@@ -117,7 +116,7 @@ async def test_apply_upstream_rolling_adjustment_rejected(db_session) -> None:
         ProviderQuotaRepository,
     )
 
-    now = datetime.now(UTC)
+    datetime.now(UTC)
     repo = ProviderQuotaRepository(db_session)
     row = await repo.upsert(
         credential_id=uuid.uuid4(),
@@ -146,7 +145,6 @@ async def test_apply_upstream_rolling_adjustment_rejected(db_session) -> None:
 @pytest.mark.asyncio
 async def test_apply_upstream_total_rolling_adjustment_allowed(db_session) -> None:
     """累计（window=0）即便策略名是 rolling 也可校正：不应被滚动守卫误拒。"""
-    from datetime import timedelta
 
     from domains.gateway.application.management.quota_usage_adjustment import (
         apply_quota_usage_adjustment,
@@ -155,7 +153,7 @@ async def test_apply_upstream_total_rolling_adjustment_allowed(db_session) -> No
         ProviderQuotaRepository,
     )
 
-    now = datetime.now(UTC)
+    datetime.now(UTC)
     repo = ProviderQuotaRepository(db_session)
     row = await repo.upsert(
         credential_id=uuid.uuid4(),

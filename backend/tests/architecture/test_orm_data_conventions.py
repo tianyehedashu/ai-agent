@@ -11,7 +11,11 @@ from libs.orm.base import TenantScopedMixin
 _BACKEND = Path(__file__).resolve().parents[2]
 _LIBS = _BACKEND / "libs"
 
-TIMESTAMP_ALLOWLIST = frozenset({"users"})
+# 豁免标准 created_at/updated_at 约定的非业务表：
+# - users：沿用 fastapi-users schema
+# - gateway_rollup_state：id=1 单行水位表（rollup watermark），刻意不继承 BaseModel，
+#   只需 last_rolled_at/updated_at；created_at 对单例行无业务语义。
+TIMESTAMP_ALLOWLIST = frozenset({"users", "gateway_rollup_state"})
 
 TENANT_BUSINESS_TABLES = frozenset(
     {

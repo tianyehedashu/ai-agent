@@ -4,8 +4,9 @@ Database Connection Management
 使用 SQLAlchemy 2.0 异步模式
 """
 
-from collections.abc import AsyncGenerator
-from contextlib import asynccontextmanager, suppress
+from collections.abc import AsyncGenerator, Iterator
+from contextlib import asynccontextmanager, contextmanager, suppress
+import contextvars
 import time
 from typing import Any, cast
 
@@ -36,6 +37,25 @@ _session_factory: async_sessionmaker[AsyncSession] | None = None
 # 后台任务专用引擎/会话工厂（小池子，与热路径物理隔离）
 _background_engine: AsyncEngine | None = None
 _background_session_factory: async_sessionmaker[AsyncSession] | None = None
+
+# 响应后结算作用域开关：置位时 ``get_session_context`` 自动改用后台小池，
+# 把 fire-and-forget 的回写（vkey 用量、请求日志、预算结算）与 /v1/* 热路径物理隔离，
+# 避免突发流量下后台写入抢占主池连接、拖垮事件循环导致 /health 探活超时。
+# ContextVar 在 ``asyncio.create_task`` 时按 PEP 567 复制，故作用域内派生的子任务一并继承。
+_prefer_background_pool: contextvars.ContextVar[bool] = contextvars.ContextVar(
+    "ai_agent_prefer_background_pool",
+    default=False,
+)
+
+
+@contextmanager
+def prefer_background_pool() -> Iterator[None]:
+    """在此作用域内让 ``get_session_context`` 改用后台连接池（响应后结算专用）。"""
+    token = _prefer_background_pool.set(True)
+    try:
+        yield
+    finally:
+        _prefer_background_pool.reset(token)
 
 
 # 触发 pool 回收的 asyncpg 异常文本片段（这些场景说明连接已脏，无法再复用）。
@@ -338,14 +358,23 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
         yield session
 
 
+def _resolve_session_factory() -> async_sessionmaker[AsyncSession]:
+    """选择会话工厂：响应后结算作用域优先后台小池，其余走主池。"""
+    if _prefer_background_pool.get() and _background_session_factory is not None:
+        return _background_session_factory
+    return get_session_factory()
+
+
 @asynccontextmanager
 async def get_session_context() -> AsyncGenerator[AsyncSession, None]:
     """
     获取数据库会话上下文管理器
 
-    用于非 FastAPI 依赖注入的场景（如后台任务、脚本等）
+    用于非 FastAPI 依赖注入的场景（如后台任务、脚本等）。
+    若处于 ``prefer_background_pool()`` 作用域内，则自动改用后台小池，
+    与 /v1/* 热路径物理隔离。
     """
-    factory = get_session_factory()
+    factory = _resolve_session_factory()
     async with factory() as session:
         try:
             yield session

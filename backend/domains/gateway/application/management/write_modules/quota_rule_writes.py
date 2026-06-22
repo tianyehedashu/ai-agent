@@ -603,7 +603,9 @@ class QuotaRuleWritesMixin:
         else:
             existing_quotas = await self._entitlement_plans.list_quotas(plan.id)
 
-        from domains.gateway.application.management.plan_quota_merge import merge_plan_quotas_by_label
+        from domains.gateway.application.management.plan_quota_merge import (
+            merge_plan_quotas_by_label,
+        )
 
         quota_payload: dict[str, object] = {
             "label": label,

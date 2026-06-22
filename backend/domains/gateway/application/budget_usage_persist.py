@@ -20,7 +20,7 @@ from domains.gateway.domain.quota_plan import PLATFORM_NS, UsageBucketNamespace
 from domains.gateway.infrastructure.repositories.quota_plan_usage_bucket_repository import (
     QuotaPlanUsageBucketRepository,
 )
-from libs.db.database import get_session_context
+from libs.db.database import get_session_context, prefer_background_pool
 from libs.db.redis import get_redis_client
 from utils.logging import get_logger
 
@@ -86,24 +86,25 @@ async def _upsert_platform_budget_usage(
     if not await _acquire_bucket_upsert_once(PLATFORM_NS, request_id, source):
         return
     try:
-        async with get_session_context() as session:
-            repo = QuotaPlanUsageBucketRepository(session)
-            for item in items:
-                window_start = compute_period_window_start(
-                    settled_at,
-                    item.period,
-                    item.period_reset_anchor,
-                )
-                await repo.increment_bucket(
-                    PLATFORM_NS,
-                    item.budget_id,
-                    item.budget_id,
-                    window_start,
-                    delta_tokens=delta_tokens,
-                    delta_requests=delta_requests,
-                    delta_cost_usd=delta_cost_usd,
-                )
-            await session.commit()
+        with prefer_background_pool():
+            async with get_session_context() as session:
+                repo = QuotaPlanUsageBucketRepository(session)
+                for item in items:
+                    window_start = compute_period_window_start(
+                        settled_at,
+                        item.period,
+                        item.period_reset_anchor,
+                    )
+                    await repo.increment_bucket(
+                        PLATFORM_NS,
+                        item.budget_id,
+                        item.budget_id,
+                        window_start,
+                        delta_tokens=delta_tokens,
+                        delta_requests=delta_requests,
+                        delta_cost_usd=delta_cost_usd,
+                    )
+                await session.commit()
     except Exception:
         logger.exception(
             "Async platform budget usage bucket upsert failed request=%s source=%s items=%d",

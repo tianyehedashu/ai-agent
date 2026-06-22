@@ -94,7 +94,9 @@ class GatewayRequestLog(Base):
     )
 
     # 调用信息
-    capability: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    # 低基数列（约 5 值）：单列 btree 选择性差、规划器几无收益，仅增 INSERT 写放大，
+    # 故不建单列索引；按 (tenant_id, created_at) 复合索引 + 时间窗过滤覆盖（迁移 20260622）。
+    capability: Mapped[str] = mapped_column(String(40), nullable=False)
     route_name: Mapped[str | None] = mapped_column(String(200), nullable=True, index=True)
     real_model: Mapped[str | None] = mapped_column(String(200), nullable=True, index=True)
     provider: Mapped[str | None] = mapped_column(String(50), nullable=True, index=True)

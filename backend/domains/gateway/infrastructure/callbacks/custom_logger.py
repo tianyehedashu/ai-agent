@@ -37,7 +37,7 @@ from domains.gateway.infrastructure.callbacks.request_log_persist_helpers import
 from domains.gateway.infrastructure.gateway_log_sampling import (
     should_persist_request_log_row,
 )
-from libs.db.database import get_session_context
+from libs.db.database import get_session_context, prefer_background_pool
 from libs.db.redis import get_redis_client
 from utils.logging import get_logger
 from utils.serialization import Serializer
@@ -100,15 +100,16 @@ def _build_logger_instance() -> Any:
             start_time: Any,
             end_time: Any,
         ) -> None:
-            await _persist_event(
-                kwargs=kwargs,
-                response_obj=response_obj,
-                start_time=start_time,
-                end_time=end_time,
-                status="success",
-                error_code=None,
-                error_message=None,
-            )
+            with prefer_background_pool():
+                await _persist_event(
+                    kwargs=kwargs,
+                    response_obj=response_obj,
+                    start_time=start_time,
+                    end_time=end_time,
+                    status="success",
+                    error_code=None,
+                    error_message=None,
+                )
 
         async def async_log_failure_event(
             self,
@@ -120,15 +121,16 @@ def _build_logger_instance() -> Any:
             error = kwargs.get("exception") or kwargs.get("error") or response_obj
             error_code = type(error).__name__ if error else "UnknownError"
             error_message = str(error) if error else None
-            await _persist_event(
-                kwargs=kwargs,
-                response_obj=response_obj,
-                start_time=start_time,
-                end_time=end_time,
-                status="failed",
-                error_code=error_code,
-                error_message=error_message,
-            )
+            with prefer_background_pool():
+                await _persist_event(
+                    kwargs=kwargs,
+                    response_obj=response_obj,
+                    start_time=start_time,
+                    end_time=end_time,
+                    status="failed",
+                    error_code=error_code,
+                    error_message=error_message,
+                )
 
         async def async_post_call_streaming_hook(
             self,
