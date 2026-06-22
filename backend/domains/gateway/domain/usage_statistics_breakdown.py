@@ -8,6 +8,7 @@ from domains.gateway.domain.usage_read_model import (
     UsageStatisticsBreakdownBy,
     UsageStatisticsGroupBy,
 )
+from libs.api.pagination import MAX_PAGE_SIZE
 from libs.exceptions import ValidationError
 
 _UUID_PARENT_GROUP_BY = frozenset(
@@ -45,7 +46,21 @@ def normalize_usage_statistics_parent_group_key(
     return key
 
 
+def validate_breakdown_batch_parent_keys(parent_keys: list[str]) -> None:
+    """批量 breakdown 父键数量不得超过单页统计上限（与 ``MAX_PAGE_SIZE`` 对齐）。"""
+    if len(parent_keys) > MAX_PAGE_SIZE:
+        raise ValidationError(
+            f"parent_group_keys exceeds maximum of {MAX_PAGE_SIZE}",
+            details={
+                "field": "parent_group_keys",
+                "max": MAX_PAGE_SIZE,
+                "count": len(parent_keys),
+            },
+        )
+
+
 __all__ = [
     "breakdown_by_to_group_by",
     "normalize_usage_statistics_parent_group_key",
+    "validate_breakdown_batch_parent_keys",
 ]

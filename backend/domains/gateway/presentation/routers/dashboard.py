@@ -356,7 +356,7 @@ async def dashboard_statistics_breakdown_batch(
     team: CurrentTeam,
     reads: MgmtReads,
     parent_group_by: UsageStatisticsGroupBy = Query(...),
-    parent_group_keys: list[str] = Query(..., max_length=200),
+    parent_group_keys: list[str] = Query(...),
     breakdown_by: UsageStatisticsBreakdownBy = Query(...),
     days: int = Query(7, ge=1, le=365),
     usage_aggregation: UsageAggregation = Query(

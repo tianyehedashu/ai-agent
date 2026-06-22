@@ -547,6 +547,16 @@ class UsageMetricsRouter:
                 parent_keys=parent_keys,
                 filters=filters,
             )
+        if len(cold_pairs) + len(hot_pairs) > settings.gateway_metrics_hybrid_merge_max_groups:
+            return await self._logs.aggregate_breakdown_pairs_by_axis(
+                axis,
+                start,
+                end,
+                parent_group_by=parent_group_by,
+                breakdown_group_by=breakdown_group_by,
+                parent_keys=parent_keys,
+                filters=filters,
+            )
         return self._merge_breakdown_pairs(cold_pairs, hot_pairs)
 
 

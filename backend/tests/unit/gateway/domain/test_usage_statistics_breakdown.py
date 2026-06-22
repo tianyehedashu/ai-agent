@@ -13,6 +13,7 @@ from domains.gateway.domain.usage_read_model import (
 from domains.gateway.domain.usage_statistics_breakdown import (
     breakdown_by_to_group_by,
     normalize_usage_statistics_parent_group_key,
+    validate_breakdown_batch_parent_keys,
 )
 from libs.exceptions import ValidationError
 
@@ -60,3 +61,12 @@ def test_normalize_parent_key_model_is_opaque_string() -> None:
         )
         == "my-route"
     )
+
+
+def test_validate_breakdown_batch_parent_keys_rejects_over_limit() -> None:
+    with pytest.raises(ValidationError, match="parent_group_keys exceeds maximum"):
+        validate_breakdown_batch_parent_keys(["k"] * 201)
+
+
+def test_validate_breakdown_batch_parent_keys_accepts_at_limit() -> None:
+    validate_breakdown_batch_parent_keys(["k"] * 200)

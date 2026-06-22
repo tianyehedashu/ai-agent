@@ -34,15 +34,18 @@ from domains.gateway.domain.usage_read_model import (
 from domains.gateway.domain.usage_statistics_breakdown import (
     breakdown_by_to_group_by,
     normalize_usage_statistics_parent_group_key,
+    validate_breakdown_batch_parent_keys,
 )
 from domains.gateway.domain.virtual_key_access import actor_owns_non_system_vkey
+from domains.gateway.infrastructure.repositories.request_log_repository import (
+    RequestLogUsageAggregateRow,
+)
 from domains.identity.application.ports import user_display_label
 from libs.api.pagination import slice_page
 
 if TYPE_CHECKING:
     from domains.gateway.infrastructure.repositories.request_log_repository import (
         RequestLogListPage,
-        RequestLogUsageAggregateRow,
         RequestLogUsageTotals,
     )
     from domains.tenancy.domain.management_context import ManagementTeamContext
@@ -489,10 +492,7 @@ class GatewayUsageLogReadMixin:
         top_n: int,
     ) -> UsageStatisticsBreakdownBatchSummary:
         """一次聚合本页多个父行的二次分组分布，替代逐行 N+1 breakdown 请求。"""
-        from domains.gateway.infrastructure.repositories.request_log_repository import (
-            RequestLogUsageAggregateRow,
-        )
-
+        validate_breakdown_batch_parent_keys(parent_keys)
         breakdown_group_by = breakdown_by_to_group_by(breakdown_by)
         normalized_keys: list[str] = []
         seen: set[str] = set()

@@ -17,6 +17,7 @@ from domains.gateway.domain.usage_read_model import (
     UsageStatisticsGroupBy,
 )
 from domains.gateway.infrastructure.repositories.request_log_repository import (
+    BreakdownPairRow,
     RequestLogUsageAggregateRow,
     RequestLogUsageTotals,
 )
@@ -363,3 +364,54 @@ async def test_aggregate_summary_status_filter_falls_back_to_logs() -> None:
     assert result["total"] == 1
     logs.aggregate_summary_by_axis.assert_awaited_once()
     hourly.aggregate_summary_by_axis.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_aggregate_breakdown_pairs_cross_boundary_falls_back_when_too_many_groups() -> None:
+    """冷热 pair 组数超过阈值时整窗 fallback 明细 logs。"""
+    logs = MagicMock()
+    hourly = MagicMock()
+    router = UsageMetricsRouter(logs, hourly)
+    axis = UsageAxis.workspace(uuid.uuid4())
+    start = datetime(2026, 6, 1, 0, 0, tzinfo=UTC)
+    end = datetime(2026, 6, 10, 0, 0, tzinfo=UTC)
+    hot_cutoff = datetime(2026, 6, 9, 22, 0, tzinfo=UTC)
+    parent_keys = [str(uuid.uuid4())]
+    fallback_pairs = [
+        BreakdownPairRow(parent_keys[0], uuid.uuid4(), "cred-a", 10),
+    ]
+    hot_pairs = [BreakdownPairRow(parent_keys[0], uuid.uuid4(), None, 1) for _ in range(10)]
+    logs.aggregate_breakdown_pairs_by_axis = AsyncMock(
+        side_effect=[hot_pairs, fallback_pairs],
+    )
+    hourly.aggregate_breakdown_pairs_by_axis = AsyncMock(
+        return_value=[
+            BreakdownPairRow(parent_keys[0], uuid.uuid4(), None, 1)
+            for _ in range(1500)
+        ]
+    )
+
+    with (
+        patch.object(settings, "gateway_metrics_hybrid_read_enabled", True),
+        patch.object(settings, "gateway_metrics_hybrid_merge_max_groups", 100),
+        patch(
+            "domains.gateway.application.management.usage_metrics_router.compute_hot_cutoff",
+            return_value=hot_cutoff,
+        ),
+    ):
+        result = await router.aggregate_breakdown_pairs(
+            axis,
+            start,
+            end,
+            parent_group_by=UsageStatisticsGroupBy.USER,
+            breakdown_group_by=UsageStatisticsGroupBy.CREDENTIAL,
+            parent_keys=parent_keys,
+            filters=UsageStatisticsFilters(),
+        )
+
+    assert result == fallback_pairs
+    assert logs.aggregate_breakdown_pairs_by_axis.await_count == 2
+    fallback_call = logs.aggregate_breakdown_pairs_by_axis.await_args_list[1]
+    assert fallback_call.args[1] == start
+    assert fallback_call.args[2] == end
+    hourly.aggregate_breakdown_pairs_by_axis.assert_awaited_once()
