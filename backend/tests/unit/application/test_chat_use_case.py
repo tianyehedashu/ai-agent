@@ -400,7 +400,7 @@ class TestChatUseCase:
                 # 等待后台任务完成（任务可能在 chat 流式过程中已结束并从集合移除）
                 import asyncio
 
-                pending = list(service._background_tasks)
+                pending = list(service._title_tasks)
                 if pending:
                     await asyncio.gather(*pending, return_exceptions=True)
 

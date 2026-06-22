@@ -102,6 +102,7 @@ class ChatUseCase(ChatImageGenMixin, ChatAgentRunMixin):
         self._init_memory_store()
 
         self._background_tasks: set[asyncio.Task[object]] = set()
+        self._title_tasks: set[asyncio.Task[object]] = set()
         self._event_queues: dict[str, asyncio.Queue[AgentEvent | None]] = {}
 
     def _init_memory_store(self) -> None:
@@ -274,6 +275,9 @@ class ChatUseCase(ChatImageGenMixin, ChatAgentRunMixin):
                 human_message_parts=human_multimodal,
             ):
                 yield event
+
+            async for late_event in self._drain_late_stream_events(session_id, event_queue):
+                yield late_event
         finally:
             if log_token is not None:
                 reset_internal_store_full_override(log_token)
@@ -338,8 +342,27 @@ class ChatUseCase(ChatImageGenMixin, ChatAgentRunMixin):
             task = asyncio.create_task(
                 self._generate_title_background(session_id, message, user_id)
             )
-            self._background_tasks.add(task)
-            task.add_done_callback(self._background_tasks.discard)
+            self._title_tasks.add(task)
+            task.add_done_callback(self._title_tasks.discard)
+
+    async def _drain_late_stream_events(
+        self,
+        session_id: str,
+        event_queue: asyncio.Queue[AgentEvent | None],
+    ) -> AsyncGenerator[AgentEvent, None]:
+        """等待标题等后台任务收尾，并冲刷队列中迟到的 SSE 事件（如 title_updated）。"""
+        pending_title = [t for t in self._title_tasks if not t.done()]
+        if pending_title:
+            await asyncio.wait(pending_title, timeout=30.0)
+
+        while True:
+            try:
+                late_event = event_queue.get_nowait()
+            except asyncio.QueueEmpty:
+                break
+            if late_event is None:
+                continue
+            yield late_event
 
     async def _generate_title_background(self, session_id: str, message: str, user_id: str) -> None:
         """后台任务：生成标题（使用独立的数据库会话）"""

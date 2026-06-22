@@ -157,6 +157,26 @@ export default function ChatPage(): React.JSX.Element {
     return selectedModelRef ?? defaultId ?? firstSelectablePersonalModelId ?? undefined
   }, [availableTextModels?.default_for_text?.id, selectedModelRef, firstSelectablePersonalModelId])
 
+  const handleChatModelChange = useCallback(
+    async (modelId: string | null): Promise<void> => {
+      setSelectedModelRef(modelId)
+      if (!sessionId) return
+      try {
+        const updated = await sessionApi.update(sessionId, { chatModelRef: modelId })
+        setCurrentSession(updated)
+        setSelectedModelRef(updated.chatModelRef ?? modelId)
+      } catch (error: unknown) {
+        const msg = error instanceof Error ? error.message : '更新失败'
+        toast({
+          title: '无法保存对话模型',
+          description: msg,
+          variant: 'destructive',
+        })
+      }
+    },
+    [sessionId, setCurrentSession, toast]
+  )
+
   // 侧栏「新建对话」已在 /chat 时 sessionId 不变，仅重置草稿区（不中断其他会话后台流）
   useEffect(() => {
     if (newChatEpoch === 0) return
@@ -321,6 +341,15 @@ export default function ChatPage(): React.JSX.Element {
       creativeMode: 'chat',
       referenceImageUrls: refLines.length > 0 ? refLines : undefined,
     })
+    if (sessionId && modelRef) {
+      try {
+        const updated = await sessionApi.update(sessionId, { chatModelRef: modelRef })
+        setCurrentSession(updated)
+        setSelectedModelRef(updated.chatModelRef ?? modelRef)
+      } catch {
+        /* 非阻塞；后端 chat 流亦会持久化 */
+      }
+    }
   }
 
   const handleVerboseGatewayLogChange = async (checked: boolean): Promise<void> => {
@@ -463,7 +492,9 @@ export default function ChatPage(): React.JSX.Element {
                       listMode="chat"
                       gatewayTeamId={workspaceTeamId}
                       value={selectedModelRef}
-                      onChange={setSelectedModelRef}
+                      onChange={(id) => {
+                        void handleChatModelChange(id)
+                      }}
                       disabled={isLoading}
                       showProviderFilter
                       className="h-8 w-[min(12rem,calc(100vw-10rem))] max-w-[12rem] border-0 bg-transparent shadow-none focus:ring-0"

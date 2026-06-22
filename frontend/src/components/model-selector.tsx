@@ -139,13 +139,13 @@ export function ModelSelector({
   useEffect(() => {
     if (value === null || value === undefined || isLoading || isError) return
     if (selectableIds.has(value)) return
-    if (hasNextPage && !isFetchingNextPage) {
-      void fetchNextPage()
+    if (hasNextPage || isFetchingNextPage) {
+      if (hasNextPage && !isFetchingNextPage) {
+        void fetchNextPage()
+      }
       return
     }
-    if (!hasNextPage) {
-      onChange(null)
-    }
+    onChange(null)
   }, [
     value,
     selectableIds,

@@ -356,11 +356,24 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
 
         case 'title_updated': {
           const titleData = event.data as { session_id?: string; title?: string }
-          if (titleData.session_id) {
+          const sid = titleData.session_id
+          const newTitle = titleData.title
+          if (sid && newTitle) {
+            queryClient.setQueryData<{ title?: string }>(['session', sid], (old) =>
+              old ? { ...old, title: newTitle } : old
+            )
+            queryClient.setQueriesData<{ items?: Array<{ id: string; title?: string }> }>(
+              { queryKey: ['sessions'] },
+              (old) => {
+                if (!old?.items) return old
+                return {
+                  ...old,
+                  items: old.items.map((s) => (s.id === sid ? { ...s, title: newTitle } : s)),
+                }
+              }
+            )
             void queryClient.invalidateQueries({ queryKey: ['sessions'] })
-            if (sessionIdRef.current === titleData.session_id && titleData.title) {
-              void queryClient.invalidateQueries({ queryKey: ['session', titleData.session_id] })
-            }
+            void queryClient.invalidateQueries({ queryKey: ['session', sid] })
           }
           break
         }

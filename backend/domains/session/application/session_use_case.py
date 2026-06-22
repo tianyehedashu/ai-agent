@@ -176,6 +176,7 @@ class SessionUseCase:
         creative_mode: str | None | type(...) = ...,  # type: ignore
         image_gen_model_ref: str | None | type(...) = ...,  # type: ignore
         video_model_ref: str | None | type(...) = ...,  # type: ignore
+        chat_model_ref: str | None | type(...) = ...,  # type: ignore
     ) -> Session:
         """更新会话"""
         sid = uuid.UUID(session_id)
@@ -188,6 +189,8 @@ class SessionUseCase:
             cfg_slice["image_gen_model_ref"] = image_gen_model_ref
         if video_model_ref is not ...:
             cfg_slice["video_model_ref"] = video_model_ref
+        if chat_model_ref is not ...:
+            cfg_slice["chat_model_ref"] = chat_model_ref
         if cfg_slice:
             await self.session_repo.update_config(sid, cfg_slice)
         session = await self.session_repo.update(

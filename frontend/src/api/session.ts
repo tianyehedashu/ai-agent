@@ -179,6 +179,10 @@ export const sessionApi = {
     if (data.creativeMode !== undefined) backendData.creative_mode = data.creativeMode
     if (data.imageGenModelRef !== undefined) backendData.image_gen_model_ref = data.imageGenModelRef
     if (data.videoModelRef !== undefined) backendData.video_model_ref = data.videoModelRef
+    if (data.chatModelRef !== undefined) backendData.chat_model_ref = data.chatModelRef
+    if (data.gatewayVerboseRequestLog !== undefined) {
+      backendData.gateway_verbose_request_log = data.gatewayVerboseRequestLog
+    }
 
     const backend = await apiClient.patch<BackendSession>(apiV1Path(`/sessions/${id}`), backendData)
     return toFrontendSession(backend)

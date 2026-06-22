@@ -59,6 +59,11 @@ class SessionUpdate(BaseModel):
         max_length=200,
         description="视频模式下的厂商模型 id（如 openai::sora2.0）",
     )
+    chat_model_ref: str | None = Field(
+        default=None,
+        max_length=300,
+        description="对话模式下的模型引用（系统 id 或用户模型 UUID）；null 表示清除",
+    )
 
 
 class SessionMCPConfigResponse(BaseModel):
@@ -273,6 +278,7 @@ async def update_session(
     creative_mode = provided_fields.get("creative_mode", ...)
     image_gen_model_ref = provided_fields.get("image_gen_model_ref", ...)
     video_model_ref = provided_fields.get("video_model_ref", ...)
+    chat_model_ref = provided_fields.get("chat_model_ref", ...)
 
     updated_session = await session_service.update_session(
         session_id=session_id,
@@ -282,6 +288,7 @@ async def update_session(
         creative_mode=creative_mode,
         image_gen_model_ref=image_gen_model_ref,
         video_model_ref=video_model_ref,
+        chat_model_ref=chat_model_ref,
     )
     return _session_to_response(updated_session)
 
