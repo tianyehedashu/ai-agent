@@ -33,6 +33,7 @@ import {
   patchModelConnectivityInCache,
   runChunkedBatchDelete,
   runChunkedBatchDeleteByTeamIds,
+  resolveUnifiedModelBatchTeamId,
   runChunkedBatchResyncByTeamIds,
   type BatchDeleteChunkResult,
   type BatchResyncChunkResult,
@@ -50,6 +51,8 @@ export interface UseUnifiedModelsBatchOpsOptions {
   }
   permissionCtx: UnifiedModelRowPermissionContext
   canShowBatchOps: boolean
+  /** URL 上下文团队；系统模型无 tenant 时批量 test/delete/resync 路由回退 */
+  defaultTeamId: string
   onBatchDeleteSucceeded?: (succeededIds: readonly string[]) => void
 }
 
@@ -89,6 +92,7 @@ export function useUnifiedModelsBatchOps({
   connectivitySummary,
   permissionCtx,
   canShowBatchOps,
+  defaultTeamId,
   onBatchDeleteSucceeded,
 }: UseUnifiedModelsBatchOpsOptions) {
   const queryClient = useQueryClient()
@@ -114,6 +118,9 @@ export function useUnifiedModelsBatchOps({
 
   const teamByModelIdRef = useRef<Map<string, string>>(new Map())
 
+  const defaultTeamIdRef = useRef(defaultTeamId)
+  defaultTeamIdRef.current = defaultTeamId
+
   const permissionCtxRef = useRef(permissionCtx)
   permissionCtxRef.current = permissionCtx
 
@@ -125,8 +132,9 @@ export function useUnifiedModelsBatchOps({
 
   const populateTeamByModelId = useCallback((entries: readonly GatewayModelListItem[]): void => {
     for (const item of entries) {
-      if (item.scope !== 'personal' && item.teamId) {
-        teamByModelIdRef.current.set(item.id, item.teamId)
+      const teamId = resolveUnifiedModelBatchTeamId(item, defaultTeamIdRef.current)
+      if (teamId) {
+        teamByModelIdRef.current.set(item.id, teamId)
       }
     }
   }, [])
@@ -135,8 +143,8 @@ export function useUnifiedModelsBatchOps({
     const cached = teamByModelIdRef.current.get(id)
     if (cached) return cached
     const item = entriesByIdRef.current.get(id)
-    if (!item || item.scope === 'personal') return null
-    return item.teamId ?? null
+    if (!item) return null
+    return resolveUnifiedModelBatchTeamId(item, defaultTeamIdRef.current)
   }, [])
 
   const invalidateModelCaches = useCallback((): void => {

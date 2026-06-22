@@ -24,6 +24,7 @@ import {
   groupModelsByTeamId,
   groupModelIdsByTeamId,
   resolveGatewayModelTeamId,
+  resolveUnifiedModelBatchTeamId,
   runChunkedBatchDeleteByTeam,
   runChunkedBatchResyncByTeam,
   createManagedTeamsTestById,
@@ -652,6 +653,26 @@ describe('resolveGatewayModelTeamId', () => {
     expect(
       resolveGatewayModelTeamId(model({ tenant_id: null, team_id: null, last_test_status: null }))
     ).toBeNull()
+  })
+})
+
+describe('resolveUnifiedModelBatchTeamId', () => {
+  it('returns null for personal models', () => {
+    expect(
+      resolveUnifiedModelBatchTeamId({ scope: 'personal', teamId: null }, 'route-team')
+    ).toBeNull()
+  })
+
+  it('uses item teamId when present', () => {
+    expect(resolveUnifiedModelBatchTeamId({ scope: 'team', teamId: 'team-a' }, 'route-team')).toBe(
+      'team-a'
+    )
+  })
+
+  it('falls back to defaultTeamId for system models without tenant', () => {
+    expect(resolveUnifiedModelBatchTeamId({ scope: 'system', teamId: null }, 'route-team')).toBe(
+      'route-team'
+    )
   })
 })
 

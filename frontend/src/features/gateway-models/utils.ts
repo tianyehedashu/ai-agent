@@ -781,6 +781,18 @@ export function resolveGatewayModelTeamId(
   return null
 }
 
+/** 统一列表批量运维：解析 gateway API 路由 teamId（系统模型无 tenant 时回退 URL 上下文团队） */
+export function resolveUnifiedModelBatchTeamId(
+  item: Pick<{ scope: 'personal' | 'team' | 'system'; teamId?: string | null }, 'scope' | 'teamId'>,
+  defaultTeamId: string | null | undefined
+): string | null {
+  if (item.scope === 'personal') return null
+  const teamId = item.teamId?.trim()
+  if (teamId) return teamId
+  const fallback = defaultTeamId?.trim()
+  return fallback ?? null
+}
+
 /** 按 tenant 分组模型（跨团队 batch delete/resync 编排） */
 export function groupModelsByTeamId(models: readonly GatewayModel[]): Map<string, GatewayModel[]> {
   const map = new Map<string, GatewayModel[]>()

@@ -259,6 +259,7 @@ export function UnifiedModelsWorkspace(): React.JSX.Element {
     connectivitySummary,
     permissionCtx,
     canShowBatchOps: hasManageableModels,
+    defaultTeamId: routeTeamId,
     onBatchDeleteSucceeded: handleBatchDeleteSucceeded,
   })
 
