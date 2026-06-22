@@ -77,10 +77,12 @@ class Settings(BaseSettings):
     database_echo: bool = False
     # 后台任务专用连接池（不抢热路径连接）：除周期任务外，还承接响应后 fire-and-forget
     # 结算（vkey 回写、请求日志、预算/配额桶 upsert），故略大于纯周期任务所需。
-    # 注意：单 worker 连接总数 = 主池(20+10) + 后台池(8+4)；多 worker 部署时需确保
+    # Redis 不可用时配额/cooldown 会退回 DB，结算写入瞬时放大，小池易被压爆触发
+    # QueuePool 30s 超时 → 任务堆积拖垮事件循环 → /health 探活超时被重启，故留足余量。
+    # 注意：单 worker 连接总数 = 主池(20+10) + 后台池(16+8)；多 worker 部署时需确保
     # workers × 总数 不超过 PostgreSQL max_connections。
-    database_background_pool_size: int = 8
-    database_background_max_overflow: int = 4
+    database_background_pool_size: int = 16
+    database_background_max_overflow: int = 8
 
     # ========================================================================
     # Redis 配置

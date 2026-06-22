@@ -5,10 +5,33 @@ Redis Connection Management
 import contextlib
 import json
 from typing import Any
+from urllib.parse import quote, urlsplit, urlunsplit
 
 import redis.asyncio as redis
 
 from bootstrap.config import settings
+
+
+def build_authenticated_redis_url(base_url: str) -> str:
+    """把 ``settings`` 中的 ACL ``username``/``password`` 注入 redis URL。
+
+    供仅接受 ``redis_url`` 字符串、不支持单独 username 参数的客户端使用
+    （如 LiteLLM Router —— 其 redis_url 最终交给 ``redis.Redis.from_url`` 解析）。
+    阿里云 Redis 启用 ACL 后必须 ``AUTH <username> <password>``，仅传密码会
+    被拒为 ``WRONGPASS``。URL 已自带凭据或未配置凭据时原样返回。
+    """
+    if not (settings.redis_username or settings.redis_password):
+        return base_url
+    parts = urlsplit(base_url)
+    if parts.username or parts.password:
+        return base_url
+    user = quote(settings.redis_username or "", safe="")
+    pwd = quote(settings.redis_password or "", safe="")
+    host = parts.hostname or ""
+    netloc = f"{user}:{pwd}@{host}"
+    if parts.port:
+        netloc += f":{parts.port}"
+    return urlunsplit((parts.scheme, netloc, parts.path, parts.query, parts.fragment))
 
 # 全局 Redis 客户端（decode_responses=True 时 value 为 str）
 # 注：redis.asyncio.client.Redis 在部分版本不支持泛型，使用 Any

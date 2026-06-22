@@ -37,6 +37,7 @@ from domains.gateway.domain.upstream_call_shape_policy import (
 from domains.gateway.domain.upstream_endpoint import resolve_upstream_endpoint
 from domains.gateway.domain.upstream_profile import UpstreamCallShape, UpstreamProtocol
 from libs.crypto import decrypt_value, derive_encryption_key
+from libs.db.redis import build_authenticated_redis_url
 from utils.logging import get_logger
 
 if TYPE_CHECKING:
@@ -528,7 +529,12 @@ async def _build_router_kwargs(
     )
     fb_general, fb_cp, fb_cw = _routes_to_fallbacks(routes, models)
 
-    redis_url = settings.gateway_router_redis_url or settings.redis_url
+    # LiteLLM Router 仅接受 redis_url 字符串（无单独 username 参数），而阿里云 Redis
+    # 启用 ACL 后必须用 username+password 鉴权，否则连接被拒 → 熔断打开、cooldown/TPM
+    # 全部退回内存与 DB，加重后台连接池压力。这里把凭据注入 URL 后再交给 Router。
+    redis_url = build_authenticated_redis_url(
+        settings.gateway_router_redis_url or settings.redis_url
+    )
 
     kwargs: dict[str, Any] = {
         "model_list": deployments,

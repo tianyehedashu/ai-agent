@@ -36,8 +36,10 @@ spec:
               cpu: "1"
               memory: "4Gi"
 
-          # 探针放宽 timeoutSeconds：/health 不查 DB，但突发流量下事件循环可能短暂拥塞，
-          # 默认 timeoutSeconds=1 会把偶发抖动误判为不健康而重启（见 K8s 调试 Skill）。
+          # /health 不查 DB/Redis，仅返回静态 JSON。但突发流量 / Redis 抖动时单核事件循环
+          # 可能短暂拥塞，探针超时不宜过紧（见 K8s 调试 Skill）。
+          # 分工：readiness 灵敏 —— 拥塞时仅摘流量；liveness 宽松 —— 仅在真正死锁时才重启，
+          # 避免高负载下被误杀重启（重启会中断在途请求并引发雪崩）。
           readinessProbe:
             httpGet:
               path: /health
@@ -54,7 +56,7 @@ spec:
             initialDelaySeconds: 30
             periodSeconds: 20
             timeoutSeconds: 5
-            failureThreshold: 3
+            failureThreshold: 6
 
       volumes:
         - name: data
