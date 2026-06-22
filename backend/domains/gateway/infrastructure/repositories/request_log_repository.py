@@ -84,6 +84,16 @@ class RequestLogUsageAggregateRow:
 
 
 @dataclass(frozen=True)
+class BreakdownPairRow:
+    """批量 breakdown 的 (父分组键, 二次分组键) 配对聚合行（仅请求数）。"""
+
+    parent_key: str
+    breakdown_key: UUID | str | None
+    label_snapshot: str | None
+    requests: int
+
+
+@dataclass(frozen=True)
 class RequestLogListPage:
     """日志列表分页（probe 模式，无精确 COUNT）。"""
 
@@ -926,8 +936,77 @@ class RequestLogRepository:
         )
         return items, totals, group_total
 
+    @staticmethod
+    def _parent_in_clause(
+        parent_group_by: UsageStatisticsGroupBy,
+        parent_keys: list[str],
+    ) -> ColumnElement[bool]:
+        """限定到一组父分组键（本页行）；空列表返回恒假以短路。"""
+        expr = RequestLogRepository._usage_statistics_group_exprs(parent_group_by)[0]
+        keys = [k.strip() for k in parent_keys if k and k.strip()]
+        if not keys:
+            return literal(False)
+        if parent_group_by in (
+            UsageStatisticsGroupBy.CREDENTIAL,
+            UsageStatisticsGroupBy.USER,
+            UsageStatisticsGroupBy.TEAM,
+            UsageStatisticsGroupBy.VKEY,
+        ):
+            from uuid import UUID as _UUID
+
+            return expr.in_([_UUID(k) for k in keys])
+        return expr.in_(keys)
+
+    async def aggregate_breakdown_pairs_by_axis(
+        self,
+        axis: UsageAxis,
+        start: datetime,
+        end: datetime,
+        *,
+        parent_group_by: UsageStatisticsGroupBy,
+        breakdown_group_by: UsageStatisticsGroupBy,
+        parent_keys: list[str],
+        filters: UsageStatisticsFilters,
+    ) -> list[BreakdownPairRow]:
+        """一次聚合本页所有父行的二次分组分布（仅请求数），供批量 breakdown。
+
+        按 ``(父维度, 二次维度)`` 双重分组；``NULL`` 二次键（未关联）保留为独立分桶，
+        使某父键的全部分桶请求数之和即为该父键总请求数，免去额外 count 查询。
+        """
+        parent_expr = self._usage_statistics_group_exprs(parent_group_by)[0]
+        breakdown_expr = self._usage_statistics_group_exprs(breakdown_group_by)[0]
+        breakdown_snapshot = self._usage_statistics_snapshot_exprs(breakdown_group_by)[0]
+        clauses = [
+            *usage_axis_base_clauses(axis),
+            GatewayRequestLog.created_at >= start,
+            GatewayRequestLog.created_at <= end,
+            *self._usage_statistics_filter_clauses(filters),
+            self._parent_in_clause(parent_group_by, parent_keys),
+        ]
+        stmt = (
+            select(
+                parent_expr.label("parent_key"),
+                breakdown_expr.label("breakdown_key"),
+                breakdown_snapshot.label("label_snapshot"),
+                func.count(GatewayRequestLog.id).label("requests"),
+            )
+            .where(_sql_and(*clauses))
+            .group_by(parent_expr, breakdown_expr)
+        )
+        result = await self._session.execute(stmt)
+        return [
+            BreakdownPairRow(
+                parent_key=self._group_key_to_str(row.parent_key),
+                breakdown_key=row.breakdown_key,
+                label_snapshot=row.label_snapshot,
+                requests=int(row.requests or 0),
+            )
+            for row in result.all()
+        ]
+
 
 __all__ = [
+    "BreakdownPairRow",
     "RequestLogListPage",
     "RequestLogRepository",
     "RequestLogUsageAggregateRow",

@@ -24,6 +24,7 @@ from domains.gateway.domain.usage_read_model import (
     UsageStatisticsParentScope,
 )
 from domains.gateway.infrastructure.repositories.request_log_repository import (
+    BreakdownPairRow,
     RequestLogUsageAggregateRow,
     RequestLogUsageTotals,
 )
@@ -449,6 +450,104 @@ class UsageMetricsRouter:
                 parent_scope=parent_scope,
             )
         return total
+
+    @staticmethod
+    def _merge_breakdown_pairs(
+        cold: list[BreakdownPairRow],
+        hot: list[BreakdownPairRow],
+    ) -> list[BreakdownPairRow]:
+        """按 ``(父键, 二次键)`` 合并冷热请求数；二次键原值与快照取非空者。"""
+        index: dict[tuple[str, str], BreakdownPairRow] = {}
+        order: list[tuple[str, str]] = []
+        for row in (*cold, *hot):
+            bk_str = "" if row.breakdown_key is None else str(row.breakdown_key)
+            key = (row.parent_key, bk_str)
+            existing = index.get(key)
+            if existing is None:
+                index[key] = row
+                order.append(key)
+                continue
+            index[key] = BreakdownPairRow(
+                parent_key=row.parent_key,
+                breakdown_key=existing.breakdown_key
+                if existing.breakdown_key is not None
+                else row.breakdown_key,
+                label_snapshot=existing.label_snapshot or row.label_snapshot,
+                requests=existing.requests + row.requests,
+            )
+        return [index[key] for key in order]
+
+    async def aggregate_breakdown_pairs(
+        self,
+        axis: UsageAxis,
+        start: datetime,
+        end: datetime,
+        *,
+        parent_group_by: UsageStatisticsGroupBy,
+        breakdown_group_by: UsageStatisticsGroupBy,
+        parent_keys: list[str],
+        filters: UsageStatisticsFilters,
+    ) -> list[BreakdownPairRow]:
+        """批量 breakdown：一次拿回本页所有父行的二次分组分布（冷热合并）。"""
+        if not parent_keys:
+            return []
+        if not self._hybrid_enabled() or not self._hourly_supported_for_statistics(
+            axis=axis,
+            group_by=breakdown_group_by,
+            filters=filters,
+            parent_group_by=parent_group_by,
+        ):
+            return await self._logs.aggregate_breakdown_pairs_by_axis(
+                axis,
+                start,
+                end,
+                parent_group_by=parent_group_by,
+                breakdown_group_by=breakdown_group_by,
+                parent_keys=parent_keys,
+                filters=filters,
+            )
+
+        split = split_usage_metrics_window(
+            start,
+            end,
+            hot_cutoff=compute_hot_cutoff(hot_tail_hours=settings.gateway_metrics_hot_tail_hours),
+        )
+        cold_range = self._cold_bucket_range(split)
+        has_hot = split.hot_start is not None and split.hot_end is not None
+
+        cold_pairs: list[BreakdownPairRow] = []
+        if cold_range is not None:
+            cold_pairs = await self._hourly.aggregate_breakdown_pairs_by_axis(
+                axis,
+                cold_range[0],
+                cold_range[1],
+                parent_group_by=parent_group_by,
+                breakdown_group_by=breakdown_group_by,
+                parent_keys=parent_keys,
+                filters=filters,
+            )
+        hot_pairs: list[BreakdownPairRow] = []
+        if has_hot:
+            hot_pairs = await self._logs.aggregate_breakdown_pairs_by_axis(
+                axis,
+                split.hot_start,
+                split.hot_end,
+                parent_group_by=parent_group_by,
+                breakdown_group_by=breakdown_group_by,
+                parent_keys=parent_keys,
+                filters=filters,
+            )
+        if cold_range is None and not has_hot:
+            return await self._logs.aggregate_breakdown_pairs_by_axis(
+                axis,
+                start,
+                end,
+                parent_group_by=parent_group_by,
+                breakdown_group_by=breakdown_group_by,
+                parent_keys=parent_keys,
+                filters=filters,
+            )
+        return self._merge_breakdown_pairs(cold_pairs, hot_pairs)
 
 
 __all__ = ["UsageMetricsRouter"]

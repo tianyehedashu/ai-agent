@@ -1247,6 +1247,18 @@ class UsageStatisticsBreakdownResponse(BaseModel):
     items: list[UsageStatisticsBreakdownSliceResponse] = Field(default_factory=list)
 
 
+class UsageStatisticsBreakdownBatchItemResponse(BaseModel):
+    parent_group_key: str
+    parent_requests: int
+    items: list[UsageStatisticsBreakdownSliceResponse] = Field(default_factory=list)
+
+
+class UsageStatisticsBreakdownBatchResponse(BaseModel):
+    parent_group_by: UsageStatisticsGroupBy
+    breakdown_by: UsageStatisticsBreakdownBy
+    items: list[UsageStatisticsBreakdownBatchItemResponse] = Field(default_factory=list)
+
+
 # =============================================================================
 # Alert
 # =============================================================================
@@ -1506,6 +1518,8 @@ __all__ = [
     "SystemVisibilityPatch",
     "SystemVisibilityTargetSnapshot",
     "TimeSeriesPointResponse",
+    "UsageStatisticsBreakdownBatchItemResponse",
+    "UsageStatisticsBreakdownBatchResponse",
     "UsageStatisticsBreakdownResponse",
     "UsageStatisticsBreakdownSliceResponse",
     "UsageStatisticsItemResponse",

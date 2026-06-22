@@ -9,6 +9,7 @@ from uuid import UUID
 from domains.gateway.application.gateway_model_listing import list_merged_models_for_tenant
 from domains.gateway.application.management.usage_metrics import merge_gateway_usage_slices
 from domains.gateway.application.management.usage_reads import (
+    UsageStatisticsBreakdownBatchSummary,
     UsageStatisticsBreakdownSlice,
     UsageStatisticsBreakdownSummary,
     UsageStatisticsItem,
@@ -472,6 +473,98 @@ class GatewayUsageLogReadMixin:
             breakdown_by=breakdown_by,
             parent_requests=parent_requests,
             items=items,
+        )
+
+    async def aggregate_usage_statistics_breakdown_batch(
+        self,
+        ctx: ManagementTeamContext,
+        start: datetime,
+        end: datetime,
+        *,
+        usage_aggregation: UsageAggregation,
+        filters: UsageStatisticsFilters,
+        parent_group_by: UsageStatisticsGroupBy,
+        parent_keys: list[str],
+        breakdown_by: UsageStatisticsBreakdownBy,
+        top_n: int,
+    ) -> UsageStatisticsBreakdownBatchSummary:
+        """一次聚合本页多个父行的二次分组分布，替代逐行 N+1 breakdown 请求。"""
+        from domains.gateway.infrastructure.repositories.request_log_repository import (
+            RequestLogUsageAggregateRow,
+        )
+
+        breakdown_group_by = breakdown_by_to_group_by(breakdown_by)
+        normalized_keys: list[str] = []
+        seen: set[str] = set()
+        for raw in parent_keys:
+            key = normalize_usage_statistics_parent_group_key(parent_group_by, raw)
+            if key and key not in seen:
+                seen.add(key)
+                normalized_keys.append(key)
+        empty = UsageStatisticsBreakdownBatchSummary(
+            parent_group_by=parent_group_by,
+            breakdown_by=breakdown_by,
+            items=[],
+        )
+        if not normalized_keys:
+            return empty
+
+        axis = self._resolve_usage_axis(ctx, usage_aggregation, vkey_id=filters.vkey_id)
+        pairs = await self._usage_metrics.aggregate_breakdown_pairs(
+            axis,
+            start,
+            end,
+            parent_group_by=parent_group_by,
+            breakdown_group_by=breakdown_group_by,
+            parent_keys=normalized_keys,
+            filters=filters,
+        )
+
+        label_rows: dict[str, RequestLogUsageAggregateRow] = {}
+        rows_by_parent: dict[str, list[tuple[str, int]]] = {}
+        totals_by_parent: dict[str, int] = {}
+        for pair in pairs:
+            bk = self._group_key_to_str(pair.breakdown_key)
+            if bk not in label_rows:
+                label_rows[bk] = RequestLogUsageAggregateRow(
+                    group_key=pair.breakdown_key,
+                    label_snapshot=pair.label_snapshot,
+                )
+            rows_by_parent.setdefault(pair.parent_key, []).append((bk, pair.requests))
+            totals_by_parent[pair.parent_key] = totals_by_parent.get(pair.parent_key, 0) + pair.requests
+
+        labels = await self._usage_statistics_labels(
+            list(label_rows.values()), breakdown_group_by, viewer_user_id=ctx.user_id
+        )
+
+        summaries: list[UsageStatisticsBreakdownSummary] = []
+        for parent_key in normalized_keys:
+            rows = sorted(
+                rows_by_parent.get(parent_key, []), key=lambda r: r[1], reverse=True
+            )[:top_n]
+            total = totals_by_parent.get(parent_key, 0)
+            items = [
+                UsageStatisticsBreakdownSlice(
+                    group_key=bk,
+                    label=labels.get(bk, "未知"),
+                    requests=requests,
+                    share=(requests / total) if total > 0 else 0.0,
+                )
+                for bk, requests in rows
+            ]
+            summaries.append(
+                UsageStatisticsBreakdownSummary(
+                    parent_group_by=parent_group_by,
+                    parent_group_key=parent_key,
+                    breakdown_by=breakdown_by,
+                    parent_requests=total,
+                    items=items,
+                )
+            )
+        return UsageStatisticsBreakdownBatchSummary(
+            parent_group_by=parent_group_by,
+            breakdown_by=breakdown_by,
+            items=summaries,
         )
 
     async def aggregate_gateway_model_route_usage(

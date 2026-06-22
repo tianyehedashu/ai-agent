@@ -19,6 +19,7 @@ from domains.gateway.infrastructure.repositories.metrics_hourly_axis_sql import 
     metrics_hourly_time_clauses,
 )
 from domains.gateway.infrastructure.repositories.request_log_repository import (
+    BreakdownPairRow,
     RequestLogUsageAggregateRow,
     RequestLogUsageTotals,
 )
@@ -182,7 +183,7 @@ class MetricsHourlyReadRepository:
             *self._statistics_filter_clauses(filters),
         ]
         if parent_scope is not None:
-            clauses.append(self._parent_clause(parent_scope, group_by))
+            clauses.append(self._parent_clause(parent_scope, parent_scope.group_by))
 
         offset = max(0, (page - 1) * page_size)
         grouped_subq = (
@@ -321,6 +322,66 @@ class MetricsHourlyReadRepository:
             avg_ttfb_ms=ttfb_weight / success_weight if success_weight > 0 else 0.0,
             cache_hit_count=int(getattr(row, "cache_hit_count", 0) or 0),
         )
+
+    @staticmethod
+    def _parent_in_clause(
+        parent_group_by: UsageStatisticsGroupBy,
+        parent_keys: list[str],
+    ):
+        expr = MetricsHourlyReadRepository._group_exprs(parent_group_by)[0]
+        keys = [k.strip() for k in parent_keys if k and k.strip()]
+        if not keys:
+            return literal(False)
+        if parent_group_by in (
+            UsageStatisticsGroupBy.CREDENTIAL,
+            UsageStatisticsGroupBy.USER,
+            UsageStatisticsGroupBy.TEAM,
+            UsageStatisticsGroupBy.VKEY,
+        ):
+            from uuid import UUID as _UUID
+
+            return expr.in_([_UUID(k) for k in keys])
+        return expr.in_(keys)
+
+    async def aggregate_breakdown_pairs_by_axis(
+        self,
+        axis: UsageAxis,
+        bucket_start: datetime,
+        bucket_end_exclusive: datetime,
+        *,
+        parent_group_by: UsageStatisticsGroupBy,
+        breakdown_group_by: UsageStatisticsGroupBy,
+        parent_keys: list[str],
+        filters: UsageStatisticsFilters,
+    ) -> list[BreakdownPairRow]:
+        """hourly 冷段：按 ``(父维度, 二次维度)`` 聚合本页所有父行的分布（仅请求数）。"""
+        parent_expr = self._group_exprs(parent_group_by)[0]
+        breakdown_expr = self._group_exprs(breakdown_group_by)[0]
+        clauses = [
+            *metrics_hourly_axis_clauses(axis),
+            *metrics_hourly_time_clauses(bucket_start, bucket_end_exclusive),
+            *self._statistics_filter_clauses(filters),
+            self._parent_in_clause(parent_group_by, parent_keys),
+        ]
+        stmt = (
+            select(
+                parent_expr.label("parent_key"),
+                breakdown_expr.label("breakdown_key"),
+                func.sum(GatewayMetricsHourly.requests).label("requests"),
+            )
+            .where(metrics_hourly_and(*clauses))
+            .group_by(parent_expr, breakdown_expr)
+        )
+        result = await self._session.execute(stmt)
+        return [
+            BreakdownPairRow(
+                parent_key="" if row.parent_key is None else str(row.parent_key),
+                breakdown_key=row.breakdown_key,
+                label_snapshot=None,
+                requests=int(row.requests or 0),
+            )
+            for row in result.all()
+        ]
 
     @staticmethod
     def _parent_clause(

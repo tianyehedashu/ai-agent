@@ -130,6 +130,15 @@ class UsageStatisticsBreakdownSummary:
     items: list[UsageStatisticsBreakdownSlice] = field(default_factory=list)
 
 
+@dataclass(frozen=True)
+class UsageStatisticsBreakdownBatchSummary:
+    """一次返回本页多个父行的二次分组分布。"""
+
+    parent_group_by: UsageStatisticsGroupBy
+    breakdown_by: UsageStatisticsBreakdownBy
+    items: list[UsageStatisticsBreakdownSummary] = field(default_factory=list)
+
+
 class GatewayUsageReadService:
     """从 Gateway 表读取用量与配额；调用方不 import ORM。"""
 
@@ -522,6 +531,7 @@ __all__ = [
     "MarginSummaryReadModel",
     "ProviderPlanCostReadModel",
     "UsageLogReadModel",
+    "UsageStatisticsBreakdownBatchSummary",
     "UsageStatisticsBreakdownSlice",
     "UsageStatisticsBreakdownSummary",
     "UsageStatisticsItem",

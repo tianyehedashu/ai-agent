@@ -95,6 +95,7 @@ from libs.types import Result
 - **系统模型可见性** - `system_provider_credentials` / `system_gateway_models` 的 `visibility` + `system_gateway_grants`（PlatformAdmin 配置）；合并列表经 `gateway_model_listing.list_merged_models_for_tenant`（domain 纯规则 + application IO）；配额/定价仍用 `gateway_budgets` / `downstream_model_pricing`（见 `AI_GATEWAY_DOMAIN_ARCHITECTURE.md` §5.1）。
 - **上游方案（Profile）** - 凭据 `profile_id` + 模型 `upstream_call_shape`；SSOT 在 `domains/gateway/domain/upstream_profile_registry.py`，统一解析经 `resolve_upstream_endpoint`（Router、探测、落库归一化共用）；列举 `GET /api/v1/gateway/provider-profiles`。
 - **AsyncSession 长 I/O** - 代理上游前 `release_request_db_connection`（还 pool）；探活/探测用 `release_session_before_blocking_io`（只结束事务）。**调用前快照 ORM 标量**，rollback 后再 lazy load 会 `xd2s` → `libs/db/session_lifecycle.py`。
+- **Gateway 延迟写入** - 响应后 vkey/桶用量合并刷写与 `settle_usage` 有界执行器见 [backend/docs/gateway/DEFERRED_WRITE_CONCURRENCY.md](backend/docs/gateway/DEFERRED_WRITE_CONCURRENCY.md)；通用原语在 `libs/concurrency/`。
 
 ## 详细规范
 

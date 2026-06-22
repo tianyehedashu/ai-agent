@@ -87,17 +87,33 @@ function processEventsForDisplay(events: ProcessEvent[]): DisplayEvent[] {
 
   const flushThinkingBuffer = (): void => {
     if (thinkingBuffer.length === 0) return
-    // 合并连续的 thinking 事件
     const lastThinking = thinkingBuffer[thinkingBuffer.length - 1]
     const lastContent = lastThinking.payload.content
     const contentStr = typeof lastContent === 'string' ? lastContent : null
+    const lastStatus = lastThinking.payload.status
+    const statusStr = typeof lastStatus === 'string' ? lastStatus : null
+    const statusLabel =
+      statusStr === 'reasoning'
+        ? '推理中'
+        : statusStr === 'analyzing'
+          ? '分析工具结果'
+          : statusStr === 'processing'
+            ? '处理中'
+            : statusStr === 'image_gen'
+              ? '图像生成'
+              : statusStr
 
     result.push({
       id: thinkingBuffer[0].id,
       kind: 'thinking',
       title: thinkingBuffer.length > 1 ? `思考 ${String(thinkingBuffer.length)} 轮` : '思考中',
-      preview: contentStr ? truncateText(contentStr, 100) : undefined,
-      details: contentStr && contentStr.length > 100 ? contentStr : undefined,
+      preview: contentStr ? truncateText(contentStr, 100) : (statusLabel ?? undefined),
+      details:
+        contentStr && contentStr.length > 100
+          ? contentStr
+          : contentStr && contentStr.length > 0
+            ? contentStr
+            : undefined,
       timestamp: thinkingBuffer[0].timestamp,
       count: thinkingBuffer.length,
     })

@@ -169,7 +169,8 @@ backend/
   - `proxy_metadata_builder.py` —— Gateway metadata、归因、下游单价 kwargs
   - `proxy_litellm_client.py` —— LiteLLM Router / 直连技术适配
   - `proxy_response_adapter.py` —— 响应适配、`response_cost` 注入、预算/套餐结算
-  - `proxy_deferred_tasks.py` —— 后台 fire-and-forget 任务登记 + shutdown 收口
+  - `deferred_task_runner.py` / `virtual_key_touch.py` / `usage_bucket_flusher.py` —— 响应后延迟写入（有界执行器 + 合并刷写，见 `docs/gateway/DEFERRED_WRITE_CONCURRENCY.md`）
+  - `proxy_deferred_tasks.py` —— 后台任务登记 + shutdown 收口
   - `proxy_chat_pipeline.py` / `proxy_stream_settlement.py` —— Chat/Anthropic 流水线
 - 禁止在 `proxy_use_case.py` 顶层加「兼容再导出」别名（如 `_settle_usage`、`_enrich_*`、
   `register_proxy_deferred_task` 等）；旧调用方一律改到正确模块。

@@ -13,6 +13,7 @@ import uuid
 from fastapi import APIRouter, Depends, Query
 
 from domains.gateway.application.management.usage_reads import (
+    UsageStatisticsBreakdownBatchSummary,
     UsageStatisticsBreakdownSummary,
     UsageStatisticsItem,
     UsageStatisticsMetric,
@@ -38,6 +39,8 @@ from domains.gateway.presentation.schemas.common import (
     DashboardSummaryResponse,
     MarginGroupItemResponse,
     MarginSummaryResponse,
+    UsageStatisticsBreakdownBatchItemResponse,
+    UsageStatisticsBreakdownBatchResponse,
     UsageStatisticsBreakdownResponse,
     UsageStatisticsBreakdownSliceResponse,
     UsageStatisticsItemResponse,
@@ -318,6 +321,85 @@ async def dashboard_statistics_breakdown(
         top_n=top_n,
     )
     return _breakdown_response(summary)
+
+
+def _breakdown_batch_response(
+    summary: UsageStatisticsBreakdownBatchSummary,
+) -> UsageStatisticsBreakdownBatchResponse:
+    return UsageStatisticsBreakdownBatchResponse(
+        parent_group_by=summary.parent_group_by,
+        breakdown_by=summary.breakdown_by,
+        items=[
+            UsageStatisticsBreakdownBatchItemResponse(
+                parent_group_key=parent.parent_group_key,
+                parent_requests=parent.parent_requests,
+                items=[
+                    UsageStatisticsBreakdownSliceResponse(
+                        group_key=item.group_key,
+                        label=item.label,
+                        requests=item.requests,
+                        share=item.share,
+                    )
+                    for item in parent.items
+                ],
+            )
+            for parent in summary.items
+        ],
+    )
+
+
+@router.get(
+    "/dashboard/statistics/breakdown-batch",
+    response_model=UsageStatisticsBreakdownBatchResponse,
+)
+async def dashboard_statistics_breakdown_batch(
+    team: CurrentTeam,
+    reads: MgmtReads,
+    parent_group_by: UsageStatisticsGroupBy = Query(...),
+    parent_group_keys: list[str] = Query(..., max_length=200),
+    breakdown_by: UsageStatisticsBreakdownBy = Query(...),
+    days: int = Query(7, ge=1, le=365),
+    usage_aggregation: UsageAggregation = Query(
+        UsageAggregation.WORKSPACE,
+        description=USAGE_AGGREGATION_QUERY_DESCRIPTION,
+    ),
+    start: datetime | None = None,
+    end: datetime | None = None,
+    top_n: int = Query(3, ge=1, le=32),
+    credential_id: uuid.UUID | None = None,
+    user_id: uuid.UUID | None = None,
+    filter_team_id: uuid.UUID | None = Query(
+        default=None,
+        description="按租户团队筛选（与路径 {team_id} 工作区上下文无关）",
+    ),
+    model: str | None = Query(default=None, min_length=1, max_length=200),
+    provider: str | None = Query(default=None, min_length=1, max_length=50),
+    capability: str | None = Query(default=None, min_length=1, max_length=40),
+    status_filter: str | None = Query(default=None, alias="status", min_length=1, max_length=40),
+    vkey_id: uuid.UUID | None = None,
+) -> UsageStatisticsBreakdownBatchResponse:
+    start, end = _resolve_dashboard_time_range(days=days, start=start, end=end)
+    summary = await reads.aggregate_usage_statistics_breakdown_batch(
+        team,
+        start,
+        end,
+        usage_aggregation=usage_aggregation,
+        filters=UsageStatisticsFilters(
+            credential_id=credential_id,
+            user_id=user_id,
+            team_id=filter_team_id,
+            model=model.strip() if model else None,
+            provider=provider.strip() if provider else None,
+            capability=capability.strip() if capability else None,
+            status=status_filter.strip() if status_filter else None,
+            vkey_id=vkey_id,
+        ),
+        parent_group_by=parent_group_by,
+        parent_keys=parent_group_keys,
+        breakdown_by=breakdown_by,
+        top_n=top_n,
+    )
+    return _breakdown_batch_response(summary)
 
 
 @router.get(

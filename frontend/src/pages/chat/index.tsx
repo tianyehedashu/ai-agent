@@ -48,8 +48,8 @@ export default function ChatPage(): React.JSX.Element {
   const prevSessionIdRef = useRef<string | undefined>(undefined)
   /** 流式创建会话后 navigate 到 /chat/:id 时跳过拉历史，避免覆盖进行中的 SSE 内容 */
   const skipHistoryLoadForSessionRef = useRef<string | null>(null)
-  /** 当前 SSE 流绑定的 sessionId（与 useChat 同步，避免 effect 依赖 isLoading） */
-  const streamingSessionRef = useRef<string | null>(null)
+  /** 进行中的 SSE 流所属 sessionId 集合（与 useChat 同步） */
+  const activeStreamSessionsRef = useRef<Set<string>>(new Set())
 
   const handleChatError = useCallback(
     (error: Error) => {
@@ -87,13 +87,13 @@ export default function ChatPage(): React.JSX.Element {
     sessionRecreation,
     sendMessage,
     resumeExecution,
-    clearMessages,
     loadMessages,
-    cancelRequest,
+    switchViewSession,
+    resetDraftChat,
     dismissSessionRecreation,
   } = useChat({
     sessionId,
-    streamingSessionRef,
+    activeStreamSessionsRef,
     onStreamEnd: handleStreamEnd,
     onError: handleChatError,
     onSessionCreated: handleSessionCreated,
@@ -157,12 +157,12 @@ export default function ChatPage(): React.JSX.Element {
     return selectedModelRef ?? defaultId ?? firstSelectablePersonalModelId ?? undefined
   }, [availableTextModels?.default_for_text?.id, selectedModelRef, firstSelectablePersonalModelId])
 
-  // 侧栏「新建对话」已在 /chat 时 sessionId 不变，需单独重置消息与进行中的流
+  // 侧栏「新建对话」已在 /chat 时 sessionId 不变，仅重置草稿区（不中断其他会话后台流）
   useEffect(() => {
     if (newChatEpoch === 0) return
-    cancelRequest()
-    clearMessages()
-  }, [newChatEpoch, cancelRequest, clearMessages])
+    resetDraftChat()
+    switchViewSession(undefined)
+  }, [newChatEpoch, resetDraftChat, switchViewSession])
 
   // 无会话时（新建对话）切回对话模式，避免底部只显示 Tab 不显示输入
   useEffect(() => {
@@ -178,7 +178,10 @@ export default function ChatPage(): React.JSX.Element {
     const isLeavingOrSwitching =
       prevSessionId !== undefined && (sessionId === undefined || prevSessionId !== sessionId)
     if (isLeavingOrSwitching) {
-      clearMessages()
+      if (sessionId === undefined) {
+        resetDraftChat()
+      }
+      switchViewSession(sessionId)
     }
 
     // 使用标志位来跟踪这个 effect 是否仍然有效
@@ -187,7 +190,7 @@ export default function ChatPage(): React.JSX.Element {
     if (sessionId) {
       const skipHistory =
         skipHistoryLoadForSessionRef.current === sessionId ||
-        streamingSessionRef.current === sessionId
+        activeStreamSessionsRef.current.has(sessionId)
 
       const applySession = (session: Awaited<ReturnType<typeof sessionApi.get>>): void => {
         if (cancelled) return
@@ -240,7 +243,14 @@ export default function ChatPage(): React.JSX.Element {
     return () => {
       cancelled = true
     }
-  }, [sessionId, setCurrentSession, clearMessages, loadMessages, handleSessionAccessError])
+  }, [
+    sessionId,
+    setCurrentSession,
+    switchViewSession,
+    resetDraftChat,
+    loadMessages,
+    handleSessionAccessError,
+  ])
 
   const handleCreativeModeChange = async (mode: CreativeInputMode): Promise<void> => {
     setCreativeMode(mode)

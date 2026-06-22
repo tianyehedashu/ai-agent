@@ -3737,6 +3737,77 @@ class TestGatewayManagementApi:
         assert over_limit.status_code == 422, over_limit.text
 
     @pytest.mark.asyncio
+    async def test_dashboard_statistics_breakdown_batch_groups_per_parent(
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict[str, str],
+        db_session,
+        test_user: User,
+    ) -> None:
+        team = await TeamService(db_session).ensure_personal_team(test_user.id)
+        now = datetime.now(UTC)
+        cred_a = uuid.uuid4()
+        cred_b = uuid.uuid4()
+
+        def _log(cred_id: uuid.UUID, cred_name: str, req_suffix: str) -> GatewayRequestLog:
+            return GatewayRequestLog(
+                id=uuid.uuid4(),
+                created_at=now,
+                tenant_id=team.id,
+                user_id=test_user.id,
+                vkey_id=None,
+                credential_id=cred_id,
+                credential_name_snapshot=cred_name,
+                capability="chat",
+                route_name="gpt-4",
+                real_model="gpt-4",
+                provider="openai",
+                status="success",
+                input_tokens=1,
+                output_tokens=1,
+                cached_tokens=0,
+                cost_usd=Decimal("0.001"),
+                latency_ms=10,
+                cache_hit=False,
+                fallback_chain=[],
+                request_id=f"req-batch-{req_suffix}",
+            )
+
+        db_session.add_all(
+            [
+                _log(cred_a, "cred-a", "a1"),
+                _log(cred_a, "cred-a", "a2"),
+                _log(cred_b, "cred-b", "b1"),
+            ]
+        )
+        await db_session.commit()
+
+        r = await dev_client.get(
+            f"/api/v1/gateway/teams/{team.id}/dashboard/statistics/breakdown-batch",
+            headers=auth_headers,
+            params={
+                "days": 7,
+                "parent_group_by": "user",
+                "parent_group_keys": [str(test_user.id)],
+                "breakdown_by": "credential",
+                "top_n": 3,
+            },
+        )
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["parent_group_by"] == "user"
+        assert body["breakdown_by"] == "credential"
+        assert len(body["items"]) == 1
+        parent = body["items"][0]
+        assert parent["parent_group_key"] == str(test_user.id)
+        assert parent["parent_requests"] == 3
+        labels = {item["label"]: item["requests"] for item in parent["items"]}
+        assert labels["cred-a"] == 2
+        assert labels["cred-b"] == 1
+        shares = {item["label"]: item["share"] for item in parent["items"]}
+        assert shares["cred-a"] == pytest.approx(2 / 3)
+
+    @pytest.mark.asyncio
     async def test_admin_credential_stats_pagination_envelope(
         self,
         dev_client: AsyncClient,

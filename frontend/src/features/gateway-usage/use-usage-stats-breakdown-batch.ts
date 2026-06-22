@@ -1,12 +1,13 @@
 import { useMemo } from 'react'
 
-import { keepPreviousData, useQueries } from '@tanstack/react-query'
+import { keepPreviousData, useQuery } from '@tanstack/react-query'
 
 import {
   statsApi,
   type GatewayUsageStatsBreakdownQuery,
   type GatewayUsageStatsGroupBy,
   type GatewayUsageStatsItem,
+  type UsageStatisticsBreakdownBatchResponse,
   type UsageStatisticsBreakdownResponse,
 } from '@/api/gateway/stats'
 import { GATEWAY_USAGE_STATS_STALE_MS } from '@/features/gateway-usage/usage-stats-query'
@@ -43,77 +44,24 @@ function breakdownBaseQueryKey(teamId: string, baseQuery: UsageStatsBreakdownBas
   ])
 }
 
-export function usageStatsBreakdownQueryKey(
-  teamId: string,
-  baseQuery: UsageStatsBreakdownBaseQuery,
+/** 批量响应 → 父行键索引，复用单行 breakdown 的展示结构。 */
+function indexBatchByParent(
+  data: UsageStatisticsBreakdownBatchResponse | undefined,
   parentGroupBy: GatewayUsageStatsGroupBy,
-  parentGroupKey: string,
-  breakdownBy: 'credential' | 'model',
-  topN: number
-): readonly (string | number)[] {
-  return [
-    'gateway',
-    'usage-stats-breakdown',
-    teamId,
-    breakdownBaseQueryKey(teamId, baseQuery),
-    parentGroupBy,
-    parentGroupKey,
-    breakdownBy,
-    topN,
-  ] as const
-}
-
-function usageStatsRowBreakdownQueryKey(
-  teamId: string,
-  baseQuery: UsageStatsBreakdownBaseQuery,
-  parentGroupBy: GatewayUsageStatsGroupBy,
-  parentGroupKey: string,
-  modelTopN: number,
-  credentialTopN: number
-): readonly (string | number)[] {
-  return [
-    'gateway',
-    'usage-stats-row-breakdown',
-    teamId,
-    breakdownBaseQueryKey(teamId, baseQuery),
-    parentGroupBy,
-    parentGroupKey,
-    modelTopN,
-    credentialTopN,
-  ] as const
-}
-
-interface RowBreakdownQueryDef {
-  rowKey: string
-  queryKey: readonly (string | number)[]
-  queryFn: () => Promise<UsageStatsRowBreakdown>
-}
-
-async function fetchRowBreakdown(
-  teamId: string,
-  baseQuery: UsageStatsBreakdownBaseQuery,
-  parentGroupBy: GatewayUsageStatsGroupBy,
-  rowKey: string,
-  credentialTopN: number
-): Promise<UsageStatsRowBreakdown> {
-  const shared = {
-    ...baseQuery,
-    parent_group_by: parentGroupBy,
-    parent_group_key: rowKey,
+  breakdownBy: 'model' | 'credential'
+): Map<string, UsageStatisticsBreakdownResponse> {
+  const map = new Map<string, UsageStatisticsBreakdownResponse>()
+  if (!data) return map
+  for (const parent of data.items) {
+    map.set(parent.parent_group_key, {
+      parent_group_by: parentGroupBy,
+      parent_group_key: parent.parent_group_key,
+      breakdown_by: breakdownBy,
+      parent_requests: parent.parent_requests,
+      items: parent.items,
+    })
   }
-  const [model, credential] = await Promise.all([
-    statsApi.usageStatsBreakdown(teamId, {
-      ...shared,
-      breakdown_by: 'model',
-      top_n: TABLE_MODEL_TOP_N,
-    }),
-    statsApi.usageStatsBreakdown(teamId, {
-      ...shared,
-      breakdown_by: 'credential',
-      top_n: credentialTopN,
-    }),
-  ])
-  return { model, credential }
+  return map
 }
 
 export function useUsageStatsBreakdownBatch({
@@ -138,60 +86,89 @@ export function useUsageStatsBreakdownBatch({
 } {
   const effectiveCredentialTopN = Math.min(Math.max(1, credentialTopN), TABLE_CREDENTIAL_TOP_N)
 
-  const queryDefs = useMemo((): RowBreakdownQueryDef[] => {
-    if (!enabled) return []
-    const defs: RowBreakdownQueryDef[] = []
-    for (const item of items) {
-      const rowKey = item.group_key.trim()
-      if (!rowKey) continue
-      defs.push({
-        rowKey,
-        queryKey: usageStatsRowBreakdownQueryKey(
-          teamId,
-          baseQuery,
-          parentGroupBy,
-          rowKey,
-          TABLE_MODEL_TOP_N,
-          effectiveCredentialTopN
-        ),
-        queryFn: () =>
-          fetchRowBreakdown(teamId, baseQuery, parentGroupBy, rowKey, effectiveCredentialTopN),
-      })
-    }
-    return defs
-  }, [enabled, items, teamId, parentGroupBy, baseQuery, effectiveCredentialTopN])
-
-  const queries = useMemo(
-    () =>
-      queryDefs.map((def) => ({
-        queryKey: def.queryKey,
-        queryFn: def.queryFn,
-        enabled: enabled && queryDefs.length > 0,
-        staleTime: GATEWAY_USAGE_STATS_STALE_MS,
-        placeholderData: keepPreviousData,
-      })),
-    [queryDefs, enabled]
+  const rowKeys = useMemo(
+    () => items.map((item) => item.group_key.trim()).filter((key) => key.length > 0),
+    [items]
   )
+  const rowKeysKey = useMemo(() => buildFilterKey(rowKeys), [rowKeys])
+  const batchEnabled = enabled && rowKeys.length > 0
+  const baseKey = breakdownBaseQueryKey(teamId, baseQuery)
 
-  const results = useQueries({ queries })
+  const modelQuery = useQuery({
+    queryKey: [
+      'gateway',
+      'usage-stats-breakdown-batch',
+      teamId,
+      baseKey,
+      parentGroupBy,
+      'model',
+      TABLE_MODEL_TOP_N,
+      rowKeysKey,
+    ],
+    queryFn: () =>
+      statsApi.usageStatsBreakdownBatch(teamId, {
+        ...baseQuery,
+        parent_group_by: parentGroupBy,
+        parent_group_keys: rowKeys,
+        breakdown_by: 'model',
+        top_n: TABLE_MODEL_TOP_N,
+      }),
+    enabled: batchEnabled,
+    staleTime: GATEWAY_USAGE_STATS_STALE_MS,
+    placeholderData: keepPreviousData,
+  })
+
+  const credentialQuery = useQuery({
+    queryKey: [
+      'gateway',
+      'usage-stats-breakdown-batch',
+      teamId,
+      baseKey,
+      parentGroupBy,
+      'credential',
+      effectiveCredentialTopN,
+      rowKeysKey,
+    ],
+    queryFn: () =>
+      statsApi.usageStatsBreakdownBatch(teamId, {
+        ...baseQuery,
+        parent_group_by: parentGroupBy,
+        parent_group_keys: rowKeys,
+        breakdown_by: 'credential',
+        top_n: effectiveCredentialTopN,
+      }),
+    enabled: batchEnabled,
+    staleTime: GATEWAY_USAGE_STATS_STALE_MS,
+    placeholderData: keepPreviousData,
+  })
 
   const { breakdownByRowKey, loadingRowKeys } = useMemo(() => {
+    const modelByKey = indexBatchByParent(modelQuery.data, parentGroupBy, 'model')
+    const credentialByKey = indexBatchByParent(credentialQuery.data, parentGroupBy, 'credential')
     const map = new Map<string, UsageStatsRowBreakdown>()
+    for (const rowKey of rowKeys) {
+      map.set(rowKey, {
+        model: modelByKey.get(rowKey),
+        credential: credentialByKey.get(rowKey),
+      })
+    }
     const loading = new Set<string>()
-    queryDefs.forEach((def, index) => {
-      const result = results[index]
-      if (result.isLoading) {
-        loading.add(def.rowKey)
-      }
-      if (result.data !== undefined) {
-        map.set(def.rowKey, result.data)
-      }
-    })
+    if (batchEnabled && (modelQuery.isLoading || credentialQuery.isLoading)) {
+      for (const rowKey of rowKeys) loading.add(rowKey)
+    }
     return { breakdownByRowKey: map, loadingRowKeys: loading }
-  }, [queryDefs, results])
+  }, [
+    modelQuery.data,
+    modelQuery.isLoading,
+    credentialQuery.data,
+    credentialQuery.isLoading,
+    rowKeys,
+    parentGroupBy,
+    batchEnabled,
+  ])
 
-  const isLoading = enabled && results.some((result) => result.isLoading)
-  const isFetching = enabled && results.some((result) => result.isFetching)
+  const isLoading = batchEnabled && (modelQuery.isLoading || credentialQuery.isLoading)
+  const isFetching = batchEnabled && (modelQuery.isFetching || credentialQuery.isFetching)
 
   return { breakdownByRowKey, loadingRowKeys, isLoading, isFetching }
 }

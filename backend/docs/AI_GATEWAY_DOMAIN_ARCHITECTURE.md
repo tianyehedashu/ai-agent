@@ -54,7 +54,10 @@ domains/gateway/
 │   ├── proxy_metadata_builder.py    # 代理 metadata / 归因 / 下游定价注入
 │   ├── proxy_litellm_client.py      # LiteLLM Router 与内部直连适配
 │   ├── proxy_response_adapter.py    # 响应适配、成本计算、预算/套餐结算
-│   ├── proxy_deferred_tasks.py      # 代理后台结算任务登记与关闭收口
+│   ├── deferred_task_runner.py      # proxy_deferred_runner 单例装配（实现见 libs/concurrency）
+│   ├── virtual_key_touch.py           # vkey 用量合并刷写
+│   ├── usage_bucket_flusher.py        # 预算/配额窗口桶合并刷写
+│   ├── proxy_deferred_tasks.py      # flusher 任务登记 + shutdown 收口（先排空有界执行器）
 │   ├── management/                # 管理面读写分包（与 CQRS 读/写侧对应）
 │   │   ├── reads.py               # GatewayManagementReadService
 │   │   ├── writes.py              # GatewayManagementWriteService
@@ -105,7 +108,8 @@ domains/agent/infrastructure/llm/agent_llm_facade.py   # AgentLlmFacade
   - `proxy_metadata_builder.py` —— Gateway metadata、归因、下游单价 kwargs
   - `proxy_litellm_client.py` —— LiteLLM Router / 内部直连技术适配
   - `proxy_response_adapter.py` —— 响应适配、`response_cost` 注入、预算/套餐结算
-  - `proxy_deferred_tasks.py` —— fire-and-forget 结算任务登记 + shutdown 收口
+  - `deferred_task_runner.py` / `virtual_key_touch.py` / `usage_bucket_flusher.py` —— 响应后延迟写入（有界执行器 + 合并刷写，见 [gateway/DEFERRED_WRITE_CONCURRENCY.md](./gateway/DEFERRED_WRITE_CONCURRENCY.md)）
+  - `proxy_deferred_tasks.py` —— 后台任务登记 + shutdown 收口
   - `proxy_chat_pipeline.py` / `proxy_stream_settlement.py` —— Chat/Anthropic 流水线
   - `proxy_vision_image_urls.py` —— 将 `/api/v1/listing-studio/images/*` 相对 URL 内联为 data URL（规则在 `domain/policies/vision_image_url.py`、`vision_image_mime.py`）；经 `ListingStudioLocalImagePort`（`application/ports.py`）依赖倒置，bootstrap 注册 `AgentListingStudioLocalImagePort`（`listing_studio_local_image_for_gateway.py` + `listing_studio_image_port_registry.py`）
   - `proxy_router_invoke.py` —— LiteLLM Router miss / 内部直连降级（chat 与非 chat 共用）
