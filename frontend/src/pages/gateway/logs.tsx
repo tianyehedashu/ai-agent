@@ -46,6 +46,10 @@ import {
   GatewayFilterCombobox,
 } from '@/features/gateway-usage/gateway-filter-combobox'
 import {
+  GATEWAY_REQUEST_STATUS_FILTER_OPTIONS,
+  GatewayRequestStatusBadge,
+} from '@/features/gateway-usage/gateway-request-status'
+import {
   logCallerDisplayText,
   logCallerDisplayTitle,
 } from '@/features/gateway-usage/log-caller-display'
@@ -70,7 +74,6 @@ import { useTeamMemberFilterSearch } from '@/features/gateway-usage/use-team-mem
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useGatewayTeamId, useGatewayTeamRecord } from '@/hooks/use-gateway-team-id'
 import {
-  AlertCircle,
   CheckCircle2,
   ChevronDown,
   CircleDashed,
@@ -83,7 +86,6 @@ import {
   ShieldAlert,
   Users,
   X,
-  XCircle,
   Zap,
 } from '@/lib/lucide-icons'
 import { coalesceMoney, formatMoney } from '@/lib/money'
@@ -93,14 +95,7 @@ import { resolveDateRange, isValidDateRangeValue, type DateRangeValue } from './
 
 const PAGE_SIZE_OPTIONS = [50, 100, 200] as const
 
-const STATUS_FILTERS: readonly { value: string; label: string }[] = [
-  { value: 'all', label: '全部状态' },
-  { value: 'success', label: '成功' },
-  { value: 'failed', label: '失败' },
-  { value: 'rate_limited', label: '限流' },
-  { value: 'budget_exceeded', label: '预算超限' },
-  { value: 'guardrail_blocked', label: '安全拦截' },
-]
+const STATUS_FILTERS = GATEWAY_REQUEST_STATUS_FILTER_OPTIONS
 
 const CAPABILITY_FILTERS: readonly { value: string; label: string }[] = [
   { value: 'all', label: '全部能力' },
@@ -961,7 +956,7 @@ export default function GatewayLogsPage(): React.JSX.Element {
         <SheetContent className="flex max-h-[100vh] w-full flex-col p-0 sm:max-w-2xl">
           <SheetHeader className="shrink-0 border-b px-5 pb-4 pt-5 text-left">
             <div className="flex min-w-0 flex-wrap items-center gap-2 pr-8">
-              {activeLog ? <StatusBadge status={activeLog.status} /> : null}
+              {activeLog ? <GatewayRequestStatusBadge status={activeLog.status} /> : null}
               <SheetTitle className="min-w-0 truncate text-base">
                 {activeLogIdentity ? logModelIdentityTitle(activeLogIdentity) : '请求详情'}
               </SheetTitle>
@@ -1134,7 +1129,7 @@ const LogRow = memo(function LogRow({
         <CapabilityBadge capability={item.capability} />
       </div>
       <div className="flex items-center gap-1">
-        <StatusBadge status={item.status} />
+        <GatewayRequestStatusBadge status={item.status} />
         {item.client_type === GATEWAY_CLIENT_TYPES.MODEL_CONNECTIVITY_PROBE ? (
           <Badge variant="outline" className="h-5 px-1 text-[10px]">
             探活
@@ -1344,46 +1339,12 @@ function PayloadPanel({
   )
 }
 
-function StatusBadge({ status }: Readonly<{ status: string }>): React.JSX.Element {
-  const normalized = status.toLowerCase()
-  const isSuccess = normalized === 'success'
-  const isFailure = normalized === 'failed' || normalized === 'error'
-  const Icon = isSuccess ? CheckCircle2 : isFailure ? XCircle : AlertCircle
-  const label = statusLabel(normalized)
-
-  return (
-    <Badge
-      variant="outline"
-      className={cn(
-        'inline-flex min-w-[76px] justify-center gap-1 border px-2 py-0.5 font-medium',
-        isSuccess
-          ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300'
-          : isFailure
-            ? 'border-red-200 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300'
-            : 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300'
-      )}
-    >
-      <Icon className="h-3 w-3" />
-      {label}
-    </Badge>
-  )
-}
-
 function CapabilityBadge({ capability }: Readonly<{ capability: string }>): React.JSX.Element {
   return (
     <Badge variant="outline" className="max-w-[92px] justify-center truncate font-medium">
       {capabilityLabel(capability)}
     </Badge>
   )
-}
-
-function statusLabel(status: string): string {
-  if (status === 'success') return '成功'
-  if (status === 'failed' || status === 'error') return '失败'
-  if (status === 'rate_limited') return '限流'
-  if (status === 'budget_exceeded') return '预算'
-  if (status === 'guardrail_blocked') return '拦截'
-  return status
 }
 
 function capabilityLabel(capability: string): string {

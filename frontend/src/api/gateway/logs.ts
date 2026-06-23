@@ -10,6 +10,7 @@
 
 import { apiClient } from '@/api/client'
 import type { GatewayClientType } from '@/features/gateway-usage/client-types'
+import type { GatewayRequestStatus } from '@/features/gateway-usage/gateway-request-status'
 import type { PaginatedList } from '@/types'
 
 import { teamGatewayPath } from './_base'
@@ -33,7 +34,7 @@ export interface GatewayLogItem {
   route_name: string | null
   real_model: string | null
   provider: string | null
-  status: string
+  status: GatewayRequestStatus | (string & {})
   error_code: string | null
   error_message?: string | null
   input_tokens: number

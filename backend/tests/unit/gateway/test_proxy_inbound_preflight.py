@@ -11,7 +11,11 @@ import pytest
 from domains.gateway.application.model_or_route_resolution import ResolvedModelName
 from domains.gateway.application.proxy_inbound_preflight import run_proxy_inbound_preflight
 from domains.gateway.application.proxy_use_case import ProxyContext, ProxyUseCase
-from domains.gateway.domain.errors import CapabilityNotAllowedError, GatewayModelNotFoundError
+from domains.gateway.domain.errors import (
+    BudgetExceededError,
+    CapabilityNotAllowedError,
+    GatewayModelNotFoundError,
+)
 from domains.gateway.domain.types import GatewayCapability
 
 
@@ -137,6 +141,27 @@ async def test_shared_team_model_still_runs_phase1_budget() -> None:
     )
     assert result.reservations == ["phase1"]
     guard.check_budget.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_preflight_failure_schedules_request_log() -> None:
+    guard = _mock_guard(_resolved("chat"), exempt=False)
+    guard.check_budget = AsyncMock(
+        side_effect=BudgetExceededError(scope="team", period="daily", limit=1.0, used=1.0)
+    )
+    ctx = _chat_ctx()
+    with (
+        patch(
+            "domains.gateway.application.proxy_inbound_preflight.schedule_preflight_failure_log",
+        ) as schedule_log,
+        pytest.raises(BudgetExceededError),
+    ):
+        await run_proxy_inbound_preflight(
+            guard, ctx, capability=GatewayCapability.CHAT, model="team-model"
+        )
+    schedule_log.assert_called_once()
+    assert schedule_log.call_args.args[0] is ctx
+    assert isinstance(schedule_log.call_args.args[1], BudgetExceededError)
 
 
 @pytest.mark.asyncio

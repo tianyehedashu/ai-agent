@@ -2,10 +2,11 @@ import { memo, useCallback } from 'react'
 import type React from 'react'
 
 import type { QuotaRule } from '@/api/gateway/quota-rules'
-import type { GatewayUsageStatsItem } from '@/api/gateway/stats'
+import type { GatewayUsageStatsGroupBy, GatewayUsageStatsItem } from '@/api/gateway/stats'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { GATEWAY_DISPLAY_CURRENCY } from '@/features/gateway-pricing/display-currency'
+import { usageStatsStatusRowLabel } from '@/features/gateway-usage/gateway-request-status'
 import { UsageStatsBreakdownCredentials } from '@/features/gateway-usage/usage-stats-breakdown-credentials'
 import { UsageStatsBreakdownPrimary } from '@/features/gateway-usage/usage-stats-breakdown-primary'
 import { UsageStatsQuotaCell } from '@/features/gateway-usage/usage-stats-quota-cell'
@@ -17,6 +18,7 @@ import { cn } from '@/lib/utils'
 
 export interface UsageStatsRankingTableProps {
   items: readonly GatewayUsageStatsItem[]
+  groupBy: GatewayUsageStatsGroupBy
   maxRequests: number
   showCost: boolean
   showBreakdownCols: boolean
@@ -33,6 +35,7 @@ export interface UsageStatsRankingTableProps {
 
 const StatsRow = memo(function StatsRow({
   item,
+  groupBy,
   maxRequests,
   showCost,
   showBreakdownCols,
@@ -46,6 +49,7 @@ const StatsRow = memo(function StatsRow({
   onSetQuota,
 }: Readonly<{
   item: GatewayUsageStatsItem
+  groupBy: GatewayUsageStatsGroupBy
   maxRequests: number
   showCost: boolean
   showBreakdownCols: boolean
@@ -61,6 +65,8 @@ const StatsRow = memo(function StatsRow({
   const width = Math.max(4, (item.requests / maxRequests) * 100)
   const rowKey = item.group_key.trim()
   const canDrill = rowKey.length > 0
+  const primaryLabel =
+    groupBy === 'status' ? usageStatsStatusRowLabel(item.group_key, item.label) : item.label
 
   const handleDrill = useCallback(() => {
     onDrill(item)
@@ -87,7 +93,7 @@ const StatsRow = memo(function StatsRow({
           onClick={canDrill ? handleDrill : undefined}
           title={canDrill ? '点击钻取下一维度' : undefined}
         >
-          <div className="truncate font-medium">{item.label}</div>
+          <div className="truncate font-medium">{primaryLabel}</div>
           {item.group_key ? (
             <div className="truncate font-mono text-[10px] text-muted-foreground">
               {item.group_key}
@@ -198,6 +204,7 @@ const StatsRow = memo(function StatsRow({
 
 export const UsageStatsRankingTable = memo(function UsageStatsRankingTable({
   items,
+  groupBy,
   maxRequests,
   showCost,
   showBreakdownCols,
@@ -250,6 +257,7 @@ export const UsageStatsRankingTable = memo(function UsageStatsRankingTable({
               <StatsRow
                 key={`${item.group_key}-${item.label}`}
                 item={item}
+                groupBy={groupBy}
                 maxRequests={maxRequests}
                 showCost={showCost}
                 showBreakdownCols={showBreakdownCols}

@@ -40,6 +40,7 @@ import {
   GatewayFilterCombobox,
   type GatewayFilterOption,
 } from '@/features/gateway-usage/gateway-filter-combobox'
+import { GATEWAY_REQUEST_STATUS_VALUE_OPTIONS } from '@/features/gateway-usage/gateway-request-status'
 import {
   gatewayUsageAggregationOptions,
   isCrossTeamUsageStatsEnabled,
@@ -100,13 +101,7 @@ const RANGE_DAYS: { value: UsageStatsPresetDays; label: string }[] = [
   { value: 90, label: '90 天' },
 ]
 
-const STATUS_OPTIONS: GatewayFilterOption[] = [
-  { value: 'success', label: '成功' },
-  { value: 'failed', label: '失败' },
-  { value: 'rate_limited', label: '限流' },
-  { value: 'budget_exceeded', label: '预算超限' },
-  { value: 'guardrail_blocked', label: '安全拦截' },
-]
+const STATUS_OPTIONS: GatewayFilterOption[] = [...GATEWAY_REQUEST_STATUS_VALUE_OPTIONS]
 
 const CAPABILITY_OPTIONS: GatewayFilterOption[] = [
   { value: 'chat', label: 'Chat' },
@@ -1017,6 +1012,7 @@ export default function GatewayStatsPage(): React.JSX.Element {
             ) : (
               <UsageStatsRankingTable
                 items={items}
+                groupBy={groupBy}
                 maxRequests={maxRequests}
                 showCost={isAdmin}
                 showBreakdownCols={showBreakdownCols}

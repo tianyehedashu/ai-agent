@@ -118,18 +118,33 @@ def _build_logger_instance() -> Any:
             start_time: Any,
             end_time: Any,
         ) -> None:
+            from domains.gateway.application.request_log_failure_classification import (
+                classify_request_log_failure,
+            )
+
             error = kwargs.get("exception") or kwargs.get("error") or response_obj
-            error_code = type(error).__name__ if error else "UnknownError"
-            error_message = str(error) if error else None
+            upstream_quota_probe_code = (
+                type(error).__name__ if isinstance(error, BaseException) else None
+            )
+            if isinstance(error, BaseException):
+                classified = classify_request_log_failure(error)
+                status = classified.status.value
+                error_code = classified.error_code
+                error_message = classified.error_message
+            else:
+                status = "failed"
+                error_code = "UnknownError"
+                error_message = str(error) if error else None
             with prefer_background_pool():
                 await _persist_event(
                     kwargs=kwargs,
                     response_obj=response_obj,
                     start_time=start_time,
                     end_time=end_time,
-                    status="failed",
+                    status=status,
                     error_code=error_code,
                     error_message=error_message,
+                    upstream_quota_probe_code=upstream_quota_probe_code,
                 )
 
         async def async_post_call_streaming_hook(
@@ -831,7 +846,7 @@ async def _settle_budgets(
                 metadata,
                 request_id=request_id_str,
             )
-    elif status == "failed":
+    elif status != "success":
         with suppress(Exception):
             from domains.gateway.application.budget_deployment_check import (
                 release_user_credential_budget_from_metadata,
@@ -898,7 +913,7 @@ async def _post_persist_side_effects(
             cache_creation_tokens=cache_creation_tokens,
             cost_usd=cost_usd,
         )
-    if status == "failed" and provider_plan_id is not None:
+    if status != "success" and provider_plan_id is not None:
         with suppress(Exception):
             await _maybe_mark_provider_quota_upstream_exhausted(
                 kwargs=kwargs,
@@ -1020,6 +1035,7 @@ async def _persist_event(
     status: str,
     error_code: str | None,
     error_message: str | None,
+    upstream_quota_probe_code: str | None = None,
 ) -> None:
     """把单次调用持久化到 DB + Redis（骨架 ~55 行）。"""
 
@@ -1158,7 +1174,7 @@ async def _persist_event(
         cost_usd=cost_usd,
         provider_plan_id=provider_plan_id,
         kwargs=kwargs,
-        error_code=error_code,
+        error_code=upstream_quota_probe_code or error_code,
         error_message=error_message,
     )
 

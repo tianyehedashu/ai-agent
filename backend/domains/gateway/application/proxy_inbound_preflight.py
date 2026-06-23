@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from domains.gateway.application.model_or_route_resolution import ResolvedModelName
+from domains.gateway.application.preflight_failure_logger import schedule_preflight_failure_log
 from domains.gateway.domain.errors import EntitlementPlanExhaustedError
 from domains.gateway.application.proxy_context import PlatformBudgetPreflightState
 from domains.gateway.domain.proxy_policy import BudgetReservation
@@ -42,39 +43,43 @@ async def run_proxy_inbound_preflight(
         raise ValueError("model is required")
     ctx.budget_model = cleaned or None
 
-    if cleaned:
-        guard.check_model(cleaned, ctx)
-        resolved = await guard.resolve_and_validate_request_model(
-            ctx,
-            cleaned,
-            match_registered_capability=match_registered_capability,
-        )
-    else:
-        resolved = None
-    guard.check_capability(ctx)
-    await guard.check_limits(ctx, estimate_tokens=estimate_tokens)
-    # 个人工作区模型豁免全部平台配额：Phase1 直接返回空预扣，
-    # Phase2（pre_call hook）因无成员+凭据规则自然跳过。
-    if await guard.is_platform_budget_exempt(ctx, resolved):
-        reservations: list[BudgetReservation] = []
-        ctx.platform_budget_preflight = PlatformBudgetPreflightState()
-    else:
-        reservations = await guard.check_budget(ctx, estimate_tokens=estimate_tokens)
     try:
-        await guard.check_entitlement(
-            ctx,
-            cleaned or None,
-            estimate_tokens=estimate_tokens,
-        )
-    except EntitlementPlanExhaustedError:
-        await guard.release_budget_reservations(reservations)
-        raise
+        if cleaned:
+            guard.check_model(cleaned, ctx)
+            resolved = await guard.resolve_and_validate_request_model(
+                ctx,
+                cleaned,
+                match_registered_capability=match_registered_capability,
+            )
+        else:
+            resolved = None
+        guard.check_capability(ctx)
+        await guard.check_limits(ctx, estimate_tokens=estimate_tokens)
+        # 个人工作区模型豁免全部平台配额：Phase1 直接返回空预扣，
+        # Phase2（pre_call hook）因无成员+凭据规则自然跳过。
+        if await guard.is_platform_budget_exempt(ctx, resolved):
+            reservations: list[BudgetReservation] = []
+            ctx.platform_budget_preflight = PlatformBudgetPreflightState()
+        else:
+            reservations = await guard.check_budget(ctx, estimate_tokens=estimate_tokens)
+        try:
+            await guard.check_entitlement(
+                ctx,
+                cleaned or None,
+                estimate_tokens=estimate_tokens,
+            )
+        except EntitlementPlanExhaustedError:
+            await guard.release_budget_reservations(reservations)
+            raise
 
-    return ProxyInboundPreflightResult(
-        model=cleaned or None,
-        reservations=reservations,
-        resolved=resolved,
-    )
+        return ProxyInboundPreflightResult(
+            model=cleaned or None,
+            reservations=reservations,
+            resolved=resolved,
+        )
+    except Exception as exc:
+        schedule_preflight_failure_log(ctx, exc, model=cleaned or None)
+        raise
 
 
 __all__ = ["ProxyInboundPreflightResult", "run_proxy_inbound_preflight"]
