@@ -9,24 +9,16 @@ from domains.gateway.application.config_catalog_sync import (
     model_types_for_gateway_registration,
     selector_capabilities_from_tags,
 )
-from domains.gateway.domain.model_types_tags import tags_from_model_types
+from domains.gateway.domain.model_types_tags import (
+    capability_for_model_type,
+    tags_from_model_types,
+)
 from domains.gateway.domain.types import PERSONAL_MODEL_TYPES
 
 if TYPE_CHECKING:
     from domains.gateway.infrastructure.models.gateway_model import GatewayModel
 
 VALID_PERSONAL_MODEL_TYPES = PERSONAL_MODEL_TYPES
-
-_MODEL_TYPE_TO_CAPABILITY: dict[str, str] = {
-    "text": "chat",
-    "image": "chat",
-    "image_gen": "image",
-    "video": "video_generation",
-}
-
-
-def capability_for_model_type(model_type: str) -> str:
-    return _MODEL_TYPE_TO_CAPABILITY.get(model_type, "chat")
 
 
 def tags_for_model_type(model_type: str) -> dict[str, Any]:

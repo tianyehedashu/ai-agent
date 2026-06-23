@@ -32,6 +32,62 @@ _CAPABILITY_ALLOWED_TYPES: dict[str, frozenset[str]] = {
     "moderation": frozenset({"text"}),
 }
 
+_MODEL_TYPE_TO_CAPABILITY: dict[str, str] = {
+    "text": "chat",
+    "image": "chat",
+    "image_gen": "image",
+    "video": "video_generation",
+}
+
+_CAPABILITY_TYPE_PRIORITY: tuple[str, ...] = ("video", "image_gen", "image", "text")
+
+
+def capability_for_model_type(model_type: str) -> str:
+    """单个 model_type → gateway ``capability`` 列值。"""
+    return _MODEL_TYPE_TO_CAPABILITY.get(model_type.strip().lower(), "chat")
+
+
+def primary_capability_from_model_types(model_types: tuple[str, ...]) -> str:
+    """多 model_types 时按产品优先级取主 capability。"""
+    for preferred in _CAPABILITY_TYPE_PRIORITY:
+        if preferred in model_types:
+            return capability_for_model_type(preferred)
+    return "chat"
+
+
+def model_types_for_capability_write(
+    model_types: tuple[str, ...],
+    capability: str,
+) -> tuple[str, ...]:
+    """写侧：按 capability 过滤 catalog 推断的 model_types。"""
+    cap = capability.strip().lower()
+    allowed = _CAPABILITY_ALLOWED_TYPES.get(cap)
+    if allowed is None:
+        return model_types
+    filtered = tuple(t for t in model_types if t in allowed)
+    if not filtered:
+        return model_types
+    return normalize_model_types(filtered, ensure_text=cap == "chat")
+
+
+def resolve_catalog_write_capability(
+    model_types: tuple[str, ...],
+    *,
+    capability_override: str | None,
+) -> str:
+    """目录写侧：推断 capability；override 不兼容时回退推断值。"""
+    inferred = primary_capability_from_model_types(model_types)
+    if capability_override is None:
+        return inferred
+    override = capability_override.strip()
+    if not override:
+        return inferred
+    try:
+        validate_model_types_for_capability(list(model_types), override)
+        return override
+    except ValidationError:
+        return inferred
+
 
 def normalize_model_types(
     types: list[str] | tuple[str, ...],
@@ -99,7 +155,11 @@ def tags_from_model_types(
 
 
 __all__ = [
+    "capability_for_model_type",
+    "model_types_for_capability_write",
     "normalize_model_types",
+    "primary_capability_from_model_types",
+    "resolve_catalog_write_capability",
     "tags_from_model_types",
     "validate_model_types_for_capability",
 ]

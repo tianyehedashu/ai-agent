@@ -61,7 +61,7 @@
 | A14 | `files` / Assistants / Threads | ❌ | — | 未接入 |
 | A15 | `token_counter` | ✅ | `ProxyUseCase` 预估算 token（`proxy_use_case.py`） | 用于预算预扣与 Anthropic `count_tokens` |
 | A16 | `completion_cost` | ✅ | `upstream_cost_resolver.py`、`pricing_display_cost.py`、流式兜底（`proxy_stream_settlement.py`） | 配合 `register_model` 与 deployment 级单价 |
-| A17 | `get_model_info` / `supports_*` | ◐ | `litellm_capability_hint.py` + `litellm_capability_mapping.py` → `LitellmCapabilityHintAdapter` | **写侧 + 探测** hint（vision/tools/json/reasoning/image_gen）；配置托管种子跳过；`PATCH resync_capabilities` 显式重算 |
+| A17 | `get_model_info` / `supports_*` | ◐ | `litellm_capability_hint.py` + `litellm_capability_mapping.py` → `LitellmCapabilityHintAdapter`；`upstream_catalog_capability_prep.py`（正则目录） | **写侧 + 探测** hint（vision/tools/json/reasoning/image_gen）；配置托管种子跳过；`PATCH resync_capabilities` / 批量导入经目录 SSOT 重算 |
 | **B. Router** |
 | B1 | `Router(model_list=…)` | ✅ | `router_singleton.py` → `get_router` / `reload_router` | 启动 warm-up + 管理面变更后 `set_model_list` |
 | B2 | `routing_strategy` | ✅ | 6 种（`domain/types.RoutingStrategy`） | 全局单策略：取 DB 路由表最高频；默认 `simple-shuffle`；`weighted-pick` 映射到 LiteLLM `simple-shuffle` |

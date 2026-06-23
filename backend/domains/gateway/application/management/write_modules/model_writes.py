@@ -24,11 +24,19 @@ from domains.gateway.application.model_reference_prune import (
     rename_gateway_model_name_references,
 )
 from domains.gateway.application.routing_strategy_validation import validate_routing_strategy
+from domains.gateway.application.upstream_catalog_capability_prep import (
+    prepare_gateway_write_from_upstream_catalog,
+    should_apply_catalog_prep_to_base_tags,
+)
 from domains.gateway.domain.errors import (
     CredentialNotFoundError,
     ManagementEntityNotFoundError,
 )
 from domains.gateway.domain.litellm_capability_mapping import strip_litellm_capability_tags
+from domains.gateway.domain.litellm_model_id import (
+    credential_api_base,
+    normalize_gateway_stored_real_model,
+)
 from domains.gateway.domain.model_types_tags import (
     tags_from_model_types,
     validate_model_types_for_capability,
@@ -108,6 +116,13 @@ class GatewayModelBatchResyncCapabilitiesResult:
 class _PreparedGatewayModelWrite:
     normalized_real_model: str
     enriched_tags: dict[str, Any]
+    catalog_capability: str | None = None
+
+
+@dataclass(frozen=True)
+class _ResyncTagsPrepResult:
+    tags: dict[str, Any]
+    capability: str | None = None
 
 
 def _upstream_profile_id_from_credential(cred: object | None) -> str | None:
@@ -124,6 +139,7 @@ def _prepare_gateway_model_write_fields(
     tags: dict[str, Any] | None,
     credential_provider: str,
     upstream_profile_id: str | None = None,
+    credential_api_base: str | None = None,
 ) -> _PreparedGatewayModelWrite:
     raw_rm = str(real_model).strip()
     if not raw_rm:
@@ -133,14 +149,27 @@ def _prepare_gateway_model_write_fields(
         raise ValidationError(
             f"凭据提供商为 {credential_provider}，与请求的 provider {provider} 不一致"
         )
-    from domains.gateway.domain.litellm_model_id import build_litellm_model_id
-
-    normalized_rm = build_litellm_model_id(prov_norm, raw_rm)
+    normalized_rm = normalize_gateway_stored_real_model(
+        prov_norm,
+        raw_rm,
+        api_base=credential_api_base,
+    )
     prefix_msg = litellm_prefix_violation_message(provider, normalized_rm)
     if prefix_msg:
         raise ValidationError(prefix_msg)
+    working_tags = dict(tags or {})
+    catalog_capability: str | None = None
+    if should_apply_catalog_prep_to_base_tags(working_tags):
+        catalog_capability, working_tags = prepare_gateway_write_from_upstream_catalog(
+            provider=prov_norm,
+            upstream_id=raw_rm,
+            owned_by=None,
+            api_base=credential_api_base,
+            base_tags=working_tags,
+            capability_override=None,
+        )
     enriched_tags = build_gateway_model_tags(
-        tags,
+        working_tags,
         provider=provider,
         real_model=normalized_rm,
         upstream_profile_id=upstream_profile_id,
@@ -149,11 +178,63 @@ def _prepare_gateway_model_write_fields(
     return _PreparedGatewayModelWrite(
         normalized_real_model=normalized_rm,
         enriched_tags=enriched_tags,
+        catalog_capability=catalog_capability,
     )
 
 
 class ModelWritesMixin:
     """写侧 mixin — 由 GatewayManagementWriteService 组合。"""
+
+    async def _resync_model_tags_pipeline(
+        self,
+        *,
+        existing: Any,
+        merged_tags: dict[str, Any],
+        real_for_tags: str,
+        cred_for_tags: object | None,
+        config_managed: bool,
+        owner_tenant_id: uuid.UUID | None,
+        model_name: str,
+    ) -> _ResyncTagsPrepResult:
+        stripped = strip_litellm_capability_tags(dict(merged_tags))
+        api_base = credential_api_base(cred_for_tags)
+        inferred_cap, pre_tags = prepare_gateway_write_from_upstream_catalog(
+            provider=existing.provider,
+            upstream_id=real_for_tags,
+            owned_by=None,
+            api_base=api_base,
+            base_tags=stripped,
+            capability_override=None,
+        )
+        enriched = build_gateway_model_tags(
+            pre_tags,
+            provider=existing.provider,
+            real_model=real_for_tags,
+            upstream_profile_id=_upstream_profile_id_from_credential(cred_for_tags),
+            skip_hints=config_managed,
+            hint_mode="resync",
+        )
+        cap_update: str | None = None
+        existing_cap = str(existing.capability or "").strip()
+        if inferred_cap is not None and inferred_cap != existing_cap:
+            if owner_tenant_id is not None:
+                try:
+                    await self._assert_capability_compatible_with_routes(
+                        tenant_id=owner_tenant_id,
+                        model_name=model_name,
+                        new_capability=inferred_cap,
+                    )
+                    cap_update = inferred_cap
+                except ValidationError:
+                    logger.warning(
+                        "resync capability %r skipped for model %s (route conflict); "
+                        "tags updated only",
+                        inferred_cap,
+                        model_name,
+                    )
+            else:
+                cap_update = inferred_cap
+        return _ResyncTagsPrepResult(tags=enriched, capability=cap_update)
 
     async def _assert_capability_compatible_with_routes(
         self,
@@ -201,12 +282,15 @@ class ModelWritesMixin:
         )
 
         # 模型创建者对自己创建的模型拥有 update/delete 权限（无需检查凭据归属）
-        if mutation in ("update", "delete") and actor_user_id is not None:
-            if actor_created_model(
+        if (
+            mutation in ("update", "delete")
+            and actor_user_id is not None
+            and actor_created_model(
                 model_created_by_user_id=model_created_by_user_id,
                 actor_user_id=actor_user_id,
-            ):
-                return
+            )
+        ):
+            return
 
         cred_row = await self._creds.get(credential_id)
         if cred_row is None:
@@ -272,7 +356,11 @@ class ModelWritesMixin:
                 f"凭据提供商为 {cred_row.provider}，与所选 provider {provider} 不一致"
             )
         tenant_id = await self._ensure_personal_tenant_id(user_id)
-        real_model = str(model_id).strip()
+        real_model = normalize_gateway_stored_real_model(
+            provider,
+            str(model_id).strip(),
+            api_base=credential_api_base(cred_row),
+        )
         created: list[Any] = []
         for idx, mtype in enumerate(model_types):
             cap = capability_for_model_type(mtype)
@@ -353,7 +441,16 @@ class ModelWritesMixin:
                 )
             update_fields["credential_id"] = incoming["credential_id"]
         if incoming.get("model_id") is not None:
-            update_fields["real_model"] = str(incoming["model_id"]).strip()
+            cred_for_rm = None
+            if incoming.get("credential_id") is not None:
+                cred_for_rm = await self._creds.get(incoming["credential_id"])
+            if cred_for_rm is None:
+                cred_for_rm = await self._creds.get(existing.credential_id)
+            update_fields["real_model"] = normalize_gateway_stored_real_model(
+                existing.provider,
+                str(incoming["model_id"]).strip(),
+                api_base=credential_api_base(cred_for_rm),
+            )
         if incoming.get("is_active") is not None:
             update_fields["enabled"] = incoming["is_active"]
         if incoming.get("weight") is not None:
@@ -395,21 +492,33 @@ class ModelWritesMixin:
                     existing_tags=merged_tags,
                     capability=effective_capability,
                 )
-            if resync_capabilities:
-                merged_tags = strip_litellm_capability_tags(merged_tags)
             real_for_tags = str(update_fields.get("real_model") or existing.real_model).strip()
             effective_cred_id = update_fields.get("credential_id") or existing.credential_id
             cred_for_tags = None
             if effective_cred_id is not None:
                 cred_for_tags = await self._creds.get(effective_cred_id)
-            update_fields["tags"] = build_gateway_model_tags(
-                merged_tags,
-                provider=existing.provider,
-                real_model=real_for_tags,
-                upstream_profile_id=_upstream_profile_id_from_credential(cred_for_tags),
-                skip_hints=config_managed,
-                hint_mode="resync" if resync_capabilities else "fill_missing",
-            )
+            if resync_capabilities:
+                resync_result = await self._resync_model_tags_pipeline(
+                    existing=existing,
+                    merged_tags=merged_tags,
+                    real_for_tags=real_for_tags,
+                    cred_for_tags=cred_for_tags,
+                    config_managed=config_managed,
+                    owner_tenant_id=tenant_id,
+                    model_name=existing.name,
+                )
+                update_fields["tags"] = resync_result.tags
+                if resync_result.capability is not None:
+                    update_fields["capability"] = resync_result.capability
+            else:
+                update_fields["tags"] = build_gateway_model_tags(
+                    merged_tags,
+                    provider=existing.provider,
+                    real_model=real_for_tags,
+                    upstream_profile_id=_upstream_profile_id_from_credential(cred_for_tags),
+                    skip_hints=config_managed,
+                    hint_mode="fill_missing",
+                )
 
         if not update_fields:
             return existing
@@ -510,11 +619,12 @@ class ModelWritesMixin:
             tags=tags,
             credential_provider=cred.provider,
             upstream_profile_id=_upstream_profile_id_from_credential(cred),
+            credential_api_base=credential_api_base(cred),
         )
         row = await self._models.create(
             tenant_id=tenant_id,
             name=name,
-            capability=capability,
+            capability=prepared.catalog_capability or capability,
             real_model=prepared.normalized_real_model,
             credential_id=credential_id,
             provider=provider,
@@ -557,10 +667,11 @@ class ModelWritesMixin:
             tags=tags,
             credential_provider=cred.provider,
             upstream_profile_id=_upstream_profile_id_from_credential(cred),
+            credential_api_base=credential_api_base(cred),
         )
         row = await self._models.create_system(
             name=name,
-            capability=capability,
+            capability=prepared.catalog_capability or capability,
             real_model=prepared.normalized_real_model,
             credential_id=credential_id,
             provider=provider,
@@ -884,10 +995,26 @@ class ModelWritesMixin:
             raw_rm = str(update_fields["real_model"]).strip()
             if not raw_rm:
                 raise ValidationError("上游模型 ID 不能为空")
-            prefix_msg = litellm_prefix_violation_message(existing.provider, raw_rm)
+            effective_cred_id = update_fields.get("credential_id") or existing.credential_id
+            cred_for_rm: object | None = None
+            if effective_cred_id is not None:
+                if owner_tenant_id is None:
+                    cred_for_rm = await self._system_creds.get(effective_cred_id)
+                else:
+                    cred_for_rm = await self._creds.get_bindable_for_team_gateway_model(
+                        effective_cred_id,
+                        tenant_id=tenant_id,
+                        is_platform_admin=is_platform_admin,
+                    )
+            normalized_rm = normalize_gateway_stored_real_model(
+                existing.provider,
+                raw_rm,
+                api_base=credential_api_base(cred_for_rm),
+            )
+            prefix_msg = litellm_prefix_violation_message(existing.provider, normalized_rm)
             if prefix_msg:
                 raise ValidationError(prefix_msg)
-            update_fields["real_model"] = raw_rm
+            update_fields["real_model"] = normalized_rm
         if "weight" in update_fields and update_fields["weight"] is not None:
             update_fields["weight"] = assert_deployment_weight(update_fields["weight"])
         if "upstream_call_shape" in update_fields:
@@ -943,8 +1070,6 @@ class ModelWritesMixin:
                     existing_tags=merged_tags,
                     capability=effective_capability,
                 )
-            if resync_capabilities:
-                merged_tags = strip_litellm_capability_tags(merged_tags)
             real_for_tags = str(update_fields.get("real_model") or existing.real_model).strip()
             effective_cred_id = update_fields.get("credential_id") or existing.credential_id
             cred_for_tags: object | None = None
@@ -957,14 +1082,28 @@ class ModelWritesMixin:
                         tenant_id=tenant_id,
                         is_platform_admin=is_platform_admin,
                     )
-            update_fields["tags"] = build_gateway_model_tags(
-                merged_tags,
-                provider=existing.provider,
-                real_model=real_for_tags,
-                upstream_profile_id=_upstream_profile_id_from_credential(cred_for_tags),
-                skip_hints=config_managed,
-                hint_mode="resync" if resync_capabilities else "fill_missing",
-            )
+            if resync_capabilities:
+                resync_result = await self._resync_model_tags_pipeline(
+                    existing=existing,
+                    merged_tags=merged_tags,
+                    real_for_tags=real_for_tags,
+                    cred_for_tags=cred_for_tags,
+                    config_managed=config_managed,
+                    owner_tenant_id=owner_tenant_id,
+                    model_name=existing.name,
+                )
+                update_fields["tags"] = resync_result.tags
+                if resync_result.capability is not None:
+                    update_fields["capability"] = resync_result.capability
+            else:
+                update_fields["tags"] = build_gateway_model_tags(
+                    merged_tags,
+                    provider=existing.provider,
+                    real_model=real_for_tags,
+                    upstream_profile_id=_upstream_profile_id_from_credential(cred_for_tags),
+                    skip_hints=config_managed,
+                    hint_mode="fill_missing",
+                )
         new_name_raw = update_fields.get("name")
         if new_name_raw is not None:
             new_name = str(new_name_raw).strip()

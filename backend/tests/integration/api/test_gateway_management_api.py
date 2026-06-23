@@ -3344,6 +3344,72 @@ class TestGatewayManagementApi:
         )
 
     @pytest.mark.asyncio
+    async def test_resync_capabilities_regex_catalog_without_litellm(
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict[str, str],
+        db_session,
+        test_user: User,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from domains.gateway.domain.litellm_capability_mapping import LitellmModelInfoHints
+        from domains.gateway.infrastructure.litellm_capability_hint_adapter import (
+            LitellmCapabilityHintAdapter,
+        )
+
+        def _no_hints(_self, *, provider: str, real_model: str) -> LitellmModelInfoHints | None:
+            _ = provider, real_model
+            return None
+
+        monkeypatch.setattr(LitellmCapabilityHintAdapter, "get_model_hints", _no_hints)
+
+        team = await TeamService(db_session).ensure_personal_team(test_user.id)
+        await db_session.commit()
+        headers = auth_headers
+        r_cred = await dev_client.post(
+            f"/api/v1/gateway/teams/{team.id}/credentials",
+            headers=headers,
+            json={
+                "provider": "openai",
+                "name": f"resync-regex-{uuid.uuid4().hex[:8]}",
+                "api_key": "sk-resync-regex-test-key-123456789",
+                "scope": "team",
+            },
+        )
+        assert r_cred.status_code == 201, r_cred.text
+        cid = r_cred.json()["id"]
+        model_name = f"resync-regex-{uuid.uuid4().hex[:6]}"
+        r_model = await dev_client.post(
+            f"/api/v1/gateway/teams/{team.id}/models",
+            headers=headers,
+            json={
+                "name": model_name,
+                "capability": "chat",
+                "real_model": "kimi-k2.6",
+                "credential_id": cid,
+                "provider": "openai",
+                "tags": {},
+            },
+        )
+        assert r_model.status_code == 201, r_model.text
+        mid = r_model.json()["id"]
+
+        r_patch = await dev_client.patch(
+            f"/api/v1/gateway/teams/{team.id}/models/{mid}",
+            headers=headers,
+            json={"resync_capabilities": True},
+        )
+        assert r_patch.status_code == 200, r_patch.text
+        body = r_patch.json()
+        assert body["tags"]["supports_vision"] is True
+        assert "image" in body["model_types"]
+
+        await dev_client.delete(f"/api/v1/gateway/teams/{team.id}/models/{mid}", headers=headers)
+        await dev_client.delete(
+            f"/api/v1/gateway/teams/{team.id}/credentials/{cid}", headers=headers
+        )
+
+    @pytest.mark.asyncio
     async def test_resync_capabilities_rejects_config_managed_system_model(
         self,
         dev_client: AsyncClient,

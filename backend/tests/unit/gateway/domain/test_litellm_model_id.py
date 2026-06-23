@@ -4,6 +4,8 @@ import pytest
 
 from domains.gateway.domain.litellm_model_id import (
     build_litellm_model_id,
+    credential_api_base,
+    normalize_gateway_stored_real_model,
     resolve_litellm_custom_llm_provider,
 )
 
@@ -63,3 +65,43 @@ def test_resolve_litellm_custom_llm_provider_with_api_base(
     provider: str, api_base: str | None, expected: str
 ) -> None:
     assert resolve_litellm_custom_llm_provider(provider, api_base=api_base) == expected
+
+
+@pytest.mark.parametrize(
+    ("model_id", "api_base", "expected"),
+    [
+        ("agnes-1.5-flash", "https://apihub.agnes-ai.com/v1", "agnes-1.5-flash"),
+        ("openai/agnes-1.5-flash", "https://apihub.agnes-ai.com/v1", "agnes-1.5-flash"),
+        ("gpt-4o", "https://api.openai.com/v1", "openai/gpt-4o"),
+        ("gpt-4o", None, "openai/gpt-4o"),
+    ],
+)
+def test_normalize_gateway_stored_real_model_openai_custom_endpoint(
+    model_id: str, api_base: str | None, expected: str
+) -> None:
+    assert (
+        normalize_gateway_stored_real_model("openai", model_id, api_base=api_base) == expected
+    )
+
+
+def test_credential_api_base_reads_openai_compat_from_api_bases_dict() -> None:
+    class _Cred:
+        api_base = None
+        api_bases = {"openai_compat": "https://apihub.agnes-ai.com/v1"}
+
+    assert credential_api_base(_Cred()) == "https://apihub.agnes-ai.com/v1"
+
+
+def test_credential_api_base_dict_used_for_custom_openai_normalization() -> None:
+    class _Cred:
+        api_base = None
+        api_bases = {"openai_compat": "https://apihub.agnes-ai.com/v1"}
+
+    assert (
+        normalize_gateway_stored_real_model(
+            "openai",
+            "agnes-1.5-flash",
+            api_base=credential_api_base(_Cred()),
+        )
+        == "agnes-1.5-flash"
+    )

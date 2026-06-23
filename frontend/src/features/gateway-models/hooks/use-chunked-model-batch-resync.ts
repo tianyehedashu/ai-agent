@@ -39,7 +39,7 @@ export function useChunkedModelBatchResync({
             })
           } else if (succeeded > 0) {
             toast({
-              title: `已从 LiteLLM 同步 ${String(succeeded)} 个模型能力`,
+              title: `已从目录同步 ${String(succeeded)} 个模型能力`,
             })
           }
           onCompleteRef.current?.(result)

@@ -81,7 +81,7 @@ export function useGatewayModelMutations(
         invalidateGatewayModelAliasDependents(queryClient)
       }
       toast({
-        title: body.resync_capabilities ? '能力已从 LiteLLM 同步' : '模型已更新',
+        title: body.resync_capabilities ? '能力已从目录同步' : '模型已更新',
       })
     },
     onError: (e: Error) => {

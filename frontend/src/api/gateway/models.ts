@@ -227,7 +227,7 @@ export interface GatewayModelUpdateBody {
   tpm_limit?: number | null
   enabled?: boolean | null
   tags?: Record<string, unknown> | null
-  /** 为 true 时从 LiteLLM model_cost 重算能力 tags（不持久化） */
+  /** 为 true 时从目录规则 + LiteLLM 重算能力 tags */
   resync_capabilities?: boolean
   upstream_call_shape?: string | null
 }
@@ -578,7 +578,7 @@ export const modelsApi = {
       teamGatewayPath(teamId, '/models/batch-delete'),
       { model_ids: modelIds }
     ),
-  /** 批量从 LiteLLM 同步能力 tags（部分成功） */
+  /** 批量同步模型能力 tags（部分成功） */
   batchResyncCapabilities: (teamId: string, modelIds: string[]) =>
     apiClient.post<GatewayModelBatchResyncCapabilitiesResponse>(
       teamGatewayPath(teamId, '/models/batch-resync-capabilities'),

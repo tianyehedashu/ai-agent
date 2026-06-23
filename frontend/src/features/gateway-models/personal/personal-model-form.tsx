@@ -308,7 +308,7 @@ export function PersonalModelForm({
                 ) : (
                   <RefreshCw className="mr-1 h-3.5 w-3.5" />
                 )}
-                从 LiteLLM 同步能力
+                同步模型能力
               </Button>
             ) : null}
           </div>

@@ -241,7 +241,7 @@ async def batch_import_team_models_endpoint(
     team: CurrentTeam,
     catalog: CatalogSvc,
 ) -> TeamGatewayModelBatchImportResponse:
-    tuples = [(it.upstream_model_id, it.name) for it in body.items]
+    tuples = [(it.upstream_model_id, it.name, it.owned_by) for it in body.items]
     created_raw, failed_raw = await catalog.batch_import_team_models(
         tenant_id=team.team_id,
         actor_user_id=team.user_id,

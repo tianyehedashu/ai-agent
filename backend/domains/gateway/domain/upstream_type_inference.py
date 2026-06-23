@@ -31,6 +31,26 @@ _VISION_CHAT_RE = re.compile(
     re.IGNORECASE,
 )
 
+# 非 personal model_types SKU → Gateway ``capability`` 列（顺序优先于 batch 默认 chat）
+_CAPABILITY_FROM_ID: tuple[tuple[re.Pattern[str], str], ...] = (
+    (re.compile(r"(embedding|embed)", re.IGNORECASE), "embedding"),
+    (re.compile(r"rerank", re.IGNORECASE), "rerank"),
+    (re.compile(r"moderation", re.IGNORECASE), "moderation"),
+    (re.compile(r"(whisper|transcri)", re.IGNORECASE), "audio_transcription"),
+    (re.compile(r"(tts|speech)", re.IGNORECASE), "audio_speech"),
+)
+
+
+def infer_non_personal_gateway_capability(upstream_id: str) -> str | None:
+    """personal model_types 为空时，从上游 id 推断主调用面 capability。"""
+    mid = upstream_id.strip()
+    if not mid:
+        return None
+    for pattern, capability in _CAPABILITY_FROM_ID:
+        if pattern.search(mid):
+            return capability
+    return None
+
 
 def infer_upstream_model_types(
     provider: str,
@@ -78,5 +98,6 @@ def filter_valid_personal_model_types(types: tuple[str, ...]) -> tuple[str, ...]
 
 __all__ = [
     "filter_valid_personal_model_types",
+    "infer_non_personal_gateway_capability",
     "infer_upstream_model_types",
 ]

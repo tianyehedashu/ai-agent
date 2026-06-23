@@ -24,7 +24,7 @@ from domains.gateway.application.model_catalog_port import (
     RegisteredModelResolution,
 )
 from domains.gateway.application.personal_models import gateway_model_to_selector_user_item
-from domains.gateway.domain.litellm_model_id import build_litellm_model_id
+from domains.gateway.domain.litellm_model_id import resolve_outbound_litellm_model
 from domains.gateway.domain.model_capability import tags_to_capability_snapshot
 from domains.gateway.domain.scenario_defaults_policy import pick_scenario_from_visible
 from domains.gateway.infrastructure.models.gateway_model import GatewayModel
@@ -188,7 +188,11 @@ class SqlModelCatalogAdapter:
 
         return RegisteredModelResolution(
             virtual_model_name=row.name,
-            litellm_model=build_litellm_model_id(row.provider, row.real_model),
+            litellm_model=resolve_outbound_litellm_model(
+                row.provider,
+                row.real_model,
+                api_base=cred.api_base,
+            ),
             provider=row.provider,
             api_key=api_key,
             api_base=cred.api_base,

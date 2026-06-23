@@ -275,6 +275,7 @@ export function CredentialUpstreamModelsPanel({
       const teamItems = selectedRows.map((row) => ({
         upstream_model_id: row.id,
         name: null as string | null,
+        owned_by: row.owned_by ?? null,
       }))
       const teamBase = {
         provider,
@@ -534,6 +535,9 @@ export function CredentialUpstreamModelsPanel({
                 onValueChange={setCapability}
                 showHint
               />
+              <p className="mt-1 text-xs text-muted-foreground">
+                主调用面默认按模型 ID 自动推断，此处作兜底。
+              </p>
             </div>
           )}
           <div className="flex items-center gap-2 pb-0.5">

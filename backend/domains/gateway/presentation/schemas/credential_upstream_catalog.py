@@ -78,6 +78,7 @@ class PersonalModelBatchImportResponse(BaseModel):
 class TeamGatewayModelBatchImportItem(BaseModel):
     upstream_model_id: str = Field(..., min_length=1, max_length=200)
     name: str | None = Field(None, max_length=200)
+    owned_by: str | None = Field(None, max_length=200)
 
 
 class TeamGatewayModelBatchImportRequest(BaseModel):

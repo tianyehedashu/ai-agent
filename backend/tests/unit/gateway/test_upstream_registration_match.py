@@ -13,6 +13,29 @@ def test_match_openai_style_id() -> None:
     assert match_registered_names("openai", "gpt-4o-mini", rows) == ("my-gpt4",)
 
 
+def test_match_custom_openai_compat_upstream_id() -> None:
+    rows = [("agnes-1-5-flash", "agnes-1.5-flash")]
+    agnes_base = "https://apihub.agnes-ai.com/v1"
+    assert (
+        match_registered_names(
+            "openai",
+            "agnes-1.5-flash",
+            rows,
+            api_base=agnes_base,
+        )
+        == ("agnes-1-5-flash",)
+    )
+    assert (
+        match_registered_names(
+            "openai",
+            "openai/agnes-1.5-flash",
+            rows,
+            api_base=agnes_base,
+        )
+        == ("agnes-1-5-flash",)
+    )
+
+
 def test_match_prefixed_real_model() -> None:
     rows = [("qwen-max", "dashscope/qwen-max")]
     assert match_registered_names("dashscope", "qwen-max", rows) == ("qwen-max",)

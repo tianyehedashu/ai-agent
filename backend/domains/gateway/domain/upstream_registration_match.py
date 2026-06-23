@@ -4,19 +4,27 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from domains.gateway.domain.litellm_model_id import build_litellm_model_id
+from domains.gateway.domain.litellm_model_id import normalize_gateway_stored_real_model
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
 
 
-def upstream_lookup_keys(provider: str, upstream_id: str) -> frozenset[str]:
+def upstream_lookup_keys(
+    provider: str,
+    upstream_id: str,
+    *,
+    api_base: str | None = None,
+) -> frozenset[str]:
     """上游列举 id 可能对应的查找键（小写）。"""
     uid = upstream_id.strip()
     if not uid:
         return frozenset()
-    built = build_litellm_model_id(provider, uid)
-    return frozenset({uid.lower(), built.lower()})
+    built = normalize_gateway_stored_real_model(provider, uid, api_base=api_base)
+    keys = {uid.lower(), built.lower()}
+    if "/" in uid:
+        keys.add(uid.split("/", 1)[1].lower())
+    return frozenset(keys)
 
 
 def real_model_lookup_keys(real_model: str) -> frozenset[str]:
@@ -34,9 +42,11 @@ def match_registered_names(
     provider: str,
     upstream_id: str,
     registered_rows: Iterable[tuple[str, str]],
+    *,
+    api_base: str | None = None,
 ) -> tuple[str, ...]:
     """返回与上游 id 匹配的已注册别名（``GatewayModel.name``），无则空元组。"""
-    up_keys = upstream_lookup_keys(provider, upstream_id)
+    up_keys = upstream_lookup_keys(provider, upstream_id, api_base=api_base)
     if not up_keys:
         return ()
     matched: set[str] = set()

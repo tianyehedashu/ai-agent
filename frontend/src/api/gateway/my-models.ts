@@ -138,7 +138,7 @@ export const myModelsApi = {
     apiClient.post<GatewayModelBatchDeleteResponse>(`${GATEWAY_API_BASE}/my-models/batch-delete`, {
       model_ids: modelIds,
     }),
-  /** 批量从 LiteLLM 同步能力 tags（部分成功） */
+  /** 批量同步模型能力 tags（部分成功） */
   batchResyncMyModels: (modelIds: string[]) =>
     apiClient.post<GatewayModelBatchResyncCapabilitiesResponse>(
       `${GATEWAY_API_BASE}/my-models/batch-resync-capabilities`,

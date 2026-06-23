@@ -177,6 +177,7 @@ export interface PersonalModelBatchImportResponse {
 export interface TeamGatewayModelBatchImportItem {
   upstream_model_id: string
   name?: string | null
+  owned_by?: string | null
 }
 
 export interface TeamGatewayModelBatchImportBody {

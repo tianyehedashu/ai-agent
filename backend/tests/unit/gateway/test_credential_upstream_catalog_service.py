@@ -208,7 +208,7 @@ async def test_batch_import_team_duplicate_fails(db_session, test_user: User) ->
         tpm_limit=None,
         tags=None,
         enabled=True,
-        items=[("gpt-4o-mini", None)],
+        items=[("gpt-4o-mini", None, None)],
         **team_owner_actor_kw(test_user),
     )
     assert created == []
@@ -241,13 +241,57 @@ async def test_batch_import_team_success(db_session, test_user: User) -> None:
         tpm_limit=None,
         tags=None,
         enabled=True,
-        items=[("gpt-new-model", "my-alias")],
+        items=[("gpt-new-model", "my-alias", None)],
         **team_owner_actor_kw(test_user),
     )
     assert failed == []
     assert len(created) == 1
     assert created[0]["upstream_model_id"] == "gpt-new-model"
     assert "gateway_model_id" in created[0]
+
+
+@pytest.mark.asyncio
+async def test_batch_import_team_writes_vision_tags_from_catalog(
+    db_session, test_user: User
+) -> None:
+    port = AsyncMock()
+    team = await TeamService(db_session).ensure_personal_team(test_user.id)
+    cred = await create_tenant_test_credential(
+        db_session,
+        team.id,
+        name="import-vision-cred",
+        provider="openai",
+        created_by_user_id=test_user.id,
+    )
+    await db_session.commit()
+
+    svc = CredentialUpstreamCatalogService(db_session, port=port)
+    created, failed = await svc.batch_import_team_models(
+        tenant_id=team.id,
+        is_platform_admin=False,
+        credential_id=cred.id,
+        provider="openai",
+        capability="chat",
+        weight=1,
+        rpm_limit=None,
+        tpm_limit=None,
+        tags=None,
+        enabled=True,
+        items=[("kimi-k2.6", None, None)],
+        **team_owner_actor_kw(test_user),
+    )
+    assert failed == []
+    assert len(created) == 1
+
+    from domains.gateway.infrastructure.repositories.model_repository import (
+        GatewayModelRepository,
+    )
+
+    row = await GatewayModelRepository(db_session).get(created[0]["gateway_model_id"])
+    assert row is not None
+    assert row.tags is not None
+    assert row.tags.get("supports_vision") is True
+    assert row.capability == "chat"
 
 
 @pytest.mark.asyncio
@@ -346,7 +390,7 @@ async def test_batch_import_system_success_writes_system_gateway_models(
         tpm_limit=None,
         tags=None,
         enabled=True,
-        items=[("gpt-system-new", "sys-alias")],
+        items=[("gpt-system-new", "sys-alias", None)],
         **team_owner_actor_kw(test_user),
     )
     assert failed == []
@@ -396,7 +440,7 @@ async def test_batch_import_system_duplicate_fails_when_in_system_gateway_models
         tpm_limit=None,
         tags=None,
         enabled=True,
-        items=[("gpt-4o-mini", None)],
+        items=[("gpt-4o-mini", None, None)],
         **team_owner_actor_kw(test_user),
     )
     assert created == []
@@ -458,7 +502,7 @@ async def test_batch_import_cross_credential_same_upstream_id_succeeds(
         tpm_limit=None,
         tags=None,
         enabled=True,
-        items=[("gpt-4o-mini", None)],
+        items=[("gpt-4o-mini", None, None)],
         **team_owner_actor_kw(test_user),
     )
     assert failed == []

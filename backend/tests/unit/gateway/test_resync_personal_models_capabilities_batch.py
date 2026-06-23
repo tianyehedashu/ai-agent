@@ -16,6 +16,7 @@ from domains.gateway.infrastructure.litellm_capability_hint_adapter import (
 from domains.gateway.infrastructure.repositories.credential_repository import (
     ProviderCredentialRepository,
 )
+from domains.gateway.infrastructure.repositories.model_repository import GatewayModelRepository
 from domains.tenancy.application.team_service import TeamService
 from libs.crypto import derive_encryption_key, encrypt_value
 from libs.exceptions import ValidationError
@@ -43,7 +44,7 @@ async def test_resync_personal_models_capabilities_batch_success(
         test_user.id,
         display_name="Resync OK",
         provider="openai",
-        model_id="gpt-4o-mini",
+        model_id="kimi-k2.6",
         credential_id=cred.id,
         model_types=["text"],
         tags=None,
@@ -53,7 +54,7 @@ async def test_resync_personal_models_capabilities_batch_success(
 
     def _vision_hints(_self, *, provider: str, real_model: str) -> LitellmModelInfoHints:
         _ = provider, real_model
-        return LitellmModelInfoHints(supports_vision=True)
+        return LitellmModelInfoHints()
 
     monkeypatch.setattr(LitellmCapabilityHintAdapter, "get_model_hints", _vision_hints)
     monkeypatch.setattr(
@@ -66,6 +67,11 @@ async def test_resync_personal_models_capabilities_batch_success(
 
     assert result.succeeded == [model_id]
     assert result.failed == []
+
+    refreshed = await GatewayModelRepository(db_session).get_for_tenant(model_id, team.id)
+    assert refreshed is not None
+    assert refreshed.tags is not None
+    assert refreshed.tags.get("supports_vision") is True
 
 
 @pytest.mark.asyncio

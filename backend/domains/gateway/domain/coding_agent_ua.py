@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from domains.gateway.domain.upstream_profile import UpstreamProtocol
+from domains.gateway.domain.litellm_model_id import credential_api_base
 from domains.gateway.domain.upstream_profile_registry import (
     get_upstream_profile,
     list_profiles_for_provider,
@@ -13,18 +13,8 @@ from domains.gateway.domain.upstream_profile_registry import (
 
 def _credential_openai_compat_api_base(credential: Any | None) -> str | None:
     """从凭据对象提取 OpenAI-compat api_base（优先 api_bases，兼容 legacy api_base）。"""
-    if credential is None:
-        return None
-    api_bases = getattr(credential, "api_bases", None)
-    if isinstance(api_bases, dict):
-        for key in (UpstreamProtocol.OPENAI_COMPAT.value, "openai_compat"):
-            raw = api_bases.get(key)
-            if isinstance(raw, str) and raw.strip():
-                return raw.strip().rstrip("/")
-    legacy = getattr(credential, "api_base", None)
-    if isinstance(legacy, str) and legacy.strip():
-        return legacy.strip().rstrip("/")
-    return None
+    base = credential_api_base(credential)
+    return base.rstrip("/") if base else None
 
 
 def _infer_profile_id_from_credential_api_base(

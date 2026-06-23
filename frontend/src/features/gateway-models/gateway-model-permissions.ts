@@ -103,7 +103,7 @@ export function canDeleteGatewayModel(
   return false
 }
 
-/** 从 LiteLLM 同步能力：与 canManageGatewayModel 一致 */
+/** 同步模型能力：与 canManageGatewayModel 一致 */
 export function canResyncGatewayModelCapabilities(
   model: GatewayModel,
   viewerUserId: string | null | undefined,

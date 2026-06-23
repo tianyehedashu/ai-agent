@@ -14,9 +14,13 @@ from domains.gateway.application.management.ports import (
     RawUpstreamListResult,
     UpstreamModelListPort,
 )
+from domains.gateway.application.upstream_catalog_capability_prep import (
+    prepare_gateway_write_from_upstream_catalog,
+)
 from domains.gateway.application.upstream_model_types_for_catalog import (
     infer_upstream_model_types_for_catalog,
 )
+from domains.gateway.domain.coding_agent_ua import resolve_coding_agent_ua
 from domains.gateway.domain.credential_probe import (
     CredentialProbeResult,
     UpstreamModelItem,
@@ -24,7 +28,6 @@ from domains.gateway.domain.credential_probe import (
 from domains.gateway.domain.policies.credential_scope import (
     registry_target_for_credential_scope,
 )
-from domains.gateway.domain.coding_agent_ua import resolve_coding_agent_ua
 from domains.gateway.domain.upstream_catalog_policy import (
     resolve_openai_compatible_models_list_url,
 )
@@ -47,6 +50,9 @@ logger = get_logger(__name__)
 
 _ImportItemT = TypeVar("_ImportItemT")
 
+# 团队/系统批量导入 work item：(upstream_id, name_override, owned_by)
+TeamImportWorkItem = tuple[str, str | None, str | None]
+
 
 def _append_import_failure(failed: list[dict[str, str]], upstream_id: str, reason: str) -> None:
     failed.append({"upstream_model_id": upstream_id, "reason": reason})
@@ -60,6 +66,7 @@ async def _run_batch_import_loop(
     upstream_id_of: Callable[[_ImportItemT], str],
     import_one: Callable[[str, _ImportItemT], Awaitable[dict[str, Any] | None]],
     log_tag: str,
+    credential_api_base: str | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, str]], bool]:
     created: list[dict[str, Any]] = []
     failed: list[dict[str, str]] = []
@@ -68,7 +75,12 @@ async def _run_batch_import_loop(
         mid = upstream_id_of(item).strip()
         if not mid:
             continue
-        existing = match_registered_names(provider_norm, mid, registered_rows)
+        existing = match_registered_names(
+            provider_norm,
+            mid,
+            registered_rows,
+            api_base=credential_api_base,
+        )
         if existing:
             _append_import_failure(failed, mid, format_already_registered_reason(existing))
             continue
@@ -140,6 +152,7 @@ class CredentialUpstreamCatalogService:
         credential_id: uuid.UUID,
         provider: str,
         items: tuple[UpstreamModelItem, ...],
+        credential_api_base: str | None = None,
     ) -> tuple[UpstreamModelItem, ...]:
         if not items:
             return items
@@ -149,15 +162,19 @@ class CredentialUpstreamCatalogService:
         prov = provider.strip().lower()
         enriched: list[UpstreamModelItem] = []
         for item in items:
-            names = match_registered_names(prov, item.id, rows)
-            inferred = infer_upstream_model_types_for_catalog(prov, item.id, item.owned_by)
+            names = match_registered_names(
+                prov,
+                item.id,
+                rows,
+                api_base=credential_api_base,
+            )
             enriched.append(
                 UpstreamModelItem(
                     id=item.id,
                     owned_by=item.owned_by,
                     already_registered=bool(names),
                     registered_names=names,
-                    inferred_model_types=inferred,
+                    inferred_model_types=item.inferred_model_types,
                 )
             )
         return tuple(enriched)
@@ -166,15 +183,25 @@ class CredentialUpstreamCatalogService:
         self,
         *,
         credential_id: uuid.UUID,
+        provider: str,
+        api_base: str | None,
         raw: RawUpstreamListResult,
     ) -> CredentialProbeResult:
         now = datetime.now(UTC)
         if raw.ok:
+            prov = provider.strip().lower()
             items = tuple(
                 UpstreamModelItem(
                     id=mid,
                     owned_by=ob,
-                    inferred_model_types=list(infer_upstream_model_types_for_catalog("", mid, ob)),
+                    inferred_model_types=list(
+                        infer_upstream_model_types_for_catalog(
+                            prov,
+                            mid,
+                            ob,
+                            api_base=api_base,
+                        )
+                    ),
                 )
                 for mid, ob in raw.items
             )
@@ -254,13 +281,19 @@ class CredentialUpstreamCatalogService:
             api_key=api_key,
             user_agent=user_agent,
         )
-        base = self._map_raw_to_probe_result(credential_id=credential_id, raw=raw)
+        base = self._map_raw_to_probe_result(
+            credential_id=credential_id,
+            provider=row.provider,
+            api_base=row.api_base,
+            raw=raw,
+        )
         if base.support not in ("full", "partial") or not base.items:
             return base
         items = await self._enrich_probe_items(
             credential_id=credential_id,
             provider=row.provider,
             items=base.items,
+            credential_api_base=row.api_base,
         )
         return CredentialProbeResult(
             credential_id=base.credential_id,
@@ -314,7 +347,7 @@ class CredentialUpstreamCatalogService:
         tpm_limit: int | None,
         tags: dict[str, Any] | None,
         enabled: bool,
-        items: list[tuple[str, str | None]],
+        items: list[TeamImportWorkItem],
     ) -> tuple[list[dict[str, Any]], list[dict[str, str]]]:
         cred = await self._reads.get_managed_credential_for_team(
             credential_id,
@@ -335,6 +368,7 @@ class CredentialUpstreamCatalogService:
                 tags=tags,
                 enabled=enabled,
                 items=items,
+                credential_api_base=cred.api_base,
             )
         return await self._batch_import_team_models_for_tenant(
             tenant_id=tenant_id,
@@ -350,6 +384,7 @@ class CredentialUpstreamCatalogService:
             tags=tags,
             enabled=enabled,
             items=items,
+            credential_api_base=cred.api_base,
         )
 
     async def batch_import_personal_models(
@@ -374,7 +409,8 @@ class CredentialUpstreamCatalogService:
         else:
             raise ValidationError("请提供 items 或 upstream_model_ids")
 
-        await self._reads.get_user_credential_for_owner(credential_id, user_id)
+        cred_row = await self._reads.get_user_credential_for_owner(credential_id, user_id)
+        cred_base = cred_row.api_base
         provider_norm = provider.strip().lower()
         registered_rows = await self._registered_rows_for_credential(credential_id)
         work_items: list[tuple[str, tuple[str, ...]]] = []
@@ -420,11 +456,43 @@ class CredentialUpstreamCatalogService:
             upstream_id_of=lambda payload: payload[0],
             import_one=import_one,
             log_tag="batch_import_personal_models",
+            credential_api_base=cred_base,
         )
         failed = pre_failed + failed
         if reload_once:
             await self._writes.reload_litellm_router()
         return created, failed
+
+    async def _import_catalog_model_row(
+        self,
+        *,
+        payload: TeamImportWorkItem,
+        provider: str,
+        capability: str,
+        tags: dict[str, Any] | None,
+        credential_api_base: str | None,
+        unique_name: str,
+        registered_rows: list[tuple[str, str]],
+        create_model: Callable[..., Awaitable[Any]],
+    ) -> dict[str, Any]:
+        _upstream_id, _name_override, owned_by = payload
+        normalized_mid = normalize_upstream_model_id(_upstream_id)
+        import_cap, import_tags = prepare_gateway_write_from_upstream_catalog(
+            provider=provider,
+            upstream_id=normalized_mid,
+            owned_by=owned_by,
+            api_base=credential_api_base,
+            base_tags=dict(tags or {}),
+            capability_override=capability,
+        )
+        model = await create_model(
+            name=unique_name,
+            capability=import_cap or capability,
+            real_model=normalized_mid,
+            tags=import_tags,
+        )
+        registered_rows.append((model.name, model.real_model))
+        return {"upstream_model_id": normalized_mid, "gateway_model_id": model.id}
 
     async def _batch_import_team_models_for_tenant(
         self,
@@ -441,36 +509,42 @@ class CredentialUpstreamCatalogService:
         tpm_limit: int | None,
         tags: dict[str, Any] | None,
         enabled: bool,
-        items: list[tuple[str, str | None]],
+        items: list[TeamImportWorkItem],
+        credential_api_base: str | None = None,
     ) -> tuple[list[dict[str, Any]], list[dict[str, str]]]:
         provider_norm = provider.strip().lower()
         registered_rows = await self._registered_rows_for_credential(credential_id)
         work_items = list(items)
 
-        async def import_one(mid: str, payload: tuple[str, str | None]) -> dict[str, Any] | None:
-            _upstream_id, name_override = payload
+        async def import_one(mid: str, payload: TeamImportWorkItem) -> dict[str, Any] | None:
+            _upstream_id, name_override, _owned_by = payload
             normalized_mid = normalize_upstream_model_id(mid)
             base_name = (name_override or "").strip() or _slugify_alias(normalized_mid)
             unique_name = await self._unique_team_model_name(tenant_id, base_name)
-            m = await self._writes.create_gateway_model(
-                tenant_id=tenant_id,
-                name=unique_name,
-                capability=capability,
-                real_model=normalized_mid,
-                credential_id=credential_id,
+            return await self._import_catalog_model_row(
+                payload=payload,
                 provider=provider,
-                weight=weight,
-                rpm_limit=rpm_limit,
-                tpm_limit=tpm_limit,
+                capability=capability,
                 tags=tags,
-                actor_user_id=actor_user_id,
-                team_role=team_role,
-                is_platform_admin=is_platform_admin,
-                enabled=enabled,
-                reload_router=False,
+                credential_api_base=credential_api_base,
+                unique_name=unique_name,
+                registered_rows=registered_rows,
+                create_model=lambda **kwargs: self._writes.create_gateway_model(
+                    tenant_id=tenant_id,
+                    credential_id=credential_id,
+                    provider=provider,
+                    weight=weight,
+                    rpm_limit=rpm_limit,
+                    tpm_limit=tpm_limit,
+                    upstream_call_shape=None,
+                    actor_user_id=actor_user_id,
+                    team_role=team_role,
+                    is_platform_admin=is_platform_admin,
+                    enabled=enabled,
+                    reload_router=False,
+                    **kwargs,
+                ),
             )
-            registered_rows.append((m.name, m.real_model))
-            return {"upstream_model_id": normalized_mid, "gateway_model_id": m.id}
 
         created, failed, reload_once = await _run_batch_import_loop(
             work_items,
@@ -479,6 +553,7 @@ class CredentialUpstreamCatalogService:
             upstream_id_of=lambda payload: payload[0],
             import_one=import_one,
             log_tag="batch_import_team_models",
+            credential_api_base=credential_api_base,
         )
         if reload_once:
             await self._writes.reload_litellm_router()
@@ -496,33 +571,39 @@ class CredentialUpstreamCatalogService:
         tpm_limit: int | None,
         tags: dict[str, Any] | None,
         enabled: bool,
-        items: list[tuple[str, str | None]],
+        items: list[TeamImportWorkItem],
+        credential_api_base: str | None = None,
     ) -> tuple[list[dict[str, Any]], list[dict[str, str]]]:
         provider_norm = provider.strip().lower()
         registered_rows = await self._registered_rows_for_credential(credential_id)
         work_items = list(items)
 
-        async def import_one(mid: str, payload: tuple[str, str | None]) -> dict[str, Any] | None:
-            _upstream_id, name_override = payload
+        async def import_one(mid: str, payload: TeamImportWorkItem) -> dict[str, Any] | None:
+            _upstream_id, name_override, _owned_by = payload
             normalized_mid = normalize_upstream_model_id(mid)
             base_name = (name_override or "").strip() or _slugify_alias(normalized_mid)
             unique_name = await self._unique_system_model_name(base_name)
-            m = await self._writes.create_system_gateway_model(
-                name=unique_name,
-                capability=capability,
-                real_model=normalized_mid,
-                credential_id=credential_id,
+            return await self._import_catalog_model_row(
+                payload=payload,
                 provider=provider,
-                weight=weight,
-                rpm_limit=rpm_limit,
-                tpm_limit=tpm_limit,
+                capability=capability,
                 tags=tags,
-                is_platform_admin=is_platform_admin,
-                enabled=enabled,
-                reload_router=False,
+                credential_api_base=credential_api_base,
+                unique_name=unique_name,
+                registered_rows=registered_rows,
+                create_model=lambda **kwargs: self._writes.create_system_gateway_model(
+                    credential_id=credential_id,
+                    provider=provider,
+                    weight=weight,
+                    rpm_limit=rpm_limit,
+                    tpm_limit=tpm_limit,
+                    upstream_call_shape=None,
+                    is_platform_admin=is_platform_admin,
+                    enabled=enabled,
+                    reload_router=False,
+                    **kwargs,
+                ),
             )
-            registered_rows.append((m.name, m.real_model))
-            return {"upstream_model_id": normalized_mid, "gateway_model_id": m.id}
 
         created, failed, reload_once = await _run_batch_import_loop(
             work_items,
@@ -531,6 +612,7 @@ class CredentialUpstreamCatalogService:
             upstream_id_of=lambda payload: payload[0],
             import_one=import_one,
             log_tag="batch_import_system_models",
+            credential_api_base=credential_api_base,
         )
         if reload_once:
             await self._writes.reload_litellm_router()

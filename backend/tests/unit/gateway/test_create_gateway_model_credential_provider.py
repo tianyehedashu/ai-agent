@@ -121,3 +121,49 @@ async def test_create_system_gateway_model_writes_system_table(
     models = GatewayModelRepository(db_session)
     assert await models.get_system(row.id) is not None
     assert await models.get(row.id) is None
+
+
+@pytest.mark.asyncio
+async def test_create_system_gateway_model_custom_openai_endpoint_stores_bare_real_model(
+    db_session,
+    test_user: User,
+) -> None:
+    encryption_key = derive_encryption_key(settings.secret_key.get_secret_value())
+    cred = await SystemProviderCredentialRepository(db_session).create(
+        provider="openai",
+        name=f"agnes-sys-{uuid.uuid4().hex[:8]}",
+        api_key_encrypted=encrypt_value("sk-fake", encryption_key),
+        api_base="https://apihub.agnes-ai.com/v1",
+    )
+    await db_session.flush()
+
+    writes = GatewayManagementWriteService(db_session)
+    row = await writes.create_system_gateway_model(
+        name=f"agnes-1-5-flash-{uuid.uuid4().hex[:6]}",
+        capability="chat",
+        real_model="agnes-1.5-flash",
+        credential_id=cred.id,
+        provider="openai",
+        weight=1,
+        rpm_limit=None,
+        tpm_limit=None,
+        tags=None,
+        is_platform_admin=True,
+        reload_router=False,
+    )
+    assert row.real_model == "agnes-1.5-flash"
+
+    row2 = await writes.create_system_gateway_model(
+        name=f"agnes-prefixed-{uuid.uuid4().hex[:6]}",
+        capability="chat",
+        real_model="openai/agnes-2.0-flash",
+        credential_id=cred.id,
+        provider="openai",
+        weight=1,
+        rpm_limit=None,
+        tpm_limit=None,
+        tags=None,
+        is_platform_admin=True,
+        reload_router=False,
+    )
+    assert row2.real_model == "agnes-2.0-flash"

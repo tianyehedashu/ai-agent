@@ -35,7 +35,7 @@ from domains.gateway.application.router_deployment_params import (
     require_volcengine_image_endpoint_id,
 )
 from domains.gateway.domain.errors import ManagementEntityNotFoundError
-from domains.gateway.domain.litellm_model_id import build_litellm_model_id
+from domains.gateway.domain.litellm_model_id import resolve_outbound_litellm_model
 from domains.gateway.domain.policies.dashscope_embedding import (
     build_dashscope_embedding_request,
     should_use_dashscope_direct_embedding,
@@ -155,9 +155,9 @@ class ProbeWritesMixin:
                 mutation="update",
             )
         capability = target.capability
-        litellm_model = build_litellm_model_id(target.provider, target.real_model)
         tested_at = datetime.now(UTC)
         record_kw = {"is_system": target.is_system}
+        litellm_model = target.real_model
         if capability not in GATEWAY_MODEL_TEST_SUPPORTED_CAPABILITIES:
             msg = f"capability={capability} 暂不支持连通性测试"
             return await record_gateway_model_test_failure(
@@ -179,6 +179,11 @@ class ProbeWritesMixin:
                 self._models, model_id, tested_at, msg, litellm_model, **record_kw
             )
         cred = ProbeCredentialSnapshot.from_encrypted(credential, api_key=api_key)
+        litellm_model = resolve_outbound_litellm_model(
+            target.provider,
+            target.real_model,
+            api_base=cred.api_base,
+        )
         probe_chat_temperature = (
             resolve_probe_chat_temperature(
                 credential_profile_id=cred.profile_id,
