@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from 'react'
 
 import { useQuery } from '@tanstack/react-query'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 
 import { gatewayApi } from '@/api/gateway'
 import type { PersonalGatewayModelUpdateBody } from '@/api/gateway/my-models'
@@ -13,7 +13,7 @@ import {
 } from '@/features/gateway-models/detail/model-detail-states'
 import { ModelInspector } from '@/features/gateway-models/detail/model-inspector'
 import { usePersonalModelMutations } from '@/features/gateway-models/hooks/use-personal-model-mutations'
-import { personalModelsIndexHref } from '@/features/gateway-models/paths'
+import { resolveUnifiedModelsReturnHref } from '@/features/gateway-models/paths'
 import {
   personalModelInspectorContext,
   personalModelToInspectorModel,
@@ -30,6 +30,7 @@ export function PersonalModelDetailPane({
 }: PersonalModelDetailPaneProps): React.JSX.Element {
   const teamId = useGatewayTeamId()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const [usageDays] = useState<UsagePeriodDays>(7)
   const [deleteOpen, setDeleteOpen] = useState(false)
 
@@ -71,7 +72,7 @@ export function PersonalModelDetailPane({
     [model]
   )
 
-  const listHref = personalModelsIndexHref(teamId)
+  const listHref = resolveUnifiedModelsReturnHref(teamId, searchParams)
 
   const { updateMutation, deleteMutation, testMutation } = usePersonalModelMutations({
     onDeleteSuccess: () => {

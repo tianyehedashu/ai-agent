@@ -22,10 +22,10 @@ import { usePersonalModelLabel } from '@/features/gateway-models/hooks/use-perso
 import {
   credentialDetailHref,
   credentialsListHref,
-  personalModelsIndexHref,
+  resolveUnifiedModelsReturnHref,
   systemModelsFilteredHref,
   teamModelsFilteredHref,
-  teamModelsIndexHref,
+  unifiedModelsListContextFromSearchParams,
 } from '@/features/gateway-models/paths'
 import { preloadUnifiedModelsWorkspace } from '@/features/gateway-models/unified/unified-models-preload'
 import { GatewayRefreshButton } from '@/features/gateway-shared/gateway-refresh-button'
@@ -90,20 +90,29 @@ export default function GatewayModelDetailPage(): React.JSX.Element {
     invalidateCredentialSummariesCache(queryClient)
   }, [id, isPersonal, queryClient, teamId])
 
+  const listContext = unifiedModelsListContextFromSearchParams(searchParams)
+
+  const listReturnHref = resolveUnifiedModelsReturnHref(teamId, searchParams, {
+    scope: isSystem ? 'system' : undefined,
+    credentialId: credentialId || undefined,
+  })
+
   const backHref = isPersonal
-    ? personalModelsIndexHref(teamId)
+    ? listReturnHref
     : credentialId.length > 0
       ? credentialDetailHref(teamId, credentialId)
-      : isSystem
-        ? systemModelsFilteredHref(teamId)
-        : teamModelsIndexHref(teamId)
+      : listReturnHref
   const backLabel = isPersonal
-    ? '全部个人模型'
+    ? '返回模型列表'
     : credentialId.length > 0
       ? '返回凭据'
       : isSystem
-        ? '全部系统模型'
-        : '全部模型'
+        ? '返回系统模型'
+        : '返回模型列表'
+
+  const breadcrumbListHref = isSystem
+    ? systemModelsFilteredHref(teamId, undefined, listContext)
+    : listReturnHref
 
   const listPreload = preloadUnifiedModelsWorkspace
 
@@ -113,7 +122,7 @@ export default function GatewayModelDetailPage(): React.JSX.Element {
         {isPersonal ? (
           <>
             <Link
-              to={personalModelsIndexHref(teamId)}
+              to={listReturnHref}
               className="hover:text-foreground"
               onMouseEnter={listPreload}
               onFocus={listPreload}
@@ -149,7 +158,7 @@ export default function GatewayModelDetailPage(): React.JSX.Element {
         ) : (
           <>
             <Link
-              to={isSystem ? systemModelsFilteredHref(teamId) : teamModelsIndexHref(teamId)}
+              to={breadcrumbListHref}
               className="hover:text-foreground"
               onMouseEnter={listPreload}
               onFocus={listPreload}
@@ -179,8 +188,8 @@ export default function GatewayModelDetailPage(): React.JSX.Element {
             <Link
               to={
                 isSystem
-                  ? systemModelsFilteredHref(teamId, credentialId)
-                  : teamModelsFilteredHref(teamId, credentialId)
+                  ? systemModelsFilteredHref(teamId, credentialId, listContext)
+                  : teamModelsFilteredHref(teamId, credentialId, listContext)
               }
               onMouseEnter={preloadUnifiedModelsWorkspace}
               onFocus={preloadUnifiedModelsWorkspace}

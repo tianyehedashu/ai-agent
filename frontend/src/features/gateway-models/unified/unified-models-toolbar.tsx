@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
@@ -32,7 +33,13 @@ import { channelLabel } from '@/features/gateway-models/utils'
 import { GatewayRefreshButton } from '@/features/gateway-shared/gateway-refresh-button'
 import { GatewayTeamCombobox } from '@/features/gateway-teams/gateway-team-combobox'
 import { GATEWAY_FILTER_ALL } from '@/features/gateway-usage/gateway-filter-combobox'
-import { MoreHorizontal, Plus, Search } from '@/lib/lucide-icons'
+import { ChevronDown, MoreHorizontal, Plus, Search } from '@/lib/lucide-icons'
+
+import { preloadAddModelRegisterViews } from './unified-models-preload'
+
+import type { AddModelTarget } from './resolve-add-model-targets'
+
+const EMPTY_ADD_MODEL_TARGETS: readonly AddModelTarget[] = []
 
 const SCOPE_FILTER_OPTIONS: ReadonlyArray<{
   value: UnifiedModelScopeFilter
@@ -75,7 +82,8 @@ export interface UnifiedModelsToolbarProps {
   isRefreshing?: boolean
   onRefresh?: () => void
   showAdd?: boolean
-  onAdd?: () => void
+  addModelTargets?: readonly AddModelTarget[]
+  onAddModelTarget?: (href: string) => void
   /** 探活统计与批量运维 */
   showBatchOps?: boolean
   connectivityModels?: readonly ModelWithConnectivityStatus[]
@@ -112,7 +120,8 @@ export const UnifiedModelsToolbar = memo(function UnifiedModelsToolbar({
   isRefreshing = false,
   onRefresh,
   showAdd = false,
-  onAdd,
+  addModelTargets = EMPTY_ADD_MODEL_TARGETS,
+  onAddModelTarget,
   showBatchOps = false,
   connectivityModels = [],
   canWrite = false,
@@ -239,11 +248,47 @@ export const UnifiedModelsToolbar = memo(function UnifiedModelsToolbar({
               <DropdownMenuContent align="end">{deleteAllFilteredSlot}</DropdownMenuContent>
             </DropdownMenu>
           ) : null}
-          {showAdd && onAdd ? (
-            <Button size="sm" onClick={onAdd}>
-              <Plus className="mr-1.5 h-4 w-4" />
-              添加模型
-            </Button>
+          {showAdd && addModelTargets.length > 0 && onAddModelTarget ? (
+            addModelTargets.length === 1 ? (
+              <Button
+                size="sm"
+                onClick={() => {
+                  onAddModelTarget(addModelTargets[0].href)
+                }}
+                onMouseEnter={preloadAddModelRegisterViews}
+                onFocus={preloadAddModelRegisterViews}
+              >
+                <Plus className="mr-1.5 h-4 w-4" />
+                添加模型
+              </Button>
+            ) : (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    size="sm"
+                    type="button"
+                    onMouseEnter={preloadAddModelRegisterViews}
+                    onFocus={preloadAddModelRegisterViews}
+                  >
+                    <Plus className="mr-1.5 h-4 w-4" />
+                    添加模型
+                    <ChevronDown className="ml-1 h-4 w-4 opacity-70" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  {addModelTargets.map((target) => (
+                    <DropdownMenuItem
+                      key={target.scope}
+                      onClick={() => {
+                        onAddModelTarget(target.href)
+                      }}
+                    >
+                      {target.label}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )
           ) : null}
         </div>
       </div>

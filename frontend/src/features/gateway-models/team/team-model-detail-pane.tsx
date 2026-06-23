@@ -13,11 +13,7 @@ import {
 } from '@/features/gateway-models/detail/model-detail-states'
 import { ModelInspector } from '@/features/gateway-models/detail/model-inspector'
 import { useGatewayModelMutations } from '@/features/gateway-models/hooks/use-gateway-model-mutations'
-import {
-  systemModelsFilteredHref,
-  teamModelsFilteredHref,
-  teamModelsIndexHref,
-} from '@/features/gateway-models/paths'
+import { resolveUnifiedModelsReturnHref } from '@/features/gateway-models/paths'
 import { indexUsageByRouteName } from '@/features/gateway-models/usage-summary-index'
 import { resolveTeamModelsRegistryScope } from '@/features/gateway-models/utils'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
@@ -61,14 +57,10 @@ export function TeamModelDetailPane({ modelId }: TeamModelDetailPaneProps): Reac
   const model = primaryModel ?? systemFallbackModel ?? null
   const resolvedRouteName = model?.name ?? ''
 
-  const listHref =
-    credentialFilter !== ''
-      ? scopeTab === 'system'
-        ? systemModelsFilteredHref(teamId, credentialFilter)
-        : teamModelsFilteredHref(teamId, credentialFilter)
-      : scopeTab === 'system'
-        ? systemModelsFilteredHref(teamId)
-        : teamModelsIndexHref(teamId)
+  const listHref = resolveUnifiedModelsReturnHref(teamId, searchParams, {
+    scope: scopeTab === 'system' ? 'system' : undefined,
+    credentialId: credentialFilter || undefined,
+  })
 
   const { data: usageSummary, isLoading: usageLoading } = useQuery({
     queryKey: ['gateway', 'models', 'usage-summary', teamId, resolvedRouteName, usageDays],

@@ -9,15 +9,60 @@ export type TeamModelsTab = 'shared' | 'system'
 
 type LegacyModelsDetailTab = 'shared' | 'system'
 
-function modelsListBaseParams(
-  options?: Readonly<{ credentialId?: string; scope?: ModelScopeParam }>
-): URLSearchParams {
+/** 统一模型列表往返上下文（详情 URL 携带，返回列表时恢复筛选） */
+export type UnifiedModelsListContext = Readonly<{
+  scope?: ModelScopeParam
+  affiliationTeamId?: string
+}>
+
+function isModelScopeParam(value: string | null): value is ModelScopeParam {
+  return value === 'personal' || value === 'team' || value === 'system'
+}
+
+export function unifiedModelsListContextFromSearchParams(
+  params: URLSearchParams
+): UnifiedModelsListContext {
+  const scopeRaw = params.get('scope')
+  const affiliationTeamId = params.get('affiliationTeamId')?.trim() ?? ''
+  const context: { scope?: ModelScopeParam; affiliationTeamId?: string } = {}
+  if (isModelScopeParam(scopeRaw)) {
+    context.scope = scopeRaw
+  }
+  if (affiliationTeamId !== '') {
+    context.affiliationTeamId = affiliationTeamId
+  }
+  return context
+}
+
+function applyUnifiedModelsListContext(
+  params: URLSearchParams,
+  context?: UnifiedModelsListContext
+): void {
+  if (!context) return
+  if (context.scope) {
+    params.set('scope', context.scope)
+  }
+  if (context.affiliationTeamId) {
+    params.set('affiliationTeamId', context.affiliationTeamId)
+  }
+}
+
+type ModelsListHrefOptions = Readonly<{
+  credentialId?: string
+  scope?: ModelScopeParam
+  affiliationTeamId?: string
+}>
+
+function modelsListBaseParams(options?: ModelsListHrefOptions): URLSearchParams {
   const params = new URLSearchParams()
   if (options?.credentialId) {
     params.set('credentialId', options.credentialId)
   }
   if (options?.scope) {
     params.set('scope', options.scope)
+  }
+  if (options?.affiliationTeamId) {
+    params.set('affiliationTeamId', options.affiliationTeamId)
   }
   return params
 }
@@ -29,17 +74,43 @@ function modelsRegisterBaseParams(scope: ModelScopeParam, credentialId?: string)
 }
 
 /** 模型统一列表 */
-export function modelsIndexHref(
-  teamId: string,
-  options?: Readonly<{ credentialId?: string; scope?: ModelScopeParam }>
-): string {
+export function modelsIndexHref(teamId: string, options?: ModelsListHrefOptions): string {
   const qs = modelsListBaseParams(options).toString()
   return `${teamBase(teamId)}/models${qs ? `?${qs}` : ''}`
 }
 
+/** 从详情页 query 恢复统一列表链接（保留 scope / affiliationTeamId 等筛选） */
+export function resolveUnifiedModelsReturnHref(
+  teamId: string,
+  searchParams: URLSearchParams,
+  defaults?: Readonly<{ scope?: ModelScopeParam; credentialId?: string }>
+): string {
+  const context = unifiedModelsListContextFromSearchParams(searchParams)
+  const credentialId = defaults?.credentialId ?? searchParams.get('credentialId')?.trim() ?? ''
+  const scope = context.scope ?? defaults?.scope
+
+  if (credentialId !== '') {
+    const credentialScope: ModelScopeParam =
+      scope === 'system' ? 'system' : scope === 'team' ? 'team' : 'team'
+    return modelsIndexHref(teamId, {
+      credentialId,
+      scope: credentialScope,
+      affiliationTeamId: context.affiliationTeamId,
+    })
+  }
+
+  return modelsIndexHref(teamId, {
+    scope,
+    affiliationTeamId: context.affiliationTeamId,
+  })
+}
+
 /** 个人模型列表（统一页） */
-export function personalModelsIndexHref(teamId: string): string {
-  return modelsIndexHref(teamId)
+export function personalModelsIndexHref(
+  teamId: string,
+  context?: UnifiedModelsListContext
+): string {
+  return modelsIndexHref(teamId, context)
 }
 
 /** 个人模型注册（可选锁定凭据） */
@@ -47,13 +118,19 @@ export function personalModelsRegisterHref(teamId: string, credentialId?: string
   return `${teamBase(teamId)}/models?${modelsRegisterBaseParams('personal', credentialId).toString()}`
 }
 
-function legacyPersonalDetailParams(): URLSearchParams {
-  return new URLSearchParams({ tab: 'personal' })
+function legacyPersonalDetailParams(listContext?: UnifiedModelsListContext): URLSearchParams {
+  const params = new URLSearchParams({ tab: 'personal' })
+  applyUnifiedModelsListContext(params, listContext)
+  return params
 }
 
 /** 个人模型详情深链 */
-export function personalModelDetailHref(teamId: string, modelId: string): string {
-  return `${teamBase(teamId)}/models/${encodeURIComponent(modelId)}?${legacyPersonalDetailParams().toString()}`
+export function personalModelDetailHref(
+  teamId: string,
+  modelId: string,
+  listContext?: UnifiedModelsListContext
+): string {
+  return `${teamBase(teamId)}/models/${encodeURIComponent(modelId)}?${legacyPersonalDetailParams(listContext).toString()}`
 }
 
 /** @deprecated 编辑已并入详情页；保留兼容旧链接 */
@@ -63,18 +140,28 @@ export function personalModelEditHref(teamId: string, modelId: string): string {
 
 function legacyTeamDetailParams(
   credentialId?: string,
-  tab: LegacyModelsDetailTab = 'shared'
+  tab: LegacyModelsDetailTab = 'shared',
+  listContext?: UnifiedModelsListContext
 ): URLSearchParams {
   const params = new URLSearchParams({ tab })
   if (credentialId) {
     params.set('credentialId', credentialId)
   }
+  applyUnifiedModelsListContext(params, listContext)
   return params
 }
 
 /** 团队模型列表（可选按凭据筛选；统一页） */
-export function teamModelsFilteredHref(teamId: string, credentialId?: string): string {
-  return modelsIndexHref(teamId, { credentialId, scope: credentialId ? 'team' : undefined })
+export function teamModelsFilteredHref(
+  teamId: string,
+  credentialId?: string,
+  listContext?: UnifiedModelsListContext
+): string {
+  return modelsIndexHref(teamId, {
+    credentialId,
+    scope: credentialId ? 'team' : listContext?.scope,
+    affiliationTeamId: listContext?.affiliationTeamId,
+  })
 }
 
 /** @deprecated 与统一列表同 URL */
@@ -83,8 +170,16 @@ export function systemModelsBrowseIndexHref(teamId: string): string {
 }
 
 /** 系统模型列表深链（统一页；可选按凭据筛选） */
-export function systemModelsFilteredHref(teamId: string, credentialId?: string): string {
-  return modelsIndexHref(teamId, { credentialId, scope: credentialId ? 'system' : undefined })
+export function systemModelsFilteredHref(
+  teamId: string,
+  credentialId?: string,
+  listContext?: UnifiedModelsListContext
+): string {
+  return modelsIndexHref(teamId, {
+    credentialId,
+    scope: credentialId ? 'system' : listContext?.scope,
+    affiliationTeamId: listContext?.affiliationTeamId,
+  })
 }
 
 /** 团队模型注册（可选锁定凭据） */
@@ -101,23 +196,35 @@ export function teamModelsRegisterHref(
 export function teamModelDetailHref(
   teamId: string,
   modelId: string,
-  options?: { credentialId?: string; tab?: LegacyModelsDetailTab }
+  options?: {
+    credentialId?: string
+    tab?: LegacyModelsDetailTab
+    listContext?: UnifiedModelsListContext
+  }
 ): string {
-  return `${teamBase(teamId)}/models/${encodeURIComponent(modelId)}?${legacyTeamDetailParams(options?.credentialId, options?.tab ?? 'shared').toString()}`
+  return `${teamBase(teamId)}/models/${encodeURIComponent(modelId)}?${legacyTeamDetailParams(
+    options?.credentialId,
+    options?.tab ?? 'shared',
+    options?.listContext
+  ).toString()}`
 }
 
 /** 系统模型详情深链（平台管理员） */
 export function systemModelDetailHref(
   teamId: string,
   modelId: string,
-  credentialId?: string
+  credentialId?: string,
+  listContext?: UnifiedModelsListContext
 ): string {
-  return teamModelDetailHref(teamId, modelId, { credentialId, tab: 'system' })
+  return teamModelDetailHref(teamId, modelId, { credentialId, tab: 'system', listContext })
 }
 
 /** 团队模型列表首页 */
-export function teamModelsIndexHref(teamId: string): string {
-  return modelsIndexHref(teamId)
+export function teamModelsIndexHref(
+  teamId: string,
+  listContext?: UnifiedModelsListContext
+): string {
+  return modelsIndexHref(teamId, listContext)
 }
 
 export type CredentialsListTab = 'personal' | 'shared' | 'system'

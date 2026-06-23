@@ -10,6 +10,7 @@ import {
   personalModelDetailHref,
   personalModelsIndexHref,
   personalModelsRegisterHref,
+  resolveUnifiedModelsReturnHref,
   teamModelDetailHref,
   teamModelsFilteredHref,
   teamModelsIndexHref,
@@ -111,8 +112,38 @@ describe('gateway model paths', () => {
     )
   })
 
-  it('modelsIndexHref for unified browse', () => {
-    expect(modelsIndexHref(TEAM)).toBe('/gateway/teams/team-abc/models')
+  it('teamModelDetailHref preserves list context', () => {
+    expect(
+      teamModelDetailHref(TEAM, 'model-1', {
+        listContext: { affiliationTeamId: 'team-x', scope: 'team' },
+      })
+    ).toBe('/gateway/teams/team-abc/models/model-1?tab=shared&scope=team&affiliationTeamId=team-x')
+  })
+
+  it('personalModelDetailHref preserves list context', () => {
+    expect(personalModelDetailHref(TEAM, 'pm-1', { affiliationTeamId: 'team-x' })).toBe(
+      '/gateway/teams/team-abc/models/pm-1?tab=personal&affiliationTeamId=team-x'
+    )
+  })
+
+  it('resolveUnifiedModelsReturnHref restores affiliationTeamId', () => {
+    const params = new URLSearchParams('tab=shared&affiliationTeamId=team-x')
+    expect(resolveUnifiedModelsReturnHref(TEAM, params)).toBe(
+      '/gateway/teams/team-abc/models?affiliationTeamId=team-x'
+    )
+  })
+
+  it('resolveUnifiedModelsReturnHref restores scope and affiliationTeamId', () => {
+    const params = new URLSearchParams('tab=shared&scope=team&affiliationTeamId=team-x')
+    expect(resolveUnifiedModelsReturnHref(TEAM, params)).toBe(
+      '/gateway/teams/team-abc/models?scope=team&affiliationTeamId=team-x'
+    )
+  })
+
+  it('modelsIndexHref with affiliationTeamId', () => {
+    expect(modelsIndexHref(TEAM, { affiliationTeamId: 'team-x' })).toBe(
+      '/gateway/teams/team-abc/models?affiliationTeamId=team-x'
+    )
   })
 })
 

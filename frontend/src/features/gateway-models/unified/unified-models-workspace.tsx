@@ -33,12 +33,12 @@ import {
 } from '@/features/gateway-models/model-delete-copy'
 import {
   personalModelDetailHref,
-  personalModelsRegisterHref,
   systemModelDetailHref,
   teamModelDetailHref,
-  teamModelsRegisterHref,
+  type UnifiedModelsListContext,
 } from '@/features/gateway-models/paths'
 import { invalidateUnifiedModelsCache } from '@/features/gateway-models/unified/invalidate-unified-models-cache'
+import { resolveAddModelTargets } from '@/features/gateway-models/unified/resolve-add-model-targets'
 import {
   canBatchImportUnifiedModelItem,
   canDeleteUnifiedModelItem,
@@ -485,37 +485,65 @@ export function UnifiedModelsWorkspace(): React.JSX.Element {
 
   const showBatchOpsToolbar = capabilities.batchTest === true && hasManageableModels
 
-  const defaultRegisterTeamId = writableTeams[0]?.id ?? memberTeams[0]?.id
-  const canRegister = hasAuthSession && (canWrite || canContribute || isPlatformAdmin)
+  const eligibleTeamIds = useMemo(() => {
+    const ids = new Set<string>()
+    for (const team of writableTeams) {
+      ids.add(team.id)
+    }
+    for (const team of memberTeams) {
+      ids.add(team.id)
+    }
+    return ids
+  }, [writableTeams, memberTeams])
 
-  const handleAdd = useCallback((): void => {
-    const cred = credentialFilter || undefined
-    if (scopeFilter === 'system' && isPlatformAdmin) {
-      navigate(teamModelsRegisterHref(routeTeamId, cred, 'system'))
-      return
-    }
-    if (scopeFilter === 'team' && defaultRegisterTeamId) {
-      navigate(teamModelsRegisterHref(defaultRegisterTeamId, cred))
-      return
-    }
-    navigate(personalModelsRegisterHref(routeTeamId, cred))
-  }, [scopeFilter, isPlatformAdmin, routeTeamId, credentialFilter, defaultRegisterTeamId, navigate])
+  const defaultRegisterTeamId = writableTeams[0]?.id ?? memberTeams[0]?.id
+  const canRegisterTeamModel = canWrite || canContribute
+  const canRegister = hasAuthSession && (canRegisterTeamModel || isPlatformAdmin)
+
+  const addModelTargets = useMemo(
+    () =>
+      resolveAddModelTargets({
+        scopeFilter,
+        routeTeamId,
+        credentialId: credentialFilter || undefined,
+        affiliationTeamId: teamFilter || undefined,
+        canRegisterTeam: canRegisterTeamModel,
+        isPlatformAdmin,
+        eligibleTeamIds,
+        defaultRegisterTeamId,
+      }),
+    [
+      scopeFilter,
+      routeTeamId,
+      credentialFilter,
+      teamFilter,
+      canRegisterTeamModel,
+      isPlatformAdmin,
+      eligibleTeamIds,
+      defaultRegisterTeamId,
+    ]
+  )
 
   const getItemHref = useCallback(
     (item: GatewayModelListItem): string | undefined => {
+      const listContext: UnifiedModelsListContext = {
+        ...(scopeFilter !== 'all' ? { scope: scopeFilter } : {}),
+        ...(teamFilter !== '' ? { affiliationTeamId: teamFilter } : {}),
+      }
       if (item.scope === 'personal') {
-        return personalModelDetailHref(routeTeamId, item.id)
+        return personalModelDetailHref(routeTeamId, item.id, listContext)
       }
       if (item.scope === 'team') {
         const teamId = item.teamId ?? routeTeamId
         return teamModelDetailHref(teamId, item.id, {
           credentialId: credentialFilter || undefined,
           tab: 'shared',
+          listContext,
         })
       }
-      return systemModelDetailHref(routeTeamId, item.id, credentialFilter || undefined)
+      return systemModelDetailHref(routeTeamId, item.id, credentialFilter || undefined, listContext)
     },
-    [routeTeamId, credentialFilter]
+    [routeTeamId, credentialFilter, scopeFilter, teamFilter]
   )
 
   const preloadNavigate = useCallback((_item: GatewayModelListItem): void => {
@@ -649,8 +677,9 @@ export function UnifiedModelsWorkspace(): React.JSX.Element {
             hasActiveFilters={hasActiveFilters}
             isRefreshing={isFetching}
             onRefresh={handleRefresh}
-            showAdd={canRegister}
-            onAdd={handleAdd}
+            showAdd={canRegister && addModelTargets.length > 0}
+            addModelTargets={addModelTargets}
+            onAddModelTarget={navigate}
             showBatchOps={showBatchOpsToolbar}
             connectivityModels={connectivityModels}
             canWrite={hasManageableModels}
