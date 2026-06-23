@@ -38,6 +38,7 @@ import { cn } from '@/lib/utils'
 
 interface ModelFormValues {
   presetId: string
+  displayName: string
   name: string
   capability: string
   realModel: string
@@ -52,6 +53,7 @@ interface ModelFormValues {
 
 const emptyForm: ModelFormValues = {
   presetId: MANUAL_PRESET,
+  displayName: '',
   name: '',
   capability: 'chat',
   realModel: '',
@@ -133,6 +135,7 @@ export function RegisterModelForm({
     setValues((prev) => ({
       ...prev,
       presetId,
+      displayName: preset.name,
       name: preset.id,
       capability: preset.capability,
       realModel: preset.real_model,
@@ -175,6 +178,7 @@ export function RegisterModelForm({
       weight: parsePositiveInt(values.weight) ?? 1,
       rpm_limit: parsePositiveInt(values.rpmLimit),
       tpm_limit: parsePositiveInt(values.tpmLimit),
+      ...(values.displayName.trim() ? { display_name: values.displayName.trim() } : {}),
       tags: Object.keys(presetTags).length > 0 ? presetTags : null,
       upstream_call_shape: values.upstreamCallShape.trim() || null,
     })
@@ -287,6 +291,21 @@ export function RegisterModelForm({
                 }}
                 showTooltip
               />
+
+              <div className="sm:col-span-2">
+                <Label>显示名</Label>
+                <Input
+                  className="mt-1"
+                  placeholder="如：通义千问 Max"
+                  value={values.displayName}
+                  onChange={(e) => {
+                    setValues({ ...values, displayName: e.target.value })
+                  }}
+                />
+                <p className="mt-1 text-xs text-muted-foreground">
+                  可选；用于列表与选择器展示，不影响 API 调用名。
+                </p>
+              </div>
 
               <div className="sm:col-span-2">
                 <div className="mb-1 flex items-center gap-1">

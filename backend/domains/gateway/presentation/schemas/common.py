@@ -344,6 +344,12 @@ class GatewayModelCreate(BaseModel):
     rpm_limit: int | None = None
     tpm_limit: int | None = None
     tags: dict[str, Any] | None = None
+    display_name: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=100,
+        description="人类可读展示名；写入 tags.display_name，缺省回退注册别名 name",
+    )
     upstream_call_shape: str | None = Field(
         default=None,
         description="出站 LiteLLM 调用形：openai_compat / anthropic_native；NULL=跟随凭据 profile",
@@ -409,6 +415,12 @@ class GatewayModelUpdate(BaseModel):
     tpm_limit: int | None = None
     enabled: bool | None = None
     tags: dict[str, Any] | None = None
+    display_name: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=100,
+        description="人类可读展示名；写入 tags.display_name",
+    )
     resync_capabilities: bool = Field(
         default=False,
         description="为 true 时从 LiteLLM model_cost 重算能力 tags（不持久化该字段）",

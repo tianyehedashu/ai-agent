@@ -1703,6 +1703,98 @@ class TestGatewayManagementApi:
         assert r_bad.status_code == 400, r_bad.text
 
     @pytest.mark.asyncio
+    async def test_team_create_model_with_display_name(
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict[str, str],
+        db_session,
+        test_user: User,
+    ) -> None:
+        """团队 POST /models：display_name 写入 tags.display_name，name 仍为调用名。"""
+        team = await TeamService(db_session).ensure_personal_team(test_user.id)
+        await db_session.commit()
+        headers = auth_headers
+        r_cred = await dev_client.post(
+            f"/api/v1/gateway/teams/{team.id}/credentials",
+            headers=headers,
+            json={
+                "provider": "openai",
+                "name": f"disp-{uuid.uuid4().hex[:8]}",
+                "api_key": "sk-display-name-int-test-123456789",
+                "scope": "team",
+            },
+        )
+        assert r_cred.status_code == 201, r_cred.text
+        cid = r_cred.json()["id"]
+        invoke_name = f"alias-{uuid.uuid4().hex[:6]}"
+        display_name = "通义千问 Max 展示"
+        r_model = await dev_client.post(
+            f"/api/v1/gateway/teams/{team.id}/models",
+            headers=headers,
+            json={
+                "name": invoke_name,
+                "display_name": display_name,
+                "capability": "chat",
+                "real_model": "gpt-4o-mini",
+                "credential_id": cid,
+                "provider": "openai",
+            },
+        )
+        assert r_model.status_code == 201, r_model.text
+        body = r_model.json()
+        assert body["name"] == invoke_name
+        assert (body.get("tags") or {}).get("display_name") == display_name
+
+    @pytest.mark.asyncio
+    async def test_team_patch_model_display_name(
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict[str, str],
+        db_session,
+        test_user: User,
+    ) -> None:
+        """PATCH /models/{id}：仅改 display_name 时调用名不变。"""
+        team = await TeamService(db_session).ensure_personal_team(test_user.id)
+        await db_session.commit()
+        headers = auth_headers
+        r_cred = await dev_client.post(
+            f"/api/v1/gateway/teams/{team.id}/credentials",
+            headers=headers,
+            json={
+                "provider": "openai",
+                "name": f"patch-disp-{uuid.uuid4().hex[:8]}",
+                "api_key": "sk-patch-display-int-test-123456789",
+                "scope": "team",
+            },
+        )
+        assert r_cred.status_code == 201, r_cred.text
+        cid = r_cred.json()["id"]
+        invoke_name = f"alias-{uuid.uuid4().hex[:6]}"
+        r_model = await dev_client.post(
+            f"/api/v1/gateway/teams/{team.id}/models",
+            headers=headers,
+            json={
+                "name": invoke_name,
+                "capability": "chat",
+                "real_model": "gpt-4o-mini",
+                "credential_id": cid,
+                "provider": "openai",
+            },
+        )
+        assert r_model.status_code == 201, r_model.text
+        mid = r_model.json()["id"]
+        new_display = "更新后的展示名"
+        r_patch = await dev_client.patch(
+            f"/api/v1/gateway/teams/{team.id}/models/{mid}",
+            headers=headers,
+            json={"display_name": new_display},
+        )
+        assert r_patch.status_code == 200, r_patch.text
+        patched = r_patch.json()
+        assert patched["name"] == invoke_name
+        assert (patched.get("tags") or {}).get("display_name") == new_display
+
+    @pytest.mark.asyncio
     async def test_team_create_model_rejects_provider_cred_mismatch(
         self,
         dev_client: AsyncClient,

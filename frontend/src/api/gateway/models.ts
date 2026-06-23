@@ -211,6 +211,8 @@ export interface GatewayModelCreateBody {
   rpm_limit?: number | null
   tpm_limit?: number | null
   tags?: Record<string, unknown> | null
+  /** 人类可读展示名；写入 tags.display_name */
+  display_name?: string | null
   upstream_call_shape?: string | null
   enabled?: boolean
 }
@@ -227,6 +229,8 @@ export interface GatewayModelUpdateBody {
   tpm_limit?: number | null
   enabled?: boolean | null
   tags?: Record<string, unknown> | null
+  /** 人类可读展示名；写入 tags.display_name */
+  display_name?: string | null
   /** 为 true 时从目录规则 + LiteLLM 重算能力 tags */
   resync_capabilities?: boolean
   upstream_call_shape?: string | null

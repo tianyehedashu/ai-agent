@@ -56,6 +56,7 @@ import { Copy, Info, Loader2, Play, RefreshCw, Trash2 } from '@/lib/lucide-icons
 import { copyToClipboard } from '@/lib/utils'
 import { useCurrentUser } from '@/stores/user'
 
+import { gatewayModelDisplayName } from '../list/gateway-model-display-name'
 import {
   ModelCapabilityEditor,
   capabilityEditorValuesFromModel,
@@ -143,9 +144,13 @@ const ModelInspectorPanel = memo(function ModelInspectorPanel({
           permissionContext
         ))
   const { byId: credentialSummariesById } = useGatewayCredentialDirectory()
+  const baselineDisplayName = useMemo(() => {
+    if (isPersonal) return personalContext?.displayName ?? ''
+    return gatewayModelDisplayName(model) ?? model.name
+  }, [isPersonal, personalContext?.displayName, model])
   const [usageScope, setUsageScope] = useState<GatewayUsageAggregation>('workspace')
   const [modelName, setModelName] = useState(model.name)
-  const [displayName, setDisplayName] = useState(personalContext?.displayName ?? '')
+  const [displayName, setDisplayName] = useState(baselineDisplayName)
   const [realModel, setRealModel] = useState(model.real_model)
   const [credentialId, setCredentialId] = useState(model.credential_id)
   const [weight, setWeight] = useState(String(model.weight))
@@ -177,7 +182,11 @@ const ModelInspectorPanel = memo(function ModelInspectorPanel({
 
   useEffect(() => {
     setModelName(model.name)
-    setDisplayName(personalContext?.displayName ?? '')
+    setDisplayName(
+      isPersonal
+        ? (personalContext?.displayName ?? '')
+        : (gatewayModelDisplayName(model) ?? model.name)
+    )
     setRealModel(model.real_model)
     setCredentialId(model.credential_id)
     setWeight(String(model.weight))
@@ -209,6 +218,7 @@ const ModelInspectorPanel = memo(function ModelInspectorPanel({
     model.tags,
     model.selector_capabilities,
     personalContext?.displayName,
+    baselineDisplayName,
   ])
 
   const referencingRoutes = useMemo(
@@ -232,8 +242,7 @@ const ModelInspectorPanel = memo(function ModelInspectorPanel({
   const cost = coalesceNumber(slice?.cost_usd)
   const daysLabel = usageDays === 1 ? '24 小时' : usageDays === 7 ? '7 天' : '30 天'
   const nameDirty = modelName.trim() !== model.name
-  const displayNameDirty =
-    isPersonal && displayName.trim() !== (personalContext?.displayName ?? '').trim()
+  const displayNameDirty = displayName.trim() !== baselineDisplayName.trim()
   const capabilityPatch = modelCapabilityPatchFromEditor(capabilityValues, capabilityBaseline)
   const capabilityDirty = Object.keys(capabilityPatch).length > 0
   const dirty =
@@ -280,6 +289,8 @@ const ModelInspectorPanel = memo(function ModelInspectorPanel({
     }
 
     if (!trimmedName) return
+    const trimmedDisplayName = displayName.trim()
+    if (!trimmedDisplayName) return
     if (
       capabilityPatch.capability !== undefined &&
       referencingRoutes.length > 0 &&
@@ -297,6 +308,9 @@ const ModelInspectorPanel = memo(function ModelInspectorPanel({
       tpm_limit: parsePositiveInt(tpmLimit),
       ...capabilityPatch,
     }
+    if (displayNameDirty) {
+      body.display_name = trimmedDisplayName
+    }
     if (trimmedName !== model.name) {
       body.name = trimmedName
     }
@@ -308,22 +322,14 @@ const ModelInspectorPanel = memo(function ModelInspectorPanel({
       <div className="flex min-h-0 flex-col rounded-lg border bg-card">
         <div className="flex flex-wrap items-start justify-between gap-3 border-b p-4">
           <div className="min-w-0 flex-1">
-            {isPersonal ? (
-              <>
-                <p className="text-base font-semibold leading-tight">
-                  {displayNameDirty
-                    ? displayName.trim() || personalContext?.displayName
-                    : personalContext?.displayName}
-                </p>
-                <p className="mt-1 font-mono text-sm text-muted-foreground">
-                  {nameDirty ? modelName.trim() || model.name : model.name}
-                </p>
-              </>
-            ) : (
-              <p className="font-mono text-base font-semibold leading-tight">
+            <>
+              <p className="text-base font-semibold leading-tight">
+                {displayNameDirty ? displayName.trim() || baselineDisplayName : baselineDisplayName}
+              </p>
+              <p className="mt-1 font-mono text-sm text-muted-foreground">
                 {nameDirty ? modelName.trim() || model.name : model.name}
               </p>
-            )}
+            </>
             <p className="mt-1 text-sm text-muted-foreground">{channelLabel(model.provider)}</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -541,19 +547,31 @@ const ModelInspectorPanel = memo(function ModelInspectorPanel({
               </Alert>
             ) : null}
             <div className="grid gap-3 sm:grid-cols-2">
-              {isPersonal ? (
-                <div className="sm:col-span-2">
+              <div className="sm:col-span-2">
+                <div className="mb-1 flex items-center gap-1">
                   <Label className="text-xs">显示名</Label>
-                  <Input
-                    className="mt-1 text-sm"
-                    value={displayName}
-                    readOnly={!canManage}
-                    onChange={(e) => {
-                      setDisplayName(e.target.value)
-                    }}
-                  />
+                  {configManaged ? (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button type="button" aria-label="显示名说明" className="inline-flex">
+                          <Info className="h-3.5 w-3.5 text-muted-foreground" />
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-xs text-xs">
+                        配置托管模型在平台 catalog 同步时，种子数据可能覆盖 tags.display_name。
+                      </TooltipContent>
+                    </Tooltip>
+                  ) : null}
                 </div>
-              ) : null}
+                <Input
+                  className="mt-0 text-sm"
+                  value={displayName}
+                  readOnly={!canManage}
+                  onChange={(e) => {
+                    setDisplayName(e.target.value)
+                  }}
+                />
+              </div>
               <div className="sm:col-span-2">
                 <div className="mb-1 flex items-center gap-1">
                   <Label className="text-xs">调用名称</Label>
@@ -699,7 +717,7 @@ const ModelInspectorPanel = memo(function ModelInspectorPanel({
                   !realModel.trim() ||
                   !credentialId ||
                   !modelName.trim() ||
-                  (isPersonal ? !displayName.trim() : false)
+                  !displayName.trim()
                 }
                 onClick={handleSave}
               >

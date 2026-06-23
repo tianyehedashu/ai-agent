@@ -19,6 +19,9 @@ from domains.gateway.application.gateway_catalog_maintenance import (
     log_gateway_catalog_maintenance_report,
     run_gateway_catalog_maintenance,
 )
+from domains.gateway.application.management.write_modules.model_writes import (
+    merge_display_name_into_tags,
+)
 from domains.gateway.domain.policies.model_registry_scope import RegistryScope
 from domains.gateway.domain.policies.model_selection import registry_kind_for_merged_row
 from domains.gateway.presentation.deps import (
@@ -302,6 +305,7 @@ async def create_model(
         is_platform_admin=team.is_platform_admin,
     )
     # 若注册别名已存在且凭据不同，自动转化为多凭据路由（追加到已有 Route 或新建 Route）
+    effective_tags = merge_display_name_into_tags(body.tags, body.display_name)
     existing = await reads._models.get_by_name(team.team_id, body.name)
     if existing is not None:
         if str(existing.credential_id) == str(body.credential_id):
@@ -319,7 +323,7 @@ async def create_model(
             weight=body.weight,
             rpm_limit=body.rpm_limit,
             tpm_limit=body.tpm_limit,
-            tags=body.tags,
+            tags=effective_tags,
             upstream_call_shape=body.upstream_call_shape,
             actor_user_id=team.user_id,
             team_role=team.team_role,
@@ -338,7 +342,7 @@ async def create_model(
             weight=body.weight,
             rpm_limit=body.rpm_limit,
             tpm_limit=body.tpm_limit,
-            tags=body.tags,
+            tags=effective_tags,
             upstream_call_shape=body.upstream_call_shape,
             actor_user_id=team.user_id,
             team_role=team.team_role,

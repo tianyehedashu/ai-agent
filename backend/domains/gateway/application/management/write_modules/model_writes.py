@@ -132,6 +132,21 @@ def _upstream_profile_id_from_credential(cred: object | None) -> str | None:
     return raw.strip() if isinstance(raw, str) and raw.strip() else None
 
 
+def merge_display_name_into_tags(
+    tags: dict[str, Any] | None,
+    display_name: str | None,
+) -> dict[str, Any] | None:
+    """将顶层 display_name 并入 tags（创建/更新 Gateway 模型共用）。"""
+    if display_name is None:
+        return tags
+    trimmed = str(display_name).strip()
+    if not trimmed:
+        return tags
+    merged = dict(tags or {})
+    merged["display_name"] = trimmed
+    return merged
+
+
 def _prepare_gateway_model_write_fields(
     *,
     provider: str,
@@ -964,6 +979,16 @@ class ModelWritesMixin:
     ) -> dict[str, Any]:
         repo = self._models
         update_fields = dict(fields)
+        display_name_raw = update_fields.pop("display_name", None)
+        if display_name_raw is not None:
+            trimmed_display = str(display_name_raw).strip()
+            if not trimmed_display:
+                raise ValidationError("显示名不能为空")
+            merged_tags = dict(existing.tags or {})
+            if isinstance(update_fields.get("tags"), dict):
+                merged_tags.update(update_fields["tags"])
+            merged_tags["display_name"] = trimmed_display
+            update_fields["tags"] = merged_tags
         if "credential_id" in update_fields and update_fields["credential_id"] is not None:
             new_cid_raw = update_fields["credential_id"]
             new_cid = (
