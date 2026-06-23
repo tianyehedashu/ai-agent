@@ -281,6 +281,10 @@ async def test_chat_writes_gateway_request_log_with_full_attribution(
     )
     assert len(active_vkeys) == 1
     assert active_vkeys[0].id == row.vkey_id
+    assert row.team_snapshot is None
+    assert row.route_snapshot is None
+    assert row.response_summary is None
+    assert row.metadata_extra is None
 
 
 @pytest.mark.asyncio

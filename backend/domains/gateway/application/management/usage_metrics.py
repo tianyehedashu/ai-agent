@@ -134,16 +134,28 @@ def _group_key_str(value: object) -> str:
     return "" if value is None else str(value)
 
 
+def _statistics_item_merge_key(row: Any) -> str:
+    """合并键：多维分组用 ``group_key_parts``，否则用 ``group_key``。"""
+    parts = getattr(row, "group_key_parts", None)
+    if parts:
+        return "\x1f".join(_group_key_str(part) for part in parts)
+    return _group_key_str(getattr(row, "group_key", None))
+
+
 def merge_statistics_items(
     rows_a: list[Any],
     rows_b: list[Any],
 ) -> list[Any]:
-    """按 group_key 合并统计行（保留 rows_a 类型）。"""
+    """按分组键合并统计行（保留 rows_a 类型）。
+
+    单维分组按 ``group_key``；``USER_MODEL_CREDENTIAL`` 等多维分组按
+    ``group_key_parts`` 全量键，避免 visibility OR 拆查后错误合并不同桶。
+    """
     index: dict[str, Any] = {}
     order: list[str] = []
 
     def _ingest(row: Any) -> None:
-        key = _group_key_str(getattr(row, "group_key", None))
+        key = _statistics_item_merge_key(row)
         if key not in index:
             index[key] = row
             order.append(key)
@@ -154,7 +166,7 @@ def merge_statistics_items(
             group_key=existing.group_key,
             label_snapshot=existing.label_snapshot or getattr(row, "label_snapshot", None),
             group_key_parts=existing.group_key_parts,
-            label_parts=existing.label_parts,
+            label_parts=existing.label_parts or getattr(row, "label_parts", None),
             requests=int(totals["requests"]),
             success_count=int(totals["success_count"]),
             failure_count=int(totals["failure_count"]),

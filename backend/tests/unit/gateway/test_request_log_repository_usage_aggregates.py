@@ -298,6 +298,89 @@ async def test_aggregate_usage_statistics_by_axis_user_axis_splits_visibility_or
 
 
 @pytest.mark.asyncio
+async def test_aggregate_usage_statistics_user_model_credential_keeps_composite_groups() -> None:
+    """user 轴拆查后，USER_MODEL_CREDENTIAL 不得按 user_id 单键合并。"""
+    uid = uuid.uuid4()
+    cred_a = uuid.uuid4()
+    cred_b = uuid.uuid4()
+
+    def _row(cred_id: uuid.UUID, requests: int, cost: str) -> SimpleNamespace:
+        return SimpleNamespace(
+            group_key=uid,
+            label_snapshot="u@example.com",
+            gk_1="gpt-4",
+            ls_1=None,
+            gk_2=cred_id,
+            ls_2=f"Cred {cred_id.hex[:4]}",
+            requests=requests,
+            success_count=requests,
+            failure_count=0,
+            input_tokens=requests,
+            output_tokens=requests,
+            cached_tokens=0,
+            cache_creation_tokens=0,
+            cost_usd=Decimal(cost),
+            avg_latency_ms=100.0,
+            avg_ttfb_ms=30.0,
+            cache_hit_count=0,
+        )
+
+    grouped_a = MagicMock()
+    grouped_a.all.return_value = [_row(cred_a, 2, "0.02")]
+    grouped_b = MagicMock()
+    grouped_b.all.return_value = [_row(cred_b, 3, "0.03")]
+    totals_a = MagicMock()
+    totals_a.one.return_value = SimpleNamespace(
+        requests=2,
+        success_count=2,
+        failure_count=0,
+        input_tokens=2,
+        output_tokens=2,
+        cached_tokens=0,
+        cache_creation_tokens=0,
+        cost_usd=Decimal("0.02"),
+        avg_latency_ms=100.0,
+        avg_ttfb_ms=30.0,
+        cache_hit_count=0,
+    )
+    totals_b = MagicMock()
+    totals_b.one.return_value = SimpleNamespace(
+        requests=3,
+        success_count=3,
+        failure_count=0,
+        input_tokens=3,
+        output_tokens=3,
+        cached_tokens=0,
+        cache_creation_tokens=0,
+        cost_usd=Decimal("0.03"),
+        avg_latency_ms=100.0,
+        avg_ttfb_ms=30.0,
+        cache_hit_count=0,
+    )
+    session = AsyncMock()
+    session.execute = AsyncMock(side_effect=[grouped_a, grouped_b, totals_a, totals_b])
+
+    repo = RequestLogRepository(session)
+    now = datetime.now(UTC)
+    items, totals, group_total = await repo.aggregate_usage_statistics_by_axis(
+        UsageAxis.user(uid),
+        now - timedelta(days=7),
+        now,
+        group_by=UsageStatisticsGroupBy.USER_MODEL_CREDENTIAL,
+        filters=UsageStatisticsFilters(),
+        page=1,
+        page_size=20,
+    )
+
+    assert session.execute.await_count == 4
+    assert group_total == 2
+    assert len(items) == 2
+    assert {item.requests for item in items} == {2, 3}
+    assert totals.requests == 5
+    assert totals.cost_usd == Decimal("0.05")
+
+
+@pytest.mark.asyncio
 async def test_aggregate_summary_by_axis_user_axis_splits_visibility_or() -> None:
     uid = uuid.uuid4()
     row_a = SimpleNamespace(

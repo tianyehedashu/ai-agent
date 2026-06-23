@@ -620,8 +620,32 @@ def _resolve_time_latency(
     return start_dt, end_dt, latency_ms, ttfb_ms if isinstance(ttfb_ms, int) else None
 
 
+def resolve_detail_jsonb_for_persist(
+    *,
+    status: str,
+    persist_detail_jsonb: bool,
+    verbose_log: bool,
+    team_snapshot: Any,
+    route_snapshot: Any,
+    response_summary: dict[str, Any] | None,
+    metadata_extra: dict[str, Any] | None,
+) -> tuple[Any, Any, dict[str, Any] | None, dict[str, Any] | None]:
+    """按配置决定是否写入 team/route 快照与响应元数据 JSONB。"""
+    if verbose_log or status != "success" or persist_detail_jsonb:
+        return team_snapshot, route_snapshot, response_summary, metadata_extra
+    return None, None, None, None
+
+
+def _should_build_detail_jsonb(*, status: str, verbose_log: bool, persist_detail_jsonb: bool) -> bool:
+    return verbose_log or status != "success" or persist_detail_jsonb
+
+
 def _build_log_previews(
-    kwargs: dict[str, Any], response_obj: Any, metadata: dict[str, Any]
+    kwargs: dict[str, Any],
+    response_obj: Any,
+    metadata: dict[str, Any],
+    *,
+    include_response_summary: bool = True,
 ) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
     """构建 prompt_redacted + response_summary。"""
     verbose_log = bool(metadata.get("gateway_store_full_messages"))
@@ -646,11 +670,13 @@ def _build_log_previews(
         prompt_max=prompt_max,
         pii_redactions=pii_redactions,
     )
-    response_summary = _summarize_response(
-        response_obj,
-        max_response_chars=response_max,
-        tool_calls_max_chars=tool_cap,
-    )
+    response_summary: dict[str, Any] | None = None
+    if include_response_summary:
+        response_summary = _summarize_response(
+            response_obj,
+            max_response_chars=response_max,
+            tool_calls_max_chars=tool_cap,
+        )
     return prompt_redacted, response_summary
 
 
@@ -733,6 +759,7 @@ async def _write_log_to_db(
     prompt_hash: Any,
     prompt_redacted: dict[str, Any] | None,
     response_summary: dict[str, Any] | None,
+    metadata_extra: dict[str, Any] | None,
     client_type: str | None,
     client_ua: str | None,
     team_snapshot: Any,
@@ -754,7 +781,6 @@ async def _write_log_to_db(
                 team_id=team_id,
                 platform_api_key_id=_to_uuid(metadata.get("gateway_platform_api_key_id")),
             )
-            metadata_extra = _metadata_extra_non_gateway(metadata)
             await RequestLogRepository(session).insert(
                 team_id=team_id,
                 user_id=persist_user_id,
@@ -1075,8 +1101,21 @@ async def _persist_event(
     # 3. 时间 + 延迟
     _start_dt, _end_dt, latency_ms, ttfb_ms = _resolve_time_latency(start_time, end_time, metadata)
 
+    verbose_log = bool(metadata.get("gateway_store_full_messages"))
+    persist_detail_jsonb = settings.gateway_request_log_persist_detail_jsonb
+    build_detail_jsonb = _should_build_detail_jsonb(
+        status=status,
+        verbose_log=verbose_log,
+        persist_detail_jsonb=persist_detail_jsonb,
+    )
+
     # 4. Prompt / Response 摘要
-    prompt_redacted, response_summary = _build_log_previews(kwargs, response_obj, metadata)
+    prompt_redacted, response_summary = _build_log_previews(
+        kwargs,
+        response_obj,
+        metadata,
+        include_response_summary=build_detail_jsonb,
+    )
 
     # 5. 客户端信息
     (
@@ -1087,11 +1126,25 @@ async def _persist_event(
         client_type,
         client_ua,
     ) = _resolve_client_info(metadata)
+    metadata_extra = _metadata_extra_non_gateway(metadata) if build_detail_jsonb else None
+    (
+        team_snapshot,
+        route_snapshot,
+        response_summary,
+        metadata_extra,
+    ) = resolve_detail_jsonb_for_persist(
+        status=status,
+        persist_detail_jsonb=persist_detail_jsonb,
+        verbose_log=verbose_log,
+        team_snapshot=team_snapshot,
+        route_snapshot=route_snapshot,
+        response_summary=response_summary,
+        metadata_extra=metadata_extra,
+    )
 
     # 6. 采样决策
     request_id = metadata.get("gateway_request_id") or kwargs.get("litellm_call_id")
     prompt_hash = metadata.get("pii_prompt_hash")
-    verbose_log = bool(metadata.get("gateway_store_full_messages"))
     persist_row = _make_sampling_decision(
         status=status,
         cost_usd=cost_usd,
@@ -1137,6 +1190,7 @@ async def _persist_event(
             prompt_hash=prompt_hash,
             prompt_redacted=prompt_redacted,
             response_summary=response_summary,
+            metadata_extra=metadata_extra,
             client_type=client_type,
             client_ua=client_ua,
             team_snapshot=team_snapshot,

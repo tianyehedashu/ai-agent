@@ -499,6 +499,8 @@ class Settings(BaseSettings):
     gateway_request_log_response_verbose_max_chars: int = Field(default=16384, ge=0, le=65536)
     # tool_calls 摘要 JSON 最大字符
     gateway_request_log_tool_calls_summary_max_chars: int = Field(default=2000, ge=0, le=8192)
+    # success 请求是否持久化详情 JSONB（team/route 快照 + response_summary + metadata_extra）
+    gateway_request_log_persist_detail_jsonb: bool = False
     # Chat 请求体中的 gateway_verbose_request_log 是否生效（生产建议 False）
     gateway_allow_client_request_verbose_log: bool = False
     # USD → CNY 展示汇率（存储仍为 USD）
