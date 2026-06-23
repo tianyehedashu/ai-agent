@@ -48,7 +48,9 @@ def test_classify_router_model_miss_maps_404() -> None:
     assert biz is not None
     assert biz.http_status == status.HTTP_404_NOT_FOUND
     assert biz.openai_error_type == "model_not_found"
-    assert "Gateway 注册" in biz.message
+    # 模型此刻已注册（否则前置抛 GatewayModelNotFoundError），文案不得再指控「未注册」。
+    assert "未在 Gateway 注册" not in biz.message
+    assert "无可用部署" in biz.message
 
 
 def test_classify_router_wrapper_with_upstream_auth_maps_401() -> None:
@@ -84,7 +86,30 @@ def test_classify_router_wrapper_bad_request_400_not_treated_as_upstream() -> No
     assert biz is not None
     assert biz.http_status == status.HTTP_404_NOT_FOUND
     assert biz.openai_error_type == "model_not_found"
-    assert "Gateway 注册" in biz.message
+    assert "无可用部署" in biz.message
+
+
+def test_classify_router_wrapper_with_upstream_model_not_found_surfaces_upstream() -> None:
+    """上游 404（model not found）即便措辞与 Router miss 撞车，也须透出上游真实原因。"""
+    import litellm
+
+    upstream = litellm.NotFoundError(
+        message="model not found",
+        llm_provider="openai",
+        model="gw/t/x/m",
+    )
+    wrapper = litellm.BadRequestError(
+        message="You passed in model=gw/t/x/m. There are no healthy deployments for this model",
+        model="gw/t/x/m",
+        llm_provider="",
+    )
+    wrapper.__cause__ = upstream
+    biz = classify_proxy_use_case_business_error(wrapper)
+    assert biz is not None
+    assert biz.http_status == status.HTTP_404_NOT_FOUND
+    assert biz.openai_error_type == "model_not_found"
+    # 透出上游 message，而非「无可用部署」兜底文案。
+    assert biz.message == "model not found"
 
 
 def test_classify_rate_limit_maps_anthropic_rate_limit_error() -> None:

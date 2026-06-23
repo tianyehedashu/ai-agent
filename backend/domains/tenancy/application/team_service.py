@@ -20,6 +20,7 @@ from domains.tenancy.domain.policies.team_invite_candidate_scope import (
 )
 from domains.tenancy.domain.policies.team_list_filter import team_metadata_matches_search
 from domains.tenancy.domain.policies.team_role import TeamRole, effective_team_role
+from domains.tenancy.domain.policies.team_slug import personal_team_slug
 from domains.tenancy.domain.team_display_label import format_team_display_label
 from domains.tenancy.infrastructure.identity_user_role_lookup import (
     user_platform_role_lookup_for_session,
@@ -100,7 +101,7 @@ class TeamService:
             return existing
         team = await self._teams.create(
             name=display_name or "Personal",
-            slug=f"personal-{user_id}",
+            slug=personal_team_slug(user_id),
             kind="personal",
             owner_user_id=user_id,
             settings={},

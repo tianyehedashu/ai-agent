@@ -276,9 +276,15 @@ def classify_proxy_use_case_business_error(exc: Exception) -> ProxyUseCaseBusine
             anthropic_error_type="invalid_request_error",
         )
     if is_router_model_miss(exc):
+        # 走到此处时模型必然已在 Gateway 注册（未注册会在前置校验抛
+        # GatewayModelNotFoundError），故不应再指控「未注册/检查配置」——真实原因是
+        # 该模型当前没有可用部署（上游连续失败或全部节点不健康）。
         return ProxyUseCaseBusinessFailure(
             http_status=status.HTTP_404_NOT_FOUND,
-            message=("请求的模型未在 Gateway 注册或当前无可用部署，请检查凭据与模型配置是否仍有效"),
+            message=(
+                "请求的模型当前无可用部署（上游连续失败或全部节点不健康），请稍后重试；"
+                "若持续如此请检查该模型的上游凭据与连通性"
+            ),
             openai_error_type="model_not_found",
             anthropic_error_type="not_found_error",
         )

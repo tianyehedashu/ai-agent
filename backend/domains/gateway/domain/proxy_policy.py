@@ -239,14 +239,17 @@ def allows_unregistered_gateway_model(
     return vkey_is_system is True
 
 
+# 仅匹配 LiteLLM Router 自身「无 deployment / 无健康节点」的聚合错误措辞。
+# 刻意不含 "model not found" / "could not find model"——它们同样是上游厂商错误体的
+# 常见原文，纳入会把「上游拒绝该模型」误判成「Router 无部署」：既让
+# resolve_upstream_proxy_exception 误把携带 status 的上游异常当成 wrapper 跳过，
+# 也让错误分类落到「未注册/无可用部署」兜底，从而掩盖真实上游原因。
 _ROUTER_MODEL_MISS_MARKERS: tuple[str, ...] = (
     "no deployments available",
     "no healthy deployments",
     "no deployment",
     "no models available",
     "unable to find deployment",
-    "model not found",
-    "could not find model",
 )
 
 

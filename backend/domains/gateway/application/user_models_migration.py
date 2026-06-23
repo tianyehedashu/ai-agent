@@ -18,6 +18,7 @@ from domains.gateway.infrastructure.repositories.credential_repository import (
 )
 from domains.gateway.infrastructure.repositories.model_repository import GatewayModelRepository
 from domains.tenancy.application.team_service import TeamService
+from domains.tenancy.domain.policies.team_slug import personal_team_slug
 from libs.crypto import derive_encryption_key
 from utils.logging import get_logger
 
@@ -151,7 +152,7 @@ def _ensure_personal_team_sync(session: Session, user_id: uuid.UUID) -> Team:
         return existing
     team = Team(
         name="Personal",
-        slug=f"personal-{user_id}",
+        slug=personal_team_slug(user_id),
         kind="personal",
         owner_user_id=user_id,
         settings={},
