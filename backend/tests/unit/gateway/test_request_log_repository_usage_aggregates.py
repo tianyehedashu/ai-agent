@@ -197,3 +197,157 @@ async def test_aggregate_usage_statistics_by_axis_maps_items_and_totals() -> Non
     assert totals.success_count == 2
     assert totals.cached_tokens == 4
     assert session.execute.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_aggregate_usage_statistics_by_axis_user_axis_splits_visibility_or() -> None:
+    """user 轴将可见性 OR 拆成两段互斥查询，便于走部分索引。"""
+    uid = uuid.uuid4()
+    model_a = SimpleNamespace(
+        group_key="gpt-4",
+        label_snapshot=None,
+        requests=2,
+        success_count=2,
+        failure_count=0,
+        input_tokens=10,
+        output_tokens=20,
+        cached_tokens=0,
+        cache_creation_tokens=0,
+        cost_usd=Decimal("0.02"),
+        avg_latency_ms=100.0,
+        avg_ttfb_ms=30.0,
+        cache_hit_count=0,
+    )
+    model_b = SimpleNamespace(
+        group_key="gpt-4",
+        label_snapshot=None,
+        requests=1,
+        success_count=1,
+        failure_count=0,
+        input_tokens=5,
+        output_tokens=6,
+        cached_tokens=0,
+        cache_creation_tokens=0,
+        cost_usd=Decimal("0.01"),
+        avg_latency_ms=200.0,
+        avg_ttfb_ms=50.0,
+        cache_hit_count=0,
+    )
+    grouped_a = MagicMock()
+    grouped_a.all.return_value = [model_a]
+    grouped_b = MagicMock()
+    grouped_b.all.return_value = [model_b]
+    totals_a = MagicMock()
+    totals_a.one.return_value = SimpleNamespace(
+        requests=2,
+        success_count=2,
+        failure_count=0,
+        input_tokens=10,
+        output_tokens=20,
+        cached_tokens=0,
+        cache_creation_tokens=0,
+        cost_usd=Decimal("0.02"),
+        avg_latency_ms=100.0,
+        avg_ttfb_ms=30.0,
+        cache_hit_count=0,
+    )
+    totals_b = MagicMock()
+    totals_b.one.return_value = SimpleNamespace(
+        requests=1,
+        success_count=1,
+        failure_count=0,
+        input_tokens=5,
+        output_tokens=6,
+        cached_tokens=0,
+        cache_creation_tokens=0,
+        cost_usd=Decimal("0.01"),
+        avg_latency_ms=200.0,
+        avg_ttfb_ms=50.0,
+        cache_hit_count=0,
+    )
+    session = AsyncMock()
+    session.execute = AsyncMock(side_effect=[grouped_a, grouped_b, totals_a, totals_b])
+
+    repo = RequestLogRepository(session)
+    now = datetime.now(UTC)
+    items, totals, group_total = await repo.aggregate_usage_statistics_by_axis(
+        UsageAxis.user(uid),
+        now - timedelta(days=7),
+        now,
+        group_by=UsageStatisticsGroupBy.MODEL,
+        filters=UsageStatisticsFilters(),
+        page=1,
+        page_size=20,
+    )
+
+    assert session.execute.await_count == 4
+    assert group_total == 1
+    assert len(items) == 1
+    assert items[0].requests == 3
+    assert items[0].cost_usd == Decimal("0.03")
+    assert totals.requests == 3
+    assert totals.success_count == 3
+    assert totals.avg_latency_ms == pytest.approx((100.0 * 2 + 200.0 * 1) / 3)
+
+    compiled_sql = [
+        str(call.args[0].compile(compile_kwargs={"literal_binds": True}))
+        for call in session.execute.await_args_list
+    ]
+    assert any("vkey_id IS NULL" in sql and "vkey_id IS NOT NULL" not in sql for sql in compiled_sql)
+    assert any("vkey_id IS NOT NULL" in sql and "vkey_id IS NULL" not in sql for sql in compiled_sql)
+
+
+@pytest.mark.asyncio
+async def test_aggregate_summary_by_axis_user_axis_splits_visibility_or() -> None:
+    uid = uuid.uuid4()
+    row_a = SimpleNamespace(
+        total=4,
+        input_tokens=40,
+        output_tokens=80,
+        cached_tokens=0,
+        cache_creation_tokens=0,
+        cost_usd=Decimal("0.04"),
+        success=4,
+        failure=0,
+        avg_latency=100.0,
+        avg_ttfb=20.0,
+    )
+    row_b = SimpleNamespace(
+        total=1,
+        input_tokens=10,
+        output_tokens=20,
+        cached_tokens=0,
+        cache_creation_tokens=0,
+        cost_usd=Decimal("0.01"),
+        success=1,
+        failure=0,
+        avg_latency=300.0,
+        avg_ttfb=60.0,
+    )
+    result_a = MagicMock()
+    result_a.one.return_value = row_a
+    result_b = MagicMock()
+    result_b.one.return_value = row_b
+    session = AsyncMock()
+    session.execute = AsyncMock(side_effect=[result_a, result_b])
+
+    repo = RequestLogRepository(session)
+    now = datetime.now(UTC)
+    summary = await repo.aggregate_summary_by_axis(
+        UsageAxis.user(uid),
+        now - timedelta(days=7),
+        now,
+    )
+
+    assert session.execute.await_count == 2
+    assert summary["total"] == 5
+    assert summary["success"] == 5
+    assert summary["cost_usd"] == Decimal("0.05")
+    assert summary["avg_latency_ms"] == pytest.approx((100.0 * 4 + 300.0 * 1) / 5)
+
+    compiled_sql = [
+        str(call.args[0].compile(compile_kwargs={"literal_binds": True}))
+        for call in session.execute.await_args_list
+    ]
+    assert any("vkey_id IS NULL" in sql and "vkey_id IS NOT NULL" not in sql for sql in compiled_sql)
+    assert any("vkey_id IS NOT NULL" in sql and "vkey_id IS NULL" not in sql for sql in compiled_sql)

@@ -122,25 +122,29 @@ class RequestLogRepository:
     def __init__(self, session: AsyncSession):
         self._session = session
 
+    @staticmethod
+    def _clause_variants_for_axis(
+        axis: UsageAxis,
+        clauses: list[ColumnElement[bool]],
+    ) -> list[list[ColumnElement[bool]]]:
+        """user / workspace-member 轴将可见性 OR 拆成互斥子句，便于走部分索引。"""
+        split = usage_axis_count_disjuncts(axis)
+        if split is None:
+            return [clauses]
+        disjuncts, visibility_idx = split
+        prefix = clauses[:visibility_idx]
+        suffix = clauses[visibility_idx + 1 :]
+        return [[*prefix, disjunct, *suffix] for disjunct in disjuncts]
+
     async def _count_logs(
         self,
         axis: UsageAxis,
         clauses: list[ColumnElement[bool]],
     ) -> int:
         """COUNT 热路径：user / workspace-member 轴拆成两段互斥子查询再相加，便于走部分索引。"""
-        split = usage_axis_count_disjuncts(axis)
-        if split is None:
-            stmt = select(func.count()).select_from(GatewayRequestLog).where(_sql_and(*clauses))
-            return int((await self._session.execute(stmt)).scalar_one())
-
-        disjuncts, visibility_idx = split
-        prefix = clauses[:visibility_idx]
-        suffix = clauses[visibility_idx + 1 :]
         total = 0
-        for disjunct in disjuncts:
-            stmt = select(func.count()).select_from(GatewayRequestLog).where(
-                _sql_and(*prefix, disjunct, *suffix)
-            )
+        for variant in self._clause_variants_for_axis(axis, clauses):
+            stmt = select(func.count()).select_from(GatewayRequestLog).where(_sql_and(*variant))
             total += int((await self._session.execute(stmt)).scalar_one())
         return total
 
@@ -360,31 +364,38 @@ class RequestLogRepository:
                 client_type=client_type,
             ),
         ]
-        stmt = select(
-            func.count(GatewayRequestLog.id).label("total"),
-            func.sum(GatewayRequestLog.input_tokens).label("input_tokens"),
-            func.sum(GatewayRequestLog.output_tokens).label("output_tokens"),
-            func.sum(GatewayRequestLog.cached_tokens).label("cached_tokens"),
-            func.sum(GatewayRequestLog.cache_creation_tokens).label("cache_creation_tokens"),
-            func.sum(GatewayRequestLog.cost_usd).label("cost_usd"),
-            func.sum(case((GatewayRequestLog.status == "success", 1), else_=0)).label("success"),
-            func.sum(case((GatewayRequestLog.status != "success", 1), else_=0)).label("failure"),
-            func.avg(_success_only_metric(GatewayRequestLog.latency_ms)).label("avg_latency"),
-            func.avg(_success_only_metric(GatewayRequestLog.ttfb_ms)).label("avg_ttfb"),
-        ).where(_sql_and(*clauses))
-        row = (await self._session.execute(stmt)).one()
-        return {
-            "total": int(row.total or 0),
-            "input_tokens": int(row.input_tokens or 0),
-            "output_tokens": int(row.output_tokens or 0),
-            "cached_tokens": int(row.cached_tokens or 0),
-            "cache_creation_tokens": int(row.cache_creation_tokens or 0),
-            "cost_usd": Decimal(row.cost_usd or 0),
-            "success": int(row.success or 0),
-            "failure": int(row.failure or 0),
-            "avg_latency_ms": float(row.avg_latency or 0),
-            "avg_ttfb_ms": float(row.avg_ttfb or 0),
-        }
+        merged: dict[str, Any] | None = None
+        from domains.gateway.application.management.usage_metrics import merge_summary_slices
+
+        for variant in self._clause_variants_for_axis(axis, clauses):
+            stmt = select(
+                func.count(GatewayRequestLog.id).label("total"),
+                func.sum(GatewayRequestLog.input_tokens).label("input_tokens"),
+                func.sum(GatewayRequestLog.output_tokens).label("output_tokens"),
+                func.sum(GatewayRequestLog.cached_tokens).label("cached_tokens"),
+                func.sum(GatewayRequestLog.cache_creation_tokens).label("cache_creation_tokens"),
+                func.sum(GatewayRequestLog.cost_usd).label("cost_usd"),
+                func.sum(case((GatewayRequestLog.status == "success", 1), else_=0)).label("success"),
+                func.sum(case((GatewayRequestLog.status != "success", 1), else_=0)).label("failure"),
+                func.avg(_success_only_metric(GatewayRequestLog.latency_ms)).label("avg_latency"),
+                func.avg(_success_only_metric(GatewayRequestLog.ttfb_ms)).label("avg_ttfb"),
+            ).where(_sql_and(*variant))
+            row = (await self._session.execute(stmt)).one()
+            partial = {
+                "total": int(row.total or 0),
+                "input_tokens": int(row.input_tokens or 0),
+                "output_tokens": int(row.output_tokens or 0),
+                "cached_tokens": int(row.cached_tokens or 0),
+                "cache_creation_tokens": int(row.cache_creation_tokens or 0),
+                "cost_usd": Decimal(row.cost_usd or 0),
+                "success": int(row.success or 0),
+                "failure": int(row.failure or 0),
+                "avg_latency_ms": float(row.avg_latency or 0),
+                "avg_ttfb_ms": float(row.avg_ttfb or 0),
+            }
+            merged = partial if merged is None else merge_summary_slices(merged, partial)
+        assert merged is not None
+        return merged
 
     async def aggregate_by_client_type(
         self,
@@ -808,36 +819,23 @@ class RequestLogRepository:
     def _group_key_to_str(value: object) -> str:
         return "" if value is None else str(value)
 
-    async def aggregate_usage_statistics_by_axis(
-        self,
-        axis: UsageAxis,
-        start: datetime,
-        end: datetime,
-        *,
-        group_by: UsageStatisticsGroupBy,
-        filters: UsageStatisticsFilters,
-        page: int = 1,
-        page_size: int = 20,
-        parent_scope: UsageStatisticsParentScope | None = None,
-        fetch_all_groups: bool = False,
-    ) -> tuple[list[RequestLogUsageAggregateRow], RequestLogUsageTotals, int]:
-        """按指定维度聚合调用统计，并返回同一过滤条件下的总计与分组总数。"""
-        group_exprs = self._usage_statistics_group_exprs(group_by)
-        snapshot_exprs = self._usage_statistics_snapshot_exprs(group_by)
-        clauses = [
-            *usage_axis_base_clauses(axis),
-            GatewayRequestLog.created_at >= start,
-            GatewayRequestLog.created_at <= end,
-            *self._usage_statistics_filter_clauses(filters),
-        ]
-        if parent_scope is not None:
-            clauses.append(self._usage_statistics_parent_clause(parent_scope))
+    @staticmethod
+    def _usage_statistics_metric_cases() -> tuple[Any, Any, Any]:
         success_case = case((GatewayRequestLog.status == "success", 1), else_=0)
         failure_case = case((GatewayRequestLog.status != "success", 1), else_=0)
         cache_hit_case = case((GatewayRequestLog.cache_hit.is_(True), 1), else_=0)
+        return success_case, failure_case, cache_hit_case
 
-        offset = max(0, (page - 1) * page_size)
-        selected = [
+    @classmethod
+    def _usage_statistics_group_select(
+        cls,
+        group_exprs: list[ColumnElement[UUID | str | None]],
+        snapshot_exprs: list[ColumnElement[str | None]],
+        success_case: Any,
+        failure_case: Any,
+        cache_hit_case: Any,
+    ) -> list[Any]:
+        selected: list[Any] = [
             group_exprs[0].label("group_key"),
             snapshot_exprs[0].label("label_snapshot"),
         ]
@@ -862,51 +860,67 @@ class RequestLogRepository:
                 func.sum(cache_hit_case).label("cache_hit_count"),
             ]
         )
-        grouped_subq = (
+        return selected
+
+    def _usage_statistics_row_to_item(
+        self,
+        row: Any,
+        group_exprs: list[ColumnElement[UUID | str | None]],
+    ) -> RequestLogUsageAggregateRow:
+        group_key_parts: list[str] | None = None
+        label_parts: list[str] | None = None
+        if len(group_exprs) > 1:
+            group_key_parts = [self._group_key_to_str(row.group_key)]
+            label_parts = [row.label_snapshot or ""]
+            for i in range(1, len(group_exprs)):
+                gk = getattr(row, f"gk_{i}")
+                ls = getattr(row, f"ls_{i}")
+                group_key_parts.append(self._group_key_to_str(gk))
+                label_parts.append(ls or "")
+        return RequestLogUsageAggregateRow(
+            group_key=row.group_key,
+            label_snapshot=row.label_snapshot,
+            group_key_parts=group_key_parts,
+            label_parts=label_parts,
+            requests=int(row.requests or 0),
+            success_count=int(row.success_count or 0),
+            failure_count=int(row.failure_count or 0),
+            input_tokens=int(row.input_tokens or 0),
+            output_tokens=int(row.output_tokens or 0),
+            cached_tokens=int(row.cached_tokens or 0),
+            cache_creation_tokens=int(row.cache_creation_tokens or 0),
+            cost_usd=Decimal(row.cost_usd or 0),
+            avg_latency_ms=float(row.avg_latency_ms or 0),
+            avg_ttfb_ms=float(row.avg_ttfb_ms or 0),
+            cache_hit_count=int(row.cache_hit_count or 0),
+        )
+
+    async def _fetch_usage_statistics_grouped_rows(
+        self,
+        clauses: list[ColumnElement[bool]],
+        *,
+        group_exprs: list[ColumnElement[UUID | str | None]],
+        snapshot_exprs: list[ColumnElement[str | None]],
+        selected: list[Any],
+    ) -> list[RequestLogUsageAggregateRow]:
+        stmt = (
             select(*selected)
             .where(_sql_and(*clauses))
             .group_by(*group_exprs)
-            .subquery("usage_grouped")
+            .order_by(func.count(GatewayRequestLog.id).desc())
         )
-        rows_stmt = select(grouped_subq).order_by(grouped_subq.c.requests.desc())
-        if not fetch_all_groups:
-            rows_stmt = rows_stmt.offset(offset).limit(page_size)
-        result = await self._session.execute(rows_stmt)
-        items: list[RequestLogUsageAggregateRow] = []
-        for row in result.all():
-            group_key_parts: list[str] | None = None
-            label_parts: list[str] | None = None
-            if len(group_exprs) > 1:
-                group_key_parts = [self._group_key_to_str(row.group_key)]
-                label_parts = [row.label_snapshot or ""]
-                for i in range(1, len(group_exprs)):
-                    gk = getattr(row, f"gk_{i}")
-                    ls = getattr(row, f"ls_{i}")
-                    group_key_parts.append(self._group_key_to_str(gk))
-                    label_parts.append(ls or "")
-            items.append(
-                RequestLogUsageAggregateRow(
-                    group_key=row.group_key,
-                    label_snapshot=row.label_snapshot,
-                    group_key_parts=group_key_parts,
-                    label_parts=label_parts,
-                    requests=int(row.requests or 0),
-                    success_count=int(row.success_count or 0),
-                    failure_count=int(row.failure_count or 0),
-                    input_tokens=int(row.input_tokens or 0),
-                    output_tokens=int(row.output_tokens or 0),
-                    cached_tokens=int(row.cached_tokens or 0),
-                    cache_creation_tokens=int(row.cache_creation_tokens or 0),
-                    cost_usd=Decimal(row.cost_usd or 0),
-                    avg_latency_ms=float(row.avg_latency_ms or 0),
-                    avg_ttfb_ms=float(row.avg_ttfb_ms or 0),
-                    cache_hit_count=int(row.cache_hit_count or 0),
-                )
-            )
+        result = await self._session.execute(stmt)
+        return [self._usage_statistics_row_to_item(row, group_exprs) for row in result.all()]
 
-        group_total_subq = select(func.count()).select_from(grouped_subq).scalar_subquery()
-        totals_stmt = select(
-            group_total_subq.label("group_total"),
+    async def _fetch_usage_statistics_totals_dict(
+        self,
+        clauses: list[ColumnElement[bool]],
+        *,
+        success_case: Any,
+        failure_case: Any,
+        cache_hit_case: Any,
+    ) -> dict[str, int | float | Decimal]:
+        stmt = select(
             func.count(GatewayRequestLog.id).label("requests"),
             func.sum(success_case).label("success_count"),
             func.sum(failure_case).label("failure_count"),
@@ -919,22 +933,156 @@ class RequestLogRepository:
             func.avg(_success_only_metric(GatewayRequestLog.ttfb_ms)).label("avg_ttfb_ms"),
             func.sum(cache_hit_case).label("cache_hit_count"),
         ).where(_sql_and(*clauses))
-        total_row = (await self._session.execute(totals_stmt)).one()
-        group_total = int(total_row.group_total or 0)
-        totals = RequestLogUsageTotals(
-            requests=int(total_row.requests or 0),
-            success_count=int(total_row.success_count or 0),
-            failure_count=int(total_row.failure_count or 0),
-            input_tokens=int(total_row.input_tokens or 0),
-            output_tokens=int(total_row.output_tokens or 0),
-            cached_tokens=int(total_row.cached_tokens or 0),
-            cache_creation_tokens=int(total_row.cache_creation_tokens or 0),
-            cost_usd=Decimal(total_row.cost_usd or 0),
-            avg_latency_ms=float(total_row.avg_latency_ms or 0),
-            avg_ttfb_ms=float(total_row.avg_ttfb_ms or 0),
-            cache_hit_count=int(total_row.cache_hit_count or 0),
+        row = (await self._session.execute(stmt)).one()
+        return {
+            "requests": int(row.requests or 0),
+            "success_count": int(row.success_count or 0),
+            "failure_count": int(row.failure_count or 0),
+            "input_tokens": int(row.input_tokens or 0),
+            "output_tokens": int(row.output_tokens or 0),
+            "cached_tokens": int(row.cached_tokens or 0),
+            "cache_creation_tokens": int(row.cache_creation_tokens or 0),
+            "cost_usd": Decimal(row.cost_usd or 0),
+            "avg_latency_ms": float(row.avg_latency_ms or 0),
+            "avg_ttfb_ms": float(row.avg_ttfb_ms or 0),
+            "cache_hit_count": int(row.cache_hit_count or 0),
+        }
+
+    @staticmethod
+    def _usage_statistics_totals_from_dict(
+        totals_dict: dict[str, int | float | Decimal],
+    ) -> RequestLogUsageTotals:
+        cost = totals_dict["cost_usd"]
+        return RequestLogUsageTotals(
+            requests=int(totals_dict["requests"]),
+            success_count=int(totals_dict["success_count"]),
+            failure_count=int(totals_dict["failure_count"]),
+            input_tokens=int(totals_dict["input_tokens"]),
+            output_tokens=int(totals_dict["output_tokens"]),
+            cached_tokens=int(totals_dict["cached_tokens"]),
+            cache_creation_tokens=int(totals_dict["cache_creation_tokens"]),
+            cost_usd=cost if isinstance(cost, Decimal) else Decimal(str(cost or 0)),
+            avg_latency_ms=float(totals_dict["avg_latency_ms"]),
+            avg_ttfb_ms=float(totals_dict["avg_ttfb_ms"]),
+            cache_hit_count=int(totals_dict["cache_hit_count"]),
         )
-        return items, totals, group_total
+
+    async def aggregate_usage_statistics_by_axis(
+        self,
+        axis: UsageAxis,
+        start: datetime,
+        end: datetime,
+        *,
+        group_by: UsageStatisticsGroupBy,
+        filters: UsageStatisticsFilters,
+        page: int = 1,
+        page_size: int = 20,
+        parent_scope: UsageStatisticsParentScope | None = None,
+        fetch_all_groups: bool = False,
+    ) -> tuple[list[RequestLogUsageAggregateRow], RequestLogUsageTotals, int]:
+        """按指定维度聚合调用统计，并返回同一过滤条件下的总计与分组总数。"""
+        group_exprs = self._usage_statistics_group_exprs(group_by)
+        snapshot_exprs = self._usage_statistics_snapshot_exprs(group_by)
+        clauses = [
+            *usage_axis_base_clauses(axis),
+            GatewayRequestLog.created_at >= start,
+            GatewayRequestLog.created_at <= end,
+            *self._usage_statistics_filter_clauses(filters),
+        ]
+        if parent_scope is not None:
+            clauses.append(self._usage_statistics_parent_clause(parent_scope))
+        success_case, failure_case, cache_hit_case = self._usage_statistics_metric_cases()
+        selected = self._usage_statistics_group_select(
+            group_exprs,
+            snapshot_exprs,
+            success_case,
+            failure_case,
+            cache_hit_case,
+        )
+        clause_variants = self._clause_variants_for_axis(axis, clauses)
+        offset = max(0, (page - 1) * page_size)
+
+        if len(clause_variants) == 1:
+            variant = clause_variants[0]
+            grouped_subq = (
+                select(*selected)
+                .where(_sql_and(*variant))
+                .group_by(*group_exprs)
+                .subquery("usage_grouped")
+            )
+            rows_stmt = select(grouped_subq).order_by(grouped_subq.c.requests.desc())
+            if not fetch_all_groups:
+                rows_stmt = rows_stmt.offset(offset).limit(page_size)
+            result = await self._session.execute(rows_stmt)
+            items = [
+                self._usage_statistics_row_to_item(row, group_exprs) for row in result.all()
+            ]
+            group_total_subq = select(func.count()).select_from(grouped_subq).scalar_subquery()
+            totals_stmt = select(
+                group_total_subq.label("group_total"),
+                func.count(GatewayRequestLog.id).label("requests"),
+                func.sum(success_case).label("success_count"),
+                func.sum(failure_case).label("failure_count"),
+                func.sum(GatewayRequestLog.input_tokens).label("input_tokens"),
+                func.sum(GatewayRequestLog.output_tokens).label("output_tokens"),
+                func.sum(GatewayRequestLog.cached_tokens).label("cached_tokens"),
+                func.sum(GatewayRequestLog.cache_creation_tokens).label("cache_creation_tokens"),
+                func.sum(GatewayRequestLog.cost_usd).label("cost_usd"),
+                func.avg(_success_only_metric(GatewayRequestLog.latency_ms)).label(
+                    "avg_latency_ms"
+                ),
+                func.avg(_success_only_metric(GatewayRequestLog.ttfb_ms)).label("avg_ttfb_ms"),
+                func.sum(cache_hit_case).label("cache_hit_count"),
+            ).where(_sql_and(*variant))
+            total_row = (await self._session.execute(totals_stmt)).one()
+            group_total = int(total_row.group_total or 0)
+            totals = RequestLogUsageTotals(
+                requests=int(total_row.requests or 0),
+                success_count=int(total_row.success_count or 0),
+                failure_count=int(total_row.failure_count or 0),
+                input_tokens=int(total_row.input_tokens or 0),
+                output_tokens=int(total_row.output_tokens or 0),
+                cached_tokens=int(total_row.cached_tokens or 0),
+                cache_creation_tokens=int(total_row.cache_creation_tokens or 0),
+                cost_usd=Decimal(total_row.cost_usd or 0),
+                avg_latency_ms=float(total_row.avg_latency_ms or 0),
+                avg_ttfb_ms=float(total_row.avg_ttfb_ms or 0),
+                cache_hit_count=int(total_row.cache_hit_count or 0),
+            )
+            return items, totals, group_total
+
+        merged_items: list[RequestLogUsageAggregateRow] = []
+        from domains.gateway.application.management.usage_metrics import (
+            merge_statistics_items,
+            merge_statistics_totals,
+        )
+
+        for variant in clause_variants:
+            rows = await self._fetch_usage_statistics_grouped_rows(
+                variant,
+                group_exprs=group_exprs,
+                snapshot_exprs=snapshot_exprs,
+                selected=selected,
+            )
+            merged_items = (
+                merge_statistics_items(merged_items, rows) if merged_items else list(rows)
+            )
+        group_total = len(merged_items)
+        items = merged_items if fetch_all_groups else merged_items[offset : offset + page_size]
+
+        merged_totals: dict[str, int | float | Decimal] | None = None
+        for variant in clause_variants:
+            partial = await self._fetch_usage_statistics_totals_dict(
+                variant,
+                success_case=success_case,
+                failure_case=failure_case,
+                cache_hit_case=cache_hit_case,
+            )
+            merged_totals = (
+                partial if merged_totals is None else merge_statistics_totals(merged_totals, partial)
+            )
+        assert merged_totals is not None
+        return items, self._usage_statistics_totals_from_dict(merged_totals), group_total
 
     @staticmethod
     def _parent_in_clause(
