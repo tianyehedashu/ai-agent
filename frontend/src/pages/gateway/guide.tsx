@@ -7,7 +7,7 @@
  * - 典型返回：4 个 Tab 横向对比（OpenAI/Anthropic × 非流式/流式），用 Badge 突出 content-type
  */
 
-import { memo, useCallback, useEffect, useMemo, useState, lazy, Suspense } from 'react'
+import { useCallback, useEffect, useMemo, useState, lazy, Suspense } from 'react'
 import type React from 'react'
 
 import { Link, useLocation, useSearchParams } from 'react-router-dom'
@@ -45,7 +45,6 @@ import { useCopyToClipboardKeyed } from '@/hooks/use-copy-to-clipboard'
 import { useGatewayMembershipTeamIds, useGatewayWorkspaceTeamId } from '@/hooks/use-gateway-team-id'
 import { resolveGatewayV1BaseUrl } from '@/lib/gateway-v1-base-url'
 import {
-  BookOpen,
   Check,
   CheckCircle2,
   Copy,
@@ -97,6 +96,7 @@ const PLACEHOLDER_MODEL = 'claude-opus-4-7'
 
 type ApiFlavor = 'openai' | 'anthropic'
 type ResponseTab = 'openai-json' | 'openai-sse' | 'anthropic-json' | 'anthropic-sse'
+type GuideResourceTab = 'clients' | 'examples' | 'reference' | 'troubleshooting'
 
 type QuickStep = { step: number; title: string; description: string; href: string }
 type TroubleshootingItem = {
@@ -151,59 +151,19 @@ function buildTroubleshooting(
   ]
 }
 
-const GUIDE_NAV_ITEMS = [
-  ['#playground', '在线试调'],
-  ['#clients', '客户端集成'],
-  ['#examples', '代码示例'],
-  ['#reference', '能力参考'],
-  ['#troubleshooting', '异常排查'],
+const GUIDE_RESOURCE_TABS: readonly { value: GuideResourceTab; label: string }[] = [
+  { value: 'examples', label: '代码示例' },
+  { value: 'clients', label: '客户端' },
+  { value: 'reference', label: '能力参考' },
+  { value: 'troubleshooting', label: '排障' },
 ] as const
 
-const GUIDE_CARD_CLASS =
-  'border-border/60 bg-card/95 shadow-sm shadow-black/[0.03] dark:shadow-black/20'
-const GUIDE_SECTION_CLASS = 'scroll-mt-24 space-y-4'
+const GUIDE_CARD_CLASS = 'border-border/60 bg-card/85 shadow-none'
+const GUIDE_SECTION_CLASS = 'scroll-mt-24 space-y-3'
 
-const GUIDE_NAV_IDS = GUIDE_NAV_ITEMS.map(([href]) => href.slice(1))
-
-/**
- * scroll-spy：基于 IntersectionObserver 监听各 section，
- * 选取最靠近视口上沿的可见 section 作为当前位置。
- */
-function useActiveGuideAnchor(): string {
-  const [active, setActive] = useState<string>(GUIDE_NAV_ITEMS[0][0])
-
-  useEffect(() => {
-    const targets = GUIDE_NAV_IDS.map((id) => document.getElementById(id)).filter(
-      (el): el is HTMLElement => el !== null
-    )
-    if (targets.length === 0) return
-
-    const visibility = new Map<string, number>()
-    const observer = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          visibility.set(entry.target.id, entry.intersectionRatio)
-        }
-        let best: { id: string; ratio: number } | null = null
-        for (const [id, ratio] of visibility) {
-          if (ratio <= 0) continue
-          if (!best || ratio > best.ratio) best = { id, ratio }
-        }
-        if (!best) return
-        const next = `#${best.id}`
-        setActive((prev) => (prev === next ? prev : next))
-      },
-      { rootMargin: '-80px 0px -55% 0px', threshold: [0, 0.25, 0.5, 0.75, 1] }
-    )
-    targets.forEach((el) => {
-      observer.observe(el)
-    })
-    return () => {
-      observer.disconnect()
-    }
-  }, [])
-
-  return active
+function guideResourceTabFromHash(hash: string): GuideResourceTab | null {
+  const value = hash.startsWith('#') ? hash.slice(1) : hash
+  return GUIDE_RESOURCE_TABS.some((tab) => tab.value === value) ? (value as GuideResourceTab) : null
 }
 
 export default function GatewayGuidePage(): React.JSX.Element {
@@ -277,6 +237,9 @@ export default function GatewayGuidePage(): React.JSX.Element {
   const [apiFlavor, setApiFlavor] = useState<ApiFlavor>('openai')
   const [exampleStream, setExampleStream] = useState(true)
   const [responseTab, setResponseTab] = useState<ResponseTab>('openai-sse')
+  const [resourceTab, setResourceTab] = useState<GuideResourceTab>(
+    () => guideResourceTabFromHash(location.hash) ?? 'examples'
+  )
 
   const guideRouteCandidates = useMemo(
     () => filterPlaygroundRouteCandidates(guideRoutes, '', guideModelCandidates, playgroundMode),
@@ -309,25 +272,40 @@ export default function GatewayGuidePage(): React.JSX.Element {
     [gatewayV1Base, displayKey, activeModel, snippets, multiGrantVkey]
   )
 
+  const openResourceTab = useCallback((tab: GuideResourceTab): void => {
+    setResourceTab(tab)
+    requestAnimationFrame(() => {
+      scrollToGuideSection('#resources', `#${tab}`)
+    })
+  }, [])
+
+  const handleResourceTabChange = useCallback((value: string): void => {
+    const tab = guideResourceTabFromHash(value)
+    if (!tab) return
+    setResourceTab(tab)
+    window.history.replaceState(null, '', `#${tab}`)
+  }, [])
+
   useEffect(() => {
-    if (location.hash !== '#clients' && !keyIdFromQuery) return
+    const tabFromHash = guideResourceTabFromHash(location.hash)
+    const nextTab = tabFromHash ?? (keyIdFromQuery ? 'clients' : null)
+    if (!nextTab) {
+      if (location.hash !== '#playground') return
+      const frame = requestAnimationFrame(() => {
+        scrollToGuideSection('#playground')
+      })
+      return () => {
+        cancelAnimationFrame(frame)
+      }
+    }
+    setResourceTab(nextTab)
     const frame = requestAnimationFrame(() => {
-      scrollToGuideSection('#clients')
+      scrollToGuideSection('#resources', `#${nextTab}`)
     })
     return () => {
       cancelAnimationFrame(frame)
     }
   }, [location.hash, keyIdFromQuery])
-
-  useEffect(() => {
-    if (!GUIDE_NAV_IDS.includes(location.hash.slice(1))) return
-    const frame = requestAnimationFrame(() => {
-      scrollToGuideSection(location.hash)
-    })
-    return () => {
-      cancelAnimationFrame(frame)
-    }
-  }, [location.hash])
 
   const capabilityModules = useMemo(
     () => buildCapabilityModules(gatewayV1Base, displayKey, activeModel || PLACEHOLDER_MODEL),
@@ -423,7 +401,6 @@ export default function GatewayGuidePage(): React.JSX.Element {
     setResponseTab(`${apiFlavor}-${exampleStream ? 'sse' : 'json'}` as ResponseTab)
   }, [apiFlavor, exampleStream])
 
-  const activeAnchor = useActiveGuideAnchor()
   const quickSteps = useMemo(() => buildQuickSteps(workspaceTeamId), [workspaceTeamId])
   const troubleshooting = useMemo(
     () => buildTroubleshooting(workspaceTeamId, multiGrantVkey),
@@ -437,29 +414,29 @@ export default function GatewayGuidePage(): React.JSX.Element {
   }, [refreshPlaygroundModels])
 
   return (
-    <div className="mx-auto w-full max-w-7xl py-6 lg:py-8">
+    <div className="w-full max-w-[1500px] px-5 py-5 lg:px-7 xl:px-8">
       <GuideHero
         baseUrl={gatewayV1Base}
         keyHint={clientIntegrationsKeyHint}
         modeLabel={PLAYGROUND_MODE_LABELS[playgroundMode]}
         model={activeModel || PLACEHOLDER_MODEL}
+        onOpenClients={() => {
+          openResourceTab('clients')
+        }}
+        onOpenExamples={() => {
+          openResourceTab('examples')
+        }}
       />
 
-      <div className="mt-7 grid gap-8 xl:grid-cols-[minmax(0,1fr)_18rem]">
-        <aside className="order-first xl:order-last">
-          <GuideAnchorNav active={activeAnchor} />
-        </aside>
-
-        <div className="space-y-9">
-          <section aria-labelledby="quick-start-heading" className={GUIDE_SECTION_CLASS}>
-            <GuideSectionHeader
-              id="quick-start-heading"
-              title="先跑通一次调用"
-              description="把接入动作压成三步，后面的示例和参考都围绕当前 Key、模型和试调模式自动变化。"
-            />
-            <div className="grid gap-4 md:grid-cols-3">
+      <div className="mt-6">
+        <div className="space-y-8">
+          <section aria-labelledby="quick-start-heading" className="scroll-mt-24">
+            <h2 id="quick-start-heading" className="sr-only">
+              先跑通一次调用
+            </h2>
+            <div className="grid gap-2 2xl:grid-cols-3">
               {quickSteps.map((item) => (
-                <QuickStepItem key={item.step} item={item} />
+                <QuickStepItem key={item.step} item={item} onOpenResourceTab={openResourceTab} />
               ))}
             </div>
           </section>
@@ -498,6 +475,7 @@ export default function GatewayGuidePage(): React.JSX.Element {
             <Suspense fallback={<GuideSectionFallback />}>
               <PlaygroundCard
                 baseUrl={gatewayV1Base}
+                title="请求配置"
                 onModelChange={handlePlaygroundModelChange}
                 playgroundMode={playgroundMode}
                 onPlaygroundModeChange={handlePlaygroundModeChange}
@@ -509,224 +487,219 @@ export default function GatewayGuidePage(): React.JSX.Element {
             </Suspense>
           </section>
 
-          <section id="clients" aria-labelledby="clients-heading" className={GUIDE_SECTION_CLASS}>
-            <GuideSectionHeader
-              id="clients-heading"
-              title="客户端集成"
-              description="把当前配置同步到常用客户端，优先使用最贴近你工作流的入口。"
-            />
-            <Suspense fallback={<GuideSectionFallback />}>
-              <GuideClientIntegrationsSection
-                clients={clientIntegrations}
-                copiedKey={copiedKey}
-                onCopy={handleCopy}
-                keyHint={clientIntegrationsKeyHint}
-              />
-            </Suspense>
-          </section>
-
-          <section id="examples" aria-labelledby="examples-heading" className={GUIDE_SECTION_CLASS}>
-            <GuideSectionHeader
-              id="examples-heading"
-              title="代码示例"
-              description="默认只展示当前协议和语言组，避免一次性把所有代码铺满屏幕。"
-              actions={
-                playgroundMode === 'chat' ? (
-                  <div className="flex items-center gap-2 rounded-lg border border-border/70 bg-card/80 px-3 py-2 shadow-sm">
-                    <Zap
-                      className={cn(
-                        'h-4 w-4',
-                        exampleStream ? 'text-amber-500' : 'text-muted-foreground'
-                      )}
-                      aria-hidden="true"
-                    />
-                    <Label htmlFor="example-stream" className="cursor-pointer text-sm">
-                      SSE
-                    </Label>
-                    <Switch
-                      id="example-stream"
-                      checked={exampleStream}
-                      onCheckedChange={setExampleStream}
-                    />
-                  </div>
-                ) : null
-              }
-            />
-            <Card className={GUIDE_CARD_CLASS}>
-              <CardHeader className="pb-4">
-                <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-                  <span>当前试调</span>
-                  <Badge variant="secondary" className="font-normal">
-                    {PLAYGROUND_MODE_LABELS[playgroundMode]}
-                  </Badge>
-                </div>
-              </CardHeader>
-              <CardContent className="pt-0">
-                {playgroundMode === 'chat' ? (
-                  <Tabs
-                    value={apiFlavor}
-                    onValueChange={(v) => {
-                      setApiFlavor(v as ApiFlavor)
-                    }}
-                  >
-                    <TabsList>
-                      <TabsTrigger value="openai">OpenAI 兼容</TabsTrigger>
-                      <TabsTrigger value="anthropic">Anthropic 兼容</TabsTrigger>
-                    </TabsList>
-
-                    <TabsContent value="openai" className="space-y-4 pt-3">
-                      <EndpointBadge
-                        endpoint={snippets.openai.endpoint}
-                        mode={exampleStream ? 'stream' : 'json'}
-                        copyKey="openaiEndpoint"
-                        copied={copiedKey === 'openaiEndpoint'}
-                        onCopy={handleCopy}
-                      />
-                      <FlavorExamples
-                        curl={exampleStream ? snippets.openai.curlStream : snippets.openai.curl}
-                        ts={exampleStream ? snippets.openai.tsStream : snippets.openai.ts}
-                        py={exampleStream ? snippets.openai.pyStream : snippets.openai.py}
-                        keyPrefix={`openai-${exampleStream ? 'stream' : 'json'}`}
-                        copiedKey={copiedKey}
-                        onCopy={handleCopy}
-                      />
-                    </TabsContent>
-
-                    <TabsContent value="anthropic" className="space-y-4 pt-3">
-                      <EndpointBadge
-                        endpoint={snippets.anthropic.endpoint}
-                        mode={exampleStream ? 'stream' : 'json'}
-                        copyKey="anthropicEndpoint"
-                        copied={copiedKey === 'anthropicEndpoint'}
-                        onCopy={handleCopy}
-                      />
-                      <FlavorExamples
-                        curl={
-                          exampleStream ? snippets.anthropic.curlStream : snippets.anthropic.curl
-                        }
-                        ts={exampleStream ? snippets.anthropic.tsStream : snippets.anthropic.ts}
-                        py={exampleStream ? snippets.anthropic.pyStream : snippets.anthropic.py}
-                        keyPrefix={`anthropic-${exampleStream ? 'stream' : 'json'}`}
-                        copiedKey={copiedKey}
-                        onCopy={handleCopy}
-                      />
-                    </TabsContent>
-                  </Tabs>
-                ) : mediaModeSnippets ? (
-                  <div className="space-y-4">
-                    {mediaModeSnippets.hint ? (
-                      <p className="rounded-lg border border-info/20 bg-info/5 px-3 py-2 text-sm text-muted-foreground">
-                        {mediaModeSnippets.hint}
-                        <Link
-                          to={gatewayTeamModelsHref(workspaceTeamId)}
-                          className="ml-1 text-primary underline-offset-4 hover:underline"
-                        >
-                          查看模型
-                        </Link>
-                      </p>
-                    ) : null}
-                    <EndpointBadge
-                      endpoint={mediaModeSnippets.endpoint}
-                      mode="json"
-                      copyKey="mediaEndpoint"
-                      copied={copiedKey === 'mediaEndpoint'}
-                      onCopy={handleCopy}
-                    />
-                    <FlavorExamples
-                      curl={mediaModeSnippets.curl}
-                      ts={mediaModeSnippets.ts}
-                      py={mediaModeSnippets.py}
-                      keyPrefix={`media-${playgroundMode}`}
-                      copiedKey={copiedKey}
-                      onCopy={handleCopy}
-                    />
-                  </div>
-                ) : null}
-              </CardContent>
-            </Card>
-          </section>
-
           <section
-            id="reference"
-            aria-labelledby="reference-heading"
+            id="resources"
+            aria-labelledby="resources-heading"
             className={GUIDE_SECTION_CLASS}
           >
             <GuideSectionHeader
-              id="reference-heading"
-              title="参考资料"
-              description="把低频但重要的能力说明、典型返回和模型查询收在这里，按需展开。"
+              id="resources-heading"
+              title="接入资料"
+              description="客户端、代码示例、能力参考和排障收在同一处，按当前试调配置自动变化。"
             />
-            <Card className={GUIDE_CARD_CLASS}>
-              <CardContent className="space-y-4 p-5">
-                <GuideReferenceSection title="按能力查看示例" defaultOpen>
-                  <p className="mb-3 text-sm text-muted-foreground">
-                    图片生成、视频生成的 curl 示例见上方
-                    <a
-                      href="#examples"
-                      className="mx-1 text-primary underline-offset-4 hover:underline"
-                      onClick={(event) => {
-                        event.preventDefault()
-                        scrollToGuideSection('#examples')
-                      }}
-                    >
-                      代码示例
-                    </a>
-                    （随在线试调 Tab 切换）。
-                  </p>
-                  <div id="capabilities" className="scroll-mt-24 space-y-3">
-                    {capabilityModules.map((mod) => (
-                      <CapabilityGuideCard
-                        key={mod.id}
-                        module={mod}
-                        apiFlavor={apiFlavor}
-                        modelHint={mod.id === 'thinking' ? thinkingModelHint : null}
-                        copiedKey={copiedKey}
-                        onCopy={handleCopy}
-                      />
-                    ))}
-                  </div>
-                </GuideReferenceSection>
+            <Tabs value={resourceTab} onValueChange={handleResourceTabChange} className="space-y-4">
+              <TabsList className="grid h-auto w-full grid-cols-2 gap-1 p-1 lg:w-fit lg:grid-cols-4">
+                {GUIDE_RESOURCE_TABS.map((tab) => (
+                  <TabsTrigger key={tab.value} value={tab.value} className="h-8 px-3 text-xs">
+                    {tab.label}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
 
-                <GuideReferenceSection title="典型返回">
-                  <ResponseExamples
-                    responseTab={responseTab}
-                    setResponseTab={setResponseTab}
-                    snippets={snippets}
+              <TabsContent value="examples" id="examples" className="mt-0">
+                <Card className={GUIDE_CARD_CLASS}>
+                  <CardHeader className="pb-4">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                        <span>当前试调</span>
+                        <Badge variant="secondary" className="font-normal">
+                          {PLAYGROUND_MODE_LABELS[playgroundMode]}
+                        </Badge>
+                      </div>
+                      {playgroundMode === 'chat' ? (
+                        <div className="flex w-fit items-center gap-2 rounded-lg border border-border/70 bg-card/80 px-3 py-2">
+                          <Zap
+                            className={cn(
+                              'h-4 w-4',
+                              exampleStream ? 'text-amber-500' : 'text-muted-foreground'
+                            )}
+                            aria-hidden="true"
+                          />
+                          <Label htmlFor="example-stream" className="cursor-pointer text-sm">
+                            SSE
+                          </Label>
+                          <Switch
+                            id="example-stream"
+                            checked={exampleStream}
+                            onCheckedChange={setExampleStream}
+                          />
+                        </div>
+                      ) : null}
+                    </div>
+                  </CardHeader>
+                  <CardContent className="pt-0">
+                    {playgroundMode === 'chat' ? (
+                      <Tabs
+                        value={apiFlavor}
+                        onValueChange={(v) => {
+                          setApiFlavor(v as ApiFlavor)
+                        }}
+                      >
+                        <TabsList>
+                          <TabsTrigger value="openai">OpenAI 兼容</TabsTrigger>
+                          <TabsTrigger value="anthropic">Anthropic 兼容</TabsTrigger>
+                        </TabsList>
+
+                        <TabsContent value="openai" className="space-y-4 pt-3">
+                          <EndpointBadge
+                            endpoint={snippets.openai.endpoint}
+                            mode={exampleStream ? 'stream' : 'json'}
+                            copyKey="openaiEndpoint"
+                            copied={copiedKey === 'openaiEndpoint'}
+                            onCopy={handleCopy}
+                          />
+                          <FlavorExamples
+                            curl={exampleStream ? snippets.openai.curlStream : snippets.openai.curl}
+                            ts={exampleStream ? snippets.openai.tsStream : snippets.openai.ts}
+                            py={exampleStream ? snippets.openai.pyStream : snippets.openai.py}
+                            keyPrefix={`openai-${exampleStream ? 'stream' : 'json'}`}
+                            copiedKey={copiedKey}
+                            onCopy={handleCopy}
+                          />
+                        </TabsContent>
+
+                        <TabsContent value="anthropic" className="space-y-4 pt-3">
+                          <EndpointBadge
+                            endpoint={snippets.anthropic.endpoint}
+                            mode={exampleStream ? 'stream' : 'json'}
+                            copyKey="anthropicEndpoint"
+                            copied={copiedKey === 'anthropicEndpoint'}
+                            onCopy={handleCopy}
+                          />
+                          <FlavorExamples
+                            curl={
+                              exampleStream
+                                ? snippets.anthropic.curlStream
+                                : snippets.anthropic.curl
+                            }
+                            ts={exampleStream ? snippets.anthropic.tsStream : snippets.anthropic.ts}
+                            py={exampleStream ? snippets.anthropic.pyStream : snippets.anthropic.py}
+                            keyPrefix={`anthropic-${exampleStream ? 'stream' : 'json'}`}
+                            copiedKey={copiedKey}
+                            onCopy={handleCopy}
+                          />
+                        </TabsContent>
+                      </Tabs>
+                    ) : mediaModeSnippets ? (
+                      <div className="space-y-4">
+                        {mediaModeSnippets.hint ? (
+                          <p className="rounded-lg border border-info/20 bg-info/5 px-3 py-2 text-sm text-muted-foreground">
+                            {mediaModeSnippets.hint}
+                            <Link
+                              to={gatewayTeamModelsHref(workspaceTeamId)}
+                              className="ml-1 text-primary underline-offset-4 hover:underline"
+                            >
+                              查看模型
+                            </Link>
+                          </p>
+                        ) : null}
+                        <EndpointBadge
+                          endpoint={mediaModeSnippets.endpoint}
+                          mode="json"
+                          copyKey="mediaEndpoint"
+                          copied={copiedKey === 'mediaEndpoint'}
+                          onCopy={handleCopy}
+                        />
+                        <FlavorExamples
+                          curl={mediaModeSnippets.curl}
+                          ts={mediaModeSnippets.ts}
+                          py={mediaModeSnippets.py}
+                          keyPrefix={`media-${playgroundMode}`}
+                          copiedKey={copiedKey}
+                          onCopy={handleCopy}
+                        />
+                      </div>
+                    ) : null}
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              <TabsContent value="clients" id="clients" className="mt-0">
+                <Suspense fallback={<GuideSectionFallback />}>
+                  <GuideClientIntegrationsSection
+                    clients={clientIntegrations}
                     copiedKey={copiedKey}
                     onCopy={handleCopy}
+                    keyHint={clientIntegrationsKeyHint}
                   />
-                </GuideReferenceSection>
+                </Suspense>
+              </TabsContent>
 
-                <GuideReferenceSection title="查询可用模型">
-                  <CodeExampleCard
-                    title="curl"
-                    icon={Terminal}
-                    code={snippets.modelsCurl}
-                    copyKey="modelsCurl"
-                    copied={copiedKey === 'modelsCurl'}
-                    onCopy={handleCopy}
-                    embedded
-                  />
-                </GuideReferenceSection>
-              </CardContent>
-            </Card>
-          </section>
+              <TabsContent value="reference" id="reference" className="mt-0">
+                <Card className={GUIDE_CARD_CLASS}>
+                  <CardContent className="space-y-4 p-5">
+                    <GuideReferenceSection title="按能力查看示例" defaultOpen>
+                      <p className="mb-3 text-sm text-muted-foreground">
+                        图片生成、视频生成的 curl 示例见
+                        <button
+                          type="button"
+                          className="mx-1 text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                          onClick={() => {
+                            setResourceTab('examples')
+                            window.history.replaceState(null, '', '#examples')
+                          }}
+                        >
+                          代码示例
+                        </button>
+                        ，随在线试调 Tab 切换。
+                      </p>
+                      <div id="capabilities" className="scroll-mt-24 space-y-3">
+                        {capabilityModules.map((mod) => (
+                          <CapabilityGuideCard
+                            key={mod.id}
+                            module={mod}
+                            apiFlavor={apiFlavor}
+                            modelHint={mod.id === 'thinking' ? thinkingModelHint : null}
+                            copiedKey={copiedKey}
+                            onCopy={handleCopy}
+                          />
+                        ))}
+                      </div>
+                    </GuideReferenceSection>
 
-          <section
-            id="troubleshooting"
-            aria-labelledby="troubleshooting-heading"
-            className={GUIDE_SECTION_CLASS}
-          >
-            <GuideSectionHeader
-              id="troubleshooting-heading"
-              title="异常排查"
-              description="把常见错误归成少量卡片，方便从失败状态直接跳到对应配置区。"
-            />
-            <div className="grid gap-4 md:grid-cols-2">
-              {troubleshooting.map((item) => (
-                <TroubleshootingCard key={item.code} item={item} />
-              ))}
-            </div>
+                    <GuideReferenceSection title="典型返回">
+                      <ResponseExamples
+                        responseTab={responseTab}
+                        setResponseTab={setResponseTab}
+                        snippets={snippets}
+                        copiedKey={copiedKey}
+                        onCopy={handleCopy}
+                      />
+                    </GuideReferenceSection>
+
+                    <GuideReferenceSection title="查询可用模型">
+                      <CodeExampleCard
+                        title="curl"
+                        icon={Terminal}
+                        code={snippets.modelsCurl}
+                        copyKey="modelsCurl"
+                        copied={copiedKey === 'modelsCurl'}
+                        onCopy={handleCopy}
+                        embedded
+                      />
+                    </GuideReferenceSection>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              <TabsContent value="troubleshooting" id="troubleshooting" className="mt-0">
+                <div className="grid gap-4 md:grid-cols-2">
+                  {troubleshooting.map((item) => (
+                    <TroubleshootingCard key={item.code} item={item} />
+                  ))}
+                </div>
+              </TabsContent>
+            </Tabs>
           </section>
         </div>
       </div>
@@ -739,11 +712,15 @@ function GuideHero({
   keyHint,
   modeLabel,
   model,
+  onOpenClients,
+  onOpenExamples,
 }: Readonly<{
   baseUrl: string
   keyHint: GuideClientIntegrationsKeyHint
   modeLabel: string
   model: string
+  onOpenClients: () => void
+  onOpenExamples: () => void
 }>): React.JSX.Element {
   const keyStatus =
     keyHint === 'revealed'
@@ -753,27 +730,24 @@ function GuideHero({
         : '占位示例'
 
   return (
-    <section className="elevated-panel overflow-hidden rounded-2xl bg-[linear-gradient(135deg,hsl(var(--card)/0.96),hsl(var(--surface-raised)/0.74))] px-5 py-5 sm:px-6 lg:px-7">
-      <div className="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
-        <div className="max-w-3xl">
-          <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl border border-primary/20 bg-primary/10 text-primary shadow-sm shadow-primary/10">
-            <BookOpen className="h-5 w-5" aria-hidden="true" />
-          </div>
+    <section className="border-b border-border/60 pb-4">
+      <div className="flex flex-col gap-4 2xl:flex-row 2xl:items-start 2xl:justify-between">
+        <div className="min-w-0 max-w-4xl">
           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-primary/80">
             AI Gateway
           </p>
-          <h1 className="mt-2 text-3xl font-semibold tracking-tight text-foreground">调用指南</h1>
-          <p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground">
+          <h1 className="mt-1 text-2xl font-semibold tracking-tight text-foreground">调用指南</h1>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
             从一次可运行的请求开始：选择虚拟 Key
             和模型，在线试调确认可用，再把同一套配置复制到客户端或 SDK。
           </p>
-          <div className="mt-5 flex flex-wrap items-center gap-2">
+          <div className="mt-3 flex flex-wrap items-center gap-2">
             <Button asChild>
               <a
                 href="#examples"
                 onClick={(event) => {
                   event.preventDefault()
-                  scrollToGuideSection('#examples')
+                  onOpenExamples()
                 }}
               >
                 查看代码示例
@@ -784,7 +758,7 @@ function GuideHero({
                 href="#clients"
                 onClick={(event) => {
                   event.preventDefault()
-                  scrollToGuideSection('#clients')
+                  onOpenClients()
                 }}
               >
                 客户端配置
@@ -793,15 +767,15 @@ function GuideHero({
           </div>
         </div>
 
-        <div className="grid min-w-0 gap-3 sm:grid-cols-3 xl:w-[34rem]">
+        <div className="grid min-w-0 gap-2 sm:grid-cols-3 2xl:w-[34rem]">
           <GuideHeroSignal icon={Key} label="Key" value={keyStatus} />
           <GuideHeroSignal icon={Network} label="模型" value={model} code />
           <GuideHeroSignal icon={Route} label="模式" value={modeLabel} />
         </div>
       </div>
-      <div className="mt-5 rounded-xl border border-border/60 bg-background/55 px-3 py-2 text-xs text-muted-foreground">
+      <div className="mt-3 flex min-w-0 items-center gap-2 rounded-lg border border-border/60 bg-card/60 px-3 py-2 text-xs text-muted-foreground">
         <span className="font-medium text-foreground">Base URL</span>
-        <span className="ml-2 font-mono" translate="no">
+        <span className="min-w-0 truncate font-mono" translate="no">
           {baseUrl}
         </span>
       </div>
@@ -821,22 +795,21 @@ function GuideHeroSignal({
   code?: boolean
 }>): React.JSX.Element {
   return (
-    <div className="min-w-0 rounded-xl border border-border/60 bg-background/55 p-3">
-      <div className="mb-3 flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
+    <div className="flex min-w-0 items-center gap-2 rounded-lg border border-border/60 bg-card/60 px-2.5 py-2">
+      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
         <Icon className="h-4 w-4" aria-hidden="true" />
       </div>
-      <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
-        {label}
-      </p>
-      <p
-        className={cn(
-          'mt-1 truncate text-sm font-medium text-foreground',
-          code && 'font-mono text-xs'
-        )}
-        translate={code ? 'no' : undefined}
-      >
-        {value}
-      </p>
+      <div className="min-w-0">
+        <p className="text-[10px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
+          {label}
+        </p>
+        <p
+          className={cn('mt-0.5 truncate text-sm font-medium text-foreground', code && 'font-mono')}
+          translate={code ? 'no' : undefined}
+        >
+          {value}
+        </p>
+      </div>
     </div>
   )
 }
@@ -854,8 +827,8 @@ function GuideSectionHeader({
 }>): React.JSX.Element {
   return (
     <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-      <div className="max-w-2xl">
-        <h2 id={id} className="text-xl font-semibold tracking-tight text-foreground">
+      <div className="max-w-3xl">
+        <h2 id={id} className="text-lg font-semibold tracking-tight text-foreground">
           {title}
         </h2>
         <p className="mt-1 text-sm leading-6 text-muted-foreground">{description}</p>
@@ -865,7 +838,7 @@ function GuideSectionHeader({
   )
 }
 
-function scrollToGuideSection(href: string): void {
+function scrollToGuideSection(href: string, historyHref = href): void {
   const target = document.getElementById(href.slice(1))
   if (!target) return
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
@@ -883,7 +856,7 @@ function scrollToGuideSection(href: string): void {
     target.scrollIntoView({ behavior, block: 'start' })
   }
 
-  window.history.replaceState(null, '', href)
+  window.history.replaceState(null, '', historyHref)
 }
 
 function findScrollableParent(element: HTMLElement): HTMLElement | null {
@@ -899,90 +872,51 @@ function findScrollableParent(element: HTMLElement): HTMLElement | null {
   return null
 }
 
-const GuideNavTab = memo(function GuideNavTab({
-  href,
-  label,
-  isActive,
+function QuickStepItem({
+  item,
+  onOpenResourceTab,
 }: Readonly<{
-  href: string
-  label: string
-  isActive: boolean
+  item: QuickStep
+  onOpenResourceTab: (tab: GuideResourceTab) => void
 }>): React.JSX.Element {
-  return (
-    <a
-      href={href}
-      aria-current={isActive ? 'location' : undefined}
-      onClick={(event) => {
-        event.preventDefault()
-        scrollToGuideSection(href)
-      }}
-      className={cn(
-        'flex items-center rounded-lg px-3 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-        isActive
-          ? 'bg-primary/10 font-medium text-primary'
-          : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'
-      )}
-    >
-      <span
-        className={cn('mr-2 h-1.5 w-1.5 rounded-full', isActive ? 'bg-primary' : 'bg-border')}
-        aria-hidden="true"
-      />
-      {label}
-    </a>
-  )
-})
-
-const GuideAnchorNav = memo(function GuideAnchorNav({
-  active,
-}: Readonly<{ active: string }>): React.JSX.Element {
-  return (
-    <nav
-      aria-label="调用指南目录"
-      className="sticky top-4 z-20 rounded-2xl border border-border/60 bg-card/90 p-2 shadow-sm shadow-black/[0.03] backdrop-blur-xl dark:shadow-black/20"
-    >
-      <p className="px-3 pb-2 pt-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground/70">
-        页面目录
-      </p>
-      <div className="flex gap-1 overflow-x-auto xl:flex-col">
-        {GUIDE_NAV_ITEMS.map(([href, label]) => (
-          <GuideNavTab key={href} href={href} label={label} isActive={href === active} />
-        ))}
-      </div>
-    </nav>
-  )
-})
-
-function QuickStepItem({ item }: Readonly<{ item: QuickStep }>): React.JSX.Element {
   const content = (
-    <div className="group flex h-full min-w-0 flex-col rounded-xl border border-border/60 bg-card/90 p-4 shadow-sm shadow-black/[0.03] transition-colors hover:border-primary/30 hover:bg-card dark:shadow-black/20">
-      <div className="mb-4 flex items-center justify-between gap-3">
+    <div className="group flex h-full min-w-0 items-start gap-3 rounded-lg border border-border/60 bg-card/70 p-3 transition-colors hover:border-primary/30 hover:bg-card">
+      <div className="flex shrink-0 items-center gap-3">
         <Badge
           variant="secondary"
-          className="h-7 w-7 shrink-0 justify-center rounded-full border border-primary/20 bg-primary/10 p-0 text-primary"
+          className="h-7 w-7 justify-center rounded-full border border-primary/20 bg-primary/10 p-0 text-primary"
         >
           {item.step}
         </Badge>
-        {item.href.startsWith('#') ? (
-          <CheckCircle2 className="h-4 w-4 shrink-0 text-success" aria-hidden="true" />
-        ) : (
-          <ExternalLink
-            className="h-4 w-4 shrink-0 text-muted-foreground transition-colors group-hover:text-primary"
-            aria-hidden="true"
-          />
-        )}
       </div>
       <div className="min-w-0 flex-1">
         <p className="text-sm font-semibold">{item.title}</p>
-        <p className="mt-2 text-xs leading-5 text-muted-foreground">{item.description}</p>
+        <p className="mt-1 hidden text-xs leading-5 text-muted-foreground 2xl:block">
+          {item.description}
+        </p>
       </div>
+      {item.href.startsWith('#') ? (
+        <CheckCircle2 className="mt-1 h-4 w-4 shrink-0 text-success" aria-hidden="true" />
+      ) : (
+        <ExternalLink
+          className="mt-1 h-4 w-4 shrink-0 text-muted-foreground transition-colors group-hover:text-primary"
+          aria-hidden="true"
+        />
+      )}
     </div>
   )
 
   if (item.href.startsWith('#')) {
+    const resourceTab = guideResourceTabFromHash(item.href)
     return (
       <a
         href={item.href}
         className="rounded-lg underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        onClick={(event) => {
+          if (!resourceTab) return
+          event.preventDefault()
+          onOpenResourceTab(resourceTab)
+        }}
       >
         {content}
       </a>

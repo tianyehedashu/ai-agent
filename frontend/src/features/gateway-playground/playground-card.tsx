@@ -78,6 +78,7 @@ const DEFAULT_PROMPT = PLAYGROUND_EXAMPLE_PROMPTS.chat
 const DEFAULT_PROMPT_VALUES = PLAYGROUND_EXAMPLE_PROMPT_VALUES
 interface PlaygroundCardProps {
   baseUrl: string
+  title?: string
   onModelChange?: (model: string) => void
   /** 可选凭据筛选（Guide 页与 URL 同步） */
   credentialId?: string
@@ -93,6 +94,7 @@ interface PlaygroundCardProps {
 
 export function PlaygroundCard({
   baseUrl,
+  title = '在线试调',
   onModelChange,
   credentialId: credentialIdProp = '',
   onCredentialChange,
@@ -532,13 +534,16 @@ export function PlaygroundCard({
   }
 
   return (
-    <Card className="border-border/60 bg-background shadow-sm">
-      <CardHeader className="pb-4">
+    <Card className="border-border/60 bg-card/85 shadow-none">
+      <CardHeader className="border-b border-border/50 pb-3">
         <div className="space-y-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="flex min-w-0 flex-wrap items-center gap-2">
-              <CardTitle className="text-base">在线试调</CardTitle>
-              <span className="truncate font-mono text-xs text-muted-foreground" translate="no">
+          <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+            <div className="flex min-w-0 flex-col gap-1 sm:flex-row sm:items-center sm:gap-2">
+              <CardTitle className="text-base">{title}</CardTitle>
+              <span
+                className="min-w-0 truncate rounded-md bg-muted/40 px-2 py-1 font-mono text-xs text-muted-foreground"
+                translate="no"
+              >
                 {effectiveBaseUrl}
                 {endpointPath}
               </span>
@@ -563,7 +568,7 @@ export function PlaygroundCard({
       </CardHeader>
       <CardContent
         className={cn(
-          'grid gap-5',
+          'grid gap-5 p-4 sm:p-5',
           showOutputPanel && 'xl:grid-cols-[minmax(0,1fr)_minmax(22rem,0.9fr)]'
         )}
       >
@@ -587,7 +592,7 @@ export function PlaygroundCard({
             </Tabs>
           ) : null}
 
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
+          <div className="grid gap-4 md:grid-cols-2">
             <PlaygroundKeyField
               apiKeyId={apiKeyId}
               apiKey={apiKey}
@@ -615,11 +620,11 @@ export function PlaygroundCard({
               isEmpty={credentialsEmpty}
             />
             {usingProxyModelList && credentialId ? (
-              <p className="text-xs text-muted-foreground md:col-span-2 xl:col-span-3 2xl:col-span-4">
+              <p className="text-xs text-muted-foreground md:col-span-2">
                 跨 team Key 的模型列表来自 GET /v1/models，不受凭据筛选影响。
               </p>
             ) : null}
-            <div className="md:col-span-2 xl:col-span-1 2xl:col-span-2">
+            <div className="md:col-span-2">
               <PlaygroundModelField
                 modelSelectId={modelSelectId}
                 modelCustomId={modelCustomId}
@@ -742,7 +747,7 @@ export function PlaygroundCard({
             </div>
           ) : null}
 
-          <div className="flex flex-wrap items-center gap-3 rounded-lg border bg-muted/20 p-2">
+          <div className="flex flex-wrap items-center gap-3 rounded-xl border border-border/60 bg-background/45 p-3">
             {showStreamSwitch ? (
               <div className="flex items-center gap-2">
                 <Switch

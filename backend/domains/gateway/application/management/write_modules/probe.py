@@ -58,6 +58,7 @@ from domains.gateway.infrastructure.upstream.volcengine_image_client import (
 from domains.gateway.infrastructure.upstream.volcengine_video_client import (
     perform_volcengine_video_create,
 )
+from domains.identity.application.user_display import resolve_user_display_snapshot
 from libs.crypto import decrypt_value, derive_encryption_key
 from libs.exceptions import PermissionDeniedError, ValidationError
 from utils.logging import get_logger
@@ -187,6 +188,7 @@ class ProbeWritesMixin:
             else None
         )
         probe_actor_id = await self._resolve_probe_actor_user_id(tenant_id, actor_user_id)
+        probe_user_snapshot = await resolve_user_display_snapshot(self._session, probe_actor_id)
         ensure_gateway_callbacks()
         from libs.db.session_lifecycle import release_session_before_blocking_io
 
@@ -200,6 +202,7 @@ class ProbeWritesMixin:
                 actor_user_id=probe_actor_id,
                 target=target,
                 credential_name=cred.name,
+                user_email_snapshot=probe_user_snapshot,
                 credential_profile_id=cred.profile_id,
             )
 

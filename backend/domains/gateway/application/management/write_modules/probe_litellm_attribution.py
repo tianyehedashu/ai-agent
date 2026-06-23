@@ -68,19 +68,21 @@ def merge_probe_litellm_kwargs(
 ) -> dict[str, Any]:
     """在探活 LiteLLM kwargs 上合并 metadata、model_info 与 coding_agent_ua。"""
     merged = dict(base)
-    merged["metadata"] = build_probe_gateway_metadata(
+    metadata = build_probe_gateway_metadata(
         tenant_id=tenant_id,
         actor_user_id=actor_user_id,
         target=target,
         credential_name=credential_name,
         user_email_snapshot=user_email_snapshot,
     )
+    merged["metadata"] = metadata
     model_info = probe_litellm_model_info(target, credential_name)
+    # LiteLLM 直连回调常只保留 litellm_params.metadata；与 Router 代理路径对齐双写。
     existing = merged.get("litellm_params")
-    if isinstance(existing, dict):
-        merged["litellm_params"] = {**existing, "model_info": model_info}
-    else:
-        merged["litellm_params"] = {"model_info": model_info}
+    litellm_params = dict(existing) if isinstance(existing, dict) else {}
+    litellm_params["model_info"] = model_info
+    litellm_params["metadata"] = metadata
+    merged["litellm_params"] = litellm_params
     return apply_coding_agent_ua_litellm_params(
         merged,
         credential_profile_id=credential_profile_id,

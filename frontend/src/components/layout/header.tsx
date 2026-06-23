@@ -37,6 +37,22 @@ function resolveSectionLabel(pathname: string): string {
   return 'AI Workspace'
 }
 
+function resolvePageTitle(pathname: string, sessionTitle?: string | null): string {
+  if (pathname.startsWith('/chat')) return sessionTitle ?? pageTitles[pathname] ?? '对话'
+  if (pathname.startsWith('/gateway/guide')) return '调用指南'
+  if (pathname.startsWith('/gateway/stats')) return '调用统计'
+  if (pathname.startsWith('/gateway/keys')) return '虚拟 Key'
+  if (pathname.startsWith('/gateway/credentials')) return '凭据'
+  if (pathname.startsWith('/gateway/models')) return '模型'
+  if (pathname.startsWith('/gateway/routes')) return '虚拟路由'
+  if (pathname.startsWith('/gateway/budgets')) return '定价目录'
+  if (pathname.startsWith('/gateway/logs')) return '调用日志'
+  if (pathname.startsWith('/gateway/teams')) return '团队管理'
+  if (pathname.startsWith('/gateway/users')) return '用户管理'
+  if (pathname.startsWith('/gateway')) return 'AI Gateway'
+  return pageTitles[pathname] ?? '对话'
+}
+
 export default function Header(): React.JSX.Element {
   const location = useLocation()
   const { sessionId } = useParams<{ sessionId?: string }>()
@@ -54,8 +70,7 @@ export default function Header(): React.JSX.Element {
     enabled: isAuthenticated && !!sessionId && location.pathname.startsWith('/chat'),
   })
 
-  // 优先显示会话标题，否则显示页面标题
-  const title = session?.title ?? pageTitles[location.pathname] ?? '对话'
+  const title = resolvePageTitle(location.pathname, session?.title)
   const sectionLabel = resolveSectionLabel(location.pathname)
 
   const handleLogout = async (): Promise<void> => {
