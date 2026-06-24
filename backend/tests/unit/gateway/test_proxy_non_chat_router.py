@@ -277,6 +277,46 @@ async def test_volcengine_image_generation_uses_direct_not_router(
 
 
 @pytest.mark.asyncio
+async def test_agnes_image_generation_uses_direct_not_router(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    body = {"model": "agnes-image-2.0-flash", "prompt": "a cat", "image": ["https://in.png"]}
+    record = SimpleNamespace(provider="agnes", real_model="agnes-image-2.0-flash")
+    prepared, invoke_kwargs = _prepared_litellm_invoke(body)
+    prepared = PreparedLitellmKwargs(
+        kwargs=prepared.kwargs,
+        client_model=prepared.client_model,
+        resolved=ResolvedModelName(record=record, route=None, via_route=None),
+    )
+
+    use_case = ProxyUseCase(db_session, budget_service=_NoopBudget())
+    ctx = _ctx()
+    _patch_preflight_model_resolution(use_case, monkeypatch, record=record)
+
+    monkeypatch.setattr(
+        use_case,
+        "prepare_litellm_invoke",
+        AsyncMock(return_value=(prepared, invoke_kwargs)),
+    )
+    monkeypatch.setattr(use_case.guard, "check_entitlement", AsyncMock())
+    agnes_direct = AsyncMock(return_value={"data": [{"b64_json": "abc"}]})
+    monkeypatch.setattr(use_case.litellm, "agnes_direct_image_generation", agnes_direct)
+    router_image = AsyncMock()
+    monkeypatch.setattr(use_case.litellm, "router_image_generation", router_image)
+    monkeypatch.setattr(
+        "domains.gateway.application.proxy_response_adapter.schedule_settle_usage",
+        AsyncMock(),
+    )
+
+    result = await use_case.image_generation(ctx, body)
+
+    assert result == {"data": [{"b64_json": "abc"}]}
+    agnes_direct.assert_awaited_once()
+    router_image.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_volcengine_image_generation_fails_without_image_endpoint(
     db_session: AsyncSession,
     monkeypatch: pytest.MonkeyPatch,

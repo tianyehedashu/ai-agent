@@ -22,6 +22,7 @@ from domains.gateway.domain.litellm_credential_extra_keys import litellm_api_key
 from domains.gateway.domain.policies.agnes_image import (
     build_agnes_image_request,
     extract_agnes_image_inputs,
+    extract_agnes_image_tags,
 )
 from domains.gateway.domain.policies.dashscope_embedding import (
     build_dashscope_embedding_request,
@@ -505,7 +506,7 @@ class ProxyLiteLLMClient:
                 n=kwargs.get("n") if isinstance(kwargs.get("n"), (int, str)) else None,
                 seed=seed if isinstance(seed, int) else None,
                 images=extract_agnes_image_inputs(kwargs),
-                tags=kwargs.get("tags") if isinstance(kwargs.get("tags"), (list, tuple)) else None,
+                tags=extract_agnes_image_tags(kwargs),
                 response_format=(
                     kwargs.get("response_format")
                     if isinstance(kwargs.get("response_format"), str)

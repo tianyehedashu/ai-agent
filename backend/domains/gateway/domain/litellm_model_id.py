@@ -105,6 +105,25 @@ def build_litellm_model_id(provider: str, model_id: str) -> str:
     return model_id
 
 
+def resolve_probe_litellm_model(
+    provider: str,
+    real_model: str,
+    *,
+    api_base: str | None = None,
+) -> str:
+    """探活顶层 ``a*`` 函数用的 LiteLLM ``model`` 串（provider 只能从 model 推断）。
+
+    第三方「OpenAI 伪兼容」provider（如 ``agnes``，映射 ``custom_openai``）不在
+    ``_PROVIDER_PREFIXES`` 中，``build_litellm_model_id`` 会返回裸名导致
+    ``LLM Provider NOT provided``；与 ``provider=openai`` 非官方端点一致，统一用
+    ``openai/<id>`` 前缀走 OpenAI handler（仍读 ``api_base``）。
+    """
+    key = provider.strip().lower()
+    if key in _OPENAI_COMPAT_THIRD_PARTY_PROVIDERS:
+        return build_litellm_model_id("openai", real_model)
+    return build_litellm_model_id(key, real_model)
+
+
 def non_chat_openai_compat_uses_openai_handler(
     capability: str | None,
     custom_llm_provider: str,
@@ -151,4 +170,5 @@ __all__ = [
     "normalize_stored_real_model_for_credential",
     "resolve_litellm_custom_llm_provider",
     "resolve_outbound_litellm_model",
+    "resolve_probe_litellm_model",
 ]

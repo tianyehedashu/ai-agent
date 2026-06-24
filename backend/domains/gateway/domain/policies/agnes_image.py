@@ -12,12 +12,14 @@ HTTP 执行在 ``infrastructure/upstream/agnes_image_client``；端点统一为
 
 from __future__ import annotations
 
-from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from domains.gateway.domain.upstream_endpoint import resolve_upstream_endpoint
 from domains.gateway.domain.upstream_profile import UpstreamProtocol
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 AGNES_PROVIDER = "agnes"
 DEFAULT_AGNES_API_BASE = "https://apihub.agnes-ai.com/v1"
@@ -64,7 +66,8 @@ def extract_agnes_image_inputs(kwargs: dict[str, Any]) -> list[str]:
     return []
 
 
-def _extract_tags(kwargs: dict[str, Any]) -> list[str] | None:
+def extract_agnes_image_tags(kwargs: dict[str, Any]) -> list[str] | None:
+    """从入站 kwargs 抽取并归一化 ``tags``（去空白/去空项；空则 None）。"""
     raw = kwargs.get("tags")
     if isinstance(raw, (list, tuple)):
         tags = [str(t).strip() for t in raw if str(t).strip()]
@@ -131,7 +134,7 @@ def build_agnes_image_request(
     if seed is not None:
         body["seed"] = seed
 
-    resolved_tags = list(tags) if tags else (["img2img"] if image_inputs else None)
+    resolved_tags = list(tags) if tags else ([AGNES_IMG2IMG_TAG] if image_inputs else None)
     if resolved_tags:
         body["tags"] = resolved_tags
 
@@ -171,5 +174,6 @@ __all__ = [
     "build_agnes_image_probe_request",
     "build_agnes_image_request",
     "extract_agnes_image_inputs",
+    "extract_agnes_image_tags",
     "should_use_agnes_direct_image",
 ]

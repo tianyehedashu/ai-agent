@@ -7,6 +7,7 @@ from domains.gateway.domain.litellm_model_id import (
     normalize_gateway_stored_real_model,
     normalize_stored_real_model_for_credential,
     resolve_litellm_custom_llm_provider,
+    resolve_probe_litellm_model,
 )
 
 
@@ -84,6 +85,26 @@ def test_normalize_gateway_stored_real_model_openai_custom_endpoint(
     assert (
         normalize_gateway_stored_real_model("openai", model_id, api_base=api_base) == expected
     )
+
+
+@pytest.mark.parametrize(
+    ("provider", "real_model", "expected"),
+    [
+        # 第三方 OpenAI 伪兼容 provider：探活须用 openai/ 前缀走 OpenAI handler
+        ("agnes", "agnes-1.5-flash", "openai/agnes-1.5-flash"),
+        ("agnes", "agnes-image-2.0-flash", "openai/agnes-image-2.0-flash"),
+        # 已带前缀则原样透传
+        ("agnes", "openai/agnes-1.5-flash", "openai/agnes-1.5-flash"),
+        # 内置 provider 仍按各自前缀
+        ("openai", "gpt-4o", "openai/gpt-4o"),
+        ("anthropic", "claude-3-5-sonnet", "anthropic/claude-3-5-sonnet"),
+        ("dashscope", "qwen-max", "dashscope/qwen-max"),
+    ],
+)
+def test_resolve_probe_litellm_model(
+    provider: str, real_model: str, expected: str
+) -> None:
+    assert resolve_probe_litellm_model(provider, real_model) == expected
 
 
 def test_normalize_stored_real_model_for_credential_custom_openai_endpoint() -> None:

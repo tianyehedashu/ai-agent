@@ -240,8 +240,8 @@ class TestTokenExpiry:
     @pytest.mark.asyncio
     async def test_hybrid_falls_back_to_gateway_when_jwt_invalid(self):
         """测试: hybrid 模式下 JWT 无效时 fallback 到网关 Header"""
-        from domains.identity.application.principal_service import get_principal
         from domains.identity.application.giikin_identity_service import GiikinIdentityService
+        from domains.identity.application.principal_service import get_principal
 
         request = self._create_mock_request()
         credentials = self._create_mock_credentials("expired-jwt-token")
@@ -281,10 +281,98 @@ class TestTokenExpiry:
         assert principal.email == "sso@example.com"
 
     @pytest.mark.asyncio
+    async def test_hybrid_sk_key_scope_denied_falls_back_to_gateway(self):
+        """hybrid 模式下 sk_ Key scope 不足时 fallback 到网关 Header（不直接 403）。"""
+        from domains.identity.application import principal_service
+        from domains.identity.application.principal_service import get_principal
+        from libs.exceptions import PermissionDeniedError
+
+        request = self._create_mock_request()
+        request.method = "GET"
+        credentials = self._create_mock_credentials("sk_live_xxx")
+        mock_db = AsyncMock()
+
+        mock_user = MagicMock()
+        mock_user.id = uuid.uuid4()
+        mock_user.email = "sso-fallback@example.com"
+        mock_user.name = "SSOUser"
+        mock_user.role = "user"
+        mock_user.vendor_creator_id = None
+        principal = principal_service.Principal(
+            id=str(mock_user.id),
+            email=mock_user.email,
+            name=mock_user.name,
+            role=mock_user.role,
+            vendor_creator_id=None,
+        )
+
+        with (
+            patch.object(principal_service, "settings") as mock_settings,
+            patch.object(
+                principal_service,
+                "_principal_from_api_key",
+                AsyncMock(side_effect=PermissionDeniedError(message="x", resource="ApiKeyScope")),
+            ),
+            patch.object(
+                principal_service,
+                "_principal_from_gateway",
+                AsyncMock(return_value=principal),
+            ),
+        ):
+            mock_settings.is_sso_auth = False
+            mock_settings.is_hybrid_auth = True
+            result = await get_principal(request, credentials, mock_db)
+
+        assert result.email == "sso-fallback@example.com"
+
+    @pytest.mark.asyncio
+    async def test_optional_principal_returns_none_on_scope_denied(self):
+        """可选认证下 sk_ Key scope 不足应降级为匿名（None），而非 403。"""
+        from domains.identity.application import principal_service
+        from domains.identity.application.principal_service import get_principal_optional
+        from libs.exceptions import PermissionDeniedError
+
+        request = self._create_mock_request()
+        mock_db = AsyncMock()
+
+        with patch.object(
+            principal_service,
+            "get_principal",
+            AsyncMock(side_effect=PermissionDeniedError(message="x", resource="ApiKeyScope")),
+        ):
+            result = await get_principal_optional(request, None, mock_db)
+
+        assert result is None
+
+    @pytest.mark.parametrize(
+        ("method", "path", "expected"),
+        [
+            ("GET", "/api/v1/gateway/pricing/upstream", True),
+            ("HEAD", "/api/v1/gateway/pricing/upstream", True),
+            ("OPTIONS", "/api/v1/gateway/pricing/upstream", True),
+            # 显式只读 POST 白名单
+            ("POST", "/api/v1/gateway/pricing/estimate", True),
+            ("POST", "/api/v1/gateway/pricing/estimate/", True),
+            # 其它 POST 仍按写处理
+            ("POST", "/api/v1/gateway/pricing/upstream", False),
+            ("PUT", "/api/v1/gateway/pricing/estimate", False),
+            ("DELETE", "/api/v1/gateway/credentials/x", False),
+        ],
+    )
+    def test_is_read_only_api_request(self, method: str, path: str, expected: bool):
+        from domains.identity.application.principal_service import _is_read_only_api_request
+
+        request = MagicMock()
+        request.method = method
+        request.url = MagicMock()
+        request.url.path = path
+        assert _is_read_only_api_request(request) is expected
+
+    @pytest.mark.asyncio
     async def test_hybrid_no_bearer_uses_gateway(self):
         """测试: hybrid 模式下无 Bearer 时直接走网关 Header"""
-        from domains.identity.application.principal_service import get_principal
         from domains.identity.application.giikin_identity_service import GiikinIdentityService
+        from domains.identity.application.principal_service import get_principal
 
         request = self._create_mock_request()
         mock_db = AsyncMock()

@@ -25,6 +25,25 @@ if TYPE_CHECKING:
     from fastapi.security import HTTPAuthorizationCredentials
     from sqlalchemy.ext.asyncio import AsyncSession
 
+# 显式的「只读 POST」端点（按 path 后缀匹配，与挂载前缀无关）：这些 POST 语义上是
+# 读/计算（非状态变更），允许 ``gateway:read`` 平台 Key 访问；其余非 GET 请求仍按写处理
+# 要求 ``gateway:admin``。新增条目须确保该端点确实无副作用。
+_READ_ONLY_POST_PATH_SUFFIXES: frozenset[str] = frozenset(
+    {
+        "/pricing/estimate",  # 用量成本预估，纯计算无副作用
+    }
+)
+
+
+def _is_read_only_api_request(request: Request) -> bool:
+    """API Key scope 判定用：是否为只读请求（读方法或显式只读 POST 白名单）。"""
+    if request.method in ("GET", "HEAD", "OPTIONS"):
+        return True
+    if request.method == "POST":
+        path = request.url.path.rstrip("/")
+        return any(path.endswith(suffix) for suffix in _READ_ONLY_POST_PATH_SUFFIXES)
+    return False
+
 
 async def _principal_from_gateway(request: Request, db: AsyncSession) -> Principal:
     """SSO 模式：解析网关注入身份并 JIT 映射本地用户。"""
@@ -74,8 +93,8 @@ async def _principal_from_jwt(
 
 async def _principal_from_api_key(
     request: Request,
-    credentials: "HTTPAuthorizationCredentials | None",
-    db: "AsyncSession",
+    credentials: HTTPAuthorizationCredentials | None,
+    db: AsyncSession,
 ) -> Principal:
     """平台 API Key 认证（需 gateway:admin 或 gateway:read scope）。
 
@@ -108,13 +127,14 @@ async def _principal_from_api_key(
             message="API key lacks gateway management scope (gateway:admin or gateway:read)",
             resource="ApiKeyScope",
         )
-    # 写操作需要 gateway:admin
-    if request.method not in ("GET", "HEAD", "OPTIONS"):
-        if not entity.can_access(ApiKeyScope.GATEWAY_ADMIN):
-            raise PermissionDeniedError(
-                message="API key lacks gateway:admin scope for write operations",
-                resource="ApiKeyScope",
-            )
+    # 写操作需要 gateway:admin；只读请求（含显式只读 POST 白名单）gateway:read 即可
+    if not _is_read_only_api_request(request) and not entity.can_access(
+        ApiKeyScope.GATEWAY_ADMIN
+    ):
+        raise PermissionDeniedError(
+            message="API key lacks gateway:admin scope for write operations",
+            resource="ApiKeyScope",
+        )
 
     import uuid as _uuid
 
@@ -135,6 +155,14 @@ async def _principal_from_api_key(
     )
 
 
+def _has_sk_key(credentials: HTTPAuthorizationCredentials | None) -> bool:
+    return bool(
+        credentials
+        and credentials.credentials
+        and credentials.credentials.strip().startswith("sk_")
+    )
+
+
 async def get_principal(
     request: Request,
     credentials: HTTPAuthorizationCredentials | None,
@@ -144,22 +172,39 @@ async def get_principal(
 
     优先级：平台 API Key（sk_ 前缀，需 gateway scope）> Bearer JWT > 网关 X-Giikin-* Header。
     平台 API Key 用于管理面自动化运维（长期有效）；JWT 用于前端交互；SSO Header 用于内网。
+
+    在 sso/hybrid 模式下，sk_ Key 解析失败（无效或 scope 不足）会像 JWT 失败一样
+    fallback 到网关 Header（而非直接 403），避免仅持 ``gateway:proxy`` 等非管理 scope
+    的合法平台 Key 阻断 SSO 身份回退。local 模式无回退目标，sk_ 失败即终态抛出。
     """
-    # 平台 API Key 优先识别（sk_ 前缀，需 gateway:admin 或 gateway:read scope）
-    if credentials and credentials.credentials:
-        if credentials.credentials.strip().startswith("sk_"):
-            return await _principal_from_api_key(request, credentials, db)
+    has_sk = _has_sk_key(credentials)
 
     if settings.is_sso_auth:
+        if has_sk:
+            try:
+                return await _principal_from_api_key(request, credentials, db)
+            except (AuthenticationError, TokenError, PermissionDeniedError):
+                pass
         return await _principal_from_gateway(request, db)
+
     if settings.is_hybrid_auth:
-        # 有 Bearer 先试 JWT；JWT 无效（非缺失）时 fallback 到网关 Header
-        if credentials and credentials.credentials:
+        if has_sk:
+            # sk_ 优先；失败回退网关 Header（与下方 JWT 回退一致）
+            try:
+                return await _principal_from_api_key(request, credentials, db)
+            except (AuthenticationError, TokenError, PermissionDeniedError):
+                pass
+        elif credentials and credentials.credentials:
+            # 有 Bearer JWT 先试；JWT 无效（非缺失）时 fallback 到网关 Header
             try:
                 return await _principal_from_jwt(credentials, db)
             except (AuthenticationError, TokenError):
                 pass
         return await _principal_from_gateway(request, db)
+
+    # local 模式：sk_ Key 或本地 JWT，无网关 Header 回退
+    if has_sk:
+        return await _principal_from_api_key(request, credentials, db)
     return await _principal_from_jwt(credentials, db)
 
 
@@ -168,10 +213,14 @@ async def get_principal_optional(
     credentials: HTTPAuthorizationCredentials | None,
     db: AsyncSession,
 ) -> Principal | None:
-    """获取当前主体（可选，无身份返回 None 不抛错）。"""
+    """获取当前主体（可选，无身份返回 None 不抛错）。
+
+    除认证失败外，平台 API Key 的 scope 不足（``PermissionDeniedError``）也视为"无可用身份"
+    降级为匿名，避免仅持非管理 scope 的 Key 在可选认证端点上误报 403。
+    """
     logger = get_logger(__name__)
     try:
         return await get_principal(request, credentials, db)
-    except (AuthenticationError, TokenError):
+    except (AuthenticationError, TokenError, PermissionDeniedError):
         logger.debug("Optional principal resolution: no valid identity")
         return None

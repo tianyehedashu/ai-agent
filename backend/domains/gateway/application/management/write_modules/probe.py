@@ -35,14 +35,14 @@ from domains.gateway.application.router_deployment_params import (
     require_volcengine_image_endpoint_id,
 )
 from domains.gateway.domain.errors import ManagementEntityNotFoundError
-from domains.gateway.domain.litellm_model_id import build_litellm_model_id
-from domains.gateway.domain.policies.dashscope_embedding import (
-    build_dashscope_embedding_request,
-    should_use_dashscope_direct_embedding,
-)
+from domains.gateway.domain.litellm_model_id import resolve_probe_litellm_model
 from domains.gateway.domain.policies.agnes_image import (
     build_agnes_image_probe_request,
     should_use_agnes_direct_image,
+)
+from domains.gateway.domain.policies.dashscope_embedding import (
+    build_dashscope_embedding_request,
+    should_use_dashscope_direct_embedding,
 )
 from domains.gateway.domain.policies.volcengine_image import build_volcengine_image_probe_request
 from domains.gateway.domain.policies.volcengine_video import (
@@ -53,11 +53,11 @@ from domains.gateway.domain.policies.volcengine_video import (
 from domains.gateway.domain.provider_env_catalog import image_probe_size
 from domains.gateway.domain.temperature_policy import resolve_probe_chat_temperature
 from domains.gateway.infrastructure.router_singleton import ensure_gateway_callbacks
-from domains.gateway.infrastructure.upstream.dashscope_embedding_client import (
-    perform_dashscope_embedding,
-)
 from domains.gateway.infrastructure.upstream.agnes_image_client import (
     perform_agnes_image_generation,
+)
+from domains.gateway.infrastructure.upstream.dashscope_embedding_client import (
+    perform_dashscope_embedding,
 )
 from domains.gateway.infrastructure.upstream.volcengine_image_client import (
     perform_volcengine_image_generation,
@@ -188,9 +188,11 @@ class ProbeWritesMixin:
         cred = ProbeCredentialSnapshot.from_encrypted(credential, api_key=api_key)
         # 探活直连 litellm 顶层 ``a*`` 函数（非 Router），provider 只能从 model 串推断；
         # ``aimage_generation`` / ``avideo_generation`` 不接受 ``custom_llm_provider`` kwarg。
-        # 因此须带 ``provider/`` 前缀（OpenAI-compat 自定义端点 → ``openai/<id>``），
+        # 因此须带 ``provider/`` 前缀（OpenAI-compat 自定义端点 / 第三方伪兼容 → ``openai/<id>``），
         # 而非 Router 出站用的裸 ``real_model``（其 provider 靠 litellm_params 携带）。
-        litellm_model = build_litellm_model_id(target.provider, target.real_model)
+        litellm_model = resolve_probe_litellm_model(
+            target.provider, target.real_model, api_base=cred.api_base
+        )
         probe_chat_temperature = (
             resolve_probe_chat_temperature(
                 credential_profile_id=cred.profile_id,
