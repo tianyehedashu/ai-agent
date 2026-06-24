@@ -211,6 +211,50 @@ async def test_image_capability_uses_aimage_generation(db_session, test_user) ->
 
 
 @pytest.mark.asyncio
+async def test_image_probe_openai_compat_custom_endpoint_prefixes_provider(
+    db_session, test_user
+) -> None:
+    """OpenAI 兼容自定义端点（裸 ``real_model``）探活须给 litellm 带 ``openai/`` 前缀。
+
+    ``aimage_generation`` 不接受 ``custom_llm_provider`` kwarg，provider 只能从
+    model 串推断；裸 ``agnes-image-2.0-flash`` 会触发 ``LLM Provider NOT provided``。
+    """
+    team = await TeamService(db_session).ensure_personal_team(test_user.id)
+    cred = await create_tenant_test_credential(
+        db_session,
+        team.id,
+        provider="openai",
+        name="agnes-openai-compat",
+        api_base="https://apihub.agnes-ai.com/v1",
+    )
+    model = await GatewayModelRepository(db_session).create(
+        tenant_id=team.id,
+        name=f"vmodel-{uuid.uuid4().hex[:6]}",
+        capability="image",
+        real_model="agnes-image-2.0-flash",
+        credential_id=cred.id,
+        provider="openai",
+    )
+    await db_session.flush()
+    writes = GatewayManagementWriteService(db_session)
+    fake_img = type(
+        "ImgResp",
+        (),
+        {"data": [type("D", (), {"url": "https://cdn.example.com/x.png", "b64_json": None})()]},
+    )()
+
+    with patch("litellm.aimage_generation", new=AsyncMock(return_value=fake_img)) as mock_img:
+        result = await writes.test_gateway_model(
+            model.id, tenant_id=team.id, **team_owner_actor_kw(test_user)
+        )
+
+    assert result["success"] is True
+    call_kw = mock_img.await_args.kwargs
+    assert call_kw["model"] == "openai/agnes-image-2.0-flash"
+    assert call_kw["api_base"] == "https://apihub.agnes-ai.com/v1"
+
+
+@pytest.mark.asyncio
 async def test_image_capability_failure_persists(db_session, test_user) -> None:
     team_id, model_id = await _seed_team_credential_and_model(
         db_session,
@@ -352,6 +396,50 @@ async def test_volcengine_image_probe_uses_image_endpoint_from_extra(db_session,
     assert result["success"] is True
     assert captured["model"] == "ep-image-test"
     assert captured["url"].endswith("/images/generations")
+
+
+@pytest.mark.asyncio
+async def test_agnes_image_probe_uses_direct_extra_body_client(db_session, test_user) -> None:
+    """Agnes 生图探活：走直连 HTTP（字面量 extra_body），不用 LiteLLM ``aimage_generation``。"""
+    team = await TeamService(db_session).ensure_personal_team(test_user.id)
+    cred = await create_tenant_test_credential(
+        db_session,
+        team.id,
+        provider="agnes",
+        name="agnes-image",
+        api_base="https://apihub.agnes-ai.com/v1",
+    )
+    model = await GatewayModelRepository(db_session).create(
+        tenant_id=team.id,
+        name=f"amodel-{uuid.uuid4().hex[:6]}",
+        capability="image",
+        real_model="agnes-image-2.0-flash",
+        credential_id=cred.id,
+        provider="agnes",
+    )
+    await db_session.flush()
+    writes = GatewayManagementWriteService(db_session)
+
+    captured: dict[str, object] = {}
+
+    async def fake_perform(request, *, timeout=60.0):
+        captured["model"] = request.json_body["model"]
+        captured["url"] = request.url
+        captured["extra_body"] = request.json_body["extra_body"]
+        return {"data": [{"url": "https://cdn.example.com/img.png"}]}
+
+    with patch(
+        "domains.gateway.application.management.write_modules.probe.perform_agnes_image_generation",
+        new=fake_perform,
+    ):
+        result = await writes.test_gateway_model(
+            model.id, tenant_id=team.id, **team_owner_actor_kw(test_user)
+        )
+
+    assert result["success"] is True
+    assert captured["model"] == "agnes-image-2.0-flash"
+    assert str(captured["url"]).endswith("/images/generations")
+    assert "response_format" in captured["extra_body"]  # type: ignore[operator]
 
 
 @pytest.mark.asyncio

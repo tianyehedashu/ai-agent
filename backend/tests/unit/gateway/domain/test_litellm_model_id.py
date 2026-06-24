@@ -37,6 +37,8 @@ def test_build_litellm_model_id(provider: str, model_id: str, expected: str) -> 
         ("dashscope", "dashscope"),
         ("volcengine", "volcengine"),
         ("moonshot", "moonshot"),
+        # 第三方 OpenAI 伪兼容 provider → custom_openai（chat/messages 走 /chat/completions）
+        ("agnes", "custom_openai"),
         # 未知 provider 原样透传
         ("some_unknown_provider", "some_unknown_provider"),
     ],

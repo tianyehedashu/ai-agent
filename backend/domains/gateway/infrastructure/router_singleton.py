@@ -24,6 +24,7 @@ from domains.gateway.domain.litellm_credential_extra_keys import (
 )
 from domains.gateway.domain.litellm_model_id import (
     build_litellm_model_id,
+    non_chat_openai_compat_uses_openai_handler,
     resolve_litellm_custom_llm_provider,
 )
 from domains.gateway.domain.policies.deployment_weight import coerce_deployment_weight
@@ -135,6 +136,7 @@ def _build_litellm_params(
     tags: dict[str, Any] | None,
     pricing: dict[str, float] | None = None,
     upstream_call_shape: str | None = None,
+    capability: str | None = None,
 ) -> dict[str, Any]:
     """构造单个 deployment 的 litellm_params。
 
@@ -193,9 +195,15 @@ def _build_litellm_params(
     # 必须使用 ``custom_openai``——否则 ``anthropic_messages()`` 会走
     # Responses API（``/responses``），而自定义端点只支持 ``/chat/completions``。
     if call_shape != UpstreamCallShape.ANTHROPIC_NATIVE:
-        params["custom_llm_provider"] = resolve_litellm_custom_llm_provider(
-            provider, api_base=endpoint
-        )
+        custom_provider = resolve_litellm_custom_llm_provider(provider, api_base=endpoint)
+        if non_chat_openai_compat_uses_openai_handler(capability, custom_provider):
+            # 媒体类能力（image/video/...）经第三方 OpenAI 兼容端点：litellm 的
+            # ``a*`` 媒体函数与 Router 均忽略 ``custom_llm_provider``，须用 ``openai/``
+            # 前缀模型走 OpenAI handler（仍读 ``api_base``），否则报无 provider。
+            params["model"] = build_litellm_model_id("openai", real_model)
+            params["custom_llm_provider"] = "openai"
+        else:
+            params["custom_llm_provider"] = custom_provider
     extra = credential.extra or {}
     for key in credential_extra_keys_for_litellm(provider):
         value = extra.get(key)
@@ -264,6 +272,7 @@ def _build_deployment(
         tags=src.tags,
         pricing=pricing,
         upstream_call_shape=getattr(src, "upstream_call_shape", None),
+        capability=str(src.capability) if src.capability is not None else None,
     )
     # LiteLLM simple_shuffle reads deployment["litellm_params"]["weight"] for
     # weighted selection; model_info.weight is retained for attribution/logging.

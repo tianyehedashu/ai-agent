@@ -19,6 +19,11 @@ _PROVIDER_TO_LITELLM: dict[str, str] = {
     "zhipuai": "zai",
 }
 
+# 第三方「OpenAI 伪兼容」provider：LiteLLM 不认识其 provider 名，须统一走
+# ``custom_openai`` handler（``/chat/completions`` + ``api_base``）。其生图等媒体
+# 能力另有非标请求体，由各自的直连 client 旁路（见 ``policies/agnes_image`` 等）。
+_OPENAI_COMPAT_THIRD_PARTY_PROVIDERS: frozenset[str] = frozenset({"agnes"})
+
 # OpenAI 官方 API 端点前缀。当 ``provider=openai`` 但 ``api_base``
 # 不匹配这些前缀时，说明是第三方 OpenAI 兼容端点，必须使用
 # ``custom_openai``——否则 ``anthropic_messages()`` 会走 Responses API
@@ -100,6 +105,22 @@ def build_litellm_model_id(provider: str, model_id: str) -> str:
     return model_id
 
 
+def non_chat_openai_compat_uses_openai_handler(
+    capability: str | None,
+    custom_llm_provider: str,
+) -> bool:
+    """非 chat 能力经第三方 OpenAI 兼容端点出站时，是否须改用 OpenAI handler。
+
+    litellm 顶层 ``aimage_generation`` / ``avideo_generation`` 等媒体函数（含 Router）
+    **不接受/忽略** ``custom_llm_provider`` kwarg，provider 只能从 ``model`` 串推断；
+    第三方端点落库为裸 ``real_model``（``custom_openai`` 在 ``openai_compatible_providers``
+    之外），直接出站会报 ``LLM Provider NOT provided``。此时须用 ``openai/`` 前缀模型
+    走 OpenAI handler（仍读 ``api_base``）。chat/messages 仍用 ``custom_openai`` 以使
+    ``anthropic_messages()`` 走 ``/chat/completions`` 而非 Responses API。
+    """
+    return custom_llm_provider == "custom_openai" and (capability or "chat") != "chat"
+
+
 def resolve_litellm_custom_llm_provider(
     provider: str,
     *,
@@ -117,12 +138,15 @@ def resolve_litellm_custom_llm_provider(
     key = provider.strip().lower()
     if key == "openai" and not _is_openai_official_endpoint(api_base):
         return "custom_openai"
+    if key in _OPENAI_COMPAT_THIRD_PARTY_PROVIDERS:
+        return "custom_openai"
     return _PROVIDER_TO_LITELLM.get(key, key)
 
 
 __all__ = [
     "build_litellm_model_id",
     "is_openai_official_endpoint",
+    "non_chat_openai_compat_uses_openai_handler",
     "normalize_gateway_stored_real_model",
     "normalize_stored_real_model_for_credential",
     "resolve_litellm_custom_llm_provider",

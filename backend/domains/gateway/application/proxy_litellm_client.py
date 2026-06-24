@@ -19,6 +19,10 @@ from domains.gateway.application.router_deployment_params import (
     resolve_volcengine_image_deployment,
 )
 from domains.gateway.domain.litellm_credential_extra_keys import litellm_api_key_param_name
+from domains.gateway.domain.policies.agnes_image import (
+    build_agnes_image_request,
+    extract_agnes_image_inputs,
+)
 from domains.gateway.domain.policies.dashscope_embedding import (
     build_dashscope_embedding_request,
 )
@@ -37,6 +41,9 @@ from domains.gateway.domain.types import GatewayCapability
 from domains.gateway.infrastructure.router_singleton import (
     ensure_router_deployment,
     filter_litellm_params_for_direct_anthropic,
+)
+from domains.gateway.infrastructure.upstream.agnes_image_client import (
+    perform_agnes_image_generation,
 )
 from domains.gateway.infrastructure.upstream.dashscope_embedding_client import (
     perform_dashscope_embedding,
@@ -465,6 +472,50 @@ class ProxyLiteLLMClient:
             raise ValidationError(str(exc)) from exc
         await self._release_session_before_upstream()
         return await perform_volcengine_image_generation(request)
+
+    async def agnes_direct_image_generation(
+        self,
+        ctx: ProxyContext,
+        client_model: str,
+        kwargs: dict[str, Any],
+        *,
+        real_model: str | None = None,
+    ) -> dict[str, Any]:
+        """经 deployment 凭据直连 Agnes ``/images/generations``（字面量 ``extra_body``）。"""
+        dep = await resolve_deployment_litellm_params(
+            self._session, ctx.team_id, client_model, user_id=ctx.user_id
+        )
+        if dep is None:
+            raise ValidationError(f"no deployment for image model: {client_model}")
+        key_name = litellm_api_key_param_name("agnes")
+        api_key = dep.get(key_name) or dep.get("api_key")
+        if not isinstance(api_key, str) or not api_key.strip():
+            raise ValidationError("agnes image generation requires api_key on deployment")
+        prompt = kwargs.get("prompt")
+        if not isinstance(prompt, str):
+            raise ValidationError("prompt is required for image generation")
+        seed = kwargs.get("seed")
+        try:
+            request = build_agnes_image_request(
+                api_key=api_key.strip(),
+                api_base=dep.get("api_base") if isinstance(dep.get("api_base"), str) else None,
+                model=real_model or client_model,
+                prompt=prompt,
+                size=kwargs.get("size") if isinstance(kwargs.get("size"), str) else None,
+                n=kwargs.get("n") if isinstance(kwargs.get("n"), (int, str)) else None,
+                seed=seed if isinstance(seed, int) else None,
+                images=extract_agnes_image_inputs(kwargs),
+                tags=kwargs.get("tags") if isinstance(kwargs.get("tags"), (list, tuple)) else None,
+                response_format=(
+                    kwargs.get("response_format")
+                    if isinstance(kwargs.get("response_format"), str)
+                    else None
+                ),
+            )
+        except ValueError as exc:
+            raise ValidationError(str(exc)) from exc
+        await self._release_session_before_upstream()
+        return await perform_agnes_image_generation(request)
 
     async def volcengine_direct_video_generation(
         self,

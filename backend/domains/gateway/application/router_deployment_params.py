@@ -115,6 +115,7 @@ async def resolve_deployment_litellm_params(
         tags=record.tags,
         pricing=pricing,
         upstream_call_shape=getattr(record, "upstream_call_shape", None),
+        capability=str(record.capability) if record.capability is not None else None,
     )
 
 
@@ -152,6 +153,7 @@ async def resolve_volcengine_image_deployment(
         tags=record.tags,
         pricing=pricing,
         upstream_call_shape=getattr(record, "upstream_call_shape", None),
+        capability=str(record.capability) if record.capability is not None else None,
     )
     return VolcengineImageDeployment(
         litellm_params=litellm_params,

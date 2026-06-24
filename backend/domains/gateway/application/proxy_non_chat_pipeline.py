@@ -14,6 +14,7 @@ from domains.gateway.application.proxy_response_adapter import (
     pricing_kwargs_from_litellm,
 )
 from domains.gateway.application.proxy_router_invoke import invoke_router_with_direct_fallback
+from domains.gateway.domain.policies.agnes_image import should_use_agnes_direct_image
 from domains.gateway.domain.policies.dashscope_embedding import (
     should_use_dashscope_direct_embedding,
 )
@@ -150,9 +151,9 @@ class ProxyNonChatMixin:
         )
         prepared, kwargs = await self.prepare_litellm_invoke(ctx, body, resolved=preflight_resolved)
         meta, up_c, down_c = pricing_kwargs_from_litellm(kwargs)
-        volcengine_direct = prepared.resolved is not None and should_use_volcengine_direct_image(
-            prepared.resolved.record.provider
-        )
+        provider = prepared.resolved.record.provider if prepared.resolved is not None else ""
+        volcengine_direct = provider != "" and should_use_volcengine_direct_image(provider)
+        agnes_direct = provider != "" and should_use_agnes_direct_image(provider)
         try:
             if volcengine_direct:
                 client_model = prepared.client_model or budget_model or ""
@@ -160,6 +161,14 @@ class ProxyNonChatMixin:
                     ctx,
                     client_model,
                     kwargs,
+                )
+            elif agnes_direct:
+                client_model = prepared.client_model or budget_model or ""
+                response = await self.litellm.agnes_direct_image_generation(
+                    ctx,
+                    client_model,
+                    kwargs,
+                    real_model=prepared.resolved.record.real_model if prepared.resolved else None,
                 )
             else:
                 response = await self._invoke_non_chat_with_router_fallback(

@@ -186,4 +186,81 @@ describe('RouteModelBatchPickerDialog', () => {
       expect(onConfirm).toHaveBeenCalledWith(['collab/image-a'])
     })
   })
+
+  it('filters candidates by feature tags (AND logic)', async () => {
+    const visionModel = pickerModel({
+      id: '1',
+      name: 'collab/vision-a',
+      registry_name: 'vision-a',
+      model_types: ['text', 'image'],
+      selector_capabilities: { supports_vision: true },
+    })
+    const toolsModel = pickerModel({
+      id: '2',
+      name: 'collab/tools-a',
+      registry_name: 'tools-a',
+      selector_capabilities: { supports_tools: true },
+    })
+    const visionToolsModel = pickerModel({
+      id: '3',
+      name: 'collab/vision-tools-a',
+      registry_name: 'vision-tools-a',
+      model_types: ['text', 'image'],
+      selector_capabilities: { supports_vision: true, supports_tools: true },
+    })
+    const plainModel = pickerModel({
+      id: '4',
+      name: 'collab/plain-a',
+      registry_name: 'plain-a',
+    })
+    const onConfirm = vi.fn()
+    render(
+      <TooltipProvider>
+        <RouteModelBatchPickerDialog
+          open
+          onOpenChange={vi.fn()}
+          candidates={[visionModel, toolsModel, visionToolsModel, plainModel]}
+          excludeNames={[]}
+          onConfirm={onConfirm}
+        />
+      </TooltipProvider>
+    )
+
+    // 默认全部可见，共 4 项
+    expect(screen.getByText(/共 4 项/)).toBeInTheDocument()
+
+    // 点击"图片理解"特性 chip
+    fireEvent.click(screen.getByRole('button', { name: '图片理解' }))
+    // 仅剩 vision 和 vision-tools（都支持图片理解）
+    expect(screen.getByText(/共 2 项/)).toBeInTheDocument()
+    expect(screen.getByText('collab/vision-a')).toBeInTheDocument()
+    expect(screen.queryByText('collab/tools-a')).not.toBeInTheDocument()
+    expect(screen.getByText('collab/vision-tools-a')).toBeInTheDocument()
+    expect(screen.queryByText('collab/plain-a')).not.toBeInTheDocument()
+
+    // 再点击"工具调用"特性 chip（AND 逻辑：需同时满足图片理解 + 工具调用）
+    fireEvent.click(screen.getByRole('button', { name: '工具调用' }))
+    // 仅剩 vision-tools
+    expect(screen.getByText(/共 1 项/)).toBeInTheDocument()
+    expect(screen.queryByText('collab/vision-a')).not.toBeInTheDocument()
+    expect(screen.getByText('collab/vision-tools-a')).toBeInTheDocument()
+
+    // 清除特性筛选
+    fireEvent.click(screen.getByRole('button', { name: '清除' }))
+    expect(screen.getByText(/共 4 项/)).toBeInTheDocument()
+
+    // 仅选"工具调用"
+    fireEvent.click(screen.getByRole('button', { name: '工具调用' }))
+    expect(screen.getByText(/共 2 项/)).toBeInTheDocument()
+    expect(screen.getByText('collab/tools-a')).toBeInTheDocument()
+    expect(screen.getByText('collab/vision-tools-a')).toBeInTheDocument()
+    expect(screen.queryByText('collab/vision-a')).not.toBeInTheDocument()
+
+    // 选中并确认
+    fireEvent.click(screen.getByLabelText(/全选当前页/))
+    fireEvent.click(screen.getByRole('button', { name: /到主模型池/ }))
+    await waitFor(() => {
+      expect(onConfirm).toHaveBeenCalledWith(['collab/tools-a', 'collab/vision-tools-a'])
+    })
+  })
 })

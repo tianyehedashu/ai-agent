@@ -134,6 +134,12 @@ _PROFILES: tuple[UpstreamProfile, ...] = (
         fixed_outbound_temperature=1.0,
     ),
     UpstreamProfile(
+        id="agnes.default",
+        provider="agnes",
+        label="Agnes AI（Sapiens）",
+        api_bases={UpstreamProtocol.OPENAI_COMPAT: "https://apihub.agnes-ai.com/v1"},
+    ),
+    UpstreamProfile(
         id="custom.default",
         provider="custom",
         label="自定义代理",

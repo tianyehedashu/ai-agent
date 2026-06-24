@@ -300,6 +300,14 @@ export const PROVIDER_SCHEMAS: readonly ProviderCredentialSchema[] = [
     availableScopes: SCOPES_ALL,
   },
   {
+    id: 'agnes',
+    label: 'Agnes AI (Sapiens)',
+    defaultApiBase: 'https://apihub.agnes-ai.com/v1',
+    availableScopes: SCOPES_ALL,
+    helpText:
+      'OpenAI 伪兼容端点：生图模型 agnes-image-2.x-flash 走 /v1/images/generations；图生图的输入图由 Gateway 自动封装为 extra_body。',
+  },
+  {
     id: 'cohere',
     label: 'Cohere',
     availableScopes: SCOPES_MANAGED,

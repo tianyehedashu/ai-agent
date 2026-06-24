@@ -37,6 +37,51 @@ const TEAM_KIND_LABEL: Record<RoutePickerModel['team_kind'], string> = {
 /** 批量弹窗每页条数：在浏览大量跨团队模型时避免长列表渲染卡顿 */
 const BATCH_PICKER_PAGE_SIZE = 50
 
+/**
+ * 细粒度特性标签：在 capability（聊天/向量/图片生成…）之下进一步区分。
+ * 判断依据为 model_types + selector_capabilities（与 ModelCapabilityBadges 对齐）。
+ */
+interface ModelFeatureTag {
+  key: string
+  label: string
+  test: (model: RoutePickerModel) => boolean
+}
+
+const MODEL_FEATURE_TAGS: readonly ModelFeatureTag[] = [
+  {
+    key: 'vision',
+    label: '图片理解',
+    test: (m) =>
+      (m.model_types ?? []).includes('image') || m.selector_capabilities?.supports_vision === true,
+  },
+  {
+    key: 'tools',
+    label: '工具调用',
+    test: (m) => m.selector_capabilities?.supports_tools === true,
+  },
+  {
+    key: 'reasoning',
+    label: '推理',
+    test: (m) => m.selector_capabilities?.supports_reasoning === true,
+  },
+  {
+    key: 'json_mode',
+    label: 'JSON 模式',
+    test: (m) => m.selector_capabilities?.supports_json_mode === true,
+  },
+]
+
+/** 判断模型是否具备指定特性 */
+function modelHasFeature(model: RoutePickerModel, featureKey: string): boolean {
+  const tag = MODEL_FEATURE_TAGS.find((t) => t.key === featureKey)
+  return tag ? tag.test(model) : false
+}
+
+/** 收集模型具备的所有特性 key（用于列表项 Badge 展示） */
+function modelFeatureKeys(model: RoutePickerModel): string[] {
+  return MODEL_FEATURE_TAGS.filter((t) => t.test(model)).map((t) => t.key)
+}
+
 export interface RouteModelBatchPickerDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -59,6 +104,7 @@ export function RouteModelBatchPickerDialog({
   const deferredSearch = useDeferredValue(search.trim().toLowerCase())
   const [teamFilter, setTeamFilter] = useState<string>('all')
   const [capabilityFilter, setCapabilityFilter] = useState<string>('all')
+  const [featureFilter, setFeatureFilter] = useState<Set<string>>(new Set())
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [page, setPage] = useState(1)
 
@@ -95,6 +141,7 @@ export function RouteModelBatchPickerDialog({
   }, [available])
 
   const filtered = useMemo(() => {
+    const requiredFeatures = [...featureFilter]
     return available.filter((item) => {
       if (teamFilter !== 'all') {
         const tid = item.tenant_id ?? item.team_id
@@ -105,6 +152,12 @@ export function RouteModelBatchPickerDialog({
         }
       }
       if (capabilityFilter !== 'all' && item.capability !== capabilityFilter) return false
+      // 特性筛选：选中的所有特性都必须满足（AND 逻辑）
+      if (requiredFeatures.length > 0) {
+        for (const fk of requiredFeatures) {
+          if (!modelHasFeature(item, fk)) return false
+        }
+      }
       if (!deferredSearch) return true
       const haystack = [
         item.name,
@@ -118,11 +171,11 @@ export function RouteModelBatchPickerDialog({
         .toLowerCase()
       return haystack.includes(deferredSearch)
     })
-  }, [available, deferredSearch, teamFilter, capabilityFilter, teamNameById])
+  }, [available, deferredSearch, teamFilter, capabilityFilter, featureFilter, teamNameById])
 
   // 筛选条件变化时回到第一页：渲染期间调整 state，避免 useEffect 引入额外渲染
   // 参考 https://react.dev/learn/you-might-not-need-an-effect#adjusting-some-state-when-a-prop-changes
-  const filterKey = `${deferredSearch}\0${teamFilter}\0${capabilityFilter}`
+  const filterKey = `${deferredSearch}\0${teamFilter}\0${capabilityFilter}\0${[...featureFilter].join(',')}`
   const [prevFilterKey, setPrevFilterKey] = useState(filterKey)
   if (filterKey !== prevFilterKey) {
     setPrevFilterKey(filterKey)
@@ -161,12 +214,22 @@ export function RouteModelBatchPickerDialog({
     })
   }, [])
 
+  const toggleFeature = useCallback((featureKey: string): void => {
+    setFeatureFilter((prev) => {
+      const next = new Set(prev)
+      if (next.has(featureKey)) next.delete(featureKey)
+      else next.add(featureKey)
+      return next
+    })
+  }, [])
+
   const handleConfirm = useCallback((): void => {
     onConfirm([...selected])
     setSelected(new Set())
     setSearch('')
     setTeamFilter('all')
     setCapabilityFilter('all')
+    setFeatureFilter(new Set())
     setPage(1)
     onOpenChange(false)
   }, [onConfirm, onOpenChange, selected])
@@ -178,6 +241,7 @@ export function RouteModelBatchPickerDialog({
         setSearch('')
         setTeamFilter('all')
         setCapabilityFilter('all')
+        setFeatureFilter(new Set())
         setPage(1)
       }
       onOpenChange(next)
@@ -252,6 +316,40 @@ export function RouteModelBatchPickerDialog({
               </Select>
             </div>
           </div>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-xs text-muted-foreground">特性</span>
+            {MODEL_FEATURE_TAGS.map((tag) => {
+              const active = featureFilter.has(tag.key)
+              return (
+                <Button
+                  key={tag.key}
+                  type="button"
+                  variant={active ? 'default' : 'outline'}
+                  size="sm"
+                  className="h-6 px-2 text-xs"
+                  aria-pressed={active}
+                  onClick={() => {
+                    toggleFeature(tag.key)
+                  }}
+                >
+                  {tag.label}
+                </Button>
+              )
+            })}
+            {featureFilter.size > 0 ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-6 px-2 text-xs text-muted-foreground"
+                onClick={() => {
+                  setFeatureFilter(new Set())
+                }}
+              >
+                清除
+              </Button>
+            ) : null}
+          </div>
           <div className="flex items-center gap-2">
             <Checkbox
               id="route-batch-select-all"
@@ -287,6 +385,7 @@ export function RouteModelBatchPickerDialog({
                   : (teamNameById.get(item.tenant_id ?? item.team_id ?? '') ??
                     item.team_slug ??
                     TEAM_KIND_LABEL[item.team_kind])
+              const featureKeys = modelFeatureKeys(item)
               return (
                 <li key={item.id}>
                   <label className="flex cursor-pointer items-start gap-3 rounded-md px-3 py-2 hover:bg-muted/40">
@@ -311,6 +410,18 @@ export function RouteModelBatchPickerDialog({
                             {capabilityLabel(item.capability)}
                           </Badge>
                         ) : null}
+                        {featureKeys.map((fk) => {
+                          const tag = MODEL_FEATURE_TAGS.find((t) => t.key === fk)
+                          return tag ? (
+                            <Badge
+                              key={fk}
+                              variant="outline"
+                              className="text-[10px] font-normal text-primary"
+                            >
+                              {tag.label}
+                            </Badge>
+                          ) : null
+                        })}
                         <ModelStatusBadge
                           status={item.last_test_status}
                           testedAt={item.last_tested_at}

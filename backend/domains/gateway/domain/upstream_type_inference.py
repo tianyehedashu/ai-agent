@@ -12,9 +12,15 @@ _NON_IMPORTABLE_RE = re.compile(
     re.IGNORECASE,
 )
 
+# 生图模型 id 特征：知名家族 + 通用 ``image`` token（``image-2`` / ``-image`` 结尾 /
+# ``/image/`` 路径段）。视觉理解（chat+image）模型 id 以 vl/vision/omni 等表达，
+# 几乎不含裸 ``image``，故本正则先于 ``_VISION_CHAT_RE`` 命中亦不会误伤。
 _IMAGE_GEN_RE = re.compile(
-    r"(^dall-e|dall-e|/dall-e|imagen|flux|stable-diffusion|sdxl|"
-    r"wanx.*image|wan.*-image|gpt-image|image-1|/image/)",
+    r"(dall-e|imagen|flux|kontext|stable-diffusion|sdxl|sd3|"
+    r"seedream|seededit|hidream|kolors|ideogram|recraft|cogview|jimeng|"
+    r"midjourney|nano-banana|gpt-image|"
+    r"qwen[-_]?image|hunyuan[-_]?image|wanx.*image|wan.*-image|"
+    r"(?:^|[-_/])image(?:[-_/]?\d|/|$))",
     re.IGNORECASE,
 )
 
