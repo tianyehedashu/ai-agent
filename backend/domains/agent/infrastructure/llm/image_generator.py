@@ -73,6 +73,7 @@ class ImageGenerator:
         strength: float | None = None,
         api_key_override: str | None = None,
         api_base_override: str | None = None,
+        endpoint_id_override: str | None = None,
     ) -> ImageGenerationResult:
         """
         生成图像（txt2img / img2img）
@@ -89,6 +90,7 @@ class ImageGenerator:
             strength: 参考图影响强度 0.0-1.0
             api_key_override: 覆写 API Key（用户自定义模型）
             api_base_override: 覆写 API Base URL（用户自定义模型）
+            endpoint_id_override: 覆写火山图像接入点 ep-xxx（用户自定义模型凭据 extra.image_endpoint_id）
         """
         defaults = PROVIDER_DEFAULTS.get(provider, {})
         actual_size = size or defaults.get("size", "1024x1024")
@@ -104,6 +106,7 @@ class ImageGenerator:
                 strength=strength,
                 api_key_override=api_key_override,
                 api_base_override=api_base_override,
+                endpoint_id_override=endpoint_id_override,
             )
         elif provider == "openai":
             return await self._generate_openai(
@@ -127,6 +130,7 @@ class ImageGenerator:
         self,
         api_key_override: str | None,
         api_base_override: str | None,
+        endpoint_id_override: str | None = None,
     ) -> tuple[str | None, str, str | None]:
         """返回 (api_key, api_base, endpoint_id)"""
         if api_key_override:
@@ -136,7 +140,9 @@ class ImageGenerator:
             api_key = raw.get_secret_value() if isinstance(raw, SecretStr) else raw
 
         api_base = api_base_override or self.config.volcengine_api_base
-        endpoint_id = self.config.volcengine_image_endpoint_id or self.config.volcengine_endpoint_id
+        # 优先使用调用方传入的 endpoint_id_override（来自凭据 extra.image_endpoint_id），
+        # 回退到环境变量配置（系统模型路径）。
+        endpoint_id = endpoint_id_override or self.config.volcengine_image_endpoint_id or self.config.volcengine_endpoint_id
         return api_key, api_base, endpoint_id
 
     async def _generate_volcengine(
@@ -150,16 +156,22 @@ class ImageGenerator:
         strength: float | None = None,
         api_key_override: str | None = None,
         api_base_override: str | None = None,
+        endpoint_id_override: str | None = None,
     ) -> ImageGenerationResult:
         """火山引擎 Seedream txt2img / img2img，支持异步轮询"""
         api_key, api_base, endpoint_id = self._resolve_volcengine_credentials(
             api_key_override,
             api_base_override,
+            endpoint_id_override,
         )
 
         if not api_key:
             return ImageGenerationResult(success=False, error="VOLCENGINE_API_KEY 未配置")
-        if not endpoint_id and not model:
+        # 火山方舟 /images/generations 要求 model 字段为图像接入点 endpoint_id（ep-xxx），
+        # 裸模型名（如 doubao-seedream-3-0-t2i-250415）会被上游拒绝。
+        # endpoint_id 优先；仅当未配置 endpoint_id 时才回退 model（兼容旧路径）。
+        volcengine_model = endpoint_id or model
+        if not volcengine_model:
             return ImageGenerationResult(success=False, error="VOLCENGINE_IMAGE_ENDPOINT_ID 未配置")
 
         try:
@@ -172,7 +184,7 @@ class ImageGenerator:
             }
 
             payload: dict[str, Any] = {
-                "model": model or endpoint_id,
+                "model": volcengine_model,
                 "prompt": prompt,
                 "size": size,
                 "n": n,

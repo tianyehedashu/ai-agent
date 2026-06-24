@@ -200,6 +200,7 @@ class SqlModelCatalogAdapter:
             is_active=row.enabled,
             last_test_status=row.last_test_status,
             model_types=tuple(types),
+            extra=cred.extra,
         )
 
     async def count_registered_text_models(

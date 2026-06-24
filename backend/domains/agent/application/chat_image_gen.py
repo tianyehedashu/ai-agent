@@ -131,6 +131,7 @@ class ChatImageGenMixin:
             strength=image_gen_strength,
             api_key_override=resolved.api_key,
             api_base_override=resolved.api_base,
+            endpoint_id_override=resolved.endpoint_id,
         )
         if not result.success:
             yield AgentEvent.error(error=result.error or "图像生成失败", session_id=session_id)

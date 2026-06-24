@@ -84,15 +84,106 @@ describe('RouteModelBatchPickerDialog', () => {
     expect(screen.getByText('collab/model-b')).toBeInTheDocument()
   })
 
-  it('select all filtered adds all visible refs', async () => {
+  it('select all current page adds all visible refs', async () => {
     const onConfirm = vi.fn()
     renderDialog({ onConfirm })
 
-    fireEvent.click(screen.getByLabelText(/全选当前筛选/))
+    fireEvent.click(screen.getByLabelText(/全选当前页/))
     fireEvent.click(screen.getByRole('button', { name: /到主模型池/ }))
 
     await waitFor(() => {
       expect(onConfirm).toHaveBeenCalledWith(['collab/model-a', 'collab/model-b'])
+    })
+  })
+
+  it('paginates candidates and keeps selection across pages', async () => {
+    // 构造 60 个模型，验证分页（每页 50 条）
+    const manyModels: RoutePickerModel[] = Array.from({ length: 60 }, (_, idx) =>
+      pickerModel({
+        id: `m-${String(idx)}`,
+        name: `collab/model-${String(idx).padStart(2, '0')}`,
+        registry_name: `model-${String(idx).padStart(2, '0')}`,
+      })
+    )
+    const onConfirm = vi.fn()
+    render(
+      <TooltipProvider>
+        <RouteModelBatchPickerDialog
+          open
+          onOpenChange={vi.fn()}
+          candidates={manyModels}
+          excludeNames={[]}
+          onConfirm={onConfirm}
+        />
+      </TooltipProvider>
+    )
+
+    // 第一页应显示 50 条，且分页控件可见
+    expect(screen.getByText(/共 60 项/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '下一页' })).toBeEnabled()
+
+    // 全选当前页（50 条）
+    fireEvent.click(screen.getByLabelText(/全选当前页/))
+    expect(screen.getByText(/已选 50 项 \/ 共 60 项/)).toBeInTheDocument()
+
+    // 翻到第二页
+    fireEvent.click(screen.getByRole('button', { name: '下一页' }))
+    expect(screen.getByRole('button', { name: '上一页' })).toBeEnabled()
+
+    // 第二页全选（剩余 10 条）
+    fireEvent.click(screen.getByLabelText(/全选当前页/))
+    expect(screen.getByText(/已选 60 项 \/ 共 60 项/)).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /到主模型池/ }))
+    await waitFor(() => {
+      expect(onConfirm).toHaveBeenCalledTimes(1)
+      const callArgs = onConfirm.mock.calls[0] as [string[]]
+      expect(callArgs[0]).toHaveLength(60)
+    })
+  })
+
+  it('filters candidates by capability', async () => {
+    const chatModel = pickerModel({ id: '1', name: 'collab/chat-a', capability: 'chat' })
+    const imageModel = pickerModel({ id: '2', name: 'collab/image-a', capability: 'image' })
+    const embeddingModel = pickerModel({
+      id: '3',
+      name: 'collab/embed-a',
+      capability: 'embedding',
+    })
+    const onConfirm = vi.fn()
+    render(
+      <TooltipProvider>
+        <RouteModelBatchPickerDialog
+          open
+          onOpenChange={vi.fn()}
+          candidates={[chatModel, imageModel, embeddingModel]}
+          excludeNames={[]}
+          onConfirm={onConfirm}
+        />
+      </TooltipProvider>
+    )
+
+    // 默认全部可见，共 3 项
+    expect(screen.getByText(/共 3 项/)).toBeInTheDocument()
+    expect(screen.getByText('collab/chat-a')).toBeInTheDocument()
+    expect(screen.getByText('collab/image-a')).toBeInTheDocument()
+    expect(screen.getByText('collab/embed-a')).toBeInTheDocument()
+
+    // 选择能力 = 图片生成
+    fireEvent.click(screen.getByLabelText('能力'))
+    fireEvent.click(screen.getByRole('option', { name: '图片生成（/v1/images）' }))
+
+    // 仅剩 image 模型
+    expect(screen.getByText(/共 1 项/)).toBeInTheDocument()
+    expect(screen.queryByText('collab/chat-a')).not.toBeInTheDocument()
+    expect(screen.getByText('collab/image-a')).toBeInTheDocument()
+    expect(screen.queryByText('collab/embed-a')).not.toBeInTheDocument()
+
+    // 选中并确认
+    fireEvent.click(screen.getByLabelText(/全选当前页/))
+    fireEvent.click(screen.getByRole('button', { name: /到主模型池/ }))
+    await waitFor(() => {
+      expect(onConfirm).toHaveBeenCalledWith(['collab/image-a'])
     })
   })
 })

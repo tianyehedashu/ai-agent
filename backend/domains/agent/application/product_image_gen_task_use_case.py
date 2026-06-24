@@ -57,6 +57,7 @@ async def _generate_images_background(
     user_id: uuid.UUID,
     api_key_override: str | None = None,
     api_base_override: str | None = None,
+    endpoint_id_override: str | None = None,
 ) -> None:
     """后台异步生成 8 张图片，逐条调用 ImageGenerator 并更新数据库。"""
     session_factory = get_session_factory()
@@ -122,6 +123,7 @@ async def _generate_images_background(
                         strength=strength,
                         api_key_override=api_key_override,
                         api_base_override=api_base_override,
+                        endpoint_id_override=endpoint_id_override,
                     )
                     if result.success and result.images:
                         url = await image_svc.persist_generated_image(result.images[0])
@@ -219,10 +221,11 @@ class ProductImageGenTaskUseCase:
         prompts: list | None = None,
         api_key_override: str | None = None,
         api_base_override: str | None = None,
+        endpoint_id_override: str | None = None,
     ) -> dict[str, Any]:
         """创建 8 图任务并异步启动图片生成。
 
-        api_key_override / api_base_override 由 Router 通过
+        api_key_override / api_base_override / endpoint_id_override 由 Router 通过
         ChatModelResolutionUseCase.resolve_image_gen_model_for_chat 解析后传入。
         """
         task = await self.repo.create(
@@ -246,6 +249,7 @@ class ProductImageGenTaskUseCase:
                     user_id=user_id,
                     api_key_override=api_key_override,
                     api_base_override=api_base_override,
+                    endpoint_id_override=endpoint_id_override,
                 )
             )
             _background_tasks.add(bg)

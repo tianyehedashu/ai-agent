@@ -388,6 +388,7 @@ async def create_image_gen_task(
         prompts=prompts,
         api_key_override=resolved.api_key,
         api_base_override=resolved.api_base,
+        endpoint_id_override=resolved.endpoint_id,
     )
 
 

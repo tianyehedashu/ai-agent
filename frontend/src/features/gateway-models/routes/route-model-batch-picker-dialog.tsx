@@ -1,6 +1,7 @@
 import { useCallback, useDeferredValue, useMemo, useState } from 'react'
 
 import { ModelStatusBadge } from '@/components/model-status-badge'
+import { PaginationControls } from '@/components/pagination-controls'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -22,6 +23,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { CAPABILITIES, capabilityLabel } from '@/features/gateway-models/constants'
 import type { RoutePickerModel } from '@/features/gateway-models/routes/use-personal-route-callable-models'
 import { useGatewayMemberTeamNameMap } from '@/features/gateway-teams/use-gateway-teams'
 import { LayoutGrid } from '@/lib/lucide-icons'
@@ -31,6 +33,9 @@ const TEAM_KIND_LABEL: Record<RoutePickerModel['team_kind'], string> = {
   shared: '团队',
   system: '系统',
 }
+
+/** 批量弹窗每页条数：在浏览大量跨团队模型时避免长列表渲染卡顿 */
+const BATCH_PICKER_PAGE_SIZE = 50
 
 export interface RouteModelBatchPickerDialogProps {
   open: boolean
@@ -53,7 +58,9 @@ export function RouteModelBatchPickerDialog({
   const [search, setSearch] = useState('')
   const deferredSearch = useDeferredValue(search.trim().toLowerCase())
   const [teamFilter, setTeamFilter] = useState<string>('all')
+  const [capabilityFilter, setCapabilityFilter] = useState<string>('all')
   const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [page, setPage] = useState(1)
 
   const exclude = useMemo(() => new Set(excludeNames), [excludeNames])
 
@@ -71,6 +78,22 @@ export function RouteModelBatchPickerDialog({
     return [...ids]
   }, [available])
 
+  /** 候选中实际出现的能力集合（用于动态渲染能力筛选下拉项） */
+  const capabilityChoices = useMemo(() => {
+    const caps = new Set<string>()
+    for (const item of available) {
+      if (item.capability) caps.add(item.capability)
+    }
+    // 按 CAPABILITIES 已知顺序排序，未知能力排在最后
+    const knownOrder = new Map<string, number>(CAPABILITIES.map((cap, idx) => [cap, idx]))
+    return [...caps].sort((a, b) => {
+      const ia = knownOrder.get(a) ?? Number.MAX_SAFE_INTEGER
+      const ib = knownOrder.get(b) ?? Number.MAX_SAFE_INTEGER
+      if (ia !== ib) return ia - ib
+      return a.localeCompare(b)
+    })
+  }, [available])
+
   const filtered = useMemo(() => {
     return available.filter((item) => {
       if (teamFilter !== 'all') {
@@ -81,6 +104,7 @@ export function RouteModelBatchPickerDialog({
           return false
         }
       }
+      if (capabilityFilter !== 'all' && item.capability !== capabilityFilter) return false
       if (!deferredSearch) return true
       const haystack = [
         item.name,
@@ -94,22 +118,39 @@ export function RouteModelBatchPickerDialog({
         .toLowerCase()
       return haystack.includes(deferredSearch)
     })
-  }, [available, deferredSearch, teamFilter, teamNameById])
+  }, [available, deferredSearch, teamFilter, capabilityFilter, teamNameById])
 
-  const allFilteredSelected =
-    filtered.length > 0 && filtered.every((item) => selected.has(item.name))
+  // 筛选条件变化时回到第一页：渲染期间调整 state，避免 useEffect 引入额外渲染
+  // 参考 https://react.dev/learn/you-might-not-need-an-effect#adjusting-some-state-when-a-prop-changes
+  const filterKey = `${deferredSearch}\0${teamFilter}\0${capabilityFilter}`
+  const [prevFilterKey, setPrevFilterKey] = useState(filterKey)
+  if (filterKey !== prevFilterKey) {
+    setPrevFilterKey(filterKey)
+    setPage(1)
+  }
 
-  const toggleAllFiltered = useCallback((): void => {
+  const totalFiltered = filtered.length
+  const totalPages = Math.max(1, Math.ceil(totalFiltered / BATCH_PICKER_PAGE_SIZE))
+  const safePage = Math.min(page, totalPages)
+  const pagedFiltered = useMemo(() => {
+    const start = (safePage - 1) * BATCH_PICKER_PAGE_SIZE
+    return filtered.slice(start, start + BATCH_PICKER_PAGE_SIZE)
+  }, [filtered, safePage])
+
+  const allCurrentPageSelected =
+    pagedFiltered.length > 0 && pagedFiltered.every((item) => selected.has(item.name))
+
+  const toggleCurrentPage = useCallback((): void => {
     setSelected((prev) => {
       const next = new Set(prev)
-      if (allFilteredSelected) {
-        for (const item of filtered) next.delete(item.name)
+      if (allCurrentPageSelected) {
+        for (const item of pagedFiltered) next.delete(item.name)
       } else {
-        for (const item of filtered) next.add(item.name)
+        for (const item of pagedFiltered) next.add(item.name)
       }
       return next
     })
-  }, [allFilteredSelected, filtered])
+  }, [allCurrentPageSelected, pagedFiltered])
 
   const toggleOne = useCallback((name: string, checked: boolean): void => {
     setSelected((prev) => {
@@ -125,6 +166,8 @@ export function RouteModelBatchPickerDialog({
     setSelected(new Set())
     setSearch('')
     setTeamFilter('all')
+    setCapabilityFilter('all')
+    setPage(1)
     onOpenChange(false)
   }, [onConfirm, onOpenChange, selected])
 
@@ -134,6 +177,8 @@ export function RouteModelBatchPickerDialog({
         setSelected(new Set())
         setSearch('')
         setTeamFilter('all')
+        setCapabilityFilter('all')
+        setPage(1)
       }
       onOpenChange(next)
     },
@@ -170,9 +215,11 @@ export function RouteModelBatchPickerDialog({
               />
             </div>
             <div className="w-40 space-y-1">
-              <Label className="text-xs">归属</Label>
+              <Label htmlFor="route-batch-team-filter" className="text-xs">
+                归属
+              </Label>
               <Select value={teamFilter} onValueChange={setTeamFilter}>
-                <SelectTrigger className="h-8">
+                <SelectTrigger id="route-batch-team-filter" className="h-8">
                   <SelectValue placeholder="全部" />
                 </SelectTrigger>
                 <SelectContent>
@@ -186,31 +233,53 @@ export function RouteModelBatchPickerDialog({
                 </SelectContent>
               </Select>
             </div>
+            <div className="w-44 space-y-1">
+              <Label htmlFor="route-batch-capability-filter" className="text-xs">
+                能力
+              </Label>
+              <Select value={capabilityFilter} onValueChange={setCapabilityFilter}>
+                <SelectTrigger id="route-batch-capability-filter" className="h-8">
+                  <SelectValue placeholder="全部" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">全部</SelectItem>
+                  {capabilityChoices.map((cap) => (
+                    <SelectItem key={cap} value={cap}>
+                      {capabilityLabel(cap)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
           <div className="flex items-center gap-2">
             <Checkbox
               id="route-batch-select-all"
-              checked={allFilteredSelected}
+              checked={allCurrentPageSelected}
               onCheckedChange={() => {
-                toggleAllFiltered()
+                toggleCurrentPage()
               }}
             />
             <Label htmlFor="route-batch-select-all" className="text-sm font-normal">
-              全选当前筛选（{filtered.length} 项）
+              全选当前页（{pagedFiltered.length} 项）
             </Label>
             {selected.size > 0 ? (
-              <span className="text-xs text-muted-foreground">已选 {selected.size} 项</span>
-            ) : null}
+              <span className="text-xs text-muted-foreground">
+                已选 {selected.size} 项 / 共 {totalFiltered} 项
+              </span>
+            ) : (
+              <span className="text-xs text-muted-foreground">共 {totalFiltered} 项</span>
+            )}
           </div>
         </div>
 
         <ul className="min-h-0 flex-1 divide-y overflow-y-auto px-2 py-1">
           {isLoadingCandidates ? (
             <li className="px-4 py-12 text-center text-sm text-muted-foreground">正在加载模型…</li>
-          ) : filtered.length === 0 ? (
+          ) : pagedFiltered.length === 0 ? (
             <li className="px-4 py-12 text-center text-sm text-muted-foreground">无匹配模型</li>
           ) : (
-            filtered.map((item) => {
+            pagedFiltered.map((item) => {
               const checked = selected.has(item.name)
               const teamLabel =
                 item.team_kind === 'system'
@@ -234,6 +303,14 @@ export function RouteModelBatchPickerDialog({
                         <Badge variant="outline" className="text-[10px] font-normal">
                           {teamLabel}
                         </Badge>
+                        {item.capability ? (
+                          <Badge
+                            variant="secondary"
+                            className="text-[10px] font-normal text-muted-foreground"
+                          >
+                            {capabilityLabel(item.capability)}
+                          </Badge>
+                        ) : null}
                         <ModelStatusBadge
                           status={item.last_test_status}
                           testedAt={item.last_tested_at}
@@ -255,6 +332,19 @@ export function RouteModelBatchPickerDialog({
             })
           )}
         </ul>
+
+        {totalFiltered > 0 ? (
+          <div className="border-t px-6 py-2">
+            <PaginationControls
+              page={safePage}
+              page_size={BATCH_PICKER_PAGE_SIZE}
+              total={totalFiltered}
+              has_next={safePage < totalPages}
+              has_prev={safePage > 1}
+              onPageChange={setPage}
+            />
+          </div>
+        ) : null}
 
         <DialogFooter className="border-t px-6 py-4">
           <Button
@@ -290,9 +380,9 @@ export function RouteModelBatchAddButton({
   onClick: () => void
 }): React.JSX.Element {
   return (
-    <Button type="button" variant="outline" size="sm" disabled={disabled} onClick={onClick}>
+    <Button type="button" variant="secondary" size="sm" disabled={disabled} onClick={onClick}>
       <LayoutGrid className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
-      批量添加
+      批量添加（跨团队）
     </Button>
   )
 }

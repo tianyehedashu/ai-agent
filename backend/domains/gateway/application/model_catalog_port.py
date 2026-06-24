@@ -24,6 +24,7 @@ class RegisteredModelResolution:
     is_active: bool
     last_test_status: str | None
     model_types: tuple[str, ...]
+    extra: dict[str, Any] | None = None
 
 
 class ModelCatalogPort(Protocol):

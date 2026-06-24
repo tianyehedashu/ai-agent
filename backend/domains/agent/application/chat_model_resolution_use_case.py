@@ -25,6 +25,9 @@ from domains.gateway.domain.policies.chat_model_readiness import (
     chat_readiness_message,
     classify_chat_readiness,
 )
+from domains.gateway.domain.policies.volcengine_image import (
+    parse_volcengine_image_endpoint_id,
+)
 from domains.gateway.domain.types import PERSONAL_MODEL_TYPES
 from libs.exceptions import ValidationError
 from libs.iam.permission_context import get_permission_context
@@ -56,6 +59,7 @@ class ResolvedImageGenModel:
     api_key: str | None = None
     api_base: str | None = None
     is_system: bool = True
+    endpoint_id: str | None = None
 
 
 class ChatModelResolutionUseCase:
@@ -188,12 +192,14 @@ class ChatModelResolutionUseCase:
         bare_model = resolution.litellm_model
         if "/" in bare_model:
             bare_model = bare_model.split("/", 1)[1]
+        endpoint_id = parse_volcengine_image_endpoint_id(resolution.extra)
         return ResolvedImageGenModel(
             provider=resolution.provider,
             model=bare_model or None,
             api_key=resolution.api_key,
             api_base=resolution.api_base,
             is_system=False,
+            endpoint_id=endpoint_id,
         )
 
     async def visible_text_system_model_ids(
