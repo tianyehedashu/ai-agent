@@ -4,9 +4,8 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from decimal import Decimal
-import uuid
-
 from unittest.mock import MagicMock
+import uuid
 
 import pytest
 

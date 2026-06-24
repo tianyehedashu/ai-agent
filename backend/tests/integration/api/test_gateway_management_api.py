@@ -4761,7 +4761,7 @@ class TestMyRoutesApi:
         test_user: User,
     ) -> None:
         ts = TeamService(db_session)
-        personal = await ts.ensure_personal_team(test_user.id)
+        await ts.ensure_personal_team(test_user.id)
         shared = await ts.create_team(
             name=f"MyRouteCross-{uuid.uuid4().hex[:8]}",
             owner_user_id=test_user.id,

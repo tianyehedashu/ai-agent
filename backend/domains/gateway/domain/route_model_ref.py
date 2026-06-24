@@ -10,11 +10,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Protocol
-from uuid import UUID
+from typing import TYPE_CHECKING, Protocol
 
 from domains.gateway.domain.vkey_grant_slug_policy import grant_tenant_prefix_dispatchable
 from domains.gateway.domain.vkey_team_prefix_policy import resolve_vkey_model_prefix
+
+if TYPE_CHECKING:
+    from uuid import UUID
 
 
 class _RegistryRow(Protocol):

@@ -12,7 +12,10 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bootstrap.config import settings
-from domains.gateway.application.management.usage_metrics_window import compute_hot_cutoff, floor_hour
+from domains.gateway.application.management.usage_metrics_window import (
+    compute_hot_cutoff,
+    floor_hour,
+)
 from domains.gateway.infrastructure.models.request_log import GatewayRequestLog
 from domains.gateway.infrastructure.repositories.metrics_rollup_repository import (
     GatewayMetricsRollupRepository,
