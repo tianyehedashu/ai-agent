@@ -102,6 +102,7 @@ async def _principal_from_api_key(
     gateway:read 或 gateway:admin；写操作额外要求 gateway:admin。
     身份解析后复用 API Key 所属 user 的 RBAC 角色与团队成员关系。
     """
+    logger = get_logger(__name__)
     if not credentials or not credentials.credentials:
         raise AuthenticationError("Authentication required")
     plain = credentials.credentials.strip()
@@ -113,16 +114,28 @@ async def _principal_from_api_key(
     from domains.identity.domain.services.api_key_service import ApiKeyGenerator
     from domains.identity.infrastructure.models.user import User
 
-    encryption_key = ApiKeyGenerator.derive_encryption_key(
-        settings.secret_key.get_secret_value()
-    )
-    use_case = ApiKeyUseCase(db, encryption_key=encryption_key)
-    entity = await use_case.verify_api_key(plain)
+    try:
+        encryption_key = ApiKeyGenerator.derive_encryption_key(
+            settings.secret_key.get_secret_value()
+        )
+        use_case = ApiKeyUseCase(db, encryption_key=encryption_key)
+        entity = await use_case.verify_api_key(plain)
+    except AuthenticationError:
+        raise
+    except Exception:
+        logger.exception("API key verification failed unexpectedly")
+        raise AuthenticationError("API key verification failed")
+
     if entity is None or not entity.is_valid:
         raise AuthenticationError("Invalid or expired API key")
 
     # scope 校验：网关管理面至少需要 gateway:read
     if not entity.can_access_any({ApiKeyScope.GATEWAY_ADMIN, ApiKeyScope.GATEWAY_READ}):
+        logger.warning(
+            "API key %s rejected: missing gateway scopes (has=%s)",
+            entity.id,
+            sorted(s.value for s in entity.scopes),
+        )
         raise PermissionDeniedError(
             message="API key lacks gateway management scope (gateway:admin or gateway:read)",
             resource="ApiKeyScope",
@@ -131,20 +144,32 @@ async def _principal_from_api_key(
     if not _is_read_only_api_request(request) and not entity.can_access(
         ApiKeyScope.GATEWAY_ADMIN
     ):
+        logger.warning(
+            "API key %s rejected: write operation requires gateway:admin (has=%s, method=%s, path=%s)",
+            entity.id,
+            sorted(s.value for s in entity.scopes),
+            request.method,
+            request.url.path,
+        )
         raise PermissionDeniedError(
             message="API key lacks gateway:admin scope for write operations",
             resource="ApiKeyScope",
         )
 
-    import uuid as _uuid
-
-    user = await db.get(User, _uuid.UUID(entity.user_id))
+    user = await db.get(User, entity.user_id)
     if user is None or not user.is_active:
         raise AuthenticationError("API key owner is inactive or not found")
 
     # 暴露 API Key 上下文供审计/中间件
     request.state.api_key_id = str(entity.id)
     request.state.api_key_scopes = sorted(s.value for s in entity.scopes)
+
+    logger.debug(
+        "API key %s authenticated user %s (scopes=%s)",
+        entity.id,
+        user.id,
+        request.state.api_key_scopes,
+    )
 
     return Principal(
         id=str(user.id),
