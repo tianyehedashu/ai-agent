@@ -10,6 +10,7 @@ from domains.gateway.domain.router_model_name import encode_router_model_name
 from domains.gateway.infrastructure.router_singleton import (
     _models_to_deployments,
     _resolve_strategy,
+    _routes_to_fallbacks,
     _routes_to_virtual_deployments,
 )
 
@@ -63,16 +64,19 @@ def _mk_route(
     virtual_model: str,
     primary_models: list[str],
     tenant_id: uuid.UUID | None = None,
+    retry_policy: dict[str, int] | None = None,
+    fallbacks_general: list[str] | None = None,
 ) -> MagicMock:
     r = MagicMock()
     r.id = uuid.uuid4()
     r.tenant_id = tenant_id
     r.virtual_model = virtual_model
     r.primary_models = primary_models
-    r.fallbacks_general = []
+    r.fallbacks_general = fallbacks_general or []
     r.fallbacks_content_policy = []
     r.fallbacks_context_window = []
     r.strategy = "simple-shuffle"
+    r.retry_policy = retry_policy
     return r
 
 
@@ -341,3 +345,61 @@ def test_virtual_route_resolves_cross_team_slug_prefixed_primary(monkeypatch) ->
     assert len(virtuals) == 1
     assert virtuals[0]["model_name"] == route_key
     assert virtuals[0]["model_info"]["gateway_credential_id"] == str(cred)
+
+
+def test_virtual_route_deployment_inherits_retry_policy_num_retries(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "domains.gateway.infrastructure.router_singleton._build_litellm_params",
+        _stub_build_litellm_params,
+    )
+    team = uuid.uuid4()
+    cred_id = uuid.uuid4()
+    model = _mk_model(
+        name="gpt-4o-a",
+        real_model="gpt-4o",
+        provider="openai",
+        cred_id=cred_id,
+        tenant_id=team,
+    )
+    creds = {cred_id: _mk_cred(id_=cred_id)}
+    route = _mk_route(
+        virtual_model="smart-4o",
+        primary_models=["gpt-4o-a"],
+        tenant_id=team,
+        retry_policy={"retries": 4},
+    )
+    virtuals = _routes_to_virtual_deployments(
+        [route],
+        [model],
+        creds,
+        reserved_model_names=frozenset(),
+    )
+    assert virtuals[0]["litellm_params"]["num_retries"] == 4
+
+
+def test_routes_to_fallbacks_skips_unresolved_target(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "domains.gateway.infrastructure.router_singleton._build_litellm_params",
+        _stub_build_litellm_params,
+    )
+    team = uuid.uuid4()
+    cred_id = uuid.uuid4()
+    backup = _mk_model(
+        name="backup-model",
+        real_model="gpt-4o-mini",
+        provider="openai",
+        cred_id=cred_id,
+        tenant_id=team,
+    )
+    route = _mk_route(
+        virtual_model="smart-route",
+        primary_models=["backup-model"],
+        tenant_id=team,
+        fallbacks_general=["missing-model", "backup-model"],
+    )
+    general, cp, cw = _routes_to_fallbacks([route], [backup])
+    route_key = encode_router_model_name(team, "smart-route")
+    backup_key = encode_router_model_name(team, "backup-model")
+    assert general == [{route_key: [backup_key]}]
+    assert cp == []
+    assert cw == []

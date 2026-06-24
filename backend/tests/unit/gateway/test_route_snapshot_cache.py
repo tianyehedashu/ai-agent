@@ -28,7 +28,11 @@ async def test_get_route_snapshot_metadata_second_call_hits_cache(
     route_mock = MagicMock()
     route_mock.virtual_model = "vm1"
     route_mock.primary_models = ["m1"]
+    route_mock.fallbacks_general = []
+    route_mock.fallbacks_content_policy = []
+    route_mock.fallbacks_context_window = []
     route_mock.strategy = "fallback"
+    route_mock.retry_policy = None
 
     repo_instance = MagicMock()
     repo_instance.resolve_by_virtual_model = AsyncMock(return_value=route_mock)
@@ -55,7 +59,11 @@ async def test_get_route_snapshot_metadata_second_call_hits_cache(
         == {
             "virtual_model": "vm1",
             "primary_models": ["m1"],
+            "fallbacks_general": [],
+            "fallbacks_content_policy": [],
+            "fallbacks_context_window": [],
             "strategy": "fallback",
+            "retry_policy": None,
         }
     )
     assert repo_instance.resolve_by_virtual_model.await_count == 1
@@ -68,7 +76,11 @@ async def test_get_route_snapshot_metadata_refetches_after_ttl(
     route_mock = MagicMock()
     route_mock.virtual_model = "vm1"
     route_mock.primary_models = []
+    route_mock.fallbacks_general = []
+    route_mock.fallbacks_content_policy = []
+    route_mock.fallbacks_context_window = []
     route_mock.strategy = "single"
+    route_mock.retry_policy = None
 
     repo_instance = MagicMock()
     repo_instance.resolve_by_virtual_model = AsyncMock(return_value=route_mock)

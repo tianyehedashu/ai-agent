@@ -8,6 +8,7 @@ from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from domains.gateway.domain.route_snapshot import build_route_snapshot_metadata
 from domains.gateway.infrastructure.repositories.model_repository import GatewayRouteRepository
 
 _CACHE: dict[tuple[UUID, str], tuple[dict[str, Any] | None, float]] = {}
@@ -31,11 +32,7 @@ async def get_route_snapshot_metadata(
     if route is None:
         _CACHE[key] = (None, now)
         return None
-    snap: dict[str, Any] = {
-        "virtual_model": route.virtual_model,
-        "primary_models": list(route.primary_models or []),
-        "strategy": route.strategy,
-    }
+    snap = build_route_snapshot_metadata(route)
     _CACHE[key] = (snap, now)
     return snap
 

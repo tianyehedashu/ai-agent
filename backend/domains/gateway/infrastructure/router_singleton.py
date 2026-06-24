@@ -37,6 +37,11 @@ from domains.gateway.application.route_owner_slug_maps import (
     build_route_owner_slug_contexts,
 )
 from domains.gateway.domain.route_model_ref import resolve_route_ref_in_registry
+from domains.gateway.domain.route_retry_policy import (
+    DEFAULT_ROUTER_NUM_RETRIES,
+    deployment_num_retries_from_policy,
+    routes_to_model_group_retry_policy,
+)
 from domains.gateway.domain.types import RoutingStrategy, credential_api_scope
 from domains.gateway.domain.upstream_call_shape_policy import (
     resolve_effective_upstream_call_shape,
@@ -259,6 +264,7 @@ def _build_deployment(
     cred: ProviderCredential,
     via_route: str | None = None,
     pricing_lookup: PricingLookup | None = None,
+    num_retries: int | None = None,
 ) -> dict[str, Any]:
     """构造单个 deployment dict（model_list 一行）。"""
     pricing = _pricing_for_model(src, pricing_lookup)
@@ -277,6 +283,8 @@ def _build_deployment(
     # LiteLLM simple_shuffle reads deployment["litellm_params"]["weight"] for
     # weighted selection; model_info.weight is retained for attribution/logging.
     litellm_params["weight"] = deployment_weight
+    if num_retries is not None:
+        litellm_params["num_retries"] = num_retries
     return {
         "model_name": model_name,
         "litellm_params": litellm_params,
@@ -385,6 +393,9 @@ def _routes_to_virtual_deployments(
             continue
         route_owner = deployment_scope_team_id(r)
         ctx = _route_owner_slug_context(route_owner, route_slug_contexts)
+        route_num_retries = deployment_num_retries_from_policy(
+            r.retry_policy if isinstance(r.retry_policy, dict) else None
+        )
         for primary_name in r.primary_models or ():
             src = _resolve(route_owner, primary_name, ctx)
             if src is None:
@@ -412,6 +423,7 @@ def _routes_to_virtual_deployments(
                     cred=cred,
                     via_route=r.virtual_model,
                     pricing_lookup=pricing_lookup,
+                    num_retries=route_num_retries,
                 )
             )
     return deployments
@@ -422,7 +434,7 @@ def _encode_fallback_model_name(
     gateway_model_name: str,
     by_team_name: dict[tuple[str | None, str], GatewayModel | SystemGatewayModel],
     ctx: RouteOwnerSlugContext,
-) -> str:
+) -> str | None:
     route_owner = deployment_scope_team_id(route)
     src = resolve_route_ref_in_registry(
         route_owner_tenant_id=route_owner,
@@ -433,7 +445,12 @@ def _encode_fallback_model_name(
     )
     if src is not None:
         return encode_router_model_name(src.tenant_id, src.name)
-    return gateway_model_name
+    logger.warning(
+        "GatewayRoute %s fallback %s has no matching GatewayModel, skip",
+        route.virtual_model,
+        gateway_model_name,
+    )
+    return None
 
 
 def _routes_to_fallbacks(
@@ -455,32 +472,29 @@ def _routes_to_fallbacks(
         route_owner = deployment_scope_team_id(r)
         ctx = _route_owner_slug_context(route_owner, route_slug_contexts)
         if r.fallbacks_general:
-            general.append(
-                {
-                    route_key: [
-                        _encode_fallback_model_name(r, n, by_team_name, ctx)
-                        for n in r.fallbacks_general
-                    ]
-                }
-            )
+            encoded_general = [
+                name
+                for n in r.fallbacks_general
+                if (name := _encode_fallback_model_name(r, n, by_team_name, ctx)) is not None
+            ]
+            if encoded_general:
+                general.append({route_key: encoded_general})
         if r.fallbacks_content_policy:
-            cp.append(
-                {
-                    route_key: [
-                        _encode_fallback_model_name(r, n, by_team_name, ctx)
-                        for n in r.fallbacks_content_policy
-                    ]
-                }
-            )
+            encoded_cp = [
+                name
+                for n in r.fallbacks_content_policy
+                if (name := _encode_fallback_model_name(r, n, by_team_name, ctx)) is not None
+            ]
+            if encoded_cp:
+                cp.append({route_key: encoded_cp})
         if r.fallbacks_context_window:
-            cw.append(
-                {
-                    route_key: [
-                        _encode_fallback_model_name(r, n, by_team_name, ctx)
-                        for n in r.fallbacks_context_window
-                    ]
-                }
-            )
+            encoded_cw = [
+                name
+                for n in r.fallbacks_context_window
+                if (name := _encode_fallback_model_name(r, n, by_team_name, ctx)) is not None
+            ]
+            if encoded_cw:
+                cw.append({route_key: encoded_cw})
     return general, cp, cw
 
 
@@ -591,6 +605,7 @@ async def _build_router_kwargs(
         )
     )
     fb_general, fb_cp, fb_cw = _routes_to_fallbacks(routes, models, route_slug_contexts=route_slug_contexts)
+    model_group_retry_policy = routes_to_model_group_retry_policy(routes)
 
     # LiteLLM Router 仅接受 redis_url 字符串（无单独 username 参数），而阿里云 Redis
     # 启用 ACL 后必须用 username+password 鉴权，否则连接被拒 → 熔断打开、cooldown/TPM
@@ -602,13 +617,15 @@ async def _build_router_kwargs(
     kwargs: dict[str, Any] = {
         "model_list": deployments,
         "routing_strategy": _resolve_strategy(routes),
-        "num_retries": 2,
+        "num_retries": DEFAULT_ROUTER_NUM_RETRIES,
         "allowed_fails": settings.gateway_router_cooldown_threshold,
         "cooldown_time": settings.gateway_router_cooldown_seconds,
         "enable_pre_call_checks": True,
         "redis_url": redis_url,
         "set_verbose": False,
     }
+    if model_group_retry_policy:
+        kwargs["model_group_retry_policy"] = model_group_retry_policy
     if fb_general:
         kwargs["fallbacks"] = fb_general
     if fb_cp:
@@ -681,6 +698,9 @@ async def reload_router(db: AsyncSession) -> Router:
         _router_instance.content_policy_fallbacks = kwargs["content_policy_fallbacks"]
     if "context_window_fallbacks" in kwargs:
         _router_instance.context_window_fallbacks = kwargs["context_window_fallbacks"]
+    if "model_group_retry_policy" in kwargs:
+        _router_instance.model_group_retry_policy = kwargs["model_group_retry_policy"]
+    _router_instance.num_retries = kwargs.get("num_retries", DEFAULT_ROUTER_NUM_RETRIES)
     _router_instance.routing_strategy = kwargs["routing_strategy"]
     logger.info("LiteLLM Router hot-reloaded: %d deployments", len(kwargs["model_list"]))
     return _router_instance

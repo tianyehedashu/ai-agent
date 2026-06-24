@@ -23,6 +23,10 @@ import uuid
 
 from bootstrap.config import settings
 from domains.gateway.domain.cache_hit_flag import coerce_cache_hit_flag
+from domains.gateway.domain.fallback_chain import (
+    record_fallback_event_chain,
+    resolve_fallback_chain,
+)
 from domains.gateway.domain.litellm_deployment_attribution import gateway_deployment_real_model
 from domains.gateway.domain.normalized_usage import extract_normalized_usage
 from domains.gateway.infrastructure.callbacks.cost_calculation import (
@@ -146,6 +150,33 @@ def _build_logger_instance() -> Any:
                     error_message=error_message,
                     upstream_quota_probe_code=upstream_quota_probe_code,
                 )
+
+        async def log_success_fallback_event(
+            self,
+            original_model_group: str,
+            kwargs: dict[str, Any],
+            original_exception: Exception,
+        ) -> None:
+            """主模型失败 → 备用模型成功：把已切换的模型组回填进显式 fallback 链。"""
+            self._record_fallback_event(original_model_group, kwargs)
+
+        async def log_failure_fallback_event(
+            self,
+            original_model_group: str,
+            kwargs: dict[str, Any],
+            original_exception: Exception,
+        ) -> None:
+            """备用模型也失败：仍回填链路，使全部失败的 failover 在日志中可见。"""
+            self._record_fallback_event(original_model_group, kwargs)
+
+        @staticmethod
+        def _record_fallback_event(original_model_group: str, kwargs: dict[str, Any]) -> None:
+            metadata = kwargs.get("metadata")
+            if not isinstance(metadata, dict):
+                metadata = {}
+                kwargs["metadata"] = metadata
+            with suppress(Exception):
+                record_fallback_event_chain(metadata, kwargs, original_model_group)
 
         async def async_post_call_streaming_hook(
             self,
@@ -492,13 +523,6 @@ def _credential_snapshots_for_persist(
         if cred_name_snap is None and mname is not None:
             cred_name_snap = mname
     return cred_id, cred_name_snap
-
-
-def _normalized_fallback_entries(metadata: dict[str, Any]) -> list[str]:
-    raw = metadata.get("gateway_fallback_chain") or []
-    if isinstance(raw, str):
-        raw = [raw]
-    return [str(x) for x in raw if x]
 
 
 def _build_prompt_redacted(
@@ -1153,7 +1177,9 @@ async def _persist_event(
         verbose_log=verbose_log,
     )
     request_id_str = str(request_id) if request_id else None
-    fallback_chain = _normalized_fallback_entries(metadata)
+    fallback_chain = resolve_fallback_chain(
+        metadata=metadata, kwargs=kwargs, response_obj=response_obj
+    )
 
     # 7. 写 DB
     if persist_row:

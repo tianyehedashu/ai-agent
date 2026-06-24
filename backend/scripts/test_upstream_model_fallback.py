@@ -283,7 +283,9 @@ def _explain_fallback(routes: list[dict[str, Any]]) -> None:
 1. LiteLLM Router fallback（general / content_policy / context_window）
    - 仅当团队配置了 gateway_routes 且 fallbacks_* 非空时生效
    - 由 router_singleton._routes_to_fallbacks 注入 Router
-   - 失败时 metadata.gateway_fallback_chain 写入日志 fallback_chain 列
+   - 发生切换时由 domain.fallback_chain 还原（成功行读响应 header
+     x-litellm-attempted-fallbacks；并由 log_*_fallback_event 钩子回填），
+     写入日志 fallback_chain 列
 
 2. 无路由时（当前常见情况）
    - 单模型 deployment，无自动换模型
