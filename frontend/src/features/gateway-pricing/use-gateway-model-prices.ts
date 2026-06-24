@@ -6,18 +6,23 @@ import { gatewayApi, type MyPriceRow } from '@/api/gateway'
 import { useResolvedGatewayTeamId } from '@/hooks/use-gateway-team-id'
 import type { DisplayCurrency } from '@/types/money'
 
-export function useGatewayModelPrices(currency: DisplayCurrency): {
+export function useGatewayModelPrices(
+  currency: DisplayCurrency,
+  options?: { teamId?: string | null; enabled?: boolean }
+): {
   byName: Map<string, MyPriceRow>
   isLoading: boolean
 } {
-  const teamId = useResolvedGatewayTeamId()
+  const fallbackTeamId = useResolvedGatewayTeamId()
+  const teamId = options?.teamId ?? fallbackTeamId
+  const queryEnabled = (options?.enabled ?? true) && Boolean(teamId)
   const { data, isLoading } = useQuery({
     queryKey: ['gateway-pricing-my', teamId, currency],
     queryFn: () => {
       if (!teamId) return Promise.reject(new Error('未选择团队'))
       return gatewayApi.listMyPrices(teamId, { currency })
     },
-    enabled: Boolean(teamId),
+    enabled: queryEnabled,
     staleTime: 60_000,
   })
 

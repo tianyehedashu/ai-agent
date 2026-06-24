@@ -11,6 +11,8 @@ import type { PaginatedList, PageQuery } from '@/types'
 
 import { GATEWAY_API_BASE, teamGatewayPath } from './_base'
 
+import type { GatewayModel } from './models'
+
 export interface GatewayRoute {
   id: string
   tenant_id?: string | null
@@ -60,6 +62,22 @@ export interface GatewayRouteUpdateBody {
   enabled?: boolean | null
 }
 
+/** GET /my-route-callable-models 单条（含跨团队 route_ref） */
+export interface RouteCallableModel extends GatewayModel {
+  route_ref: string
+  team_kind: 'personal' | 'shared' | 'system'
+  team_slug: string | null
+  prefix_dispatchable: boolean
+}
+
+export type RouteCallableModelListResponse = PaginatedList<RouteCallableModel>
+
+export interface ListMyRouteCallableModelsParams extends PageQuery {
+  q?: string
+  provider?: string
+  team_id?: string
+}
+
 /** Routes 资源 API */
 export const routesApi = {
   /** 列出 membership 内各团队可见的虚拟路由（跨团队聚合，分页） */
@@ -84,4 +102,23 @@ export const routesApi = {
   /** 删除路由 */
   deleteRoute: (teamId: string, id: string) =>
     apiClient.delete<unknown>(teamGatewayPath(teamId, `/routes/${id}`)),
+
+  listMyRouteCallableModelsPage: (params?: ListMyRouteCallableModelsParams) =>
+    apiClient.get<RouteCallableModelListResponse>(
+      `${GATEWAY_API_BASE}/my-route-callable-models`,
+      buildPageQuerySearch(params)
+    ),
+  listMyRouteCallableModels: (
+    params?: Omit<ListMyRouteCallableModelsParams, 'page' | 'page_size'>
+  ) =>
+    fetchAllPaginatedPages((page, page_size) =>
+      routesApi.listMyRouteCallableModelsPage({ ...params, page, page_size })
+    ),
+
+  listMyRoutes: () => apiClient.get<GatewayRoute[]>(`${GATEWAY_API_BASE}/my-routes`),
+  createMyRoute: (body: GatewayRouteCreateBody) =>
+    apiClient.post<GatewayRoute>(`${GATEWAY_API_BASE}/my-routes`, body),
+  updateMyRoute: (id: string, body: GatewayRouteUpdateBody) =>
+    apiClient.patch<GatewayRoute>(`${GATEWAY_API_BASE}/my-routes/${id}`, body),
+  deleteMyRoute: (id: string) => apiClient.delete<unknown>(`${GATEWAY_API_BASE}/my-routes/${id}`),
 } as const

@@ -113,6 +113,47 @@ async def test_resolve_returns_route_with_primary_model(db_session, test_user) -
 
 
 @pytest.mark.asyncio
+async def test_resolve_personal_route_with_cross_team_primary(db_session, test_user) -> None:
+    """personal 虚拟路由 primary 为 {slug}/{name} 时应解析到协作团队模型。"""
+    teams = TeamService(db_session)
+    personal = await teams.ensure_personal_team(test_user.id)
+    shared = await teams.create_team(
+        name=f"CrossRoute-{uuid.uuid4().hex[:8]}",
+        owner_user_id=test_user.id,
+    )
+    await db_session.commit()
+    await db_session.refresh(shared)
+
+    shared_cred = await _seed_cred(db_session, shared.id, f"shared-{uuid.uuid4().hex[:6]}")
+    primary_name = f"cross-primary-{uuid.uuid4().hex[:6]}"
+    virtual = f"vr-cross-{uuid.uuid4().hex[:6]}"
+    primary = await GatewayModelRepository(db_session).create(
+        tenant_id=shared.id,
+        name=primary_name,
+        capability="chat",
+        real_model="gpt-4o-mini",
+        credential_id=shared_cred.id,
+        provider="openai",
+    )
+    route_ref = f"{shared.slug}/{primary_name}"
+    await GatewayRouteRepository(db_session).create(
+        tenant_id=personal.id,
+        virtual_model=virtual,
+        primary_models=[route_ref],
+    )
+    await db_session.flush()
+
+    resolved = await resolve_model_or_route(
+        db_session, personal.id, virtual, user_id=test_user.id
+    )
+    assert resolved is not None
+    assert resolved.route is not None
+    assert resolved.via_route == virtual
+    assert resolved.record.id == primary.id
+    assert resolved.record.tenant_id == shared.id
+
+
+@pytest.mark.asyncio
 async def test_resolve_returns_none_when_route_primary_missing(db_session, test_user) -> None:
     team = await TeamService(db_session).ensure_personal_team(test_user.id)
     virtual = f"empty-route-{uuid.uuid4().hex[:6]}"

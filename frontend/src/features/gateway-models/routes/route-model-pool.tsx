@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom'
 
 import type { GatewayModel, MyPriceRow } from '@/api/gateway'
 import { ModelStatusBadge } from '@/components/model-status-badge'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { TooltipProvider } from '@/components/ui/tooltip'
@@ -19,6 +20,26 @@ import { PricingBadge } from '@/features/gateway-pricing/pricing-badge'
 import { ChevronDown, ChevronUp, X } from '@/lib/lucide-icons'
 import { cn } from '@/lib/utils'
 import type { DisplayCurrency } from '@/types/money'
+
+function modelAffiliationLabel(model: GatewayModel): string | null {
+  const extended = model as GatewayModel & {
+    team_kind?: 'personal' | 'shared' | 'system'
+    registry_name?: string
+    team_slug?: string | null
+  }
+  if (extended.team_kind === 'system') return '系统'
+  if (extended.team_kind === 'personal') return '个人'
+  if (extended.team_kind === 'shared') return extended.team_slug ?? '团队'
+  return null
+}
+
+function modelDisplaySubtitle(model: GatewayModel): string | null {
+  const extended = model as GatewayModel & { registry_name?: string }
+  if (extended.registry_name && extended.registry_name !== model.name) {
+    return extended.registry_name
+  }
+  return null
+}
 
 const PICKER_ROW_CV = '[contain-intrinsic-size:auto_2.75rem] [content-visibility:auto]' as const
 
@@ -54,6 +75,96 @@ interface RouteSelectedModelRowProps {
   onWeightChange?: (modelName: string, weight: number) => void
 }
 
+interface RouteOrphanRefRowProps {
+  name: string
+  order: number
+  disabled: boolean
+  showOrderControls?: boolean
+  selectedCount?: number
+  onMove?: (order: number, dir: -1 | 1) => void
+  onRemove: (name: string) => void
+}
+
+const RouteOrphanRefRow = memo(function RouteOrphanRefRow({
+  name,
+  order,
+  disabled,
+  showOrderControls = false,
+  selectedCount = 0,
+  onMove,
+  onRemove,
+}: RouteOrphanRefRowProps): React.JSX.Element {
+  return (
+    <li
+      className={cn(
+        PICKER_ROW_CV,
+        'flex items-center gap-2 rounded border border-dashed border-amber-500/40 bg-amber-500/5 px-1 py-1'
+      )}
+    >
+      {showOrderControls ? (
+        <span className="w-5 shrink-0 text-center text-xs tabular-nums text-muted-foreground">
+          {order + 1}
+        </span>
+      ) : null}
+      <span className="min-w-0 flex-1">
+        <span className="flex min-w-0 items-center gap-1.5">
+          <span className="truncate font-mono text-sm">{name}</span>
+          <Badge variant="outline" className="shrink-0 text-[10px] font-normal text-amber-700">
+            不可引用
+          </Badge>
+        </span>
+        <span className="block truncate text-[11px] text-muted-foreground">
+          不在当前可选模型池中，请移除后重新添加
+        </span>
+      </span>
+      {showOrderControls && !disabled && onMove ? (
+        <div className="flex shrink-0 gap-0.5">
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            className="h-7 w-7"
+            disabled={order === 0}
+            onClick={() => {
+              onMove(order, -1)
+            }}
+            aria-label={`上移 ${name}`}
+          >
+            <ChevronUp className="h-4 w-4" />
+          </Button>
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            className="h-7 w-7"
+            disabled={order >= selectedCount - 1}
+            onClick={() => {
+              onMove(order, 1)
+            }}
+            aria-label={`下移 ${name}`}
+          >
+            <ChevronDown className="h-4 w-4" />
+          </Button>
+        </div>
+      ) : null}
+      {!disabled ? (
+        <Button
+          type="button"
+          size="icon"
+          variant="ghost"
+          className="h-7 w-7 shrink-0 text-muted-foreground hover:text-foreground"
+          onClick={() => {
+            onRemove(name)
+          }}
+          aria-label={`移除 ${name}`}
+        >
+          <X className="h-4 w-4" />
+        </Button>
+      ) : null}
+    </li>
+  )
+})
+
 const RouteSelectedModelRow = memo(function RouteSelectedModelRow({
   model,
   order,
@@ -69,6 +180,8 @@ const RouteSelectedModelRow = memo(function RouteSelectedModelRow({
   onWeightChange,
 }: RouteSelectedModelRowProps): React.JSX.Element {
   const weightEditable = showWeight && !disabled && onWeightChange !== undefined
+  const affiliation = modelAffiliationLabel(model)
+  const subtitle = modelDisplaySubtitle(model)
 
   return (
     <li
@@ -79,7 +192,19 @@ const RouteSelectedModelRow = memo(function RouteSelectedModelRow({
           {order + 1}
         </span>
       ) : null}
-      <span className="min-w-0 flex-1 truncate font-mono text-sm">{model.name}</span>
+      <span className="min-w-0 flex-1">
+        <span className="flex min-w-0 items-center gap-1.5">
+          <span className="truncate font-mono text-sm">{model.name}</span>
+          {affiliation ? (
+            <Badge variant="outline" className="shrink-0 text-[10px] font-normal">
+              {affiliation}
+            </Badge>
+          ) : null}
+        </span>
+        {subtitle ? (
+          <span className="block truncate text-[11px] text-muted-foreground">{subtitle}</span>
+        ) : null}
+      </span>
       {showWeight && onWeightChange ? (
         <RouteDeploymentWeightInput
           modelName={model.name}
@@ -160,6 +285,7 @@ interface RouteOrderedModelPickerProps {
   /** 权重展示值（modelName → 草稿值），未命中回退 model.weight */
   weightByName?: ReadonlyMap<string, number>
   onWeightChange?: (modelName: string, weight: number) => void
+  batchAddAction?: React.ReactNode
 }
 
 export function RouteOrderedModelPicker({
@@ -175,6 +301,7 @@ export function RouteOrderedModelPicker({
   showWeight = false,
   weightByName,
   onWeightChange,
+  batchAddAction,
 }: RouteOrderedModelPickerProps): React.JSX.Element {
   const modelsByName = useMemo(() => buildModelsByName(models), [models])
   const selectedSet = useMemo(() => new Set(selected), [selected])
@@ -182,11 +309,6 @@ export function RouteOrderedModelPicker({
   selectedRef.current = selected
   const onSelectedChangeRef = useRef(onSelectedChange)
   onSelectedChangeRef.current = onSelectedChange
-
-  const selectedModels = useMemo(
-    () => resolveSelectedModels(selected, modelsByName),
-    [selected, modelsByName]
-  )
 
   const unselectedCandidates = useMemo(
     () => models.filter((m) => !selectedSet.has(m.name)),
@@ -214,7 +336,7 @@ export function RouteOrderedModelPicker({
           <p>
             请先在{' '}
             <Link
-              to="/gateway/models?tab=shared"
+              to="/gateway/models?scope=personal"
               className="text-primary underline-offset-4 hover:underline"
             >
               模型管理
@@ -224,49 +346,72 @@ export function RouteOrderedModelPicker({
         </div>
       ) : (
         <TooltipProvider delayDuration={200}>
-          {selectedModels.length === 0 ? (
+          {selected.length === 0 ? (
             <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed bg-muted/10 px-4 py-8 text-center">
               <p className="text-sm text-muted-foreground">尚未配置主模型</p>
               {!disabled ? (
-                <RouteModelAddCombobox
-                  candidates={unselectedCandidates}
-                  onPick={handleAdd}
-                  triggerLabel="添加主模型"
-                  priceByName={priceByName}
-                  currency={currency}
-                />
+                <div className="flex flex-wrap items-center gap-2">
+                  <RouteModelAddCombobox
+                    candidates={unselectedCandidates}
+                    onPick={handleAdd}
+                    triggerLabel="添加主模型"
+                    priceByName={priceByName}
+                    currency={currency}
+                  />
+                  {batchAddAction}
+                </div>
               ) : null}
             </div>
           ) : (
             <>
               <ul className="space-y-1 rounded-md border p-2">
-                {selectedModels.map((model, index) => (
-                  <RouteSelectedModelRow
-                    key={model.id}
-                    model={model}
-                    order={index}
-                    disabled={disabled}
-                    showOrderControls={showOrderControls}
-                    selectedCount={selectedModels.length}
-                    onMove={showOrderControls && !disabled ? handleMove : undefined}
-                    onRemove={handleRemove}
-                    priceRow={priceByName?.get(model.name)}
-                    currency={currency}
-                    showWeight={showWeight}
-                    weight={weightByName?.get(model.name)}
-                    onWeightChange={onWeightChange}
-                  />
-                ))}
+                {selected.map((name, index) => {
+                  const model = modelsByName.get(name)
+                  if (model !== undefined) {
+                    return (
+                      <RouteSelectedModelRow
+                        key={model.id}
+                        model={model}
+                        order={index}
+                        disabled={disabled}
+                        showOrderControls={showOrderControls}
+                        selectedCount={selected.length}
+                        onMove={showOrderControls && !disabled ? handleMove : undefined}
+                        onRemove={handleRemove}
+                        priceRow={priceByName?.get(model.name)}
+                        currency={currency}
+                        showWeight={showWeight}
+                        weight={weightByName?.get(model.name)}
+                        onWeightChange={onWeightChange}
+                      />
+                    )
+                  }
+                  return (
+                    <RouteOrphanRefRow
+                      key={name}
+                      name={name}
+                      order={index}
+                      disabled={disabled}
+                      showOrderControls={showOrderControls}
+                      selectedCount={selected.length}
+                      onMove={showOrderControls && !disabled ? handleMove : undefined}
+                      onRemove={handleRemove}
+                    />
+                  )
+                })}
               </ul>
               {!disabled ? (
-                <RouteModelAddCombobox
-                  candidates={unselectedCandidates}
-                  onPick={handleAdd}
-                  triggerLabel="添加主模型"
-                  variant="ghost"
-                  priceByName={priceByName}
-                  currency={currency}
-                />
+                <div className="flex flex-wrap items-center gap-2">
+                  <RouteModelAddCombobox
+                    candidates={unselectedCandidates}
+                    onPick={handleAdd}
+                    triggerLabel="添加主模型"
+                    variant="ghost"
+                    priceByName={priceByName}
+                    currency={currency}
+                  />
+                  {batchAddAction}
+                </div>
               ) : null}
             </>
           )}

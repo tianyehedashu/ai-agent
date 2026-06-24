@@ -125,7 +125,12 @@ export type {
 
 export { fetchAllPersonalGatewayModels } from './my-models'
 
-export type { GatewayRoute, GatewayRouteCreateBody, GatewayRouteUpdateBody } from './routes'
+export type {
+  GatewayRoute,
+  GatewayRouteCreateBody,
+  GatewayRouteUpdateBody,
+  RouteCallableModel,
+} from './routes'
 
 export type { GatewayBudget, BudgetUpsertBody } from './budgets'
 

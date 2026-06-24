@@ -5,6 +5,7 @@ from __future__ import annotations
 from unittest.mock import MagicMock
 import uuid
 
+from domains.gateway.application.route_owner_slug_maps import RouteOwnerSlugContext
 from domains.gateway.domain.router_model_name import encode_router_model_name
 from domains.gateway.infrastructure.router_singleton import (
     _models_to_deployments,
@@ -298,3 +299,45 @@ def test_virtual_route_falls_back_to_global_gateway_model(monkeypatch) -> None:
     )
     assert len(virtuals) == 1
     assert virtuals[0]["model_name"] == encode_router_model_name(team, "team-virtual")
+
+
+def test_virtual_route_resolves_cross_team_slug_prefixed_primary(monkeypatch) -> None:
+    """personal 路由 primary 为 {slug}/{name} 时应解析到 grant team 的 GatewayModel。"""
+    monkeypatch.setattr(
+        "domains.gateway.infrastructure.router_singleton._build_litellm_params",
+        _stub_build_litellm_params,
+    )
+    personal_team = uuid.uuid4()
+    shared_team = uuid.uuid4()
+    shared_slug = "collab-team"
+    cred = uuid.uuid4()
+    shared_model = _mk_model(
+        name="gpt-4o-shared",
+        real_model="gpt-4o",
+        provider="openai",
+        cred_id=cred,
+        tenant_id=shared_team,
+    )
+    creds = {cred: _mk_cred(id_=cred, name="shared-cred")}
+    route = _mk_route(
+        virtual_model="my-virtual",
+        primary_models=[f"{shared_slug}/gpt-4o-shared"],
+        tenant_id=personal_team,
+    )
+    route_slug_contexts = {
+        personal_team: RouteOwnerSlugContext(
+            slug_to_tenant={shared_slug: shared_team},
+            enable_slug_prefix=True,
+        ),
+    }
+    virtuals = _routes_to_virtual_deployments(
+        [route],
+        [shared_model],
+        creds,
+        reserved_model_names=frozenset(),
+        route_slug_contexts=route_slug_contexts,
+    )
+    route_key = encode_router_model_name(personal_team, "my-virtual")
+    assert len(virtuals) == 1
+    assert virtuals[0]["model_name"] == route_key
+    assert virtuals[0]["model_info"]["gateway_credential_id"] == str(cred)

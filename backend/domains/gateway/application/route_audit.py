@@ -9,6 +9,11 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 import uuid
 
+from domains.gateway.application.route_owner_slug_maps import (
+    RouteOwnerSlugContext,
+    build_route_owner_slug_contexts,
+)
+from domains.gateway.domain.route_model_ref import resolve_route_ref_in_registry
 from domains.gateway.infrastructure.repositories.model_repository import (
     GatewayModelRepository,
     GatewayRouteRepository,
@@ -137,14 +142,29 @@ async def audit_gateway_routes(session: AsyncSession) -> RouteAuditReport:
         *await model_repo.list_system(only_enabled=True),
     ]
 
-    by_team_name: dict[tuple[str | None, str], None] = {}
+    by_team_name: dict[tuple[str | None, str], object] = {}
     for m in models:
-        by_team_name[(_scope_id_key(_row_scope_id(m)), m.name)] = None
+        by_team_name[(_scope_id_key(_row_scope_id(m)), m.name)] = m
+
+    owner_ids = frozenset(
+        owner_id for r in routes if (owner_id := _row_scope_id(r)) is not None
+    )
+    slug_contexts = await build_route_owner_slug_contexts(session, owner_ids)
 
     def _name_exists(scope_id: uuid.UUID | None, name: str) -> bool:
-        if (_scope_id_key(scope_id), name) in by_team_name:
-            return True
-        return (None, name) in by_team_name
+        ctx = (
+            slug_contexts.get(scope_id, RouteOwnerSlugContext(slug_to_tenant={}, enable_slug_prefix=False))
+            if scope_id is not None
+            else RouteOwnerSlugContext(slug_to_tenant={}, enable_slug_prefix=False)
+        )
+        row = resolve_route_ref_in_registry(
+            route_owner_tenant_id=scope_id,
+            ref=name,
+            by_team_name=by_team_name,
+            slug_to_tenant=ctx.slug_to_tenant,
+            enable_slug_prefix=ctx.enable_slug_prefix,
+        )
+        return row is not None
 
     issues: list[RouteReferenceIssue] = []
     shadowed: list[tuple[str | None, str]] = []

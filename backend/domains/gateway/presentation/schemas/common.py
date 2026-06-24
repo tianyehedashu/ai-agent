@@ -901,6 +901,27 @@ class ManagedTeamRouteListResponse(PaginatedListResponse[RouteResponse]):
     )
 
 
+class RouteCallableModelItem(GatewayModelResponse):
+    """个人虚拟路由模型池条目（含跨团队 route_ref）。"""
+
+    route_ref: str = Field(description="写入 GatewayRoute.primary_models 的引用名")
+    team_kind: Literal["personal", "shared", "system"] = Field(
+        description="模型归属：personal / 协作团队 shared / 系统 system",
+    )
+    team_slug: str | None = Field(
+        default=None,
+        description="协作团队 slug；personal/system 裸别名时为 null",
+    )
+    prefix_dispatchable: bool = Field(
+        default=True,
+        description="是否可安全使用 slug 前缀引用（homonym slug 时为 false）",
+    )
+
+
+class RouteCallableModelListResponse(PaginatedListResponse[RouteCallableModelItem]):
+    """个人虚拟路由可选 callable 模型分页列表。"""
+
+
 class ManagedTeamVirtualKeyListResponse(PaginatedListResponse[VirtualKeyResponse]):
     """跨 membership 团队聚合的虚拟 Key 列表（仅 actor 自建）。"""
 

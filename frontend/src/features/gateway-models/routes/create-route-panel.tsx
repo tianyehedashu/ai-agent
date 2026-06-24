@@ -7,6 +7,8 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import type { RoutingStrategy } from '@/features/gateway-models/constants'
+import { PersonalRouteBatchPicker } from '@/features/gateway-models/routes/personal-route-batch-picker-lazy'
+import { RouteModelBatchAddButton } from '@/features/gateway-models/routes/route-model-batch-picker-dialog'
 import {
   RouteFallbackModelPicker,
   RouteOrderedModelPicker,
@@ -36,6 +38,8 @@ interface CreateRoutePanelProps {
   onSubmit: (body: GatewayRouteCreateBody, weightChanges: readonly DeploymentWeightChange[]) => void
   onCancel: () => void
   isSubmitting?: boolean
+  /** 个人路由：启用批量添加（全量候选在弹窗打开时按需加载） */
+  allowPersonalBatchAdd?: boolean
 }
 
 export function CreateRoutePanel({
@@ -48,8 +52,12 @@ export function CreateRoutePanel({
   onSubmit,
   onCancel,
   isSubmitting = false,
+  allowPersonalBatchAdd = false,
 }: CreateRoutePanelProps): React.JSX.Element {
-  const { byName: priceByName } = useGatewayModelPrices(GATEWAY_DISPLAY_CURRENCY)
+  const [batchOpen, setBatchOpen] = useState(false)
+  const { byName: priceByName } = useGatewayModelPrices(GATEWAY_DISPLAY_CURRENCY, {
+    teamId: targetTeamId,
+  })
   const [virtualModel, setVirtualModel] = useState('')
   const [primaryModels, setPrimaryModels] = useState<string[]>([])
   const [fallbacksGeneral, setFallbacksGeneral] = useState<string[]>([])
@@ -90,6 +98,22 @@ export function CreateRoutePanel({
     setFallbacksContentPolicy((prev) => excludeModelsFromList(prev, next))
     setFallbacksContextWindow((prev) => excludeModelsFromList(prev, next))
   }, [])
+
+  const handleBatchAdd = useCallback(
+    (refs: string[]): void => {
+      setPrimaryModelsAndPruneFallbacks([...new Set([...primaryModels, ...refs])])
+    },
+    [primaryModels, setPrimaryModelsAndPruneFallbacks]
+  )
+
+  const batchAddAction = allowPersonalBatchAdd ? (
+    <RouteModelBatchAddButton
+      disabled={isSubmitting}
+      onClick={() => {
+        setBatchOpen(true)
+      }}
+    />
+  ) : null
 
   const canSubmit =
     hasTargetTeam &&
@@ -200,7 +224,16 @@ export function CreateRoutePanel({
               showWeight={isWeightedRoutingStrategy(strategy)}
               weightByName={weightByName}
               onWeightChange={setWeight}
+              batchAddAction={batchAddAction}
             />
+            {allowPersonalBatchAdd ? (
+              <PersonalRouteBatchPicker
+                open={batchOpen}
+                onOpenChange={setBatchOpen}
+                excludeNames={primaryModels}
+                onConfirm={handleBatchAdd}
+              />
+            ) : null}
 
             {isWeightedRoutingStrategy(strategy) ? (
               <p className="-mt-2 text-xs text-muted-foreground">

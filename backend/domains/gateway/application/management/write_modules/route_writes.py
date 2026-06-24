@@ -5,6 +5,9 @@ from __future__ import annotations
 from typing import Any
 import uuid
 
+from domains.gateway.application.management.personal_route_callable_reads import (
+    build_personal_route_allowed_refs,
+)
 from domains.gateway.application.routing_strategy_validation import validate_routing_strategy
 from domains.gateway.domain.errors import (
     ManagementEntityNotFoundError,
@@ -26,21 +29,40 @@ class RouteWritesMixin:
         fallbacks_general: list[str],
         fallbacks_content_policy: list[str],
         fallbacks_context_window: list[str],
+        actor_user_id: uuid.UUID | None = None,
+        actor_is_platform_admin: bool = False,
     ) -> None:
+        team = await self._teams.get_team(tenant_id)
+        refs = [
+            name
+            for name in (
+                *primary_models,
+                *fallbacks_general,
+                *fallbacks_content_policy,
+                *fallbacks_context_window,
+            )
+            if name
+        ]
+        if team is not None and team.kind == "personal" and actor_user_id is not None:
+            allowed = await build_personal_route_allowed_refs(
+                self._session,
+                user_id=actor_user_id,
+                is_platform_admin=actor_is_platform_admin,
+            )
+            unknown = sorted({ref for ref in refs if ref not in allowed})
+            if unknown:
+                raise ValidationError(f"未注册或不可引用的模型别名: {', '.join(unknown)}")
+            return
+
         available = {
             m.name for m in await self._models.list_for_tenant(tenant_id, only_enabled=False)
         }
-        unknown: list[str] = []
-        for name in (
-            *primary_models,
-            *fallbacks_general,
-            *fallbacks_content_policy,
-            *fallbacks_context_window,
-        ):
-            if name and name not in available:
-                unknown.append(name)
-        if unknown:
-            unique = sorted(set(unknown))
+        unknown_local: list[str] = []
+        for name in refs:
+            if name not in available:
+                unknown_local.append(name)
+        if unknown_local:
+            unique = sorted(set(unknown_local))
             raise ValidationError(f"未注册的模型别名: {', '.join(unique)}")
 
     async def create_gateway_route(
@@ -54,6 +76,8 @@ class RouteWritesMixin:
         fallbacks_context_window: list[str],
         strategy: str,
         retry_policy: dict[str, Any],
+        actor_user_id: uuid.UUID | None = None,
+        actor_is_platform_admin: bool = False,
     ) -> Any:
         cleaned_virtual = (virtual_model or "").strip()
         if not cleaned_virtual:
@@ -67,6 +91,8 @@ class RouteWritesMixin:
             fallbacks_general=fallbacks_general,
             fallbacks_content_policy=fallbacks_content_policy,
             fallbacks_context_window=fallbacks_context_window,
+            actor_user_id=actor_user_id,
+            actor_is_platform_admin=actor_is_platform_admin,
         )
         row = await self._routes.create(
             tenant_id=tenant_id,
@@ -82,7 +108,13 @@ class RouteWritesMixin:
         return row
 
     async def update_gateway_route(
-        self, route_id: uuid.UUID, *, tenant_id: uuid.UUID, fields: dict[str, Any]
+        self,
+        route_id: uuid.UUID,
+        *,
+        tenant_id: uuid.UUID,
+        fields: dict[str, Any],
+        actor_user_id: uuid.UUID | None = None,
+        actor_is_platform_admin: bool = False,
     ) -> Any:
         repo = self._routes
         existing = await repo.get(route_id)
@@ -105,6 +137,8 @@ class RouteWritesMixin:
             fallbacks_general=list(fallbacks_general),
             fallbacks_content_policy=list(fallbacks_content_policy),
             fallbacks_context_window=list(fallbacks_context_window),
+            actor_user_id=actor_user_id,
+            actor_is_platform_admin=actor_is_platform_admin,
         )
         updated = await repo.update(route_id, **patch)
         if updated is None:

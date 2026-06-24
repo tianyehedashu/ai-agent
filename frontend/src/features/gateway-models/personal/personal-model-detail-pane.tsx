@@ -18,7 +18,9 @@ import {
   personalModelInspectorContext,
   personalModelToInspectorModel,
 } from '@/features/gateway-models/personal/personal-model-inspector-adapter'
+import { MY_ROUTES_QUERY_KEY } from '@/features/gateway-models/routes/query-keys'
 import { indexUsageByRouteName } from '@/features/gateway-models/usage-summary-index'
+import { routesReferencingModel } from '@/features/gateway-models/utils'
 import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
 
 interface PersonalModelDetailPaneProps {
@@ -46,6 +48,17 @@ export function PersonalModelDetailPane({
   })
 
   const routeName = model?.name ?? ''
+
+  const { data: personalRoutes = [] } = useQuery({
+    queryKey: MY_ROUTES_QUERY_KEY,
+    queryFn: () => gatewayApi.listMyRoutes(),
+    enabled: routeName !== '',
+  })
+
+  const referencingRoutes = useMemo(
+    () => routesReferencingModel(personalRoutes, routeName),
+    [personalRoutes, routeName]
+  )
 
   const { data: usageSummary, isLoading: usageLoading } = useQuery({
     queryKey: ['gateway', 'my-models', 'usage-summary', routeName, usageDays],
@@ -136,7 +149,7 @@ export function PersonalModelDetailPane({
         personalContext={personalContext}
         model={inspectorModel}
         credentials={credentials}
-        routes={[]}
+        routes={referencingRoutes}
         usageDays={usageDays}
         usageRow={usageByRouteName.get(model.name)}
         usageLoading={usageLoading}

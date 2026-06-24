@@ -106,3 +106,39 @@ async def test_audit_flags_virtual_model_shadowed_by_gateway_model(db_session, t
 
     report = await audit_gateway_routes(db_session)
     assert (str(team.id), same) in report.virtual_model_shadowed_by_model
+
+
+@pytest.mark.asyncio
+async def test_audit_clean_with_slug_prefixed_cross_team_primary(db_session, test_user) -> None:
+    teams = TeamService(db_session)
+    personal = await teams.ensure_personal_team(test_user.id)
+    shared = await teams.create_team(
+        name=f"AuditCross-{uuid.uuid4().hex[:8]}",
+        owner_user_id=test_user.id,
+    )
+    await db_session.commit()
+    await db_session.refresh(shared)
+
+    shared_cred = await create_tenant_test_credential(
+        db_session, shared.id, name=f"audit-cross-{uuid.uuid4().hex[:6]}"
+    )
+    model_name = f"vm-shared-{uuid.uuid4().hex[:6]}"
+    await GatewayModelRepository(db_session).create(
+        tenant_id=shared.id,
+        name=model_name,
+        capability="chat",
+        real_model="gpt-4o-mini",
+        credential_id=shared_cred.id,
+        provider="openai",
+    )
+    route_ref = f"{shared.slug}/{model_name}"
+    await GatewayRouteRepository(db_session).create(
+        tenant_id=personal.id,
+        virtual_model=f"vroute-{uuid.uuid4().hex[:6]}",
+        primary_models=[route_ref],
+    )
+    await db_session.flush()
+
+    report = await audit_gateway_routes(db_session)
+    assert report.is_clean
+    assert not report.has_blocking_issues

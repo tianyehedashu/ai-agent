@@ -16,6 +16,11 @@ from typing import TYPE_CHECKING, Any
 import uuid
 
 from domains.gateway.application.gateway_model_listing import resolve_by_name_visible
+from domains.gateway.application.route_owner_slug_maps import build_route_owner_slug_context
+from domains.gateway.domain.route_model_ref import (
+    RouteModelRefParsed,
+    parse_route_model_ref,
+)
 from domains.gateway.infrastructure.repositories.gateway_route_repository import (
     GatewayRouteRepository,
 )
@@ -193,6 +198,37 @@ async def _resolve_personal_team_model(
     return await resolve_by_name_visible(session, personal.id, name, user_id=user_id)
 
 
+async def _resolve_route_primary_record(
+    session: AsyncSession,
+    route_owner_team_id: uuid.UUID,
+    primary_ref: str,
+    *,
+    user_id: uuid.UUID | None,
+) -> GatewayModel | SystemGatewayModel | None:
+    ctx = await build_route_owner_slug_context(session, route_owner_team_id)
+    cleaned = primary_ref.strip()
+    if ctx.enable_slug_prefix:
+        parsed = parse_route_model_ref(
+            route_owner_tenant_id=route_owner_team_id,
+            ref=cleaned,
+            slug_to_tenant=ctx.slug_to_tenant,
+        )
+    else:
+        parsed = RouteModelRefParsed(
+            route_ref=cleaned,
+            target_tenant_id=route_owner_team_id,
+            model_name=cleaned,
+            matched_slug=None,
+        )
+    target_tenant = parsed.target_tenant_id or route_owner_team_id
+    return await resolve_by_name_visible(
+        session,
+        target_tenant,
+        parsed.model_name,
+        user_id=user_id,
+    )
+
+
 async def _resolve_model_or_route_uncached(
     session: AsyncSession,
     team_id: uuid.UUID,
@@ -223,7 +259,12 @@ async def _resolve_model_or_route_uncached(
     if route is None:
         return None
     for primary in route.primary_models or ():
-        primary_record = await resolve_by_name_visible(session, team_id, primary, user_id=user_id)
+        primary_record = await _resolve_route_primary_record(
+            session,
+            team_id,
+            primary,
+            user_id=user_id,
+        )
         if primary_record is not None:
             return ResolvedModelName(
                 record=primary_record,

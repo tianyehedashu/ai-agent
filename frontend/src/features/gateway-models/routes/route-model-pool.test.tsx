@@ -158,6 +158,47 @@ describe('RouteOrderedModelPicker', () => {
     fireEvent.blur(input)
     expect(onWeightChange).not.toHaveBeenCalled()
   })
+
+  it('renders cross-team route_ref with affiliation badge', () => {
+    const crossTeam = gatewayModel({
+      id: 'x1',
+      name: 'collab/gpt-4o',
+    })
+    Object.assign(crossTeam, {
+      registry_name: 'gpt-4o',
+      team_kind: 'shared',
+      team_slug: 'collab',
+    })
+
+    render(
+      <RouteOrderedModelPicker
+        models={[crossTeam]}
+        selected={['collab/gpt-4o']}
+        onSelectedChange={vi.fn()}
+        label="主模型"
+      />
+    )
+
+    expect(screen.getByText('collab/gpt-4o')).toBeInTheDocument()
+    expect(screen.getByText('collab')).toBeInTheDocument()
+    expect(screen.getByText('gpt-4o')).toBeInTheDocument()
+  })
+
+  it('renders orphan route_ref rows with remove control', () => {
+    render(
+      <RouteOrderedModelPicker
+        models={[MODEL_A]}
+        selected={['collab/missing-model', 'model-a']}
+        onSelectedChange={vi.fn()}
+        label="主模型"
+      />
+    )
+
+    expect(screen.getByText('collab/missing-model')).toBeInTheDocument()
+    expect(screen.getByText('不可引用')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '移除 collab/missing-model' })).toBeInTheDocument()
+    expect(screen.getByText('model-a')).toBeInTheDocument()
+  })
 })
 
 describe('RouteFallbackModelPicker', () => {

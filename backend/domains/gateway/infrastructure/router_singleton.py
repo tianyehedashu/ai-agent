@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import asyncio
 from typing import TYPE_CHECKING, Any
+import uuid
 
 from bootstrap.config import settings
 from domains.gateway.domain.coding_agent_ua import apply_coding_agent_ua_litellm_params
@@ -30,6 +31,11 @@ from domains.gateway.domain.router_model_name import (
     deployment_scope_team_id,
     encode_router_model_name,
 )
+from domains.gateway.application.route_owner_slug_maps import (
+    RouteOwnerSlugContext,
+    build_route_owner_slug_contexts,
+)
+from domains.gateway.domain.route_model_ref import resolve_route_ref_in_registry
 from domains.gateway.domain.types import RoutingStrategy, credential_api_scope
 from domains.gateway.domain.upstream_call_shape_policy import (
     resolve_effective_upstream_call_shape,
@@ -314,12 +320,27 @@ def _models_to_deployments(
     return deployments
 
 
+def _route_owner_slug_context(
+    route_owner_tenant_id: uuid.UUID | None,
+    contexts: dict[uuid.UUID, RouteOwnerSlugContext] | None,
+) -> RouteOwnerSlugContext:
+    if route_owner_tenant_id is None:
+        return RouteOwnerSlugContext(slug_to_tenant={}, enable_slug_prefix=False)
+    if contexts is None:
+        return RouteOwnerSlugContext(slug_to_tenant={}, enable_slug_prefix=False)
+    return contexts.get(
+        route_owner_tenant_id,
+        RouteOwnerSlugContext(slug_to_tenant={}, enable_slug_prefix=False),
+    )
+
+
 def _routes_to_virtual_deployments(
     routes: list[GatewayRoute | SystemGatewayRoute],
     models: list[GatewayModel | SystemGatewayModel],
     credentials: dict[Any, ProviderCredential],
     reserved_model_names: frozenset[str],
     pricing_lookup: PricingLookup | None = None,
+    route_slug_contexts: dict[uuid.UUID, RouteOwnerSlugContext] | None = None,
 ) -> list[dict[str, Any]]:
     """把 ``GatewayRoute.virtual_model`` 注册为多 deployment，激活 Router 内置负载均衡。
 
@@ -335,17 +356,28 @@ def _routes_to_virtual_deployments(
         scope_key = str(deployment_scope_team_id(m)) if deployment_scope_team_id(m) else None
         by_team_name[(scope_key, m.name)] = m
 
-    def _resolve(scope_id: Any, name: str) -> GatewayModel | SystemGatewayModel | None:
-        scope_key = str(scope_id) if scope_id else None
-        return by_team_name.get((scope_key, name)) or by_team_name.get((None, name))
+    def _resolve(
+        route_owner_tenant_id: uuid.UUID | None,
+        name: str,
+        ctx: RouteOwnerSlugContext,
+    ) -> GatewayModel | SystemGatewayModel | None:
+        return resolve_route_ref_in_registry(
+            route_owner_tenant_id=route_owner_tenant_id,
+            ref=name,
+            by_team_name=by_team_name,
+            slug_to_tenant=ctx.slug_to_tenant,
+            enable_slug_prefix=ctx.enable_slug_prefix,
+        )  # type: ignore[return-value]
 
     deployments: list[dict[str, Any]] = []
     for r in routes:
         if r.virtual_model in reserved_model_names:
             # 同名 GatewayModel 优先；路由仅作为 fallback 关系图
             continue
+        route_owner = deployment_scope_team_id(r)
+        ctx = _route_owner_slug_context(route_owner, route_slug_contexts)
         for primary_name in r.primary_models or ():
-            src = _resolve(deployment_scope_team_id(r), primary_name)
+            src = _resolve(route_owner, primary_name, ctx)
             if src is None:
                 logger.warning(
                     "GatewayRoute %s primary %s has no matching GatewayModel, skip",
@@ -380,10 +412,15 @@ def _encode_fallback_model_name(
     route: GatewayRoute | SystemGatewayRoute,
     gateway_model_name: str,
     by_team_name: dict[tuple[str | None, str], GatewayModel | SystemGatewayModel],
+    ctx: RouteOwnerSlugContext,
 ) -> str:
-    team_key = str(route.tenant_id) if route.tenant_id else None
-    src = by_team_name.get((team_key, gateway_model_name)) or by_team_name.get(
-        (None, gateway_model_name)
+    route_owner = deployment_scope_team_id(route)
+    src = resolve_route_ref_in_registry(
+        route_owner_tenant_id=route_owner,
+        ref=gateway_model_name,
+        by_team_name=by_team_name,
+        slug_to_tenant=ctx.slug_to_tenant,
+        enable_slug_prefix=ctx.enable_slug_prefix,
     )
     if src is not None:
         return encode_router_model_name(src.tenant_id, src.name)
@@ -393,6 +430,7 @@ def _encode_fallback_model_name(
 def _routes_to_fallbacks(
     routes: list[GatewayRoute | SystemGatewayRoute],
     models: list[GatewayModel | SystemGatewayModel],
+    route_slug_contexts: dict[uuid.UUID, RouteOwnerSlugContext] | None = None,
 ) -> tuple[list[dict[str, list[str]]], list[dict[str, list[str]]], list[dict[str, list[str]]]]:
     """从 routes 解出三类 fallback 列表（键与目标均为 Router 编码后的 ``model_name``）。"""
     by_team_name: dict[tuple[str | None, str], GatewayModel | SystemGatewayModel] = {}
@@ -405,11 +443,14 @@ def _routes_to_fallbacks(
     cw: list[dict[str, list[str]]] = []
     for r in routes:
         route_key = encode_router_model_name(deployment_scope_team_id(r), r.virtual_model)
+        route_owner = deployment_scope_team_id(r)
+        ctx = _route_owner_slug_context(route_owner, route_slug_contexts)
         if r.fallbacks_general:
             general.append(
                 {
                     route_key: [
-                        _encode_fallback_model_name(r, n, by_team_name) for n in r.fallbacks_general
+                        _encode_fallback_model_name(r, n, by_team_name, ctx)
+                        for n in r.fallbacks_general
                     ]
                 }
             )
@@ -417,7 +458,7 @@ def _routes_to_fallbacks(
             cp.append(
                 {
                     route_key: [
-                        _encode_fallback_model_name(r, n, by_team_name)
+                        _encode_fallback_model_name(r, n, by_team_name, ctx)
                         for n in r.fallbacks_content_policy
                     ]
                 }
@@ -426,7 +467,7 @@ def _routes_to_fallbacks(
             cw.append(
                 {
                     route_key: [
-                        _encode_fallback_model_name(r, n, by_team_name)
+                        _encode_fallback_model_name(r, n, by_team_name, ctx)
                         for n in r.fallbacks_context_window
                     ]
                 }
@@ -521,13 +562,26 @@ async def _build_router_kwargs(
         *await route_repo.list_all_active(),
         *await route_repo.list_system(only_enabled=True),
     ]
+    route_owner_ids = frozenset(
+        owner_id
+        for route in routes
+        if (owner_id := deployment_scope_team_id(route)) is not None
+    )
+    route_slug_contexts = await build_route_owner_slug_contexts(db, route_owner_ids)
     pricing_lookup = await _load_upstream_pricing_lookup(db)
     deployments = _models_to_deployments(models, credentials, pricing_lookup)
     reserved_names = frozenset(m.name for m in models if m.enabled)
     deployments.extend(
-        _routes_to_virtual_deployments(routes, models, credentials, reserved_names, pricing_lookup)
+        _routes_to_virtual_deployments(
+            routes,
+            models,
+            credentials,
+            reserved_names,
+            pricing_lookup,
+            route_slug_contexts=route_slug_contexts,
+        )
     )
-    fb_general, fb_cp, fb_cw = _routes_to_fallbacks(routes, models)
+    fb_general, fb_cp, fb_cw = _routes_to_fallbacks(routes, models, route_slug_contexts=route_slug_contexts)
 
     # LiteLLM Router 仅接受 redis_url 字符串（无单独 username 参数），而阿里云 Redis
     # 启用 ACL 后必须用 username+password 鉴权，否则连接被拒 → 熔断打开、cooldown/TPM

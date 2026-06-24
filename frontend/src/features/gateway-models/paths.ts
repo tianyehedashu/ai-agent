@@ -292,3 +292,16 @@ export function credentialDetailHref(
 export function credentialDetailAddModelsHref(teamId: string, credentialId: string): string {
   return `${credentialDetailHref(teamId, credentialId)}?addModels=1`
 }
+
+export type GatewayRoutesScopeFilter = 'all' | 'personal' | 'shared'
+
+/** 虚拟路由工作区 */
+export function gatewayRoutesHref(
+  options?: Readonly<{ create?: boolean; scope?: GatewayRoutesScopeFilter }>
+): string {
+  const params = new URLSearchParams()
+  if (options?.create) params.set('create', '1')
+  if (options?.scope && options.scope !== 'all') params.set('scope', options.scope)
+  const qs = params.toString()
+  return `/gateway/routes${qs ? `?${qs}` : ''}`
+}

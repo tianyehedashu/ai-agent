@@ -4751,6 +4751,106 @@ class TestManagedTeamRoutesAggregateApi:
         assert str(shared.id) in {str(t) for t in payload["tenant_ids_with_routes"]}
 
 
+class TestMyRoutesApi:
+    @pytest.mark.asyncio
+    async def test_my_routes_cross_team_primary(
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict[str, str],
+        db_session,
+        test_user: User,
+    ) -> None:
+        ts = TeamService(db_session)
+        personal = await ts.ensure_personal_team(test_user.id)
+        shared = await ts.create_team(
+            name=f"MyRouteCross-{uuid.uuid4().hex[:8]}",
+            owner_user_id=test_user.id,
+        )
+        await db_session.commit()
+        await db_session.refresh(shared)
+
+        shared_model_name = f"shared-primary-{uuid.uuid4().hex[:6]}"
+        await _create_team_model_via_api(
+            dev_client,
+            shared.id,
+            auth_headers,
+            model_name=shared_model_name,
+        )
+        route_ref = f"{shared.slug}/{shared_model_name}"
+        virtual_model = f"my-virtual-{uuid.uuid4().hex[:6]}"
+
+        r_create = await dev_client.post(
+            "/api/v1/gateway/my-routes",
+            headers=auth_headers,
+            json={
+                "virtual_model": virtual_model,
+                "primary_models": [route_ref],
+                "strategy": "simple-shuffle",
+            },
+        )
+        assert r_create.status_code == 201, r_create.text
+        body = r_create.json()
+        assert body["virtual_model"] == virtual_model
+        assert route_ref in body["primary_models"]
+
+        r_list = await dev_client.get("/api/v1/gateway/my-routes", headers=auth_headers)
+        assert r_list.status_code == 200, r_list.text
+        virtual_models = {item["virtual_model"] for item in r_list.json()}
+        assert virtual_model in virtual_models
+
+        r_callable = await dev_client.get(
+            "/api/v1/gateway/my-route-callable-models",
+            headers=auth_headers,
+            params={"page": 1, "page_size": 200},
+        )
+        assert r_callable.status_code == 200, r_callable.text
+        refs = {item["route_ref"] for item in r_callable.json()["items"]}
+        assert route_ref in refs
+
+    @pytest.mark.asyncio
+    async def test_my_routes_rejects_unknown_primary(
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict[str, str],
+    ) -> None:
+        r = await dev_client.post(
+            "/api/v1/gateway/my-routes",
+            headers=auth_headers,
+            json={
+                "virtual_model": f"bad-route-{uuid.uuid4().hex[:6]}",
+                "primary_models": ["unknown-team/ghost-model"],
+                "strategy": "simple-shuffle",
+            },
+        )
+        assert r.status_code == 400, r.text
+        body = r.json()
+        assert body.get("code") == "VALIDATION_ERROR"
+
+    @pytest.mark.asyncio
+    async def test_my_route_callable_models_pagination_envelope(
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict[str, str],
+    ) -> None:
+        r = await dev_client.get(
+            "/api/v1/gateway/my-route-callable-models",
+            headers=auth_headers,
+            params={"page": 1, "page_size": 10},
+        )
+        assert r.status_code == 200, r.text
+        payload = r.json()
+        assert "items" in payload
+        assert "total" in payload
+        assert payload["page"] == 1
+        assert payload["page_size"] == 10
+        assert isinstance(payload["has_next"], bool)
+        assert isinstance(payload["has_prev"], bool)
+        for item in payload["items"]:
+            assert "route_ref" in item
+            assert "team_kind" in item
+            assert "prefix_dispatchable" in item
+
+
 class TestManagedTeamVirtualKeysAggregateApi:
     @pytest.mark.asyncio
     async def test_list_managed_team_keys_includes_personal_and_shared(

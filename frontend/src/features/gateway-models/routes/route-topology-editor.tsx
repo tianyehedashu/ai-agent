@@ -20,6 +20,8 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { routingStrategyLabel } from '@/features/gateway-models/constants'
+import { PersonalRouteBatchPicker } from '@/features/gateway-models/routes/personal-route-batch-picker-lazy'
+import { RouteModelBatchAddButton } from '@/features/gateway-models/routes/route-model-batch-picker-dialog'
 import {
   RouteFallbackModelPicker,
   RouteOrderedModelPicker,
@@ -38,7 +40,7 @@ import { cn } from '@/lib/utils'
 
 interface RouteTopologyEditorProps {
   route: GatewayRoute | null
-  models: GatewayModel[]
+  models: readonly GatewayModel[]
   pickerModels: readonly GatewayModel[]
   isSaving: boolean
   isDeleting?: boolean
@@ -51,11 +53,12 @@ interface RouteTopologyEditorProps {
     weightChanges: readonly DeploymentWeightChange[]
   ) => void
   onDelete?: (id: string) => void
+  allowPersonalBatchAdd?: boolean
 }
 
 interface RouteTopologyFormProps {
   route: GatewayRoute
-  models: GatewayModel[]
+  models: readonly GatewayModel[]
   pickerModels: readonly GatewayModel[]
   isSaving: boolean
   isDeleting?: boolean
@@ -68,6 +71,7 @@ interface RouteTopologyFormProps {
     weightChanges: readonly DeploymentWeightChange[]
   ) => void
   onDelete?: (id: string) => void
+  allowPersonalBatchAdd?: boolean
 }
 
 function RouteTopologyForm({
@@ -81,11 +85,17 @@ function RouteTopologyForm({
   readOnly = false,
   onSave,
   onDelete,
+  allowPersonalBatchAdd = false,
 }: RouteTopologyFormProps): React.JSX.Element {
+  const [batchOpen, setBatchOpen] = useState(false)
+  const pricingTeamId = route.team_id ?? route.tenant_id ?? null
+  const { byName: priceByName } = useGatewayModelPrices(GATEWAY_DISPLAY_CURRENCY, {
+    teamId: pricingTeamId,
+  })
+
   // readOnly 已由父组件基于路由所属团队角色判断（canManageTeamRoutes），
   // 无需再用 canWrite（基于当前工作区团队）做冗余检查——跨团队视图下二者可能不一致。
   const editable = !readOnly
-  const { byName: priceByName } = useGatewayModelPrices(GATEWAY_DISPLAY_CURRENCY)
 
   const modelsByName = useMemo(() => new Map(models.map((m) => [m.name, m])), [models])
   const registeredNames = useMemo(() => new Set(models.map((m) => m.name)), [models])
@@ -110,12 +120,29 @@ function RouteTopologyForm({
     setFallbacksContextWindow((prev) => excludeModelsFromList(prev, next))
   }, [])
 
+  const handleBatchAdd = useCallback(
+    (refs: string[]): void => {
+      setPrimaryModelsAndPruneFallbacks([...new Set([...primaryModels, ...refs])])
+    },
+    [primaryModels, setPrimaryModelsAndPruneFallbacks]
+  )
+
+  const batchAddAction =
+    editable && allowPersonalBatchAdd ? (
+      <RouteModelBatchAddButton
+        disabled={isSaving}
+        onClick={() => {
+          setBatchOpen(true)
+        }}
+      />
+    ) : null
+
   const validationIssues = useMemo(() => {
     if (modelsLoading) return []
     const issues: string[] = []
     for (const name of primaryModels) {
       const m = modelsByName.get(name)
-      if (!m) issues.push(`主模型「${name}」未注册`)
+      if (!m) issues.push(`主模型「${name}」不可引用或已失效`)
       else if (!m.enabled) issues.push(`主模型「${name}」已禁用`)
     }
     for (const name of fallbacksGeneral) {
@@ -255,7 +282,16 @@ function RouteTopologyForm({
           showWeight={weightedMode}
           weightByName={weightByName}
           onWeightChange={editable ? setWeight : undefined}
+          batchAddAction={batchAddAction}
         />
+        {allowPersonalBatchAdd ? (
+          <PersonalRouteBatchPicker
+            open={batchOpen}
+            onOpenChange={setBatchOpen}
+            excludeNames={primaryModels}
+            onConfirm={handleBatchAdd}
+          />
+        ) : null}
 
         {weightedMode ? (
           <p className="-mt-2 text-xs text-muted-foreground">
@@ -371,6 +407,7 @@ export function RouteTopologyEditor({
   readOnly: readOnlyProp = false,
   onSave,
   onDelete,
+  allowPersonalBatchAdd = false,
 }: RouteTopologyEditorProps): React.JSX.Element {
   if (!route) {
     return (
@@ -398,6 +435,7 @@ export function RouteTopologyEditor({
       readOnly={readOnly}
       onSave={onSave}
       onDelete={readOnly ? undefined : onDelete}
+      allowPersonalBatchAdd={allowPersonalBatchAdd}
     />
   )
 }
