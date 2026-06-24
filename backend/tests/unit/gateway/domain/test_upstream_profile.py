@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from domains.gateway.domain.upstream_endpoint import (
+    credential_api_base,
     effective_api_bases_for_credential,
     infer_profile_id_from_env_api_base,
     normalize_credential_api_bases_for_storage,
@@ -175,3 +176,31 @@ def test_list_profiles_for_provider_includes_multi_plan_vendors() -> None:
 def test_moonshot_coding_plan_declares_fixed_outbound_temperature() -> None:
     profile = get_upstream_profile("moonshot.coding_plan", provider="moonshot")
     assert profile.fixed_outbound_temperature == 1.0
+
+
+def test_credential_api_base_returns_none_for_missing_credential() -> None:
+    assert credential_api_base(None) is None
+
+
+def test_credential_api_base_uses_legacy_when_api_bases_missing() -> None:
+    class _Cred:
+        api_base = "https://legacy.example.com/v1"
+        api_bases = None
+
+    assert credential_api_base(_Cred()) == "https://legacy.example.com/v1"
+
+
+def test_credential_api_base_api_bases_dict_overrides_legacy_column() -> None:
+    class _Cred:
+        api_base = "https://legacy.example.com/v1"
+        api_bases = {"openai_compat": "https://dict.example.com/v1"}
+
+    assert credential_api_base(_Cred()) == "https://dict.example.com/v1"
+
+
+def test_credential_api_base_reads_openai_compat_from_api_bases_dict() -> None:
+    class _Cred:
+        api_base = None
+        api_bases = {"openai_compat": "https://apihub.agnes-ai.com/v1"}
+
+    assert credential_api_base(_Cred()) == "https://apihub.agnes-ai.com/v1"

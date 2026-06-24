@@ -4,8 +4,8 @@ import pytest
 
 from domains.gateway.domain.litellm_model_id import (
     build_litellm_model_id,
-    credential_api_base,
     normalize_gateway_stored_real_model,
+    normalize_stored_real_model_for_credential,
     resolve_litellm_custom_llm_provider,
 )
 
@@ -84,24 +84,16 @@ def test_normalize_gateway_stored_real_model_openai_custom_endpoint(
     )
 
 
-def test_credential_api_base_reads_openai_compat_from_api_bases_dict() -> None:
+def test_normalize_stored_real_model_for_credential_custom_openai_endpoint() -> None:
     class _Cred:
-        api_base = None
-        api_bases = {"openai_compat": "https://apihub.agnes-ai.com/v1"}
-
-    assert credential_api_base(_Cred()) == "https://apihub.agnes-ai.com/v1"
-
-
-def test_credential_api_base_dict_used_for_custom_openai_normalization() -> None:
-    class _Cred:
-        api_base = None
-        api_bases = {"openai_compat": "https://apihub.agnes-ai.com/v1"}
+        api_base = "https://apihub.agnes-ai.com/v1"
+        api_bases = None
 
     assert (
-        normalize_gateway_stored_real_model(
+        normalize_stored_real_model_for_credential(
             "openai",
-            "agnes-1.5-flash",
-            api_base=credential_api_base(_Cred()),
+            "openai/agnes-1.5-flash",
+            _Cred(),
         )
         == "agnes-1.5-flash"
     )

@@ -2,16 +2,13 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from collections.abc import Mapping
 
 from domains.gateway.domain.upstream_profile import UpstreamProtocol
 from domains.gateway.domain.upstream_profile_registry import (
     get_upstream_profile,
     list_profiles_for_provider,
 )
-
-if TYPE_CHECKING:
-    from collections.abc import Mapping
 
 _CREDENTIAL_API_BASE_KEYS = frozenset(
     {UpstreamProtocol.OPENAI_COMPAT.value, UpstreamProtocol.ANTHROPIC_NATIVE.value}
@@ -154,6 +151,19 @@ def effective_api_bases_for_credential(
     return out
 
 
+def credential_api_base(credential: object | None) -> str | None:
+    """从凭据 ORM / 读模型取 OpenAI-compat 首选 api_base（落库规范化用）。"""
+    if credential is None:
+        return None
+    legacy = getattr(credential, "api_base", None)
+    bases = getattr(credential, "api_bases", None)
+    merged = merge_credential_stored_api_bases(
+        api_base=legacy if isinstance(legacy, str) else None,
+        api_bases=bases if isinstance(bases, Mapping) else None,
+    )
+    return merged.get(UpstreamProtocol.OPENAI_COMPAT.value)
+
+
 def infer_profile_id_from_env_api_base(
     provider: str,
     *,
@@ -172,6 +182,7 @@ def infer_profile_id_from_env_api_base(
 
 
 __all__ = [
+    "credential_api_base",
     "effective_api_bases_for_credential",
     "infer_profile_id_from_env_api_base",
     "merge_credential_stored_api_bases",

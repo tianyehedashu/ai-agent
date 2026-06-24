@@ -34,8 +34,8 @@ from domains.gateway.domain.errors import (
 )
 from domains.gateway.domain.litellm_capability_mapping import strip_litellm_capability_tags
 from domains.gateway.domain.litellm_model_id import (
-    credential_api_base,
     normalize_gateway_stored_real_model,
+    normalize_stored_real_model_for_credential,
 )
 from domains.gateway.domain.model_types_tags import (
     tags_from_model_types,
@@ -55,6 +55,7 @@ from domains.gateway.domain.types import (
     GatewayCapability,
     is_config_managed_system_gateway_model,
 )
+from domains.gateway.domain.upstream_endpoint import credential_api_base
 from libs.exceptions import HttpMappableDomainError, ValidationError
 from utils.logging import get_logger
 
@@ -195,6 +196,24 @@ def _prepare_gateway_model_write_fields(
         enriched_tags=enriched_tags,
         catalog_capability=catalog_capability,
     )
+
+
+def _normalize_real_model_for_update(
+    provider: str,
+    raw_model_id: str,
+    credential: object | None,
+    *,
+    validate_prefix: bool = False,
+) -> str:
+    raw = str(raw_model_id).strip()
+    if not raw:
+        raise ValidationError("上游模型 ID 不能为空")
+    normalized = normalize_stored_real_model_for_credential(provider, raw, credential)
+    if validate_prefix:
+        prefix_msg = litellm_prefix_violation_message(provider, normalized)
+        if prefix_msg:
+            raise ValidationError(prefix_msg)
+    return normalized
 
 
 class ModelWritesMixin:
@@ -371,10 +390,10 @@ class ModelWritesMixin:
                 f"凭据提供商为 {cred_row.provider}，与所选 provider {provider} 不一致"
             )
         tenant_id = await self._ensure_personal_tenant_id(user_id)
-        real_model = normalize_gateway_stored_real_model(
+        real_model = normalize_stored_real_model_for_credential(
             provider,
             str(model_id).strip(),
-            api_base=credential_api_base(cred_row),
+            cred_row,
         )
         created: list[Any] = []
         for idx, mtype in enumerate(model_types):
@@ -461,10 +480,10 @@ class ModelWritesMixin:
                 cred_for_rm = await self._creds.get(incoming["credential_id"])
             if cred_for_rm is None:
                 cred_for_rm = await self._creds.get(existing.credential_id)
-            update_fields["real_model"] = normalize_gateway_stored_real_model(
+            update_fields["real_model"] = _normalize_real_model_for_update(
                 existing.provider,
-                str(incoming["model_id"]).strip(),
-                api_base=credential_api_base(cred_for_rm),
+                str(incoming["model_id"]),
+                cred_for_rm,
             )
         if incoming.get("is_active") is not None:
             update_fields["enabled"] = incoming["is_active"]
@@ -1017,9 +1036,6 @@ class ModelWritesMixin:
                     f"凭据提供商为 {cred.provider}，与当前模型的 provider（{existing.provider}）不一致"
                 )
         if "real_model" in update_fields and update_fields["real_model"] is not None:
-            raw_rm = str(update_fields["real_model"]).strip()
-            if not raw_rm:
-                raise ValidationError("上游模型 ID 不能为空")
             effective_cred_id = update_fields.get("credential_id") or existing.credential_id
             cred_for_rm: object | None = None
             if effective_cred_id is not None:
@@ -1031,15 +1047,12 @@ class ModelWritesMixin:
                         tenant_id=tenant_id,
                         is_platform_admin=is_platform_admin,
                     )
-            normalized_rm = normalize_gateway_stored_real_model(
+            update_fields["real_model"] = _normalize_real_model_for_update(
                 existing.provider,
-                raw_rm,
-                api_base=credential_api_base(cred_for_rm),
+                str(update_fields["real_model"]),
+                cred_for_rm,
+                validate_prefix=True,
             )
-            prefix_msg = litellm_prefix_violation_message(existing.provider, normalized_rm)
-            if prefix_msg:
-                raise ValidationError(prefix_msg)
-            update_fields["real_model"] = normalized_rm
         if "weight" in update_fields and update_fields["weight"] is not None:
             update_fields["weight"] = assert_deployment_weight(update_fields["weight"])
         if "upstream_call_shape" in update_fields:

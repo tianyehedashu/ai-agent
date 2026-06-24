@@ -6,7 +6,7 @@ LiteLLM 模型标识拼装（Gateway 出站规则，纯函数无 I/O）。
 
 from __future__ import annotations
 
-from domains.gateway.domain.upstream_profile import UpstreamProtocol
+from domains.gateway.domain.upstream_endpoint import credential_api_base
 
 _PROVIDER_PREFIXES: frozenset[str] = frozenset(
     {"openai", "anthropic", "dashscope", "deepseek", "volcengine", "moonshot"}
@@ -73,6 +73,19 @@ def resolve_outbound_litellm_model(
     return normalize_gateway_stored_real_model(provider, real_model, api_base=api_base)
 
 
+def normalize_stored_real_model_for_credential(
+    provider: str,
+    model_id: str,
+    credential: object | None,
+) -> str:
+    """按凭据 endpoint 规范化落库 ``real_model``。"""
+    return normalize_gateway_stored_real_model(
+        provider.strip().lower(),
+        model_id,
+        api_base=credential_api_base(credential),
+    )
+
+
 def build_litellm_model_id(provider: str, model_id: str) -> str:
     """根据 provider + model_id 构建 LiteLLM 模型标识（运行时前缀拼装）。"""
     if not model_id:
@@ -107,31 +120,11 @@ def resolve_litellm_custom_llm_provider(
     return _PROVIDER_TO_LITELLM.get(key, key)
 
 
-def credential_api_base(credential: object | None) -> str | None:
-    """从凭据 ORM / 读模型取首选 ``api_base``（用于落库规范化）。"""
-    if credential is None:
-        return None
-    base = getattr(credential, "api_base", None)
-    if isinstance(base, str) and base.strip():
-        return base.strip()
-    bases = getattr(credential, "api_bases", None)
-    if isinstance(bases, dict):
-        for key in (UpstreamProtocol.OPENAI_COMPAT.value, "openai_compat"):
-            raw = bases.get(key)
-            if isinstance(raw, str) and raw.strip():
-                return raw.strip()
-    if isinstance(bases, list):
-        for item in bases:
-            if isinstance(item, str) and item.strip():
-                return item.strip()
-    return None
-
-
 __all__ = [
     "build_litellm_model_id",
-    "credential_api_base",
     "is_openai_official_endpoint",
     "normalize_gateway_stored_real_model",
+    "normalize_stored_real_model_for_credential",
     "resolve_litellm_custom_llm_provider",
     "resolve_outbound_litellm_model",
 ]
