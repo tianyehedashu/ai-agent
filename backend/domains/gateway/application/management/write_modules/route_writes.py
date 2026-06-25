@@ -85,6 +85,17 @@ class RouteWritesMixin:
         existing = await self._routes.get_by_virtual_model_for_tenant(tenant_id, cleaned_virtual)
         if existing is not None:
             raise ValidationError(f"虚拟模型名 '{cleaned_virtual}' 在当前工作区已存在路由")
+        from domains.gateway.domain.policies.route_grant_access import (
+            assert_local_name_free_of_grant_alias,
+        )
+
+        assert_local_name_free_of_grant_alias(
+            cleaned_virtual,
+            grant_alias_in_use=(
+                await self._route_grants.get_active_alias(tenant_id, cleaned_virtual) is not None
+            ),
+            kind="route",
+        )
         await self._validate_route_model_names(
             tenant_id,
             primary_models=primary_models,
@@ -103,6 +114,7 @@ class RouteWritesMixin:
             fallbacks_context_window=fallbacks_context_window,
             strategy=validate_routing_strategy(strategy),
             retry_policy=retry_policy,
+            created_by_user_id=actor_user_id,
         )
         await self.reload_litellm_router()
         return row
@@ -151,5 +163,7 @@ class RouteWritesMixin:
         existing = await repo.get(route_id)
         if existing is None or (existing.tenant_id is not None and existing.tenant_id != tenant_id):
             raise ManagementEntityNotFoundError("route", str(route_id))
+        # 级联软撤销该路由的全部跨团队共享授权，避免悬空 grant
+        await self._cascade_revoke_route_grants(route_id)
         await repo.delete(route_id)
         await self.reload_litellm_router()

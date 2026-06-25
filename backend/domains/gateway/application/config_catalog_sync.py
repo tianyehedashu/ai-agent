@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import os
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -40,12 +40,14 @@ from domains.gateway.domain.types import (
     CONFIG_MANAGED_CREDENTIAL_NAME,
 )
 from domains.gateway.domain.upstream_endpoint import infer_profile_id_from_env_api_base
-from domains.gateway.infrastructure.models.gateway_model import GatewayModel
 from domains.gateway.infrastructure.repositories.model_repository import GatewayModelRepository
 from domains.gateway.infrastructure.repositories.system_credential_repository import (
     SystemProviderCredentialRepository,
 )
 from libs.crypto import derive_encryption_key, encrypt_value
+
+if TYPE_CHECKING:
+    from domains.gateway.application.gateway_model_listing import GatewayRegistryModelRow
 
 logger = logging.getLogger(__name__)
 
@@ -456,8 +458,8 @@ async def _sync_catalog_models(
     }
 
 
-def gateway_model_to_selector_item(row: GatewayModel) -> dict[str, Any]:
-    """将 ORM 行转为模型选择器 system_models 条目。"""
+def gateway_model_to_selector_item(row: GatewayRegistryModelRow) -> dict[str, Any]:
+    """将 ORM 行转为模型选择器 system_models 条目（``GatewayModel`` 或 ``SystemGatewayModel``）。"""
     tags = row.tags or {}
     display_name = str(tags.get("display_name") or row.name)
     raw_vendor = tags.get("video_vendor_model_id") or tags.get("giikin_video_model")

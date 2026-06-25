@@ -8,6 +8,9 @@ from typing import TYPE_CHECKING, Any
 import uuid
 
 from bootstrap.config import settings
+from domains.gateway.application.budget_platform_settlement import (
+    serialize_budget_anchor_pins,
+)
 from domains.gateway.application.model_or_route_resolution import (
     ResolvedModelName,
 )
@@ -19,13 +22,12 @@ from domains.gateway.application.proxy_router_team_metadata import (
     ensure_litellm_router_team_metadata,
 )
 from domains.gateway.application.proxy_timing import ProxyPrepareTimings
-from domains.gateway.application.budget_platform_settlement import (
-    serialize_budget_anchor_pins,
-)
 from domains.gateway.application.route_snapshot_cache import get_route_snapshot_metadata
 from domains.gateway.application.router_model_name import router_model_name_for_client
 from domains.gateway.domain.guardrail_policy import effective_guardrail_enabled
+from domains.gateway.domain.route_snapshot import build_delegated_route_snapshot_metadata
 from domains.gateway.domain.types import credential_api_scope
+from domains.gateway.infrastructure.models.system_gateway import SystemGatewayRoute
 from domains.gateway.infrastructure.repositories.credential_repository import (
     ProviderCredentialRepository,
 )
@@ -243,6 +245,26 @@ class ProxyMetadataBuilder:
             resolved=model_resolved,
         )
 
+    @staticmethod
+    def _apply_delegated_route_metadata(
+        meta: dict[str, Any], resolved: ResolvedModelName
+    ) -> None:
+        """委派路由：写 route_snapshot（含暴露别名 + owner）与 resource_owner 归因。"""
+        route = resolved.route
+        # 系统路由不参与跨团队委派（无 owner 归因），仅 team/personal 路由可被 grant。
+        if route is None or isinstance(route, SystemGatewayRoute):
+            return
+        owner_user_id = route.created_by_user_id
+        meta["gateway_route_snapshot"] = build_delegated_route_snapshot_metadata(
+            route,
+            exposed_alias=resolved.exposed_alias,
+            owner_tenant_id=route.tenant_id,
+            owner_user_id=owner_user_id,
+            route_grant_id=resolved.delegated_grant_id,
+        )
+        if owner_user_id is not None:
+            meta["gateway_resource_owner_user_id"] = str(owner_user_id)
+
     async def _merge_user_and_model_metadata(
         self,
         ctx: ProxyContext,
@@ -280,9 +302,14 @@ class ProxyMetadataBuilder:
                 resolved=resolved,
             )
         )
-        snap = await get_route_snapshot_metadata(self._session, ctx.team_id, virtual_model)
-        if snap is not None:
-            meta["gateway_route_snapshot"] = snap
+        if resolved is not None and resolved.delegated_grant_team_id is not None:
+            # 委派（跨团队共享路由）：本团队无同名本地路由，快照取 owner 路由并标注委派信息；
+            # resource_owner 落为路由创建者，使用量可归因到"共享出资源的人"。
+            self._apply_delegated_route_metadata(meta, resolved)
+        else:
+            snap = await get_route_snapshot_metadata(self._session, ctx.team_id, virtual_model)
+            if snap is not None:
+                meta["gateway_route_snapshot"] = snap
         metadata_ms = int((time.perf_counter() - cred_started) * 1000)
         billing_package = "entitlement" if ctx.entitlement_state is not None else None
         pricing_started = time.perf_counter()

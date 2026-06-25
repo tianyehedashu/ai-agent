@@ -10,6 +10,7 @@ from .budget import GatewayBudget
 from .entitlement_plan import EntitlementPlan, EntitlementPlanQuota
 from .gateway_model import GatewayModel
 from .gateway_route import GatewayRoute
+from .gateway_route_team_grant import GatewayRouteTeamGrant
 from .gateway_rollup_state import GatewayRollupState
 from .metrics_hourly import GatewayMetricsHourly
 from .pricing_downstream import DownstreamModelPricing
@@ -34,6 +35,7 @@ __all__ = [
     "GatewayRequestLog",
     "GatewayResourceGrant",
     "GatewayRoute",
+    "GatewayRouteTeamGrant",
     "GatewayVirtualKey",
     "GatewayVirtualKeyTeamGrant",
     "ProviderCredential",

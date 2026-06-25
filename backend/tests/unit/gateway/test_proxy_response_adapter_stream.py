@@ -5,9 +5,8 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from decimal import Decimal
 from typing import Any
-import uuid
-
 from unittest.mock import AsyncMock
+import uuid
 
 import pytest
 

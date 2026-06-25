@@ -14,6 +14,7 @@ import { ModelSelector } from '@/components/model-selector'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
+import { GATEWAY_MODELS_AVAILABLE_QUERY_KEY } from '@/features/gateway-models/query-keys'
 import { useChat } from '@/hooks/use-chat'
 import { useGatewayWorkspaceTeamId } from '@/hooks/use-gateway-team-id'
 import { useToast } from '@/hooks/use-toast'
@@ -129,7 +130,7 @@ export default function ChatPage(): React.JSX.Element {
     isPending,
     isFetching,
   } = useQuery({
-    queryKey: ['gateway-models-available', 'text', '', '', workspaceTeamId ?? ''],
+    queryKey: [...GATEWAY_MODELS_AVAILABLE_QUERY_KEY, 'text', '', '', workspaceTeamId ?? ''],
     queryFn: () =>
       gatewayApi.listAvailableModels('text', undefined, {
         ...(workspaceTeamId ? { gatewayTeamId: workspaceTeamId } : {}),

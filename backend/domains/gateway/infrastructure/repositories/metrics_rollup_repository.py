@@ -37,12 +37,12 @@ _UPSERT_DIMENSION_COLUMNS = (
     "bucket_at",
     "tenant_id",
     "user_id",
+    "resource_owner_user_id",
     "vkey_id",
     "credential_id",
     "entitlement_plan_id",
     "provider_plan_id",
     "provider",
-    "real_model",
     "model_key",
     "capability",
 )
@@ -84,13 +84,13 @@ class GatewayMetricsRollupRepository:
                 bucket.label("bucket_at"),
                 GatewayRequestLog.tenant_id,
                 GatewayRequestLog.user_id,
+                GatewayRequestLog.resource_owner_user_id,
                 GatewayRequestLog.vkey_id,
                 GatewayRequestLog.credential_id,
                 GatewayRequestLog.entitlement_plan_id,
                 GatewayRequestLog.provider_plan_id,
                 GatewayRequestLog.provider,
                 func.max(GatewayRequestLog.real_model).label("real_model"),
-                func.max(GatewayRequestLog.resource_owner_user_id).label("resource_owner_user_id"),
                 model_key.label("model_key"),
                 GatewayRequestLog.capability,
                 func.count(GatewayRequestLog.id).label("requests"),
@@ -130,6 +130,7 @@ class GatewayMetricsRollupRepository:
                 bucket,
                 GatewayRequestLog.tenant_id,
                 GatewayRequestLog.user_id,
+                GatewayRequestLog.resource_owner_user_id,
                 GatewayRequestLog.vkey_id,
                 GatewayRequestLog.credential_id,
                 GatewayRequestLog.entitlement_plan_id,
@@ -182,12 +183,10 @@ class GatewayMetricsRollupRepository:
                 for col in _METRIC_ACCUMULATE_COLUMNS
             }
             update_cols["real_model"] = excluded.real_model
-            update_cols["resource_owner_user_id"] = excluded.resource_owner_user_id
             update_cols["p95_latency_ms"] = GatewayMetricsHourly.p95_latency_ms
         else:
             update_cols = {col: getattr(excluded, col) for col in _METRIC_ACCUMULATE_COLUMNS}
             update_cols["real_model"] = excluded.real_model
-            update_cols["resource_owner_user_id"] = excluded.resource_owner_user_id
             update_cols["p95_latency_ms"] = excluded.p95_latency_ms
 
         await self._session.execute(

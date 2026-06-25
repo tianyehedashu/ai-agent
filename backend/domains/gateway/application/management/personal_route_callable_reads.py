@@ -205,6 +205,28 @@ async def build_personal_route_allowed_refs(
     return frozenset(c.route_ref for c in candidates)
 
 
+async def list_personal_route_owner_callable_pool(
+    session: AsyncSession,
+    *,
+    owner_user_id: uuid.UUID,
+) -> list[GatewayRegistryModelRow]:
+    """个人路由 owner 可引用的全部 callable 模型行（含跨团队协作团队，去重）。"""
+    candidates = await collect_personal_route_callable_candidates(
+        session,
+        user_id=owner_user_id,
+        is_platform_admin=False,
+    )
+    seen: set[uuid.UUID] = set()
+    pool: list[GatewayRegistryModelRow] = []
+    for candidate in candidates:
+        row_id = candidate.row.id
+        if row_id in seen:
+            continue
+        seen.add(row_id)
+        pool.append(candidate.row)
+    return pool
+
+
 async def list_personal_route_callable_models_for_actor(
     session: AsyncSession,
     *,
@@ -263,5 +285,6 @@ __all__ = [
     "build_personal_route_allowed_refs",
     "collect_personal_route_callable_candidates",
     "list_personal_route_callable_models_for_actor",
+    "list_personal_route_owner_callable_pool",
     "route_callable_model_to_response_dict",
 ]

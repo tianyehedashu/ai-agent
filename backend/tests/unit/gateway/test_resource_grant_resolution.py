@@ -242,6 +242,12 @@ def test_granted_record_encodes_owner_tenant_not_caller() -> None:
     owner_team = uuid.uuid4()
     caller_team = uuid.uuid4()
     record = SimpleNamespace(name="shared-alias", tenant_id=owner_team)
-    resolved = SimpleNamespace(record=record, route=None, via_route=None)
+    resolved = SimpleNamespace(
+        record=record,
+        route=None,
+        via_route=None,
+        delegated_grant_team_id=None,
+        exposed_alias=None,
+    )
     encoded = router_model_name_for_client(caller_team, "shared-alias", resolved)
     assert encoded == f"gw/t/{owner_team}/shared-alias"

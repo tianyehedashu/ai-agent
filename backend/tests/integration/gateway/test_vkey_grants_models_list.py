@@ -224,6 +224,58 @@ class TestVkeyGrantsModelsList:
         assert virtual_model not in ids
 
     @pytest.mark.asyncio
+    async def test_multi_grant_exposes_shared_route_with_slug_prefix(
+        self,
+        dev_client: AsyncClient,
+        auth_headers: dict[str, str],
+        db_session,
+        test_user,
+    ) -> None:
+        """委派共享进 grant team 的个人路由，对 multi-grant vkey 以 slug 前缀暴露。"""
+        primary, shared = await ensure_two_teams(db_session, test_user)
+        shared_slug = shared.slug
+        model_name = f"sm-{uuid.uuid4().hex[:6]}"
+        await setup_team_model(
+            dev_client, primary.id, auth_headers, model_name=model_name
+        )
+        r_route = await dev_client.post(
+            "/api/v1/gateway/my-routes",
+            headers=auth_headers,
+            json={
+                "virtual_model": f"vm-{uuid.uuid4().hex[:6]}",
+                "primary_models": [model_name],
+            },
+        )
+        assert r_route.status_code == 201, r_route.text
+        route_id = r_route.json()["id"]
+        alias = f"shared-{uuid.uuid4().hex[:6]}"
+        r_grant_route = await dev_client.post(
+            f"/api/v1/gateway/my-routes/{route_id}/grants",
+            headers=auth_headers,
+            json={"target_tenant_id": str(shared.id), "exposed_alias": alias},
+        )
+        assert r_grant_route.status_code == 201, r_grant_route.text
+
+        vkey_id, plain_key = await create_vkey_with_plain(
+            dev_client, primary.id, auth_headers
+        )
+        r_grant = await dev_client.post(
+            f"/api/v1/gateway/teams/{primary.id}/keys/{vkey_id}/grants",
+            headers=auth_headers,
+            json={"tenant_ids": [str(shared.id)]},
+        )
+        assert r_grant.status_code == 201, r_grant.text
+        await reload_router(db_session)
+
+        r = await dev_client.get(
+            _OPENAI_MODELS,
+            headers={"Authorization": f"Bearer {plain_key}"},
+        )
+        assert r.status_code == 200, r.text
+        ids = _model_ids(r.json())
+        assert f"{shared_slug}/{alias}" in ids
+
+    @pytest.mark.asyncio
     async def test_homonym_slug_omits_grant_team_models_from_list(
         self,
         dev_client: AsyncClient,

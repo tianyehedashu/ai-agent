@@ -1110,7 +1110,11 @@ async def _persist_event(
         gateway_deployment_owner_user_id,
     )
 
-    resource_owner_user_id = _to_uuid(metadata.get("gateway_credential_owner_user_id"))
+    # 委派（跨团队共享路由）显式归因优先：resource_owner = 路由创建者（共享出资源的人），
+    # 不受底层凭据 scope 影响；其次回退 BYOK 凭据所有者 / deployment 归属。
+    resource_owner_user_id = _to_uuid(metadata.get("gateway_resource_owner_user_id"))
+    if resource_owner_user_id is None:
+        resource_owner_user_id = _to_uuid(metadata.get("gateway_credential_owner_user_id"))
     if resource_owner_user_id is None:
         resource_owner_user_id = gateway_deployment_owner_user_id(kwargs)
 

@@ -317,6 +317,24 @@ RBAC 与 `libs/db/permission_context.py`：`deps.py` 调用 **`GatewayAccessUseC
 
 **列表 id 规则（multi-grant vkey）**：``GET /v1/models`` 合并各 grant team 的 callable 列表；主属 team 条目 id 为裸注册名，grant team 为 ``{slug}/{name}``（slug 为 ``Team.slug``，与 dispatch 对称）。同 id 去重；grant team 的 system 行若主属已裸名列出则跳过 prefixed 重复。**homonym slug**（grants 集合内多个 tenant 共用同一 slug）：不参与 prefix 派发 lookup，**列表侧亦跳过对应 grant team 条目**（与 ``domain/vkey_grant_slug_policy.grant_tenant_prefix_dispatchable`` 一致，避免 silent dedupe）。stale grant（team 行缺失）跳过。列表项 ``gateway.registry_name`` / ``gateway.team_slug`` 仅 multi-grant 路径注入。
 
+### 4.4.2 路由跨团队共享（`gateway_route_team_grants`）
+
+**委派模式（Route-as-Shareable-Model）**：owner A 把个人/团队路由发布给协作团队 T；T 成员以 **暴露别名** 调用，上游凭据与底层模型解析以 **A（路由 owner）** 身份执行，**计费与日志 `tenant_id` 归 T**，``resource_owner_user_id`` 归 A。与 vkey grant 对称但语义不同：vkey 共享的是调用令牌，route grant 共享的是虚拟路由能力。
+
+| 概念 | 说明 |
+|------|------|
+| **存储** | ``gateway_route_team_grants``：``(route_id, tenant_id)`` 唯一；``exposed_alias`` 在 consumer team 内唯一；**无 DB FK**（离线清理 + 生命周期端口） |
+| **开关** | ``settings.gateway_route_sharing_enabled``（默认 true）；关闭后热路径不解析 grant、列表不暴露 |
+| **鉴权 · 发布** | 仅路由 owner（``created_by_user_id``）可 ``POST`` grant；目标 team 须为 owner membership 内 shared 团队 |
+| **鉴权 · 撤销** | owner ``DELETE`` 或 T 的 owner/admin ``DELETE /shared-routes/{grant_id}``（踢出） |
+| **热路径** | ``resolve_model_or_route`` grant 分支 → ``delegated_grant_team_id``；Router deployment ``model_name=exposed_alias``（consumer team 命名空间）；凭据池按 owner tenant 解析 |
+| **列表** | ``/v1/models``：``granted_route_listing`` + ``proxy_model_list_reads`` / ``vkey_proxy_model_list``（``gateway.kind=route``、``shared_from``；multi-grant vkey 合并各 team 时含共享路由项）。``/models/available`` 聊天选择器：``granted_route_selector_items`` 并入 ``system_models``（``id=暴露别名``、``is_shared_route=true``） |
+| **审计** | 日志 ``tenant_id=T``、``resource_owner_user_id=owner``；``route_snapshot`` 含 ``delegated/route_grant_id/exposed_alias/owner_*``（``build_delegated_route_snapshot_metadata``，``route_grant_id`` 供按 grant 维度聚合） |
+| **生命周期** | ``RouteGrantLifecyclePort``：成员离 T、删 T、删路由 → 软撤销；``scripts/cleanup_stale_route_grants.py`` 离线补救 |
+| **别名冲突** | 本地建 model/route 与 grant ``exposed_alias`` 双向互斥（``model_writes`` / ``route_writes`` / grant 写侧） |
+
+**管理 API**（JWT）：owner 侧 ``GET/POST/PATCH/DELETE /api/v1/gateway/my-routes/{route_id}/grants``、``GET .../grantable-teams``；consumer 侧 ``GET/DELETE /api/v1/gateway/teams/{team_id}/shared-routes``。设计详述见 [plans/2026-06-25-route-as-shareable-model-design.md](plans/2026-06-25-route-as-shareable-model-design.md)。
+
 ### 4.5 模型注册：主调用面（`capability`）与特性（`tags` / `model_types`）
 
 | 概念 | 含义 | 典型存储 |

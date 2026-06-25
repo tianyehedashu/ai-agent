@@ -35,6 +35,10 @@ def router_model_name_for_client(
         return cleaned
     if resolved is None:
         return cleaned
+    # 委派（跨团队共享路由）：deployment 注册在消费团队 T 的命名空间下（gw/t/{T}/{别名}），
+    # 上游凭据走 owner，但编码键须用 T + 客户端别名，才能命中 grant 装配的 deployment。
+    if resolved.delegated_grant_team_id is not None:
+        return encode_router_model_name(resolved.delegated_grant_team_id, cleaned)
     if resolved.route is not None:
         return encode_router_model_name(deployment_scope_team_id(resolved.route), cleaned)
     return encode_router_model_name(deployment_scope_team_id(resolved.record), cleaned)

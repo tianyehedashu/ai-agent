@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 import uuid
 
 from domains.gateway.application.config_catalog_sync import (
@@ -16,13 +16,57 @@ from domains.gateway.application.entitlement_model_status import (
     entitlement_status_by_model_names,
 )
 from domains.gateway.application.gateway_model_listing import GatewayRegistryModelRow
+from domains.gateway.application.granted_route_listing import GrantedRouteRow
+from domains.gateway.application.route_owner_slug_maps import RouteOwnerSlugContext
+from domains.gateway.domain.route_model_ref import (
+    registry_lookup_key,
+    resolve_route_ref_in_registry,
+)
 from domains.gateway.domain.types import EntitlementListStatus, ModelConnectivityStatus
+from domains.gateway.infrastructure.models.gateway_route import GatewayRoute
+from domains.gateway.infrastructure.models.system_gateway import SystemGatewayRoute
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
-    from domains.gateway.infrastructure.models.gateway_route import GatewayRoute
-    from domains.gateway.infrastructure.models.system_gateway import SystemGatewayRoute
+ProxyRouteListSource = GatewayRoute | SystemGatewayRoute | GrantedRouteRow
+
+
+def _route_owner_tenant_id(route: ProxyRouteListSource) -> uuid.UUID | None:
+    return getattr(route, "tenant_id", None)
+
+
+def _models_by_team_name(
+    pool: list[GatewayRegistryModelRow],
+) -> dict[tuple[str | None, str], GatewayRegistryModelRow]:
+    return {
+        (registry_lookup_key(getattr(m, "tenant_id", None)), m.name): m for m in pool
+    }
+
+
+def _resolve_primary_model_row(
+    ref: str,
+    *,
+    models_by_name: dict[str, GatewayRegistryModelRow],
+    models_by_team_name: dict[tuple[str | None, str], GatewayRegistryModelRow],
+    route_owner_tenant_id: uuid.UUID | None,
+    slug_ctx: RouteOwnerSlugContext | None,
+) -> GatewayRegistryModelRow | None:
+    row = models_by_name.get(ref)
+    if row is not None:
+        return row
+    if route_owner_tenant_id is None or slug_ctx is None:
+        return None
+    resolved = resolve_route_ref_in_registry(
+        route_owner_tenant_id=route_owner_tenant_id,
+        ref=ref,
+        by_team_name=models_by_team_name,
+        slug_to_tenant=slug_ctx.slug_to_tenant,
+        enable_slug_prefix=slug_ctx.enable_slug_prefix,
+    )
+    if resolved is None:
+        return None
+    return cast("GatewayRegistryModelRow", resolved)
 
 
 def _iso_or_none(when: datetime | None) -> str | None:
@@ -105,7 +149,7 @@ def _aggregate_entitlement(
 
 
 def _build_route_model_list_item(
-    route: GatewayRoute | SystemGatewayRoute,
+    route: ProxyRouteListSource,
     models_by_name: dict[str, GatewayRegistryModelRow],
     entitlement_by_name: dict[str, EntitlementListStatus],
     *,
@@ -113,6 +157,9 @@ def _build_route_model_list_item(
     team_slug: str | None = None,
     include_extended_gateway_metadata: bool = False,
     credential_profiles: dict[uuid.UUID, str] | None = None,
+    route_owner_tenant_id: uuid.UUID | None = None,
+    slug_ctx: RouteOwnerSlugContext | None = None,
+    models_by_team_name: dict[tuple[str | None, str], GatewayRegistryModelRow] | None = None,
 ) -> dict[str, object] | None:
     """从 GatewayRoute 构建 OpenAI 格式的模型列表项。
 
@@ -123,9 +170,22 @@ def _build_route_model_list_item(
     if not primary:
         return None
 
+    owner_tid = route_owner_tenant_id if route_owner_tenant_id is not None else _route_owner_tenant_id(
+        route
+    )
+    team_name_index = models_by_team_name if models_by_team_name is not None else _models_by_team_name(
+        list(models_by_name.values())
+    )
+
     resolved_models: list[GatewayRegistryModelRow] = []
-    for name in primary:
-        m = models_by_name.get(name)
+    for ref in primary:
+        m = _resolve_primary_model_row(
+            ref,
+            models_by_name=models_by_name,
+            models_by_team_name=team_name_index,
+            route_owner_tenant_id=owner_tid,
+            slug_ctx=slug_ctx,
+        )
         if m is not None:
             resolved_models.append(m)
 
@@ -190,7 +250,7 @@ async def build_proxy_models_list(
     session: AsyncSession,
     models: list[GatewayRegistryModelRow],
     *,
-    routes: list[GatewayRoute | SystemGatewayRoute] | None = None,
+    routes: list[ProxyRouteListSource] | None = None,
     entitlement_scope: str | None,
     entitlement_scope_id: uuid.UUID | None,
     route_lookup_models: list[GatewayRegistryModelRow] | None = None,
@@ -250,6 +310,16 @@ async def build_proxy_models_list(
     credential_profiles = await build_credential_profile_map_for_models(session, profile_source)
     result: list[dict[str, object]] = []
 
+    route_owner_ids: set[uuid.UUID] = set()
+    if routes:
+        for route in routes:
+            owner_tid = _route_owner_tenant_id(route)
+            if owner_tid is not None:
+                route_owner_ids.add(owner_tid)
+    from domains.gateway.application.route_owner_slug_maps import build_route_owner_slug_contexts
+
+    slug_contexts = await build_route_owner_slug_contexts(session, frozenset(route_owner_ids))
+
     for index, row in enumerate(models):
         list_id = model_list_ids[index] if model_list_ids is not None else None
         team_slug = (
@@ -276,10 +346,15 @@ async def build_proxy_models_list(
                 if route_team_slugs is not None and index < len(route_team_slugs)
                 else None
             )
+            owner_tid = _route_owner_tenant_id(route)
+            slug_ctx = slug_contexts.get(owner_tid) if owner_tid is not None else None
             if route_lookup_pools is not None and index < len(route_lookup_pools):
-                route_models_by_name = {m.name: m for m in route_lookup_pools[index]}
+                pool = route_lookup_pools[index]
+                route_models_by_name = {m.name: m for m in pool}
+                route_models_by_team_name = _models_by_team_name(pool)
             else:
                 route_models_by_name = models_by_name
+                route_models_by_team_name = _models_by_team_name(lookup_pool)
             item = _build_route_model_list_item(
                 route,
                 route_models_by_name,
@@ -288,6 +363,9 @@ async def build_proxy_models_list(
                 team_slug=team_slug,
                 include_extended_gateway_metadata=include_extended_gateway_metadata,
                 credential_profiles=credential_profiles,
+                route_owner_tenant_id=owner_tid,
+                slug_ctx=slug_ctx,
+                models_by_team_name=route_models_by_team_name,
             )
             if item is not None:
                 result.append(item)

@@ -14,9 +14,12 @@ from __future__ import annotations
 
 import asyncio
 from typing import TYPE_CHECKING, Any
-import uuid
 
 from bootstrap.config import settings
+from domains.gateway.application.route_owner_slug_maps import (
+    RouteOwnerSlugContext,
+    build_route_owner_slug_contexts,
+)
 from domains.gateway.domain.coding_agent_ua import apply_coding_agent_ua_litellm_params
 from domains.gateway.domain.litellm_credential_extra_keys import (
     credential_extra_keys_for_litellm,
@@ -28,19 +31,15 @@ from domains.gateway.domain.litellm_model_id import (
     resolve_litellm_custom_llm_provider,
 )
 from domains.gateway.domain.policies.deployment_weight import coerce_deployment_weight
-from domains.gateway.domain.router_model_name import (
-    deployment_scope_team_id,
-    encode_router_model_name,
-)
-from domains.gateway.application.route_owner_slug_maps import (
-    RouteOwnerSlugContext,
-    build_route_owner_slug_contexts,
-)
 from domains.gateway.domain.route_model_ref import resolve_route_ref_in_registry
 from domains.gateway.domain.route_retry_policy import (
     DEFAULT_ROUTER_NUM_RETRIES,
     deployment_num_retries_from_policy,
     routes_to_model_group_retry_policy,
+)
+from domains.gateway.domain.router_model_name import (
+    deployment_scope_team_id,
+    encode_router_model_name,
 )
 from domains.gateway.domain.types import RoutingStrategy, credential_api_scope
 from domains.gateway.domain.upstream_call_shape_policy import (
@@ -53,6 +52,8 @@ from libs.db.redis import build_authenticated_redis_url
 from utils.logging import get_logger
 
 if TYPE_CHECKING:
+    import uuid
+
     from litellm.router import Router  # type: ignore[import-not-found]
     from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -435,6 +436,127 @@ def _routes_to_virtual_deployments(
     return deployments
 
 
+def _grants_to_virtual_deployments(
+    grants: list[Any],
+    routes_by_id: dict[uuid.UUID, GatewayRoute],
+    models: list[GatewayModel | SystemGatewayModel],
+    credentials: dict[Any, ProviderCredential],
+    pricing_lookup: PricingLookup | None = None,
+    route_slug_contexts: dict[uuid.UUID, RouteOwnerSlugContext] | None = None,
+) -> list[dict[str, Any]]:
+    """跨团队共享授权（委派）→ 在消费团队 T 命名空间下注册路由 deployment。
+
+    每条 active grant 把其 owner 路由的 ``primary_models`` 复制为
+    ``model_name = gw/t/{T}/{exposed_alias}`` 的 deployment，底层模型与凭据均按
+    **路由 owner 团队** 解析（委派），从而调用以 owner 身份命中上游，计费归消费团队 T。
+    """
+    if not grants:
+        return []
+    by_team_name: dict[tuple[str | None, str], GatewayModel | SystemGatewayModel] = {}
+    for m in models:
+        scope_key = str(deployment_scope_team_id(m)) if deployment_scope_team_id(m) else None
+        by_team_name[(scope_key, m.name)] = m
+
+    deployments: list[dict[str, Any]] = []
+    for grant in grants:
+        route = routes_by_id.get(grant.route_id)
+        if route is None or not route.enabled:
+            continue
+        consumer_team_id = grant.tenant_id
+        alias = grant.exposed_alias
+        # 与消费团队本地同名模型冲突时跳过（编码键会撞车）；本地优先
+        if (str(consumer_team_id), alias) in by_team_name:
+            logger.warning(
+                "RouteGrant alias %s collides with local model in team %s, skip",
+                alias,
+                consumer_team_id,
+            )
+            continue
+        route_owner = deployment_scope_team_id(route)
+        ctx = _route_owner_slug_context(route_owner, route_slug_contexts)
+        route_num_retries = deployment_num_retries_from_policy(
+            route.retry_policy if isinstance(route.retry_policy, dict) else None
+        )
+        encoded = encode_router_model_name(consumer_team_id, alias)
+        for primary_name in route.primary_models or ():
+            src = resolve_route_ref_in_registry(
+                route_owner_tenant_id=route_owner,
+                ref=primary_name,
+                by_team_name=by_team_name,
+                slug_to_tenant=ctx.slug_to_tenant,
+                enable_slug_prefix=ctx.enable_slug_prefix,
+            )
+            if src is None:
+                logger.warning(
+                    "RouteGrant %s->%s primary %s has no matching GatewayModel, skip",
+                    route.virtual_model,
+                    alias,
+                    primary_name,
+                )
+                continue
+            cred = credentials.get(src.credential_id)
+            if cred is None:
+                logger.warning(
+                    "RouteGrant %s->%s primary %s missing credential, skip",
+                    route.virtual_model,
+                    alias,
+                    primary_name,
+                )
+                continue
+            deployments.append(
+                _build_deployment(
+                    model_name=encoded,
+                    src=src,
+                    cred=cred,
+                    via_route=route.virtual_model,
+                    pricing_lookup=pricing_lookup,
+                    num_retries=route_num_retries,
+                )
+            )
+    return deployments
+
+
+def _grants_to_fallbacks(
+    grants: list[Any],
+    routes_by_id: dict[uuid.UUID, GatewayRoute],
+    models: list[GatewayModel | SystemGatewayModel],
+    route_slug_contexts: dict[uuid.UUID, RouteOwnerSlugContext] | None = None,
+) -> tuple[list[dict[str, list[str]]], list[dict[str, list[str]]], list[dict[str, list[str]]]]:
+    """共享授权的三类 fallback：键为 ``gw/t/{T}/{别名}``，目标按 owner 团队编码。"""
+    if not grants:
+        return [], [], []
+    by_team_name: dict[tuple[str | None, str], GatewayModel | SystemGatewayModel] = {}
+    for m in models:
+        scope_key = str(deployment_scope_team_id(m)) if deployment_scope_team_id(m) else None
+        by_team_name[(scope_key, m.name)] = m
+
+    general: list[dict[str, list[str]]] = []
+    cp: list[dict[str, list[str]]] = []
+    cw: list[dict[str, list[str]]] = []
+    for grant in grants:
+        route = routes_by_id.get(grant.route_id)
+        if route is None or not route.enabled:
+            continue
+        route_owner = deployment_scope_team_id(route)
+        ctx = _route_owner_slug_context(route_owner, route_slug_contexts)
+        grant_key = encode_router_model_name(grant.tenant_id, grant.exposed_alias)
+        for source, bucket in (
+            (route.fallbacks_general, general),
+            (route.fallbacks_content_policy, cp),
+            (route.fallbacks_context_window, cw),
+        ):
+            if not source:
+                continue
+            encoded = [
+                name
+                for n in source
+                if (name := _encode_fallback_model_name(route, n, by_team_name, ctx)) is not None
+            ]
+            if encoded:
+                bucket.append({grant_key: encoded})
+    return general, cp, cw
+
+
 def _encode_fallback_model_name(
     route: GatewayRoute | SystemGatewayRoute,
     gateway_model_name: str,
@@ -611,6 +733,35 @@ async def _build_router_kwargs(
         )
     )
     fb_general, fb_cp, fb_cw = _routes_to_fallbacks(routes, models, route_slug_contexts=route_slug_contexts)
+
+    # 跨团队共享授权（委派）：在消费团队命名空间装配 owner 路由 deployment
+    if settings.gateway_route_sharing_enabled:
+        from domains.gateway.infrastructure.repositories.gateway_route_grant_repository import (
+            GatewayRouteTeamGrantRepository,
+        )
+
+        grants = await GatewayRouteTeamGrantRepository(db).list_all_active()
+        if grants:
+            tenant_routes_by_id: dict[uuid.UUID, GatewayRoute] = {
+                r.id: r for r in routes if getattr(r, "tenant_id", None) is not None  # type: ignore[misc]
+            }
+            deployments.extend(
+                _grants_to_virtual_deployments(
+                    grants,
+                    tenant_routes_by_id,
+                    models,
+                    credentials,
+                    pricing_lookup,
+                    route_slug_contexts=route_slug_contexts,
+                )
+            )
+            g_general, g_cp, g_cw = _grants_to_fallbacks(
+                grants, tenant_routes_by_id, models, route_slug_contexts=route_slug_contexts
+            )
+            fb_general.extend(g_general)
+            fb_cp.extend(g_cp)
+            fb_cw.extend(g_cw)
+
     model_group_retry_policy = routes_to_model_group_retry_policy(routes)
 
     # LiteLLM Router 仅接受 redis_url 字符串（无单独 username 参数），而阿里云 Redis
@@ -818,6 +969,12 @@ async def _build_deployments_for_encoded_model(
     route = None
     if record is None and team_id is not None:
         route = await route_repo.resolve_by_virtual_model(team_id, client_name)
+        if route is None and settings.gateway_route_sharing_enabled:
+            grant_deps = await _build_grant_deployments_for_encoded(
+                db, team_id, client_name, encoded, pricing_lookup
+            )
+            if grant_deps:
+                return grant_deps
         if route is not None:
             deployments: list[dict[str, Any]] = []
             for primary in route.primary_models or ():
@@ -852,6 +1009,68 @@ async def _build_deployments_for_encoded_model(
             pricing_lookup=pricing_lookup,
         )
     ]
+
+
+async def _build_grant_deployments_for_encoded(
+    db: AsyncSession,
+    consumer_team_id: uuid.UUID,
+    alias: str,
+    encoded: str,
+    pricing_lookup: PricingLookup | None,
+) -> list[dict[str, Any]]:
+    """委派路由的增量 deployment 装配（owner 路由 + owner 凭据，键用消费团队编码）。"""
+    from domains.gateway.domain.route_model_ref import parse_route_model_ref
+    from domains.gateway.infrastructure.repositories.gateway_route_grant_repository import (
+        GatewayRouteTeamGrantRepository,
+    )
+    from domains.gateway.infrastructure.repositories.model_repository import (
+        GatewayModelRepository,
+        GatewayRouteRepository,
+    )
+
+    grant = await GatewayRouteTeamGrantRepository(db).resolve_by_tenant_alias(
+        consumer_team_id, alias
+    )
+    if grant is None:
+        return []
+    route = await GatewayRouteRepository(db).get(grant.route_id)
+    if route is None or not route.enabled:
+        return []
+    route_owner = deployment_scope_team_id(route)
+    contexts = await build_route_owner_slug_contexts(
+        db, frozenset({route_owner}) if route_owner is not None else frozenset()
+    )
+    ctx = _route_owner_slug_context(route_owner, contexts)
+    model_repo = GatewayModelRepository(db)
+    deployments: list[dict[str, Any]] = []
+    for primary in route.primary_models or ():
+        cleaned = primary.strip()
+        parsed_tenant = route_owner
+        model_name = cleaned
+        if ctx.enable_slug_prefix:
+            parsed = parse_route_model_ref(
+                route_owner_tenant_id=route_owner,
+                ref=cleaned,
+                slug_to_tenant=ctx.slug_to_tenant,
+            )
+            parsed_tenant = parsed.target_tenant_id or route_owner
+            model_name = parsed.model_name
+        src = await model_repo.resolve_by_name(parsed_tenant, model_name)
+        if src is None:
+            continue
+        cred = await _resolve_router_credential(db, src.credential_id)
+        if cred is None:
+            continue
+        deployments.append(
+            _build_deployment(
+                model_name=encoded,
+                src=src,
+                cred=cred,
+                via_route=route.virtual_model,
+                pricing_lookup=pricing_lookup,
+            )
+        )
+    return deployments
 
 
 def get_router_sync() -> Router | None:

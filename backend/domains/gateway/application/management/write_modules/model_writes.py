@@ -219,6 +219,23 @@ def _normalize_real_model_for_update(
 class ModelWritesMixin:
     """写侧 mixin — 由 GatewayManagementWriteService 组合。"""
 
+    async def _assert_model_name_free_of_route_grant_alias(
+        self, tenant_id: uuid.UUID | None, name: str
+    ) -> None:
+        if tenant_id is None:
+            return
+        from domains.gateway.domain.policies.route_grant_access import (
+            assert_local_name_free_of_grant_alias,
+        )
+
+        assert_local_name_free_of_grant_alias(
+            name,
+            grant_alias_in_use=(
+                await self._route_grants.get_active_alias(tenant_id, name) is not None
+            ),
+            kind="model",
+        )
+
     async def _resync_model_tags_pipeline(
         self,
         *,
@@ -456,6 +473,7 @@ class ModelWritesMixin:
             if new_name != existing.name:
                 if await self._models.name_exists_in_scope(tenant_id, new_name, exclude_id=model_id):
                     raise ValidationError(f"调用名称已存在: {new_name}")
+                await self._assert_model_name_free_of_route_grant_alias(tenant_id, new_name)
                 await rename_gateway_model_name_references(
                     self._session,
                     tenant_id=tenant_id,
@@ -647,6 +665,17 @@ class ModelWritesMixin:
                 "系统凭据注册的模型应写入 system_gateway_models；"
                 "请使用 create_system_gateway_model 或系统凭据批量导入"
             )
+        from domains.gateway.domain.policies.route_grant_access import (
+            assert_local_name_free_of_grant_alias,
+        )
+
+        assert_local_name_free_of_grant_alias(
+            name,
+            grant_alias_in_use=(
+                await self._route_grants.get_active_alias(tenant_id, name) is not None
+            ),
+            kind="model",
+        )
         prepared = _prepare_gateway_model_write_fields(
             provider=provider,
             real_model=real_model,
@@ -1153,6 +1182,7 @@ class ModelWritesMixin:
                     raise ValidationError("配置托管的系统模型不可修改注册别名")
                 if await repo.name_exists_in_scope(owner_tenant_id, new_name, exclude_id=model_id):
                     raise ValidationError(f"注册别名已存在: {new_name}")
+                await self._assert_model_name_free_of_route_grant_alias(owner_tenant_id, new_name)
                 await rename_gateway_model_name_references(
                     self._session,
                     tenant_id=owner_tenant_id,

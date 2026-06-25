@@ -27,6 +27,9 @@ from domains.gateway.application.management.write_modules.quota_rule_writes impo
 from domains.gateway.application.management.write_modules.quota_usage_adjustment_writes import (
     QuotaUsageAdjustmentWritesMixin,
 )
+from domains.gateway.application.management.write_modules.route_grant_writes import (
+    RouteGrantWritesMixin,
+)
 from domains.gateway.application.management.write_modules.route_writes import (
     RouteWritesMixin,
 )
@@ -39,6 +42,7 @@ class GatewayManagementWriteService(
     QuotaPlanQuotaDeleteWritesMixin,
     QuotaUsageAdjustmentWritesMixin,
     PricingWritesMixin,
+    RouteGrantWritesMixin,
     RouteWritesMixin,
     ModelWritesMixin,
     CredentialWritesMixin,

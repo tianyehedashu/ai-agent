@@ -17,6 +17,9 @@ from domains.gateway.application.gateway_model_listing import (
     _registry_row_deployable,
     list_merged_models_for_tenant,
 )
+from domains.gateway.application.granted_route_selector_items import (
+    list_granted_route_selector_items,
+)
 from domains.gateway.application.internal_bridge_actor import resolve_internal_gateway_team_id
 from domains.gateway.application.model_list_pipeline import (
     ModelListQuery,
@@ -72,9 +75,7 @@ def _filter_selector_items(
             item
             for item in filtered
             if matches_connectivity_filter(
-                item.get("last_test_status")
-                if isinstance(item.get("last_test_status"), str)
-                else None,
+                status if isinstance(status := item.get("last_test_status"), str) else None,
                 query.connectivity,
             )
         ]
@@ -112,6 +113,14 @@ async def list_available_models_page(
         item["enabled"] = row.enabled
         item["last_test_status"] = row.last_test_status
         system_items.append(item)
+
+    if team_id is not None:
+        # 团队工作区：并入共享进本团队的路由（委派），使其在选择器中可被选用。
+        system_items.extend(
+            await list_granted_route_selector_items(
+                session, team_id, ability_filter=ability_filter
+            )
+        )
 
     if query.provider is not None:
         system_items = [i for i in system_items if str(i.get("provider") or "") == query.provider]

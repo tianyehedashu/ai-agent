@@ -12,6 +12,11 @@ from domains.gateway.application.management.personal_route_callable_reads import
     list_personal_route_callable_models_for_actor,
     route_callable_model_to_response_dict,
 )
+from domains.gateway.application.management.route_grant_reads import (
+    assert_actor_owns_route_by_id,
+    list_grantable_teams_for_route_id,
+    list_route_grants_for_route,
+)
 from domains.gateway.application.management.route_read_mappers import route_row_to_api_dict
 from domains.gateway.presentation.model_list_query import ModelListQueryDep
 from domains.gateway.presentation.schemas.common import (
@@ -20,6 +25,12 @@ from domains.gateway.presentation.schemas.common import (
     RouteCreate,
     RouteResponse,
     RouteUpdate,
+)
+from domains.gateway.presentation.schemas.route_grants import (
+    RouteGrantableTeamResponse,
+    RouteGrantAliasUpdateRequest,
+    RouteGrantCreateRequest,
+    RouteGrantResponse,
 )
 from domains.identity.domain.rbac import Role
 from domains.identity.presentation.deps import RequiredAuthUser, get_user_uuid
@@ -137,3 +148,105 @@ async def delete_my_route(
     user_id = get_user_uuid(current_user)
     personal_id = await _personal_team_id(db, user_id)
     await writes.delete_gateway_route(route_id, tenant_id=personal_id)
+
+
+async def _assert_route_owned_by(db: AsyncSession, route_id: uuid.UUID, user_id: uuid.UUID) -> None:
+    await assert_actor_owns_route_by_id(db, route_id, user_id)
+
+
+@router.get("/my-routes/{route_id}/grants", response_model=list[RouteGrantResponse])
+async def list_my_route_grants(
+    route_id: uuid.UUID,
+    current_user: RequiredAuthUser,
+    db: DbSession,
+) -> list[RouteGrantResponse]:
+    """列出该路由的全部跨团队共享授权（仅路由创建者）。"""
+    user_id = get_user_uuid(current_user)
+    await _assert_route_owned_by(db, route_id, user_id)
+    return await list_route_grants_for_route(db, route_id)
+
+
+@router.post(
+    "/my-routes/{route_id}/grants",
+    response_model=RouteGrantResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def grant_my_route_to_team(
+    route_id: uuid.UUID,
+    body: RouteGrantCreateRequest,
+    current_user: RequiredAuthUser,
+    writes: MgmtWrites,
+    db: DbSession,
+) -> RouteGrantResponse:
+    """把路由发布给团队（仅路由创建者；委派模式，调用以 owner 身份解析底层模型）。"""
+    user_id = get_user_uuid(current_user)
+    grant = await writes.grant_route_to_team(
+        route_id=route_id,
+        target_tenant_id=body.target_tenant_id,
+        exposed_alias=body.exposed_alias,
+        actor_user_id=user_id,
+    )
+    grants = await list_route_grants_for_route(db, route_id)
+    return next((g for g in grants if g.tenant_id == grant.tenant_id), grants[0])
+
+
+@router.patch(
+    "/my-routes/{route_id}/grants/{tenant_id}",
+    response_model=RouteGrantResponse,
+)
+async def update_my_route_grant_alias(
+    route_id: uuid.UUID,
+    tenant_id: uuid.UUID,
+    body: RouteGrantAliasUpdateRequest,
+    current_user: RequiredAuthUser,
+    writes: MgmtWrites,
+    db: DbSession,
+) -> RouteGrantResponse:
+    user_id = get_user_uuid(current_user)
+    grant = await writes.update_route_grant_alias(
+        route_id=route_id,
+        target_tenant_id=tenant_id,
+        exposed_alias=body.exposed_alias,
+        actor_user_id=user_id,
+    )
+    grants = await list_route_grants_for_route(db, route_id)
+    return next((g for g in grants if g.tenant_id == grant.tenant_id), grants[0])
+
+
+@router.delete(
+    "/my-routes/{route_id}/grants/{tenant_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def revoke_my_route_grant(
+    route_id: uuid.UUID,
+    tenant_id: uuid.UUID,
+    current_user: RequiredAuthUser,
+    writes: MgmtWrites,
+    db: DbSession,
+) -> None:
+    user_id = get_user_uuid(current_user)
+    await writes.revoke_route_grant(
+        route_id=route_id,
+        target_tenant_id=tenant_id,
+        actor_user_id=user_id,
+        reason="owner_revoked",
+    )
+
+
+@router.get(
+    "/my-routes/{route_id}/grantable-teams",
+    response_model=list[RouteGrantableTeamResponse],
+)
+async def list_my_route_grantable_teams(
+    route_id: uuid.UUID,
+    current_user: RequiredAuthUser,
+    db: DbSession,
+) -> list[RouteGrantableTeamResponse]:
+    user_id = get_user_uuid(current_user)
+    personal_id = await _personal_team_id(db, user_id)
+    return await list_grantable_teams_for_route_id(
+        db,
+        route_id=route_id,
+        actor_user_id=user_id,
+        fallback_route_tenant_id=personal_id,
+    )

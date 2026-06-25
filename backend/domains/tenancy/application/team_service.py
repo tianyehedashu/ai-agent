@@ -39,7 +39,10 @@ from libs.exceptions import (
 from libs.iam.tenancy import MembershipPort, TenantId
 
 if TYPE_CHECKING:
-    from domains.gateway.application.ports import VirtualKeyGrantLifecyclePort
+    from domains.gateway.application.ports import (
+        RouteGrantLifecyclePort,
+        VirtualKeyGrantLifecyclePort,
+    )
 
 
 class TeamService:
@@ -52,6 +55,7 @@ class TeamService:
         membership: MembershipPort | None = None,
         user_role_lookup: UserPlatformRoleLookupPort | None = None,
         vkey_grant_lifecycle: VirtualKeyGrantLifecyclePort | None = None,
+        route_grant_lifecycle: RouteGrantLifecyclePort | None = None,
     ) -> None:
         self._session = session
         self._teams = TeamRepository(session)
@@ -60,6 +64,7 @@ class TeamService:
         self._user_role_lookup = user_role_lookup or user_platform_role_lookup_for_session(session)
         self._users = UserUseCase(session)
         self._vkey_grant_lifecycle = vkey_grant_lifecycle
+        self._route_grant_lifecycle = route_grant_lifecycle
 
     def _grant_lifecycle(self) -> VirtualKeyGrantLifecyclePort:
         if self._vkey_grant_lifecycle is not None:
@@ -69,6 +74,15 @@ class TeamService:
         )
 
         return VirtualKeyGrantLifecycleAdapter(self._session)
+
+    def _route_grant_lifecycle_port(self) -> RouteGrantLifecyclePort:
+        if self._route_grant_lifecycle is not None:
+            return self._route_grant_lifecycle
+        from domains.gateway.application.route_grant_lifecycle_adapter import (
+            RouteGrantLifecycleAdapter,
+        )
+
+        return RouteGrantLifecycleAdapter(self._session)
 
     async def _filter_platform_admin_teams(
         self,
@@ -160,6 +174,10 @@ class TeamService:
 
         # 先撤销 grant，再移出成员：避免 member 已删但 grant 仍 active 的窗口
         await self._grant_lifecycle().revoke_for_membership_lost(
+            user_id=user_id,
+            tenant_id=team_id,
+        )
+        await self._route_grant_lifecycle_port().revoke_for_membership_lost(
             user_id=user_id,
             tenant_id=team_id,
         )
@@ -289,6 +307,7 @@ class TeamService:
         if team.kind == "personal":
             raise ValueError("Cannot delete personal team")
         await self._grant_lifecycle().revoke_for_team_deleted(tenant_id=team_id)
+        await self._route_grant_lifecycle_port().revoke_for_team_deleted(tenant_id=team_id)
         await self._teams.delete(team_id)
 
     async def get_display_names_by_ids(

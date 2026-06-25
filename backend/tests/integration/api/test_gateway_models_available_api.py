@@ -174,11 +174,18 @@ class TestGatewayModelsAvailableApi:
         dev_client: AsyncClient,
         auth_headers: dict,
     ):
-        """gateway_team_id 注入后 system_models 含该团队租户注册行（与 Chat / 调用指南工作区一致）"""
-        r_teams = await dev_client.get("/api/v1/gateway/teams", headers=auth_headers)
-        assert r_teams.status_code == status.HTTP_200_OK, r_teams.text
-        personal = next(t for t in r_teams.json() if t.get("kind") == "personal")
-        team_id = personal["id"]
+        """gateway_team_id 注入后 system_models 含该团队租户注册行（与 Chat / 调用指南工作区一致）。
+
+        目标须为**协作团队**：不传 gateway_team_id 时鉴权用户的 billing 上下文回退到 personal
+        team，若把模型建在 personal team 则两种请求都会命中，无法验证注入效果。
+        """
+        team_create = await dev_client.post(
+            "/api/v1/gateway/teams",
+            headers=auth_headers,
+            json={"name": f"avail-team-{uuid.uuid4().hex[:6]}"},
+        )
+        assert team_create.status_code == status.HTTP_201_CREATED, team_create.text
+        team_id = team_create.json()["id"]
 
         cred = await dev_client.post(
             f"/api/v1/gateway/teams/{team_id}/credentials",

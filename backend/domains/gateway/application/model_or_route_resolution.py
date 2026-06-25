@@ -79,6 +79,7 @@ class GatewayRouteResolveSnapshot:
     strategy: str
     retry_policy: dict[str, Any] | None
     enabled: bool
+    created_by_user_id: uuid.UUID | None = None
 
 
 if TYPE_CHECKING:
@@ -94,11 +95,20 @@ class ResolvedModelName:
         record: 用于 capability / 下游单价基准的 ``GatewayModel`` 行（必有）。
         route: 命中 ``GatewayRoute`` 时存在；表示当前调用走多 deployment 调度。
         via_route: 与 ``route`` 同步；为前端/日志快照预留。
+        delegated_grant_team_id: 命中跨团队共享授权（委派）时 = 消费团队 T 的 id。
+            非 None 表示 ``record`` 为路由 owner 的模型（owner 凭据上游），但 Router
+            deployment 与计费均落在消费团队 T；编码 Router model_name 时用 T + 暴露别名。
+        exposed_alias: 委派时消费团队内的暴露别名（= 客户端 model）。
+        delegated_grant_id: 命中的 ``gateway_route_team_grants`` 行 id；写入日志
+            ``route_snapshot`` 供按 grant 维度审计/聚合。
     """
 
     record: ResolvedGatewayModel
     route: ResolvedGatewayRoute | None
     via_route: str | None
+    delegated_grant_team_id: uuid.UUID | None = None
+    exposed_alias: str | None = None
+    delegated_grant_id: uuid.UUID | None = None
 
 
 def _uuid_or_none(value: object) -> uuid.UUID | None:
@@ -166,6 +176,7 @@ def _route_snapshot(row: ResolvedGatewayRoute) -> GatewayRouteResolveSnapshot:
         strategy=row.strategy,
         retry_policy=_dict_copy(row.retry_policy),
         enabled=row.enabled,
+        created_by_user_id=_uuid_or_none(getattr(row, "created_by_user_id", None)),
     )
 
 
@@ -179,6 +190,9 @@ def cache_safe_resolved_model_name(
         record=_model_snapshot(resolved.record),
         route=_route_snapshot(resolved.route) if resolved.route is not None else None,
         via_route=resolved.via_route,
+        delegated_grant_team_id=resolved.delegated_grant_team_id,
+        exposed_alias=resolved.exposed_alias,
+        delegated_grant_id=resolved.delegated_grant_id,
     )
 
 
@@ -229,6 +243,48 @@ async def _resolve_route_primary_record(
     )
 
 
+async def _resolve_granted_route(
+    session: AsyncSession,
+    team_id: uuid.UUID,
+    alias: str,
+) -> ResolvedModelName | None:
+    """委派解析：消费团队 T 内的暴露别名命中跨团队共享授权时，以路由 owner 身份解析底层模型。
+
+    Fail-closed：路由被删/停用、owner 缺失（未回填）、owner 已失去底层模型可见性时返回 ``None``，
+    使共享调用随权限实时失效。
+    """
+    from domains.gateway.infrastructure.repositories.gateway_route_grant_repository import (
+        GatewayRouteTeamGrantRepository,
+    )
+
+    grant = await GatewayRouteTeamGrantRepository(session).resolve_by_tenant_alias(team_id, alias)
+    if grant is None:
+        return None
+    route = await GatewayRouteRepository(session).get(grant.route_id)
+    if route is None or not route.enabled:
+        return None
+    owner_id = route.created_by_user_id
+    if owner_id is None:
+        return None
+    for primary in route.primary_models or ():
+        primary_record = await _resolve_route_primary_record(
+            session,
+            route.tenant_id,
+            primary,
+            user_id=owner_id,
+        )
+        if primary_record is not None:
+            return ResolvedModelName(
+                record=primary_record,
+                route=route,
+                via_route=route.virtual_model,
+                delegated_grant_team_id=team_id,
+                exposed_alias=grant.exposed_alias,
+                delegated_grant_id=grant.id,
+            )
+    return None
+
+
 async def _resolve_model_or_route_uncached(
     session: AsyncSession,
     team_id: uuid.UUID,
@@ -257,6 +313,10 @@ async def _resolve_model_or_route_uncached(
         return ResolvedModelName(record=record, route=None, via_route=None)
     route = await GatewayRouteRepository(session).resolve_by_virtual_model(team_id, cleaned)
     if route is None:
+        from bootstrap.config import settings
+
+        if settings.gateway_route_sharing_enabled:
+            return await _resolve_granted_route(session, team_id, cleaned)
         return None
     for primary in route.primary_models or ():
         primary_record = await _resolve_route_primary_record(

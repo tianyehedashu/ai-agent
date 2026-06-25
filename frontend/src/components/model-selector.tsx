@@ -7,7 +7,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { useInfiniteQuery } from '@tanstack/react-query'
-import { Cpu, Loader2, User } from 'lucide-react'
 
 import { gatewayApi } from '@/api/gateway'
 import {
@@ -19,6 +18,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { GATEWAY_MODELS_AVAILABLE_QUERY_KEY } from '@/features/gateway-models/query-keys'
+import { Cpu, Loader2, User } from '@/lib/lucide-icons'
 import { PROVIDER_CHANNEL_FILTER_HINT_LONG } from '@/lib/provider-channel-hint'
 import { chatReadinessLabel } from '@/pages/chat/components/chat-gateway-setup-alert'
 import type { ModelType, SystemModel, UserModel } from '@/types/user-model'
@@ -79,7 +80,7 @@ export function ModelSelector({
   const { data, isLoading, isError, refetch, fetchNextPage, hasNextPage, isFetchingNextPage } =
     useInfiniteQuery({
       queryKey: [
-        'gateway-models-available',
+        ...GATEWAY_MODELS_AVAILABLE_QUERY_KEY,
         modelType,
         listMode ?? '',
         showProviderFilter ? channel : '',
@@ -120,18 +121,38 @@ export function ModelSelector({
     () => data?.pages.flatMap((page) => page.user_models.items) ?? [],
     [data]
   )
+  const systemModelRows = useMemo(
+    () =>
+      systemModels.map((m) => {
+        const unavailable = !isSelectableModel(m as SelectorModel)
+        return {
+          model: m,
+          unavailable,
+          sharedRoute: Boolean(m.is_shared_route),
+        }
+      }),
+    [systemModels]
+  )
+  const userModelRows = useMemo(
+    () =>
+      userModels.map((m) => ({
+        model: m,
+        unavailable: !isSelectableModel(m as SelectorModel),
+      })),
+    [userModels]
+  )
   const defaultPage = data?.pages[0]
 
   const selectableIds = useMemo(() => {
     const ids = new Set<string>()
-    for (const m of systemModels) {
-      if (isSelectableModel(m as SelectorModel)) ids.add(m.id)
+    for (const { model, unavailable } of systemModelRows) {
+      if (!unavailable) ids.add(model.id)
     }
-    for (const m of userModels) {
-      if (isSelectableModel(m as SelectorModel)) ids.add(m.id)
+    for (const { model, unavailable } of userModelRows) {
+      if (!unavailable) ids.add(model.id)
     }
     return ids
-  }, [systemModels, userModels])
+  }, [systemModelRows, userModelRows])
 
   const hasModels = systemModels.length > 0 || userModels.length > 0
 
@@ -222,22 +243,24 @@ export function ModelSelector({
               <Cpu className="h-3 w-3" />
               系统模型
             </SelectLabel>
-            {systemModels.map((m) => {
-              const unavailable = !isSelectableModel(m as SelectorModel)
-              return (
-                <SelectItem key={m.id} value={m.id} disabled={unavailable}>
-                  {m.display_name}
-                  {unavailable ? (
-                    <span className="ml-1.5 text-xs text-muted-foreground">（不可用）</span>
-                  ) : null}
-                  {!unavailable && m.config?.description ? (
-                    <span className="ml-1.5 text-xs text-muted-foreground">
-                      ({m.config.description})
-                    </span>
-                  ) : null}
-                </SelectItem>
-              )
-            })}
+            {systemModelRows.map(({ model: m, unavailable, sharedRoute }) => (
+              <SelectItem key={m.id} value={m.id} disabled={unavailable}>
+                {m.display_name}
+                {sharedRoute ? (
+                  <span className="ml-1.5 rounded bg-muted px-1 py-0.5 text-[10px] text-muted-foreground">
+                    共享路由
+                  </span>
+                ) : null}
+                {unavailable ? (
+                  <span className="ml-1.5 text-xs text-muted-foreground">（不可用）</span>
+                ) : null}
+                {!unavailable && m.config?.description ? (
+                  <span className="ml-1.5 text-xs text-muted-foreground">
+                    ({m.config.description})
+                  </span>
+                ) : null}
+              </SelectItem>
+            ))}
           </SelectGroup>
         ) : null}
 
@@ -247,19 +270,16 @@ export function ModelSelector({
               <User className="h-3 w-3" />
               我的模型
             </SelectLabel>
-            {userModels.map((m) => {
-              const unavailable = !isSelectableModel(m as SelectorModel)
-              return (
-                <SelectItem key={m.id} value={m.id} disabled={unavailable}>
-                  {m.display_name}
-                  {unavailable ? (
-                    <span className="ml-1.5 text-xs text-muted-foreground">（不可用）</span>
-                  ) : (
-                    <span className="ml-1.5 text-xs text-muted-foreground">({m.model_id})</span>
-                  )}
-                </SelectItem>
-              )
-            })}
+            {userModelRows.map(({ model: m, unavailable }) => (
+              <SelectItem key={m.id} value={m.id} disabled={unavailable}>
+                {m.display_name}
+                {unavailable ? (
+                  <span className="ml-1.5 text-xs text-muted-foreground">（不可用）</span>
+                ) : (
+                  <span className="ml-1.5 text-xs text-muted-foreground">({m.model_id})</span>
+                )}
+              </SelectItem>
+            ))}
           </SelectGroup>
         ) : null}
 

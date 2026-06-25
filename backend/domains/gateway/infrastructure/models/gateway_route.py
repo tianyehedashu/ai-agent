@@ -7,9 +7,10 @@ GatewayRoute - 路由配置（含三类 fallback）
 from __future__ import annotations
 
 from typing import Any
+import uuid
 
 from sqlalchemy import ARRAY, Boolean, String, UniqueConstraint
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from libs.orm.base import BaseModel, TenantScopedMixin
@@ -24,6 +25,12 @@ class GatewayRoute(BaseModel, TenantScopedMixin):
     __tablename__ = "gateway_routes"
 
     virtual_model: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        nullable=True,
+        index=True,
+        comment="路由创建者 / 委派授权（跨团队共享）时的权威主体；历史行由迁移回填团队 owner",
+    )
     primary_models: Mapped[list[str]] = mapped_column(
         ARRAY(String(200)), nullable=False, server_default="{}"
     )

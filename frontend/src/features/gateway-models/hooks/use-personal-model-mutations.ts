@@ -6,6 +6,7 @@ import {
   type PersonalGatewayModelCreateBody,
   type PersonalGatewayModelUpdateBody,
 } from '@/api/gateway'
+import { invalidateGatewayModelsAvailableCaches } from '@/features/gateway-models/query-keys'
 import { useToast } from '@/hooks/use-toast'
 
 import type { UseMutationResult } from '@tanstack/react-query'
@@ -18,7 +19,7 @@ export function invalidatePersonalModelCaches(
 ): void {
   void queryClient.invalidateQueries({ queryKey: ['gateway', 'my-models'] })
   void queryClient.invalidateQueries({ queryKey: ['gateway', 'unified-models'] })
-  void queryClient.invalidateQueries({ queryKey: ['gateway-models-available'] })
+  invalidateGatewayModelsAvailableCaches(queryClient)
 }
 
 interface UsePersonalModelMutationsOptions {

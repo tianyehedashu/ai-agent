@@ -7,6 +7,10 @@ import uuid
 
 from domains.gateway.application.entitlement_model_status import resolve_entitlement_scope
 from domains.gateway.application.gateway_model_listing import GatewayRegistryModelRow
+from domains.gateway.application.granted_route_listing import (
+    GrantedRouteRow,
+    list_granted_route_rows_for_team,
+)
 from domains.gateway.application.management import GatewayManagementReadService
 from domains.gateway.application.proxy_model_list_reads import build_proxy_models_list
 from domains.gateway.application.vkey_team_resolution import fetch_grant_team_slug_rows
@@ -34,7 +38,7 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
-RouteRow = GatewayRoute | SystemGatewayRoute
+RouteRow = GatewayRoute | SystemGatewayRoute | GrantedRouteRow
 
 
 def _filter_models(
@@ -85,7 +89,26 @@ async def list_proxy_models_for_team(
     reads = GatewayManagementReadService(session)
     all_models, routes = await _list_callable_for_team(reads, team_id, user_id=user_id)
     visible_models = _filter_models(all_models, allowed)
-    visible_routes = _filter_routes(routes, allowed)
+    visible_routes: list[RouteRow] = list(_filter_routes(routes, allowed))
+
+    # 跨团队共享授权（委派）：把共享进本团队的路由按暴露别名投影为合成路由行，
+    # 并为其提供 owner 团队的可调用模型池以解析 capability。本地路由用本团队模型池。
+    granted_rows, granted_pools = await list_granted_route_rows_for_team(
+        session, team_id, allowed=allowed
+    )
+    if granted_rows:
+        route_lookup_pools = [all_models for _ in visible_routes] + granted_pools
+        visible_routes.extend(granted_rows)
+        return await build_proxy_models_list(
+            session,
+            visible_models,
+            routes=visible_routes,
+            entitlement_scope=entitlement_scope,
+            entitlement_scope_id=entitlement_scope_id,
+            route_lookup_models=all_models,
+            route_lookup_pools=route_lookup_pools,
+        )
+
     return await build_proxy_models_list(
         session,
         visible_models,
@@ -213,6 +236,31 @@ async def list_proxy_models_for_multi_grant_vkey(
                 None if tenant_id == vkey.team_id else team_slug
             )
             route_lookup_pools.append(all_models)
+
+        # 共享进该 team 的路由（委派）：按暴露别名投影，owner 模型池单独提供
+        granted_rows, granted_pools = await list_granted_route_rows_for_team(
+            session, tenant_id, allowed=allowed
+        )
+        for granted_row, owner_pool in zip(granted_rows, granted_pools, strict=True):
+            list_id = resolve_vkey_proxy_list_id(
+                bound_team_id=vkey.team_id,
+                model_tenant_id=tenant_id,
+                model_name=granted_row.virtual_model,
+                slug_by_tenant=slug_by_tenant,
+            )
+            if not should_include_multi_grant_entry(
+                tenant_id=tenant_id,
+                bound_team_id=vkey.team_id,
+                list_id=list_id,
+                seen_list_ids=frozenset(seen_list_ids),
+                prefix_dispatchable=prefix_dispatchable,
+            ):
+                continue
+            seen_list_ids.add(list_id)
+            visible_routes.append(granted_row)
+            route_list_ids.append(list_id)
+            route_team_slugs.append(None if tenant_id == vkey.team_id else team_slug)
+            route_lookup_pools.append(owner_pool)
 
     return await build_proxy_models_list(
         session,

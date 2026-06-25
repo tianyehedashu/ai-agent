@@ -25,7 +25,9 @@ import { useInfiniteGatewayModelPages } from '@/features/gateway-models/hooks/us
 import { modelsIndexHref } from '@/features/gateway-models/paths'
 import { CreateRoutePanel } from '@/features/gateway-models/routes/create-route-panel'
 import { invalidateGatewayRouteCaches } from '@/features/gateway-models/routes/query-keys'
+import { RouteSharePanel } from '@/features/gateway-models/routes/route-share-panel'
 import { RouteTopologyEditor } from '@/features/gateway-models/routes/route-topology-editor'
+import { SharedRoutesPanel } from '@/features/gateway-models/routes/shared-routes-panel'
 import type { DeploymentWeightChange } from '@/features/gateway-models/routes/use-deployment-weight-drafts'
 import { usePersonalRouteCallableModels } from '@/features/gateway-models/routes/use-personal-route-callable-models'
 import {
@@ -234,6 +236,12 @@ export function RouteWorkspace(): React.JSX.Element {
     if (!ownerTeamId) return false
     return canManageTeamRoutes(ownerTeamId, memberTeams, isPlatformAdmin, isPlatformViewer)
   }, [selectedRoute, memberTeams, isPlatformAdmin, isPlatformViewer])
+
+  const workspaceTeamIsShared = Boolean(currentTeam) && currentTeam?.kind !== 'personal'
+  const canManageWorkspaceTeam = useMemo(
+    () => canManageTeamRoutes(workspaceTeamId, memberTeams, isPlatformAdmin, isPlatformViewer),
+    [workspaceTeamId, memberTeams, isPlatformAdmin, isPlatformViewer]
+  )
 
   const selectedRouteTeamLabel = selectedRoute ? routeTeamLabel(selectedRoute, teamNameById) : null
   const createTeamLabel = createTeamId
@@ -588,27 +596,42 @@ export function RouteWorkspace(): React.JSX.Element {
             isSubmitting={createMutation.isPending}
           />
         ) : (
-          <RouteTopologyEditor
-            route={selectedRoute}
-            models={models}
-            pickerModels={pickerModels}
-            isSaving={updateMutation.isPending}
-            isDeleting={deleteMutation.isPending}
-            modelsLoading={modelsLoading}
-            teamLabel={selectedRouteTeamLabel}
-            readOnly={selectedRoute !== null && !selectedRouteEditable}
-            allowPersonalBatchAdd={isPersonalRouteContext}
-            onSave={(_id, body, weightChanges) => {
-              if (!selectedRoute) return
-              handleSave(selectedRoute, body, weightChanges)
-            }}
-            onDelete={() => {
-              if (!selectedRoute) return
-              handleDelete(selectedRoute)
-            }}
-          />
+          <div className="flex min-w-0 flex-col gap-4">
+            <RouteTopologyEditor
+              route={selectedRoute}
+              models={models}
+              pickerModels={pickerModels}
+              isSaving={updateMutation.isPending}
+              isDeleting={deleteMutation.isPending}
+              modelsLoading={modelsLoading}
+              teamLabel={selectedRouteTeamLabel}
+              readOnly={selectedRoute !== null && !selectedRouteEditable}
+              allowPersonalBatchAdd={isPersonalRouteContext}
+              onSave={(_id, body, weightChanges) => {
+                if (!selectedRoute) return
+                handleSave(selectedRoute, body, weightChanges)
+              }}
+              onDelete={() => {
+                if (!selectedRoute) return
+                handleDelete(selectedRoute)
+              }}
+            />
+            {selectedRoute &&
+            selectedRoute.source !== 'system' &&
+            isPersonalRouteContext &&
+            selectedRouteEditable ? (
+              <RouteSharePanel
+                routeId={selectedRoute.id}
+                virtualModel={selectedRoute.virtual_model}
+              />
+            ) : null}
+          </div>
         )}
       </div>
+
+      {workspaceTeamIsShared ? (
+        <SharedRoutesPanel teamId={workspaceTeamId} canManage={canManageWorkspaceTeam} />
+      ) : null}
     </div>
   )
 }

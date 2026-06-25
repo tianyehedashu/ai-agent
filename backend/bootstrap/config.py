@@ -441,6 +441,8 @@ class Settings(BaseSettings):
     gateway_router_redis_url: str | None = None
     # 热路径：``resolve_model_or_route`` 进程内 LRU+TTL（管理面写路径会失效）
     gateway_resolve_model_cache_enabled: bool = True
+    # 路由即可共享模型：个人路由经 grant 委派发布给团队（关闭时解析与 Router 装配均跳过 grant）
+    gateway_route_sharing_enabled: bool = True
     # 热路径：``TeamService.get_team`` / ``member_role`` 进程内短 TTL
     gateway_team_cache_enabled: bool = True
     # SQLAlchemy 慢查询日志阈值（毫秒）；0 = 关闭

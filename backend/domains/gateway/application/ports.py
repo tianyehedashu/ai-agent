@@ -166,6 +166,23 @@ class VirtualKeyGrantLifecyclePort(Protocol):
         ...
 
 
+class RouteGrantLifecyclePort(Protocol):
+    """路由跨团队共享授权生命周期（tenancy 成员变更 / 团队删除时同步撤销）。"""
+
+    async def revoke_for_membership_lost(
+        self,
+        *,
+        user_id: uuid.UUID,
+        tenant_id: uuid.UUID,
+    ) -> int:
+        """用户失去 team membership 时撤销其共享进该 team 的路由 grant。"""
+        ...
+
+    async def revoke_for_team_deleted(self, *, tenant_id: uuid.UUID) -> int:
+        """团队删除前撤销所有指向该 team 的路由 grant。"""
+        ...
+
+
 __all__ = [
     "GatewayCallContext",
     "GatewayProxyProtocol",
@@ -175,5 +192,6 @@ __all__ = [
     "ListingStudioLocalImagePort",
     "ListingStudioLocalImagePortFactory",
     "LitellmCapabilityHintPort",
+    "RouteGrantLifecyclePort",
     "VirtualKeyGrantLifecyclePort",
 ]

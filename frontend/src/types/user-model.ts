@@ -73,6 +73,8 @@ export interface SystemModel {
   config: UserModelConfig | null
   /** 后端网关 tags 扁平化能力（可选） */
   capabilities?: ModelCapabilitiesPayload
+  /** 跨团队共享进来的委派路由（GET /models/available） */
+  is_shared_route?: boolean
 }
 
 /** 默认模型信息（用于展示「默认（模型名）」） */

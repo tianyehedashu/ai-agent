@@ -25,6 +25,13 @@ class GatewayRouteRepository:
     async def get(self, route_id: uuid.UUID) -> GatewayRoute | None:
         return await self._session.get(GatewayRoute, route_id)
 
+    async def list_by_ids(self, route_ids: list[uuid.UUID]) -> dict[uuid.UUID, GatewayRoute]:
+        if not route_ids:
+            return {}
+        stmt = select(GatewayRoute).where(GatewayRoute.id.in_(route_ids))
+        result = await self._session.execute(stmt)
+        return {row.id: row for row in result.scalars().all()}
+
     async def list_system(
         self,
         *,
@@ -154,6 +161,7 @@ class GatewayRouteRepository:
         fallbacks_context_window: list[str] | None = None,
         strategy: str = "simple-shuffle",
         retry_policy: dict[str, Any] | None = None,
+        created_by_user_id: uuid.UUID | None = None,
     ) -> GatewayRoute:
         route = GatewayRoute(
             tenant_id=tenant_id,
@@ -164,6 +172,7 @@ class GatewayRouteRepository:
             fallbacks_context_window=fallbacks_context_window or [],
             strategy=strategy,
             retry_policy=retry_policy,
+            created_by_user_id=created_by_user_id,
         )
         self._session.add(route)
         await self._session.flush()

@@ -85,6 +85,7 @@ class GatewayMetricsHourly(BaseModel):
             "bucket_at",
             "tenant_id",
             "user_id",
+            "resource_owner_user_id",
             "vkey_id",
             "credential_id",
             "entitlement_plan_id",

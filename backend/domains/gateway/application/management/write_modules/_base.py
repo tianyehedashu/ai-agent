@@ -34,6 +34,9 @@ from domains.gateway.infrastructure.repositories.credential_repository import (
 from domains.gateway.infrastructure.repositories.entitlement_plan_repository import (
     EntitlementPlanRepository,
 )
+from domains.gateway.infrastructure.repositories.gateway_route_grant_repository import (
+    GatewayRouteTeamGrantRepository,
+)
 from domains.gateway.infrastructure.repositories.model_repository import (
     GatewayModelRepository,
     GatewayRouteRepository,
@@ -69,6 +72,7 @@ class GatewayManagementWriteBaseMixin:
         self._system_creds = SystemProviderCredentialRepository(session)
         self._models = GatewayModelRepository(session)
         self._routes = GatewayRouteRepository(session)
+        self._route_grants = GatewayRouteTeamGrantRepository(session)
         self._budgets = BudgetRepository(session)
         self._alerts = GatewayAlertRepository(session)
         self._provider_quotas = ProviderQuotaRepository(session)
@@ -415,6 +419,7 @@ class GatewayManagementWriteBaseMixin:
 
         if tenant_id is not None:
             invalidate_gateway_read_caches_for_tenant(tenant_id)
+            await self._invalidate_shared_route_consumer_caches(exclude=tenant_id)
         else:
             invalidate_all()
             clear_route_snapshot_cache_for_tests()
@@ -425,6 +430,28 @@ class GatewayManagementWriteBaseMixin:
             await reload_router(self._session)
         except Exception:
             logger.exception("LiteLLM Router reload failed")
+
+    async def _invalidate_shared_route_consumer_caches(
+        self, *, exclude: uuid.UUID | None = None
+    ) -> None:
+        """失效持有共享路由的消费团队 resolve 缓存。
+
+        委派解析结果按消费团队 ``(T, user, alias)`` 键缓存，而 owner 侧改/禁用底层模型时
+        只会失效 owner 自身租户，遗漏 T。这里在租户级 reload 时连带失效所有消费团队，
+        保证「owner 改路由底层资源对 T 实时生效」（D4）。grant 表规模小，开销可忽略。
+        """
+        from bootstrap.config import settings
+
+        if not settings.gateway_route_sharing_enabled:
+            return
+        from domains.gateway.application.gateway_cache_invalidation import (
+            invalidate_gateway_read_caches_for_tenant,
+        )
+
+        consumer_tenant_ids = await self._route_grants.list_active_consumer_tenant_ids()
+        for consumer_tenant_id in consumer_tenant_ids:
+            if consumer_tenant_id != exclude:
+                invalidate_gateway_read_caches_for_tenant(consumer_tenant_id)
 
     def invalidate_tenant_gateway_read_caches(self, tenant_id: uuid.UUID) -> None:
         from domains.gateway.application.gateway_cache_invalidation import (

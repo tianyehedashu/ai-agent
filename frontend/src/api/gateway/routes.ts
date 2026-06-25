@@ -78,6 +78,48 @@ export interface ListMyRouteCallableModelsParams extends PageQuery {
   team_id?: string
 }
 
+// ─── 跨团队共享授权（路由即可共享模型 · 委派） ──────────────────────────────
+
+/** 路由 owner 视角：单条共享授权 */
+export interface RouteGrant {
+  id: string
+  route_id: string
+  tenant_id: string
+  exposed_alias: string
+  virtual_model?: string | null
+  granted_team_name?: string | null
+  granted_team_slug?: string | null
+  created_at: string
+}
+
+export interface RouteGrantCreateBody {
+  target_tenant_id: string
+  exposed_alias?: string | null
+}
+
+export interface RouteGrantAliasUpdateBody {
+  exposed_alias: string
+}
+
+/** 可作为共享目标的团队 */
+export interface RouteGrantableTeam {
+  team_id: string
+  name: string
+  slug: string
+}
+
+/** 团队侧视角：共享进本团队的路由（只读 + 可移除） */
+export interface SharedRoute {
+  grant_id: string
+  route_id: string
+  tenant_id: string
+  exposed_alias: string
+  virtual_model?: string | null
+  owner_user_id?: string | null
+  owner_display?: string | null
+  created_at: string
+}
+
 /** Routes 资源 API */
 export const routesApi = {
   /** 列出 membership 内各团队可见的虚拟路由（跨团队聚合，分页） */
@@ -121,4 +163,32 @@ export const routesApi = {
   updateMyRoute: (id: string, body: GatewayRouteUpdateBody) =>
     apiClient.patch<GatewayRoute>(`${GATEWAY_API_BASE}/my-routes/${id}`, body),
   deleteMyRoute: (id: string) => apiClient.delete<unknown>(`${GATEWAY_API_BASE}/my-routes/${id}`),
+
+  // ── 路由共享授权（owner 侧） ──
+  /** 列出某路由的全部跨团队共享授权 */
+  listRouteGrants: (routeId: string) =>
+    apiClient.get<RouteGrant[]>(`${GATEWAY_API_BASE}/my-routes/${routeId}/grants`),
+  /** 把路由发布给团队（委派） */
+  grantRouteToTeam: (routeId: string, body: RouteGrantCreateBody) =>
+    apiClient.post<RouteGrant>(`${GATEWAY_API_BASE}/my-routes/${routeId}/grants`, body),
+  /** 修改某团队内的暴露别名 */
+  updateRouteGrantAlias: (routeId: string, tenantId: string, body: RouteGrantAliasUpdateBody) =>
+    apiClient.patch<RouteGrant>(
+      `${GATEWAY_API_BASE}/my-routes/${routeId}/grants/${tenantId}`,
+      body
+    ),
+  /** 撤销某团队的共享授权（owner 操作） */
+  revokeRouteGrant: (routeId: string, tenantId: string) =>
+    apiClient.delete<unknown>(`${GATEWAY_API_BASE}/my-routes/${routeId}/grants/${tenantId}`),
+  /** 列出该路由可共享的目标团队（membership 的 shared 团队 ∖ 已授权 ∖ 所属） */
+  listRouteGrantableTeams: (routeId: string) =>
+    apiClient.get<RouteGrantableTeam[]>(`${GATEWAY_API_BASE}/my-routes/${routeId}/grantable-teams`),
+
+  // ── 共享进团队的路由（team 侧） ──
+  /** 列出共享进某团队的路由（成员可见） */
+  listSharedRoutes: (teamId: string) =>
+    apiClient.get<SharedRoute[]>(teamGatewayPath(teamId, '/shared-routes')),
+  /** 团队 owner/admin 把共享路由踢出本团队 */
+  ejectSharedRoute: (teamId: string, grantId: string) =>
+    apiClient.delete<unknown>(teamGatewayPath(teamId, `/shared-routes/${grantId}`)),
 } as const

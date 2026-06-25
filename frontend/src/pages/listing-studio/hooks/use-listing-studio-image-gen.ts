@@ -8,6 +8,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { gatewayApi } from '@/api/gateway'
 import { listingStudioApi } from '@/api/listingStudio'
+import { GATEWAY_MODELS_AVAILABLE_QUERY_KEY } from '@/features/gateway-models/query-keys'
 import {
   defaultImageGenSizeForProvider,
   imageGenSizesForProvider,
@@ -97,7 +98,7 @@ export function useListingStudioImageGen({
   const { toast } = useToast()
 
   const { data: selectedProvider = 'volcengine' } = useQuery({
-    queryKey: ['gateway-models-available', 'image_gen', 'provider', modelId],
+    queryKey: [...GATEWAY_MODELS_AVAILABLE_QUERY_KEY, 'image_gen', 'provider', modelId],
     queryFn: () => {
       if (modelId === null) {
         throw new Error('modelId is required')
