@@ -199,6 +199,24 @@ describe('RouteOrderedModelPicker', () => {
     expect(screen.getByRole('button', { name: '移除 collab/missing-model' })).toBeInTheDocument()
     expect(screen.getByText('model-a')).toBeInTheDocument()
   })
+
+  it('renders orphan refs as configuration-only when disabled', () => {
+    render(
+      <RouteOrderedModelPicker
+        models={[MODEL_A]}
+        selected={['collab/missing-model']}
+        onSelectedChange={vi.fn()}
+        label="主模型"
+        disabled
+      />
+    )
+
+    expect(screen.getByText('配置引用')).toBeInTheDocument()
+    expect(screen.queryByText('不可引用')).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: '移除 collab/missing-model' })
+    ).not.toBeInTheDocument()
+  })
 })
 
 describe('RouteFallbackModelPicker', () => {

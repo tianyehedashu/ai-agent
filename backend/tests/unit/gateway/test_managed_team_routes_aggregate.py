@@ -69,6 +69,10 @@ async def test_list_managed_team_routes_includes_personal_and_paginates() -> Non
     assert result.total == 1
     assert [row.id for row in result.page_items] == [personal_route_id]
     assert result.tenant_ids_with_routes == (personal_id,)
+    assert result.tenant_kind_by_id == {
+        personal_id: "personal",
+        shared_id: "shared",
+    }
     route_repo.list_merged_routes_for_tenants.assert_awaited_once_with(
         [personal_id, shared_id],
         only_enabled=False,

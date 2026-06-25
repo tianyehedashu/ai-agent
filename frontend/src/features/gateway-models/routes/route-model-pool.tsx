@@ -94,11 +94,15 @@ const RouteOrphanRefRow = memo(function RouteOrphanRefRow({
   onMove,
   onRemove,
 }: RouteOrphanRefRowProps): React.JSX.Element {
+  const readOnlyView = disabled
   return (
     <li
       className={cn(
         PICKER_ROW_CV,
-        'flex items-center gap-2 rounded border border-dashed border-amber-500/40 bg-amber-500/5 px-1 py-1'
+        'flex items-center gap-2 rounded border px-1 py-1',
+        readOnlyView
+          ? 'border-border bg-muted/20'
+          : 'border-dashed border-amber-500/40 bg-amber-500/5'
       )}
     >
       {showOrderControls ? (
@@ -110,11 +114,13 @@ const RouteOrphanRefRow = memo(function RouteOrphanRefRow({
         <span className="flex min-w-0 items-center gap-1.5">
           <span className="truncate font-mono text-sm">{name}</span>
           <Badge variant="outline" className="shrink-0 text-[10px] font-normal text-amber-700">
-            不可引用
+            {readOnlyView ? '配置引用' : '不可引用'}
           </Badge>
         </span>
         <span className="block truncate text-[11px] text-muted-foreground">
-          不在当前可选模型池中，请移除后重新添加
+          {readOnlyView
+            ? '跨团队或外部模型引用，仅展示配置'
+            : '不在当前可选模型池中，请移除后重新添加'}
         </span>
       </span>
       {showOrderControls && !disabled && onMove ? (

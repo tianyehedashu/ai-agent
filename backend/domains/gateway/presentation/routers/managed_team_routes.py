@@ -37,9 +37,16 @@ async def list_managed_team_routes(
         is_platform_admin=is_platform_admin,
         page_params=page,
     )
+    kind_by_tenant = result.tenant_kind_by_id
     envelope = build_page(
         items=[
-            RouteResponse.model_validate(route_row_to_api_dict(row)) for row in result.page_items
+            RouteResponse.model_validate(
+                route_row_to_api_dict(
+                    row,
+                    owner_team_kind=kind_by_tenant.get(getattr(row, "tenant_id", None)),
+                )
+            )
+            for row in result.page_items
         ],
         total=result.total,
         page=result.page,

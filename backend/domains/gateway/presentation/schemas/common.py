@@ -868,6 +868,10 @@ class RouteResponse(BaseModel):
     tenant_id: uuid.UUID | None = None
     team_id: uuid.UUID | None = None
     source: Literal["team", "system"] = "team"
+    # 路由归属团队的 kind（personal/shared/system）。``source`` 对个人与协作团队都返回
+    # "team"，无法区分；前端据此判定「个人路由」而不必依赖查看者自身的成员关系
+    # （平台 admin 跨账号查看他人个人路由时尤为关键）。聚合列表填充，单团队读侧默认 None。
+    owner_team_kind: Literal["personal", "shared", "system"] | None = None
     virtual_model: str
     primary_models: list[str]
     fallbacks_general: list[str]

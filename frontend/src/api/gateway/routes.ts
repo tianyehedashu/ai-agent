@@ -19,6 +19,11 @@ export interface GatewayRoute {
   team_id: string | null
   /** 团队自定义或系统级（只读） */
   source?: 'team' | 'system'
+  /**
+   * 路由归属团队的 kind。`source` 对个人与协作团队都返回 "team"，无法区分；
+   * 据此判定「个人路由」而不依赖查看者自身成员关系（聚合列表填充，可能为空）。
+   */
+  owner_team_kind?: 'personal' | 'shared' | 'system' | null
   /** 调用方传入的 `model` 字段值 */
   virtual_model: string
   primary_models: string[]

@@ -31,6 +31,8 @@ class ManagedTeamRouteListPage:
     queried_personal_team_count: int
     queried_shared_team_count: int
     tenant_ids_with_routes: tuple[uuid.UUID, ...]
+    # 路由归属 tenant_id → 团队 kind（personal/shared），供前端区分个人/协作团队路由。
+    tenant_kind_by_id: dict[uuid.UUID, str]
 
 
 async def list_managed_team_routes_for_actor(
@@ -51,6 +53,7 @@ async def list_managed_team_routes_for_actor(
     tenant_ids = [m.team_id for m in memberships]
     personal_count = sum(1 for m in memberships if m.kind == "personal")
     shared_count = sum(1 for m in memberships if m.kind == "shared")
+    tenant_kind_by_id = {m.team_id: m.kind for m in memberships}
 
     # 团队路由与 system 路由需按 virtual_model 合并去重，暂在应用层 slice_page；
     # 路由数量通常远小于 vkey，避免为合并语义引入过度复杂的 SQL 分页。
@@ -79,6 +82,7 @@ async def list_managed_team_routes_for_actor(
         queried_personal_team_count=personal_count,
         queried_shared_team_count=shared_count,
         tenant_ids_with_routes=tenant_ids_with_routes,
+        tenant_kind_by_id=tenant_kind_by_id,
     )
 
 

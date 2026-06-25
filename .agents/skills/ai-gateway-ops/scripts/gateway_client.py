@@ -663,6 +663,12 @@ def cmd_routes_route_grants_publish(args):
         sys.exit(2)
 
     results = []
+    failures = 0
+    multi_route = len(selected) > 1
+    if multi_route and args.exposed_alias:
+        sys.stderr.write(
+            "警告：批量发布时忽略 --exposed-alias，各路由将使用 virtual_model 作为暴露别名\n"
+        )
     for route in selected:
         rid = route["id"]
         grants = client.get(f"/gateway/my-routes/{rid}/grants")
@@ -678,9 +684,21 @@ def cmd_routes_route_grants_publish(args):
             )
             continue
         body = {"target_tenant_id": target_team_id}
-        if args.exposed_alias:
+        if args.exposed_alias and not multi_route:
             body["exposed_alias"] = args.exposed_alias
-        grant = client.post(f"/gateway/my-routes/{rid}/grants", body=body)
+        try:
+            grant = client.post(f"/gateway/my-routes/{rid}/grants", body=body)
+        except GatewayError as exc:
+            failures += 1
+            results.append(
+                {
+                    "route_id": rid,
+                    "virtual_model": route.get("virtual_model"),
+                    "status": "failed",
+                    "error": str(exc),
+                }
+            )
+            continue
         results.append(
             {
                 "route_id": rid,
@@ -689,6 +707,8 @@ def cmd_routes_route_grants_publish(args):
                 "grant": grant,
             }
         )
+    if failures:
+        sys.stderr.write(f"批量发布完成：{failures} 条失败（见 results 中 status=failed）\n")
     return results
 
 
@@ -1360,7 +1380,10 @@ def _build_routes(sub):
     rg.add_argument("--target-team-id", required=True)
     rg.add_argument("--all-routes", action="store_true", help="发布全部个人路由")
     rg.add_argument("--route-ids", help="逗号分隔的 route_id 列表")
-    rg.add_argument("--exposed-alias", help="统一暴露别名（通常省略，用各路由 virtual_model）")
+    rg.add_argument(
+        "--exposed-alias",
+        help="单条路由时的暴露别名（批量发布时忽略，各路由用 virtual_model）",
+    )
     rg.set_defaults(func=run(cmd_routes_route_grants_publish))
 
 

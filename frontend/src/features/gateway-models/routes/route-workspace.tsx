@@ -9,7 +9,6 @@ import type {
   GatewayRouteCreateBody,
   GatewayRouteUpdateBody,
 } from '@/api/gateway/routes'
-import type { GatewayTeam } from '@/api/gateway/teams'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -27,6 +26,14 @@ import { CreateRoutePanel } from '@/features/gateway-models/routes/create-route-
 import { invalidateGatewayRouteCaches } from '@/features/gateway-models/routes/query-keys'
 import { RouteSharePanel } from '@/features/gateway-models/routes/route-share-panel'
 import { RouteTopologyEditor } from '@/features/gateway-models/routes/route-topology-editor'
+import {
+  canManageTeamRoutes,
+  isForeignPersonalRouteView,
+  isPersonalRouteRecord,
+  isPersonalTeamId,
+  resolveSelectedRouteEditable,
+  resolveUsePersonalCallableModels,
+} from '@/features/gateway-models/routes/route-workspace-policy'
 import { SharedRoutesPanel } from '@/features/gateway-models/routes/shared-routes-panel'
 import type { DeploymentWeightChange } from '@/features/gateway-models/routes/use-deployment-weight-drafts'
 import { usePersonalRouteCallableModels } from '@/features/gateway-models/routes/use-personal-route-callable-models'
@@ -37,10 +44,7 @@ import {
 import { enabledGatewayModels } from '@/features/gateway-models/utils'
 import { combineFetching } from '@/features/gateway-shared/combine-fetching'
 import { GatewayRefreshButton } from '@/features/gateway-shared/gateway-refresh-button'
-import {
-  filterGatewayWritableTeams,
-  isGatewayTeamWritable,
-} from '@/features/gateway-teams/gateway-team-write-policy'
+import { filterGatewayWritableTeams } from '@/features/gateway-teams/gateway-team-write-policy'
 import {
   useGatewayMemberTeamNameMap,
   useGatewayMemberTeams,
@@ -50,22 +54,6 @@ import { useGatewayTeamId, useGatewayTeamRecord } from '@/hooks/use-gateway-team
 import { useToast } from '@/hooks/use-toast'
 import { Route, Loader2, Search } from '@/lib/lucide-icons'
 import { cn } from '@/lib/utils'
-
-function isPersonalTeamId(teamId: string, memberTeams: readonly GatewayTeam[]): boolean {
-  return memberTeams.some((team) => team.id === teamId && team.kind === 'personal')
-}
-
-function canManageTeamRoutes(
-  targetTeamId: string,
-  memberTeams: readonly GatewayTeam[],
-  isPlatformAdmin: boolean,
-  isPlatformViewer: boolean
-): boolean {
-  if (isPlatformViewer) return false
-  if (isPlatformAdmin) return true
-  const team = memberTeams.find((item) => item.id === targetTeamId)
-  return team ? isGatewayTeamWritable(team, false) : false
-}
 
 function routeTeamLabel(
   route: GatewayRoute,
@@ -193,10 +181,34 @@ export function RouteWorkspace(): React.JSX.Element {
 
   const needsRouteModels = (createMode && createTeamId.length > 0) || selectedId !== null
 
-  const isPersonalRouteContext = useMemo(
-    () => isPersonalTeamId(activeTeamId, memberTeams),
-    [activeTeamId, memberTeams]
+  const isForeignPersonalView = useMemo(
+    () => isForeignPersonalRouteView({ selectedRoute, memberTeams }),
+    [selectedRoute, memberTeams]
   )
+
+  const usePersonalCallableModels = useMemo(
+    () =>
+      resolveUsePersonalCallableModels({
+        createMode,
+        selectedRoute,
+        activeTeamId,
+        memberTeams,
+      }),
+    [createMode, selectedRoute, activeTeamId, memberTeams]
+  )
+
+  const isPersonalRouteRecordContext = useMemo(
+    () =>
+      isPersonalRouteRecord({
+        createMode,
+        selectedRoute,
+        activeTeamId,
+        memberTeams,
+      }),
+    [createMode, selectedRoute, activeTeamId, memberTeams]
+  )
+
+  const shouldLoadRouteModels = needsRouteModels && !isForeignPersonalView
 
   const {
     items: teamModels,
@@ -206,7 +218,7 @@ export function RouteWorkspace(): React.JSX.Element {
   } = useInfiniteGatewayModelPages(
     activeTeamId,
     { registry_scope: 'callable' },
-    { enabled: needsRouteModels && !isPersonalRouteContext, prefetchMode: 'idle' }
+    { enabled: shouldLoadRouteModels && !usePersonalCallableModels, prefetchMode: 'idle' }
   )
 
   const {
@@ -215,13 +227,13 @@ export function RouteWorkspace(): React.JSX.Element {
     isFetching: personalModelsFetching,
     refetch: refetchPersonalModels,
   } = usePersonalRouteCallableModels({
-    enabled: needsRouteModels && isPersonalRouteContext,
+    enabled: shouldLoadRouteModels && usePersonalCallableModels,
   })
 
-  const models = isPersonalRouteContext ? personalCallableItems : teamModels
-  const modelsLoading = isPersonalRouteContext ? personalModelsLoading : teamModelsLoading
-  const modelsFetching = isPersonalRouteContext ? personalModelsFetching : teamModelsFetching
-  const refetchModels = isPersonalRouteContext ? refetchPersonalModels : refetchTeamModels
+  const models = usePersonalCallableModels ? personalCallableItems : teamModels
+  const modelsLoading = usePersonalCallableModels ? personalModelsLoading : teamModelsLoading
+  const modelsFetching = usePersonalCallableModels ? personalModelsFetching : teamModelsFetching
+  const refetchModels = usePersonalCallableModels ? refetchPersonalModels : refetchTeamModels
 
   const pickerModels = useMemo(() => enabledGatewayModels(models), [models])
   const modelsByName = useMemo(() => new Map(models.map((model) => [model.name, model])), [models])
@@ -230,12 +242,16 @@ export function RouteWorkspace(): React.JSX.Element {
     [memberTeams]
   )
 
-  const selectedRouteEditable = useMemo(() => {
-    if (selectedRoute === null || selectedRoute.source === 'system') return false
-    const ownerTeamId = resolveGatewayRouteTeamId(selectedRoute)
-    if (!ownerTeamId) return false
-    return canManageTeamRoutes(ownerTeamId, memberTeams, isPlatformAdmin, isPlatformViewer)
-  }, [selectedRoute, memberTeams, isPlatformAdmin, isPlatformViewer])
+  const selectedRouteEditable = useMemo(
+    () =>
+      resolveSelectedRouteEditable({
+        selectedRoute,
+        memberTeams,
+        isPlatformAdmin,
+        isPlatformViewer,
+      }),
+    [selectedRoute, memberTeams, isPlatformAdmin, isPlatformViewer]
+  )
 
   const workspaceTeamIsShared = Boolean(currentTeam) && currentTeam?.kind !== 'personal'
   const canManageWorkspaceTeam = useMemo(
@@ -606,7 +622,7 @@ export function RouteWorkspace(): React.JSX.Element {
               modelsLoading={modelsLoading}
               teamLabel={selectedRouteTeamLabel}
               readOnly={selectedRoute !== null && !selectedRouteEditable}
-              allowPersonalBatchAdd={isPersonalRouteContext}
+              allowPersonalBatchAdd={isPersonalRouteRecordContext && selectedRouteEditable}
               onSave={(_id, body, weightChanges) => {
                 if (!selectedRoute) return
                 handleSave(selectedRoute, body, weightChanges)
@@ -618,7 +634,7 @@ export function RouteWorkspace(): React.JSX.Element {
             />
             {selectedRoute &&
             selectedRoute.source !== 'system' &&
-            isPersonalRouteContext &&
+            isPersonalRouteRecordContext &&
             selectedRouteEditable ? (
               <RouteSharePanel
                 routeId={selectedRoute.id}

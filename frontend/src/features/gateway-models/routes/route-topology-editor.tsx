@@ -138,7 +138,7 @@ function RouteTopologyForm({
     ) : null
 
   const validationIssues = useMemo(() => {
-    if (modelsLoading) return []
+    if (!editable || modelsLoading) return []
     const issues: string[] = []
     for (const name of primaryModels) {
       const m = modelsByName.get(name)
@@ -164,6 +164,7 @@ function RouteTopologyForm({
     modelsByName,
     registeredNames,
     modelsLoading,
+    editable,
   ])
 
   const weightedMode = isWeightedRoutingStrategy(strategy)
