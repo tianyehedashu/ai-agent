@@ -415,3 +415,16 @@ async def test_aggregate_breakdown_pairs_cross_boundary_falls_back_when_too_many
     assert fallback_call.args[1] == start
     assert fallback_call.args[2] == end
     hourly.aggregate_breakdown_pairs_by_axis.assert_awaited_once()
+
+
+def test_hourly_statistics_unsupported_for_resource_owner_group_by() -> None:
+    router = UsageMetricsRouter(MagicMock(), MagicMock())
+    axis = UsageAxis.workspace(uuid.uuid4())
+    assert (
+        router._hourly_supported_for_statistics(
+            axis=axis,
+            group_by=UsageStatisticsGroupBy.RESOURCE_OWNER,
+            filters=UsageStatisticsFilters(),
+        )
+        is False
+    )

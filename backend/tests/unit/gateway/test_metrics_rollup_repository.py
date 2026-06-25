@@ -49,6 +49,7 @@ async def test_rollup_window_batches_upsert_in_single_execute() -> None:
         real_model="gpt-4",
         model_key="gpt-4",
         capability="chat",
+        resource_owner_user_id=uuid.uuid4(),
         requests=3,
         success_count=2,
         error_count=1,

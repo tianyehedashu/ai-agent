@@ -32,6 +32,7 @@ from domains.gateway.presentation.routers import (
     my_routes,
     playground,
     provider_profiles,
+    resource_grants,
     system_visibility,
     team_scoped,
 )
@@ -49,6 +50,7 @@ router.include_router(managed_team_routes.router)
 router.include_router(managed_team_virtual_keys.router)
 router.include_router(my_models.router)
 router.include_router(my_routes.router)
+router.include_router(resource_grants.router)
 router.include_router(provider_profiles.router)
 router.include_router(system_visibility.router)
 router.include_router(system_visibility.admin_router)

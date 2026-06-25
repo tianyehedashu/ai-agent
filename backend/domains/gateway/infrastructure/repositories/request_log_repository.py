@@ -187,12 +187,14 @@ class RequestLogRepository:
         metadata_extra: dict[str, Any] | None,
         entitlement_plan_id: UUID | None = None,
         provider_plan_id: UUID | None = None,
+        resource_owner_user_id: UUID | None = None,
         client_type: str | None = None,
         client_ua: str | None = None,
     ) -> GatewayRequestLog:
         log = GatewayRequestLog(
             tenant_id=team_id,
             user_id=user_id,
+            resource_owner_user_id=resource_owner_user_id,
             vkey_id=vkey_id,
             team_snapshot=team_snapshot,
             user_email_snapshot=user_email_snapshot,
@@ -703,6 +705,8 @@ class RequestLogRepository:
             return [GatewayRequestLog.capability]
         if group_by == UsageStatisticsGroupBy.STATUS:
             return [GatewayRequestLog.status]
+        if group_by == UsageStatisticsGroupBy.RESOURCE_OWNER:
+            return [GatewayRequestLog.resource_owner_user_id]
         if group_by == UsageStatisticsGroupBy.USER_MODEL_CREDENTIAL:
             return [
                 GatewayRequestLog.user_id,

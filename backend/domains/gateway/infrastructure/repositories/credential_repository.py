@@ -52,6 +52,17 @@ class ProviderCredentialRepository:
         if row is not None:
             if row.tenant_id == tenant_id:
                 return row
+            if row.scope == "user" and row.scope_id is not None:
+                from domains.gateway.application.resource_grant_filter import (
+                    is_credential_granted_to_team,
+                )
+
+                if await is_credential_granted_to_team(
+                    self._session,
+                    credential_id=credential_id,
+                    target_team_id=tenant_id,
+                ):
+                    return row
             return None
         if is_platform_admin:
             return await SystemProviderCredentialRepository(self._session).get(credential_id)

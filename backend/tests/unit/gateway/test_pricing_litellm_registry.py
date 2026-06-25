@@ -33,23 +33,30 @@ def _row(
     )
 
 
-def _make_service(rows: list) -> tuple[PricingService, list[dict]]:
+def _make_service(
+    rows: list,
+    monkeypatch: pytest.MonkeyPatch,
+) -> tuple[PricingService, list[dict]]:
     upstream = SimpleNamespace(list_active=AsyncMock(return_value=rows))
     captured: list[dict] = []
 
-    import litellm
+    def _capture_register_model(*args: object, **kwargs: object) -> None:
+        if args:
+            captured.append(dict(args[0]))  # type: ignore[arg-type]
+        elif "model_cost" in kwargs:
+            captured.append(dict(kwargs["model_cost"]))  # type: ignore[arg-type]
 
-    litellm.register_model = lambda payload: captured.append(dict(payload))  # type: ignore[assignment]
+    monkeypatch.setattr("litellm.register_model", _capture_register_model)
 
     svc = PricingService(upstream, SimpleNamespace())  # type: ignore[arg-type]
     return svc, captured
 
 
 @pytest.mark.asyncio
-async def test_sync_skips_unchanged_fingerprints() -> None:
+async def test_sync_skips_unchanged_fingerprints(monkeypatch: pytest.MonkeyPatch) -> None:
     reset_litellm_pricing_register_cache()
     rows = [_row("openai/gpt-4o"), _row("anthropic/claude-3-5-sonnet")]
-    svc, captured = _make_service(rows)
+    svc, captured = _make_service(rows, monkeypatch)
 
     first = await svc.sync_to_litellm_registry()
     second = await svc.sync_to_litellm_registry()
@@ -61,10 +68,10 @@ async def test_sync_skips_unchanged_fingerprints() -> None:
 
 
 @pytest.mark.asyncio
-async def test_sync_only_keys_filters_payload() -> None:
+async def test_sync_only_keys_filters_payload(monkeypatch: pytest.MonkeyPatch) -> None:
     reset_litellm_pricing_register_cache()
     rows = [_row("openai/gpt-4o"), _row("anthropic/claude-3-5-sonnet")]
-    svc, captured = _make_service(rows)
+    svc, captured = _make_service(rows, monkeypatch)
 
     written = await svc.sync_to_litellm_registry(only_keys={"openai/gpt-4o"})
 
@@ -80,14 +87,14 @@ async def test_sync_only_keys_filters_payload() -> None:
 
 
 @pytest.mark.asyncio
-async def test_sync_detects_version_bump() -> None:
+async def test_sync_detects_version_bump(monkeypatch: pytest.MonkeyPatch) -> None:
     reset_litellm_pricing_register_cache()
     rows = [_row("openai/gpt-4o", version=1)]
-    svc, captured = _make_service(rows)
+    svc, captured = _make_service(rows, monkeypatch)
     await svc.sync_to_litellm_registry()
 
     rows[0] = _row("openai/gpt-4o", inp="9e-7", version=2)
-    svc, captured2 = _make_service(rows)
+    svc, captured2 = _make_service(rows, monkeypatch)
     written = await svc.sync_to_litellm_registry()
 
     assert written == 1
@@ -95,9 +102,9 @@ async def test_sync_detects_version_bump() -> None:
 
 
 @pytest.mark.asyncio
-async def test_sync_only_keys_empty_set_is_noop() -> None:
+async def test_sync_only_keys_empty_set_is_noop(monkeypatch: pytest.MonkeyPatch) -> None:
     reset_litellm_pricing_register_cache()
-    svc, captured = _make_service([_row("openai/gpt-4o")])
+    svc, captured = _make_service([_row("openai/gpt-4o")], monkeypatch)
     written = await svc.sync_to_litellm_registry(only_keys=set())
     assert written == 0
     assert captured == []

@@ -164,6 +164,61 @@ async def test_delete_user_credential_cascades_personal_models(db_session, test_
 
 
 @pytest.mark.asyncio
+async def test_delete_user_credential_purges_credential_and_model_grants(
+    db_session, test_user
+) -> None:
+    ts = TeamService(db_session)
+    team = await ts.ensure_personal_team(test_user.id)
+    shared = await ts.create_team(name="Grant Purge Team", owner_user_id=test_user.id)
+    encryption_key = derive_encryption_key(settings.secret_key.get_secret_value())
+    cred_repo = ProviderCredentialRepository(db_session)
+    model_repo = GatewayModelRepository(db_session)
+    cred = await cred_repo.create(
+        scope="user",
+        scope_id=test_user.id,
+        provider="deepseek",
+        name="user-grant-purge",
+        api_key_encrypted=encrypt_value("sk-fake", encryption_key),
+        api_base=None,
+    )
+    model = await model_repo.create(
+        tenant_id=team.id,
+        name=f"pm-grant-{uuid.uuid4().hex[:6]}",
+        capability="chat",
+        real_model="deepseek/deepseek-chat",
+        credential_id=cred.id,
+        provider="deepseek",
+    )
+    from domains.gateway.infrastructure.repositories.resource_grant_repository import (
+        GatewayResourceGrantRepository,
+    )
+
+    grant_repo = GatewayResourceGrantRepository(db_session)
+    await grant_repo.create(
+        owner_user_id=test_user.id,
+        subject_kind="credential",
+        subject_id=cred.id,
+        target_team_id=shared.id,
+        granted_by=test_user.id,
+    )
+    await grant_repo.create(
+        owner_user_id=test_user.id,
+        subject_kind="model",
+        subject_id=model.id,
+        target_team_id=shared.id,
+        granted_by=test_user.id,
+    )
+    await db_session.flush()
+
+    writes = GatewayManagementWriteService(db_session)
+    await writes.delete_user_credential(cred.id, actor_user_id=test_user.id)
+    await db_session.flush()
+
+    assert await grant_repo.list_for_subject("credential", cred.id) == []
+    assert await grant_repo.list_for_subject("model", model.id) == []
+
+
+@pytest.mark.asyncio
 async def test_update_managed_wrong_team_returns_not_found(db_session, test_user) -> None:
     team_a = await TeamService(db_session).ensure_personal_team(test_user.id)
     cred = await create_tenant_test_credential(db_session, team_a.id, name="other-team-cred")

@@ -786,6 +786,7 @@ async def _write_log_to_db(
     metadata_extra: dict[str, Any] | None,
     client_type: str | None,
     client_ua: str | None,
+    resource_owner_user_id: uuid.UUID | None = None,
     team_snapshot: Any,
     user_email_snapshot: Any,
     vkey_name_snapshot: Any,
@@ -808,6 +809,7 @@ async def _write_log_to_db(
             await RequestLogRepository(session).insert(
                 team_id=team_id,
                 user_id=persist_user_id,
+                resource_owner_user_id=resource_owner_user_id,
                 vkey_id=vkey_id,
                 team_snapshot=_jsonb_safe_dict(team_snapshot),
                 user_email_snapshot=user_email_snapshot,
@@ -1104,6 +1106,13 @@ async def _persist_event(
         provider_plan_id,
     ) = _normalize_route_model(metadata, kwargs, response_obj)
     cred_id, cred_name_snap = _credential_snapshots_for_persist(metadata, kwargs)
+    from domains.gateway.domain.litellm_deployment_attribution import (
+        gateway_deployment_owner_user_id,
+    )
+
+    resource_owner_user_id = _to_uuid(metadata.get("gateway_credential_owner_user_id"))
+    if resource_owner_user_id is None:
+        resource_owner_user_id = gateway_deployment_owner_user_id(kwargs)
 
     # 2. Usage + 成本结算
     (
@@ -1219,6 +1228,7 @@ async def _persist_event(
             metadata_extra=metadata_extra,
             client_type=client_type,
             client_ua=client_ua,
+            resource_owner_user_id=resource_owner_user_id,
             team_snapshot=team_snapshot,
             user_email_snapshot=user_email_snapshot,
             vkey_name_snapshot=vkey_name_snapshot,

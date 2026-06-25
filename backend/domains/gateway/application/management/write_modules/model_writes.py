@@ -1307,6 +1307,15 @@ class ModelWritesMixin:
     ) -> tuple[int, int]:
         if not deleted_names:
             return 0, 0
+        if deleted_ids:
+            from domains.gateway.application.resource_grant_cleanup import (
+                purge_resource_grants_for_subjects,
+            )
+
+            await purge_resource_grants_for_subjects(
+                self._session,
+                subjects=[("model", list(deleted_ids))],
+            )
         await prune_gateway_model_name_references(self._session, deleted_names)
         grants_removed, budgets_removed = await prune_gateway_model_orphan_records(
             self._session,

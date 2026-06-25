@@ -10,3 +10,14 @@ from __future__ import annotations
 import pytest
 
 pytestmark = pytest.mark.xdist_group("gateway_db")
+
+
+@pytest.fixture(autouse=True)
+def _restore_litellm_register_model_after_test() -> None:
+    """防止单测直接赋值 ``litellm.register_model`` 污染后续集成测。"""
+    import litellm
+
+    original = litellm.register_model
+    yield
+    if litellm.register_model is not original:
+        litellm.register_model = original

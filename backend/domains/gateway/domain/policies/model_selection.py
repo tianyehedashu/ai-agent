@@ -36,11 +36,31 @@ def merge_named_rows_tenant_overrides_system(
     only_enabled: bool = True,
 ) -> list[_T]:
     """同名时保留 tenant 行，system 行仅补 tenant 未覆盖的名称。"""
+    return merge_named_rows_team_granted_system(
+        tenant_rows,
+        (),
+        system_rows,
+        only_enabled=only_enabled,
+    )
+
+
+def merge_named_rows_team_granted_system(
+    tenant_rows: Sequence[_T],
+    granted_rows: Sequence[_T],
+    system_rows: Sequence[_T],
+    *,
+    only_enabled: bool = True,
+) -> list[_T]:
+    """同名优先级：团队自有 > 授权个人模型 > 系统。"""
     by_name: dict[str, _T] = {}
     for row in tenant_rows:
         if only_enabled and not row.enabled:
             continue
         by_name[row.name] = row
+    for row in granted_rows:
+        if only_enabled and not row.enabled:
+            continue
+        by_name.setdefault(row.name, row)
     for row in system_rows:
         if only_enabled and not row.enabled:
             continue
@@ -69,6 +89,7 @@ def merge_virtual_model_rows_tenant_overrides_system(
 
 __all__ = [
     "RegistryKind",
+    "merge_named_rows_team_granted_system",
     "merge_named_rows_tenant_overrides_system",
     "merge_virtual_model_rows_tenant_overrides_system",
     "registry_kind_for_merged_row",

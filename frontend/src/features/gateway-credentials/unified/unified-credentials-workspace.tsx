@@ -37,9 +37,9 @@ import { Loader2, Plus } from '@/lib/lucide-icons'
 import { buildFilterKey, usePaginationPageForFilters } from '@/lib/pagination'
 import { useCurrentUser } from '@/stores/user'
 
-const CopyCredentialsDialog = lazyWithReload(() =>
-  import('@/features/gateway-credentials/copy-credentials-dialog').then((m) => ({
-    default: m.CopyCredentialsDialog,
+const GrantCredentialsToTeamsDialog = lazyWithReload(() =>
+  import('@/features/gateway-credentials/grant-to-teams-dialog').then((m) => ({
+    default: m.GrantCredentialsToTeamsDialog,
   }))
 )
 
@@ -74,7 +74,7 @@ export function UnifiedCredentialsWorkspace({
   const [personalPendingDelete, setPersonalPendingDelete] = useState<ProviderCredential | null>(
     null
   )
-  const [copyDialogState, setCopyDialogState] = useState<{
+  const [grantDialogState, setGrantDialogState] = useState<{
     open: boolean
     preselectedIds: string[]
   }>({ open: false, preselectedIds: [] })
@@ -87,8 +87,6 @@ export function UnifiedCredentialsWorkspace({
     counts,
     filteredTotal,
     personalCredentials,
-    copyableTeamCredentials,
-    teamCredentialsLoading,
     pagination,
   } = useUnifiedCredentialsList({ search, scopeFilter, page })
   const hasActiveFilters = scopeFilter !== 'all' || search.trim().length > 0
@@ -172,9 +170,7 @@ export function UnifiedCredentialsWorkspace({
     }
   }, [personalDeleteMutation])
 
-  const hasCopyableSource = counts.personal > 0 || copyableTeamCredentials.length > 0
-  const hasCopyDestination = contributorTeams.length > 0 || copyableTeamCredentials.length > 0
-  const showCopy = canContribute && hasCopyableSource && hasCopyDestination
+  const showGrant = canContribute && counts.personal > 0 && contributorTeams.length > 0
 
   const toolbar = (
     <UnifiedCredentialsToolbar
@@ -189,9 +185,9 @@ export function UnifiedCredentialsWorkspace({
       onRefresh={() => {
         void refetch()
       }}
-      showCopy={showCopy}
-      onCopy={() => {
-        setCopyDialogState({ open: true, preselectedIds: [] })
+      showGrant={showGrant}
+      onGrant={() => {
+        setGrantDialogState({ open: true, preselectedIds: [] })
       }}
       showVerify={counts.personal > 0}
       verifyPending={testMutation.isPending}
@@ -317,25 +313,24 @@ export function UnifiedCredentialsWorkspace({
         onConfirm={handlePersonalDeleteConfirm}
       />
 
-      {copyDialogState.open ? (
+      {grantDialogState.open ? (
         <Suspense
           fallback={
             <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              加载复制…
+              加载授权…
             </div>
           }
         >
-          <CopyCredentialsDialog
+          <GrantCredentialsToTeamsDialog
+            open={grantDialogState.open}
             onOpenChange={(next) => {
-              if (!next) setCopyDialogState({ open: false, preselectedIds: [] })
+              if (!next) setGrantDialogState({ open: false, preselectedIds: [] })
             }}
-            preselectedCredentialIds={copyDialogState.preselectedIds}
-            personalCredentials={personalCredentialsForActions}
-            teamCredentials={copyableTeamCredentials}
-            teamCredentialsLoading={teamCredentialsLoading}
+            credentials={personalCredentialsForActions}
             contributorTeams={contributorTeams}
             teamNameById={teamNameById}
+            preselectedCredentialIds={grantDialogState.preselectedIds}
           />
         </Suspense>
       ) : null}

@@ -37,8 +37,8 @@ export interface UnifiedCredentialsToolbarProps {
   hasActiveFilters: boolean
   isRefreshing?: boolean
   onRefresh?: () => void
-  showCopy?: boolean
-  onCopy?: () => void
+  showGrant?: boolean
+  onGrant?: () => void
   showVerify?: boolean
   verifyPending?: boolean
   onVerify?: () => void
@@ -55,8 +55,8 @@ export function UnifiedCredentialsToolbar({
   hasActiveFilters,
   isRefreshing = false,
   onRefresh,
-  showCopy = false,
-  onCopy,
+  showGrant = false,
+  onGrant,
   showVerify = false,
   verifyPending = false,
   onVerify,
@@ -122,10 +122,10 @@ export function UnifiedCredentialsToolbar({
               onRefresh={onRefresh}
             />
           ) : null}
-          {showCopy && onCopy ? (
-            <Button variant="outline" size="sm" onClick={onCopy}>
+          {showGrant && onGrant ? (
+            <Button variant="outline" size="sm" onClick={onGrant}>
               <Upload className="mr-1.5 h-4 w-4" />
-              复制凭据
+              授权到团队
             </Button>
           ) : null}
           {showVerify && onVerify ? (

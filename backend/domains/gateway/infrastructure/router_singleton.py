@@ -306,6 +306,12 @@ def _build_deployment(
                 scope=getattr(cred, "scope", None),
                 tenant_id=getattr(cred, "tenant_id", None),
             ),
+            "gateway_credential_owner_user_id": (
+                str(cred.scope_id)
+                if getattr(cred, "scope", None) == "user"
+                and getattr(cred, "scope_id", None) is not None
+                else None
+            ),
             "gateway_via_route": via_route,
         },
     }

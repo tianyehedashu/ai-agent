@@ -80,6 +80,7 @@ class UsageMetricsRouter:
             if candidate in (
                 UsageStatisticsGroupBy.STATUS,
                 UsageStatisticsGroupBy.USER_MODEL_CREDENTIAL,
+                UsageStatisticsGroupBy.RESOURCE_OWNER,
             ):
                 return False
         return True

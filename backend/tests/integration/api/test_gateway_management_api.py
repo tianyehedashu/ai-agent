@@ -2385,7 +2385,11 @@ class TestGatewayManagementApi:
         r_callable = await dev_client.get(
             f"/api/v1/gateway/teams/{team.id}/models",
             headers=auth_headers,
-            params={"registry_scope": "callable"},
+            params={
+                "registry_scope": "callable",
+                "q": registration_name,
+                "page_size": 50,
+            },
         )
         assert r_callable.status_code == 200, r_callable.text
         assert registration_name in {m["name"] for m in _model_list_items(r_callable.json())}

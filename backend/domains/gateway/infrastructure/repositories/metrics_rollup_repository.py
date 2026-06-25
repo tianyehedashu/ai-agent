@@ -90,6 +90,7 @@ class GatewayMetricsRollupRepository:
                 GatewayRequestLog.provider_plan_id,
                 GatewayRequestLog.provider,
                 func.max(GatewayRequestLog.real_model).label("real_model"),
+                func.max(GatewayRequestLog.resource_owner_user_id).label("resource_owner_user_id"),
                 model_key.label("model_key"),
                 GatewayRequestLog.capability,
                 func.count(GatewayRequestLog.id).label("requests"),
@@ -154,6 +155,7 @@ class GatewayMetricsRollupRepository:
                 "provider_plan_id": row.provider_plan_id,
                 "provider": row.provider,
                 "real_model": row.real_model,
+                "resource_owner_user_id": row.resource_owner_user_id,
                 "model_key": row.model_key,
                 "capability": row.capability,
                 "requests": int(row.requests or 0),
@@ -180,10 +182,12 @@ class GatewayMetricsRollupRepository:
                 for col in _METRIC_ACCUMULATE_COLUMNS
             }
             update_cols["real_model"] = excluded.real_model
+            update_cols["resource_owner_user_id"] = excluded.resource_owner_user_id
             update_cols["p95_latency_ms"] = GatewayMetricsHourly.p95_latency_ms
         else:
             update_cols = {col: getattr(excluded, col) for col in _METRIC_ACCUMULATE_COLUMNS}
             update_cols["real_model"] = excluded.real_model
+            update_cols["resource_owner_user_id"] = excluded.resource_owner_user_id
             update_cols["p95_latency_ms"] = excluded.p95_latency_ms
 
         await self._session.execute(

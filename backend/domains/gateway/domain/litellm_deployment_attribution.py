@@ -66,9 +66,28 @@ def gateway_deployment_id(kwargs: dict[str, Any]) -> str | None:
     return stripped or None
 
 
+def gateway_deployment_owner_user_id(kwargs: dict[str, Any]) -> uuid.UUID | None:
+    model_info = litellm_model_info_from_kwargs(kwargs)
+    if model_info is None:
+        return None
+    top_meta = kwargs.get("metadata")
+    if isinstance(top_meta, dict):
+        raw_meta = top_meta.get("gateway_credential_owner_user_id")
+        if raw_meta is not None:
+            with suppress(ValueError, TypeError):
+                return uuid.UUID(str(raw_meta))
+    raw = model_info.get("gateway_credential_owner_user_id")
+    if raw is None:
+        return None
+    with suppress(ValueError, TypeError):
+        return uuid.UUID(str(raw))
+    return None
+
+
 __all__ = [
     "gateway_deployment_credential_id",
     "gateway_deployment_id",
+    "gateway_deployment_owner_user_id",
     "gateway_deployment_real_model",
     "litellm_model_info_from_kwargs",
 ]

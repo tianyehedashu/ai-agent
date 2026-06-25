@@ -78,8 +78,6 @@ export type {
   ListManagedTeamCredentialsParams,
   ImportedModelSummary,
   ModelImportFailureItem,
-  ImportedCredentialItem,
-  ImportCredentialsWithModelsResponse,
 } from './credentials'
 
 export type {

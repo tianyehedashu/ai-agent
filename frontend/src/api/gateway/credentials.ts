@@ -215,31 +215,6 @@ export interface ModelImportFailureItem {
   reason: string
 }
 
-export interface ImportedCredentialItem {
-  source_credential_id: string
-  new_credential: ProviderCredential
-  models_created: ImportedModelSummary[]
-  models_failed: ModelImportFailureItem[]
-}
-
-export interface CredentialCopyFailureItem {
-  credential_id: string
-  reason: string
-}
-
-export interface ImportCredentialsWithModelsResponse {
-  succeeded: ImportedCredentialItem[]
-  failed: CredentialCopyFailureItem[]
-}
-
-export type CredentialCopyEndpoint = { kind: 'personal' } | { kind: 'team'; team_id: string }
-
-export interface CopyCredentialsWithModelsBody {
-  credential_ids: string[]
-  source: CredentialCopyEndpoint
-  destination: CredentialCopyEndpoint
-}
-
 /** GET /managed-team-credentials 分页响应 */
 export interface ManagedTeamCredentialListResponse extends PaginatedList<ProviderCredential> {
   queried_team_count: number
@@ -389,26 +364,6 @@ export const credentialsApi = {
   /** 将当前用户的全部 user-scope 凭据复制到团队；返回新建条数 */
   importFromUserConfig: (teamId: string) =>
     apiClient.post<{ created: number }>(teamGatewayPath(teamId, '/credentials/import')),
-
-  /** 跨个人/团队 scope 复制凭据及关联模型 */
-  copyCredentialsWithModels: async (body: CopyCredentialsWithModelsBody) => {
-    const data = await apiClient.post<{
-      succeeded: Array<{
-        source_credential_id: string
-        new_credential: ProviderCredentialWire
-        models_created: ImportedModelSummary[]
-        models_failed: ModelImportFailureItem[]
-      }>
-      failed: CredentialCopyFailureItem[]
-    }>(`${GATEWAY_API_BASE}/credentials/copy-with-models`, body)
-    return {
-      ...data,
-      succeeded: data.succeeded.map((s) => ({
-        ...s,
-        new_credential: normalizeCredential(s.new_credential),
-      })),
-    } as ImportCredentialsWithModelsResponse
-  },
 } as const
 
 /** 拉取当前 actor 可见的全部团队 scope 凭据（筛选下拉等需全量时使用） */

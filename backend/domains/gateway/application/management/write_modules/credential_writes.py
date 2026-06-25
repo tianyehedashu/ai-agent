@@ -493,7 +493,12 @@ class CredentialWritesMixin:
         source_team_role: str | None,
         destination_team_role: str | None,
     ) -> ImportCredentialsWithModelsResult:
-        """Copy credentials and associated models between personal / team scopes."""
+        """Copy credentials and associated models between personal / team scopes.
+
+        .. deprecated::
+            请改用 ``POST /api/v1/gateway/resource-grants`` 共享同一行 BYOK 资源，
+            避免复制导致上游配额桶拆分。
+        """
         from domains.gateway.domain.policies.credential_copy_policy import (
             assert_copy_endpoints_valid,
             assert_credential_copy_destination_allowed,
@@ -837,6 +842,23 @@ class CredentialWritesMixin:
         existing = await self._creds.get(credential_id)
         if existing is None or existing.scope != "user" or existing.scope_id != actor_user_id:
             raise CredentialNotFoundError(str(credential_id))
+        tenant_models = await self._models.list_by_credential_id(credential_id)
+        system_models = await self._models.list_system(
+            credential_id=credential_id,
+            only_enabled=False,
+        )
+        model_ids = [m.id for m in (*tenant_models, *system_models)]
+        from domains.gateway.application.resource_grant_cleanup import (
+            purge_resource_grants_for_subjects,
+        )
+
+        await purge_resource_grants_for_subjects(
+            self._session,
+            subjects=[
+                ("credential", [credential_id]),
+                ("model", model_ids),
+            ],
+        )
         await self._cascade_delete_models_for_credential(credential_id)
         await self._creds.delete(credential_id)
         if reload_router:

@@ -8,6 +8,8 @@ import {
   filterPlatformQuotaCredentialSummaries,
   filterUpstreamQuotaCredentialSummaries,
   resolveActorCredentialContextTeamId,
+  resolveAdminQuotaPrefillLayer,
+  resolveQuotaPickerCredentials,
 } from './use-actor-credential-summaries'
 
 function summary(
@@ -73,6 +75,40 @@ describe('filterPlatformQuotaCredentialSummaries', () => {
     expect(filterPlatformQuotaCredentialSummaries(creds, 'team-a', false).map((c) => c.id)).toEqual(
       ['a']
     )
+  })
+})
+
+describe('resolveAdminQuotaPrefillLayer', () => {
+  it('uses URL layer when set', () => {
+    expect(resolveAdminQuotaPrefillLayer('upstream', 'cred-1', null)).toBe('upstream')
+    expect(resolveAdminQuotaPrefillLayer('platform', 'cred-1', 'user-1')).toBe('platform')
+  })
+
+  it('defaults credential-only prefill to upstream', () => {
+    expect(resolveAdminQuotaPrefillLayer('all', 'cred-1', null)).toBe('upstream')
+  })
+
+  it('defaults user prefill without layer to platform', () => {
+    expect(resolveAdminQuotaPrefillLayer('all', null, 'user-1')).toBe('platform')
+  })
+})
+
+describe('resolveQuotaPickerCredentials', () => {
+  it('admin upstream uses writable teams instead of route team', () => {
+    const adminTeams = new Set(['team-b'])
+    const creds = [
+      summary({ id: 'team-a', name: 'a', context_team_id: 'team-a' }),
+      summary({ id: 'team-b', name: 'b', context_team_id: 'team-b' }),
+    ]
+    const filtered = resolveQuotaPickerCredentials(
+      creds,
+      'admin',
+      'upstream',
+      'team-a',
+      adminTeams,
+      false
+    )
+    expect(filtered.map((c) => c.id)).toEqual(['team-b'])
   })
 })
 

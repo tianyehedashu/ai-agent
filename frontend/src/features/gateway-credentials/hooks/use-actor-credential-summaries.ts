@@ -126,6 +126,41 @@ export function isUpstreamQuotaCredentialSummary(
   return cred.scope === 'user' || cred.scope === 'team' || cred.scope === 'system'
 }
 
+export type QuotaPickerMode = 'admin' | 'member'
+
+/** 配额向导/预填：按层级与角色解析可选凭据列表。 */
+export function resolveQuotaPickerCredentials(
+  creds: readonly PlaygroundCredentialSummary[],
+  mode: QuotaPickerMode,
+  layer: QuotaRuleLayer,
+  teamId: string,
+  adminTeamIds: ReadonlySet<string>,
+  isPlatformAdmin: boolean
+): PlaygroundCredentialSummary[] {
+  if (mode === 'member') {
+    return filterMemberSelfServiceCredentialSummaries(creds, teamId, layer)
+  }
+  if (layer === 'upstream') {
+    return filterUpstreamQuotaCredentialSummaries(creds, adminTeamIds, isPlatformAdmin)
+  }
+  return filterPlatformQuotaCredentialSummaries(creds, teamId, isPlatformAdmin)
+}
+
+/** 管理员从 URL 跳转预填时解析配额层级（须与凭据详情 budgetsAdminHref 一致）。 */
+export function resolveAdminQuotaPrefillLayer(
+  layerFilter: string,
+  adminCredentialPrefill: string | null,
+  userPrefill: string | null
+): QuotaRuleLayer {
+  if (layerFilter === 'upstream' || layerFilter === 'platform' || layerFilter === 'downstream') {
+    return layerFilter
+  }
+  if (adminCredentialPrefill !== null && userPrefill === null) {
+    return 'upstream'
+  }
+  return 'platform'
+}
+
 /** 上游配额写入可选：含本人 BYOK；团队凭据须 actor 对 context 团队有 admin。 */
 export function filterUpstreamQuotaCredentialSummaries(
   creds: readonly PlaygroundCredentialSummary[],

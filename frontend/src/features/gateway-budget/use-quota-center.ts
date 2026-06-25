@@ -16,8 +16,8 @@ import type { PersonalGatewayModel } from '@/api/gateway/my-models'
 import {
   collectQuotaBatchTargetTeamIds,
   filterMemberSelfServiceCredentialSummaries,
-  filterPlatformQuotaCredentialSummaries,
-  filterUpstreamQuotaCredentialSummaries,
+  resolveAdminQuotaPrefillLayer,
+  resolveQuotaPickerCredentials,
   useActorCredentialSummaries,
 } from '@/features/gateway-credentials/hooks/use-actor-credential-summaries'
 import { useGatewayVirtualKeys } from '@/features/gateway-keys/use-gateway-virtual-keys'
@@ -434,16 +434,36 @@ function useQuotaCenterImpl(): QuotaCenterState {
     return options
   }, [actorCredentials.list, mode, teamId])
 
-  const pickerCredentials = useMemo(() => {
-    const raw = actorCredentials.list
-    if (mode === 'member') {
-      return filterMemberSelfServiceCredentialSummaries(raw, teamId, batchValues.layer)
-    }
-    if (batchValues.layer === 'upstream') {
-      return filterUpstreamQuotaCredentialSummaries(raw, adminTeamIds, isPlatformAdmin)
-    }
-    return filterPlatformQuotaCredentialSummaries(raw, teamId, isPlatformAdmin)
-  }, [actorCredentials.list, mode, batchValues.layer, teamId, adminTeamIds, isPlatformAdmin])
+  const pickerCredentials = useMemo(
+    () =>
+      resolveQuotaPickerCredentials(
+        actorCredentials.list,
+        mode,
+        batchValues.layer,
+        teamId,
+        adminTeamIds,
+        isPlatformAdmin
+      ),
+    [actorCredentials.list, mode, batchValues.layer, teamId, adminTeamIds, isPlatformAdmin]
+  )
+
+  const adminPrefillLayer = useMemo(
+    () => resolveAdminQuotaPrefillLayer(layerFilter, adminCredentialPrefill, userPrefill),
+    [layerFilter, adminCredentialPrefill, userPrefill]
+  )
+
+  const adminPrefillPickerCredentials = useMemo(
+    () =>
+      resolveQuotaPickerCredentials(
+        actorCredentials.list,
+        'admin',
+        adminPrefillLayer,
+        teamId,
+        adminTeamIds,
+        isPlatformAdmin
+      ),
+    [actorCredentials.list, adminPrefillLayer, teamId, adminTeamIds, isPlatformAdmin]
+  )
 
   const memberSelfCredentialIds = useMemo((): ReadonlySet<string> => {
     if (mode !== 'member') return new Set()
@@ -804,18 +824,18 @@ function useQuotaCenterImpl(): QuotaCenterState {
   useEffect(() => {
     if (mode !== 'admin') return
     if (userPrefill === null && adminCredentialPrefill === null) return
-    if (actorCredentials.isLoading) return
+    if (actorCredentials.isLoading || actorCredentials.isFetching) return
     const token = `${userPrefill ?? ''}|${adminCredentialPrefill ?? ''}`
     if (consumedAdminPrefillRef.current === token) return
     if (
       adminCredentialPrefill !== null &&
       userPrefill === null &&
-      !pickerCredentials.some((c) => c.id === adminCredentialPrefill)
+      !adminPrefillPickerCredentials.some((c) => c.id === adminCredentialPrefill)
     ) {
       consumedAdminPrefillRef.current = token
       toast({
         title: '无法预填凭据',
-        description: '该凭据不在你可管理的上游配额范围内，或尚未加载完成。',
+        description: '该凭据不在你可管理的配额范围内，或凭据摘要尚未加载完成。',
         variant: 'destructive',
       })
       return
@@ -835,10 +855,10 @@ function useQuotaCenterImpl(): QuotaCenterState {
         ...modelFields,
       })
     } else if (adminCredentialPrefill !== null) {
-      // 仅凭据无成员：platform 层凭据维度必须挂在成员上，故落到 upstream 层。
+      // 仅凭据无成员：platform 层凭据维度必须挂在成员上，故默认 upstream（与 URL layer 一致）。
       setBatchValues({
         ...DEFAULT_BATCH_FORM,
-        layer: 'upstream',
+        layer: adminPrefillLayer,
         allCredentials: false,
         credentialIds: [adminCredentialPrefill],
         ...modelFields,
@@ -851,7 +871,9 @@ function useQuotaCenterImpl(): QuotaCenterState {
     adminCredentialPrefill,
     modelFilter,
     actorCredentials.isLoading,
-    pickerCredentials,
+    actorCredentials.isFetching,
+    adminPrefillLayer,
+    adminPrefillPickerCredentials,
     toast,
   ])
 

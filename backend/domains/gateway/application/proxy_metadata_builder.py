@@ -102,6 +102,9 @@ class ProxyMetadataBuilder:
                 scope=cred.scope,
                 tenant_id=cred.tenant_id,
             ),
+            "gateway_credential_owner_user_id": (
+                str(cred.scope_id) if cred.scope == "user" and cred.scope_id is not None else None
+            ),
             "gateway_credential_profile_id": cred.profile_id,
             "gateway_provider": record.provider,
         }

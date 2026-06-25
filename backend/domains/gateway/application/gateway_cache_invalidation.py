@@ -4,6 +4,10 @@ from __future__ import annotations
 
 from uuid import UUID
 
+from domains.gateway.application.resource_grants_cache import (
+    clear_resource_grants_cache_for_tests,
+    invalidate_resource_grants_for_team,
+)
 from domains.gateway.application.resolve_model_cache import invalidate_for_tenant
 from domains.gateway.application.route_snapshot_cache import (
     invalidate_route_snapshot_cache_for_tenant,
@@ -22,6 +26,19 @@ def invalidate_gateway_read_caches_for_tenant(tenant_id: UUID) -> None:
     invalidate_for_tenant(tenant_id)
     invalidate_route_snapshot_cache_for_tenant(tenant_id)
     invalidate_team(tenant_id)
+
+
+async def invalidate_gateway_resource_grants_cache_for_team(team_id: UUID) -> None:
+    invalidate_for_tenant(team_id)
+    await invalidate_resource_grants_for_team(team_id)
+
+
+def invalidate_gateway_read_caches_for_tenant_with_grants(tenant_id: UUID) -> None:
+    """同步失效租户读缓存（含 resource grants L1）。"""
+    invalidate_gateway_read_caches_for_tenant(tenant_id)
+    from domains.gateway.application.resource_grants_cache import _LOCAL
+
+    _LOCAL.pop(tenant_id, None)
 
 
 async def invalidate_gateway_budget_config_cache() -> None:
@@ -85,6 +102,7 @@ def clear_all_gateway_read_caches_for_tests() -> None:
     clear_provider_quota_config_cache_for_tests()
     clear_resolve_model_cache_for_tests()
     clear_grants_cache_for_tests()
+    clear_resource_grants_cache_for_tests()
     clear_team_cache_for_tests()
     clear_route_snapshot_cache_for_tests()
 
@@ -98,4 +116,6 @@ __all__ = [
     "invalidate_gateway_provider_quota_config_cache",
     "invalidate_gateway_quota_rule_cache_for_team",
     "invalidate_gateway_read_caches_for_tenant",
+    "invalidate_gateway_resource_grants_cache_for_team",
+    "invalidate_gateway_read_caches_for_tenant_with_grants",
 ]

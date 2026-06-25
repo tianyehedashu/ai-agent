@@ -17,6 +17,7 @@ from .pricing_upstream import UpstreamModelPricing
 from .provider_credential import ProviderCredential
 from .provider_quota import ProviderQuota
 from .request_log import GatewayRequestLog
+from .resource_grant import GatewayResourceGrant
 from .virtual_key import GatewayVirtualKey
 from .virtual_key_team_grant import GatewayVirtualKeyTeamGrant
 
@@ -31,6 +32,7 @@ __all__ = [
     "GatewayRollupState",
     "GatewayModel",
     "GatewayRequestLog",
+    "GatewayResourceGrant",
     "GatewayRoute",
     "GatewayVirtualKey",
     "GatewayVirtualKeyTeamGrant",

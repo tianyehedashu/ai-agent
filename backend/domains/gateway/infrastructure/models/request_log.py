@@ -59,6 +59,11 @@ class GatewayRequestLog(Base):
         UUID(as_uuid=True), nullable=True, index=True
     )
     user_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
+    resource_owner_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        nullable=True,
+        comment="BYOK 资源 owner（授权共享调用时快照 users.id）",
+    )
     vkey_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
 
     # 快照（防止级联删除/改名导致历史失真）
