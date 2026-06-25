@@ -21,6 +21,7 @@
 | 删除 vkey | `vkeys delete --team-id <tid> --key-id <kid>` |
 | **聊天测试** | `proxy chat --team-id <tid> --model <model> --message "..."` |
 | **生图测试** | `proxy image --team-id <tid> --model <model> --prompt "..."` |
+| **列出代理可见模型** | `proxy models --team-id <tid> [--filter volcano]` |
 
 ### vkeys ensure —— 智能复用（核心）
 

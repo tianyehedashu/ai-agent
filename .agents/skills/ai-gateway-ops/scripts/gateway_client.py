@@ -32,6 +32,12 @@
   # 便捷模式：为某凭据下全部模型配置每日 480 万 tokens 限额，17:00 重置
   python gateway_client.py quotas batch-upsert --team-id <tid> --credential-id <cid> --limit-tokens 4800000 --all-models --reset-at 17:00
 
+  # 路由共享 / 日志 / 归因
+  python gateway_client.py teams find --name-contains "研发"
+  python gateway_client.py routes route-grants-publish --target-team-id <tid> --all-routes
+  python gateway_client.py proxy models --team-id <tid> --filter volcano
+  python gateway_client.py logs get --team-id <tid> --log-id <id> --attribution-only
+
   # 切换到本地开发环境：
   export GATEWAY_BASE_URL="http://localhost:8000/ai-agent/api/v1"
 """
@@ -50,12 +56,56 @@ DEFAULT_BASE_URL = "https://gateway.giimallai.com/ai-agent/api/v1"
 class GatewayError(Exception):
     """Gateway API 错误。"""
 
-    def __init__(self, status, code, message, details=None):
+    def __init__(self, status, code, message, details=None, raw=None):
         self.status = status
         self.code = code
         self.message = message
         self.details = details or {}
+        self.raw = raw
         super().__init__(f"[{status}] {code}: {message}")
+
+
+def _normalize_api_error(status: int, raw: str) -> GatewayError:
+    """解析管理面与 OpenAI 兼容代理的错误体（含 FastAPI detail 嵌套）。"""
+    try:
+        payload = json.loads(raw)
+    except (ValueError, json.JSONDecodeError):
+        return GatewayError(status, "HTTP_ERROR", raw or f"HTTP {status}", raw=raw)
+
+    if isinstance(payload.get("error"), dict):
+        err = payload["error"]
+        return GatewayError(
+            status,
+            err.get("code", "HTTP_ERROR"),
+            err.get("message", raw),
+            err.get("details"),
+            raw=raw,
+        )
+
+    detail = payload.get("detail")
+    if isinstance(detail, dict):
+        inner = detail.get("error", detail)
+        if isinstance(inner, dict):
+            message = inner.get("message") or inner.get("type") or json.dumps(inner, ensure_ascii=False)
+            return GatewayError(
+                status,
+                inner.get("code", inner.get("type", "HTTP_ERROR")),
+                message,
+                inner,
+                raw=raw,
+            )
+        return GatewayError(status, "HTTP_ERROR", str(detail), raw=raw)
+
+    if isinstance(detail, str):
+        return GatewayError(status, "HTTP_ERROR", detail, raw=raw)
+
+    return GatewayError(
+        status,
+        payload.get("code", "HTTP_ERROR"),
+        payload.get("message", raw),
+        payload.get("details"),
+        raw=raw,
+    )
 
 
 class ApiClient:
@@ -99,13 +149,7 @@ class ApiClient:
                 status = resp.status
         except urllib.error.HTTPError as e:
             raw = e.read().decode("utf-8", errors="replace")
-            try:
-                err = json.loads(raw)
-                err_body = err.get("error", err)
-            except (ValueError, json.JSONDecodeError):
-                err_body = {"code": "HTTP_ERROR", "message": raw or str(e)}
-            raise GatewayError(e.code, err_body.get("code", "HTTP_ERROR"),
-                               err_body.get("message", str(e)), err_body.get("details"))
+            raise _normalize_api_error(e.code, raw) from e
         except urllib.error.URLError as e:
             raise GatewayError(0, "CONNECTION_ERROR", f"无法连接到 {url}: {e.reason}")
 
@@ -180,6 +224,8 @@ def run(handler):
             sys.stderr.write(f"API 错误: {e}\n")
             if e.details:
                 sys.stderr.write(f"详情: {json.dumps(e.details, ensure_ascii=False)}\n")
+            elif e.raw and e.message in ("HTTP Error 403: Forbidden", "HTTP Error 404: Not Found"):
+                sys.stderr.write(f"原始响应: {e.raw[:800]}\n")
             sys.exit(1)
     return wrapper
 
@@ -200,6 +246,25 @@ def cmd_teams_create(args):
 
 def cmd_teams_list(args):
     return make_client(args).get("/gateway/teams")
+
+
+def cmd_teams_find(args):
+    """按名称或 slug 子串过滤团队（客户端过滤，避免手写脚本）。"""
+    teams = make_client(args).get("/gateway/teams")
+    if not isinstance(teams, list):
+        teams = teams.get("items", [])
+    needle = args.name_contains.lower()
+    matched = [
+        t
+        for t in teams
+        if needle in (t.get("name") or "").lower() or needle in (t.get("slug") or "").lower()
+    ]
+    if args.kind:
+        matched = [t for t in matched if t.get("kind") == args.kind]
+    if args.json_fields:
+        fields = [f.strip() for f in args.json_fields.split(",")]
+        matched = [{k: t.get(k) for k in fields if k in t} for t in matched]
+    return matched
 
 
 def cmd_teams_update(args):
@@ -552,6 +617,139 @@ def cmd_grants_grantable(args):
     return make_client(args).get(f"/gateway/teams/{args.team_id}/keys/{args.key_id}/grants/grantable-teams")
 
 
+def cmd_routes_route_grants_list(args):
+    return make_client(args).get(f"/gateway/my-routes/{args.route_id}/grants")
+
+
+def cmd_routes_route_grants_create(args):
+    client = make_client(args)
+    body = {"target_tenant_id": args.target_team_id}
+    if args.exposed_alias:
+        body["exposed_alias"] = args.exposed_alias
+    return client.post(f"/gateway/my-routes/{args.route_id}/grants", body=body)
+
+
+def cmd_routes_route_grants_delete(args):
+    make_client(args).delete(f"/gateway/my-routes/{args.route_id}/grants/{args.target_team_id}")
+    return {"revoked": True, "route_id": args.route_id, "target_team_id": args.target_team_id}
+
+
+def cmd_routes_route_grants_grantable(args):
+    return make_client(args).get(f"/gateway/my-routes/{args.route_id}/grantable-teams")
+
+
+def cmd_routes_shared_routes_list(args):
+    return make_client(args).get(f"/gateway/teams/{args.team_id}/shared-routes")
+
+
+def cmd_routes_route_grants_publish(args):
+    """批量把个人路由发布到目标团队（跳过已授权项）。"""
+    client = make_client(args)
+    target_team_id = args.target_team_id
+    routes = client.get("/gateway/my-routes")
+    if not isinstance(routes, list):
+        routes = routes.get("items", [])
+
+    if args.all_routes:
+        selected = routes
+    elif args.route_ids:
+        wanted = {rid.strip() for rid in args.route_ids.split(",") if rid.strip()}
+        selected = [r for r in routes if r.get("id") in wanted]
+        missing = wanted - {r.get("id") for r in selected}
+        if missing:
+            sys.stderr.write(f"警告：未找到路由 id: {', '.join(sorted(missing))}\n")
+    else:
+        sys.stderr.write("需要 --all-routes 或 --route-ids <id1,id2>\n")
+        sys.exit(2)
+
+    results = []
+    for route in selected:
+        rid = route["id"]
+        grants = client.get(f"/gateway/my-routes/{rid}/grants")
+        if not isinstance(grants, list):
+            grants = grants.get("items", [])
+        if any(g.get("tenant_id") == target_team_id for g in grants):
+            results.append(
+                {
+                    "route_id": rid,
+                    "virtual_model": route.get("virtual_model"),
+                    "status": "already_granted",
+                }
+            )
+            continue
+        body = {"target_tenant_id": target_team_id}
+        if args.exposed_alias:
+            body["exposed_alias"] = args.exposed_alias
+        grant = client.post(f"/gateway/my-routes/{rid}/grants", body=body)
+        results.append(
+            {
+                "route_id": rid,
+                "virtual_model": route.get("virtual_model"),
+                "status": "created",
+                "grant": grant,
+            }
+        )
+    return results
+
+
+# ---------------------------------------------------------------------------
+# auth / logs / stats
+# ---------------------------------------------------------------------------
+
+def cmd_auth_whoami(args):
+    return make_client(args).get("/auth/me")
+
+
+def cmd_logs_list(args):
+    client = make_client(args)
+    params = {
+        "page": args.page,
+        "page_size": args.page_size,
+        "usage_aggregation": args.usage_aggregation,
+        "start": args.start,
+        "end": args.end,
+        "status": args.status,
+        "capability": args.capability,
+        "vkey_id": args.vkey_id,
+        "credential_id": args.credential_id,
+        "user_id": args.user_id,
+        "model": args.model,
+        "client_type": args.client_type,
+    }
+    return client.get(f"/gateway/teams/{args.team_id}/logs", params=params)
+
+
+def cmd_logs_get(args):
+    detail = make_client(args).get(f"/gateway/teams/{args.team_id}/logs/{args.log_id}")
+    if args.attribution_only:
+        snap = detail.get("route_snapshot") or {}
+        return {
+            "id": detail.get("id"),
+            "created_at": detail.get("created_at"),
+            "team_id": detail.get("team_id"),
+            "user_id": detail.get("user_id"),
+            "user_email_snapshot": detail.get("user_email_snapshot"),
+            "vkey_id": detail.get("vkey_id"),
+            "route_name": detail.get("route_name"),
+            "status": detail.get("status"),
+            "route_snapshot": snap,
+            "delegated": bool(snap.get("delegated")),
+            "resource_owner_user_id": snap.get("owner_user_id"),
+        }
+    return detail
+
+
+def cmd_stats_summary(args):
+    client = make_client(args)
+    params = {
+        "group_by": args.group_by,
+        "usage_aggregation": args.usage_aggregation,
+        "start": args.start,
+        "end": args.end,
+    }
+    return client.get(f"/gateway/teams/{args.team_id}/dashboard/statistics", params=params)
+
+
 # ---------------------------------------------------------------------------
 # quotas 命令
 # ---------------------------------------------------------------------------
@@ -791,6 +989,26 @@ def cmd_proxy_image(args):
     return proxy.post("/openai/v1/images/generations", body=body)
 
 
+def cmd_proxy_models(args):
+    """列出代理端可见模型（含共享进团队的路由别名）。"""
+    client = make_client(args)
+    vkey_name = args.vkey_name or "gateway-proxy"
+    _vkey_id, plain_key, reused = _ensure_vkey(client, args.team_id, vkey_name)
+    if reused:
+        sys.stderr.write(f"[info] 复用 vkey (name={vkey_name})\n")
+    proxy = ApiClient(base_url=client.base_url, token=plain_key)
+    data = proxy.get("/openai/v1/models")
+    items = data.get("data", []) if isinstance(data, dict) else []
+    if args.filter:
+        needle = args.filter.lower()
+        items = [m for m in items if needle in (m.get("id") or "").lower()]
+    if args.ids_only:
+        return [m.get("id") for m in items]
+    if args.filter or args.ids_only:
+        return {"object": "list", "data": items}
+    return data
+
+
 # ---------------------------------------------------------------------------
 # 参数解析构建
 # ---------------------------------------------------------------------------
@@ -805,11 +1023,14 @@ def build_parser():
     sub = parser.add_subparsers(dest="category", required=True, metavar="<category>")
 
     _build_teams(sub)
+    _build_auth(sub)
     _build_credentials(sub)
     _build_models(sub)
     _build_routes(sub)
     _build_quotas(sub)
     _build_vkeys(sub)
+    _build_logs(sub)
+    _build_stats(sub)
     _build_proxy(sub)
     return parser
 
@@ -826,6 +1047,16 @@ def _build_teams(sub):
 
     c = sp.add_parser("list", help="列出可见团队")
     c.set_defaults(func=run(cmd_teams_list))
+
+    c = sp.add_parser("find", help="按名称/slug 子串查找团队（输出 id/name/slug）")
+    c.add_argument("--name-contains", required=True, help="名称或 slug 子串，如 研发API")
+    c.add_argument("--kind", choices=["personal", "shared", "system"], help="按团队类型过滤")
+    c.add_argument(
+        "--json-fields",
+        default="id,name,slug,kind,team_role",
+        help="输出字段（逗号分隔）",
+    )
+    c.set_defaults(func=run(cmd_teams_find))
 
     c = sp.add_parser("update", help="更新团队")
     c.add_argument("--team-id", required=True)
@@ -1101,6 +1332,37 @@ def _build_routes(sub):
     g.add_argument("--key-id", required=True)
     g.set_defaults(func=run(cmd_grants_grantable))
 
+    # Route Team Grants（路由跨团队共享，委派模式）
+    rg = sp.add_parser("route-grants-list", help="列出某条个人路由的共享授权")
+    rg.add_argument("--route-id", required=True)
+    rg.set_defaults(func=run(cmd_routes_route_grants_list))
+
+    rg = sp.add_parser("route-grants-create", help="发布个人路由到团队")
+    rg.add_argument("--route-id", required=True)
+    rg.add_argument("--target-team-id", required=True)
+    rg.add_argument("--exposed-alias", help="消费团队内调用名（默认=virtual_model）")
+    rg.set_defaults(func=run(cmd_routes_route_grants_create))
+
+    rg = sp.add_parser("route-grants-delete", help="撤销路由共享")
+    rg.add_argument("--route-id", required=True)
+    rg.add_argument("--target-team-id", required=True)
+    rg.set_defaults(func=run(cmd_routes_route_grants_delete))
+
+    rg = sp.add_parser("route-grants-grantable", help="列出可共享目标团队")
+    rg.add_argument("--route-id", required=True)
+    rg.set_defaults(func=run(cmd_routes_route_grants_grantable))
+
+    rg = sp.add_parser("shared-routes-list", help="列出共享进某团队的路由")
+    rg.add_argument("--team-id", required=True)
+    rg.set_defaults(func=run(cmd_routes_shared_routes_list))
+
+    rg = sp.add_parser("route-grants-publish", help="批量发布个人路由到团队（跳过已授权）")
+    rg.add_argument("--target-team-id", required=True)
+    rg.add_argument("--all-routes", action="store_true", help="发布全部个人路由")
+    rg.add_argument("--route-ids", help="逗号分隔的 route_id 列表")
+    rg.add_argument("--exposed-alias", help="统一暴露别名（通常省略，用各路由 virtual_model）")
+    rg.set_defaults(func=run(cmd_routes_route_grants_publish))
+
 
 def _build_quotas(sub):
     p = sub.add_parser("quotas", help="配额与限额管理")
@@ -1237,6 +1499,73 @@ def _build_proxy(sub):
     c.add_argument("--size", help="图片尺寸，如 512x512")
     c.add_argument("--vkey-name", default="gateway-proxy", help="vkey 名称（同名复用）")
     c.set_defaults(func=run(cmd_proxy_image))
+
+    c = sp.add_parser("models", help="列出代理端可见模型（含共享路由别名）")
+    c.add_argument("--team-id", required=True)
+    c.add_argument("--vkey-name", default="gateway-proxy")
+    c.add_argument("--filter", help="按模型 id 子串过滤，如 volcano")
+    c.add_argument("--ids-only", action="store_true", help="仅输出模型 id 列表")
+    c.set_defaults(func=run(cmd_proxy_models))
+
+
+def _build_auth(sub):
+    p = sub.add_parser("auth", help="当前认证身份")
+    sp = p.add_subparsers(dest="command", required=True, metavar="<command>")
+    c = sp.add_parser("whoami", help="当前 API Key / JWT 对应用户")
+    c.set_defaults(func=run(cmd_auth_whoami))
+
+
+def _build_logs(sub):
+    p = sub.add_parser("logs", help="请求日志（管理面）")
+    sp = p.add_subparsers(dest="command", required=True, metavar="<command>")
+
+    c = sp.add_parser("list", help="列出团队请求日志")
+    c.add_argument("--team-id", required=True)
+    c.add_argument("--page", type=int, default=1)
+    c.add_argument("--page-size", type=int, default=20)
+    c.add_argument(
+        "--usage-aggregation",
+        default="workspace",
+        choices=["workspace", "user", "platform"],
+        help="workspace=团队切片；user=当前用户跨团队",
+    )
+    c.add_argument("--start", help="ISO 起始时间")
+    c.add_argument("--end", help="ISO 结束时间")
+    c.add_argument("--status", help="success / failed / budget_exceeded 等")
+    c.add_argument("--capability")
+    c.add_argument("--vkey-id")
+    c.add_argument("--credential-id")
+    c.add_argument("--user-id")
+    c.add_argument("--model", help="route_name 过滤")
+    c.add_argument("--client-type")
+    c.set_defaults(func=run(cmd_logs_list))
+
+    c = sp.add_parser("get", help="单条日志详情")
+    c.add_argument("--team-id", required=True)
+    c.add_argument("--log-id", required=True)
+    c.add_argument(
+        "--attribution-only",
+        action="store_true",
+        help="仅输出 team/user/route_snapshot 归因字段",
+    )
+    c.set_defaults(func=run(cmd_logs_get))
+
+
+def _build_stats(sub):
+    p = sub.add_parser("stats", help="用量统计（管理面大盘）")
+    sp = p.add_subparsers(dest="command", required=True, metavar="<command>")
+
+    c = sp.add_parser("summary", help="按维度聚合用量")
+    c.add_argument("--team-id", required=True)
+    c.add_argument(
+        "--group-by",
+        default="user",
+        choices=["user", "team", "credential", "model", "vkey", "provider", "resource_owner"],
+    )
+    c.add_argument("--usage-aggregation", default="workspace", choices=["workspace", "user", "platform"])
+    c.add_argument("--start", help="ISO 起始时间")
+    c.add_argument("--end", help="ISO 结束时间")
+    c.set_defaults(func=run(cmd_stats_summary))
 
 
 def main():

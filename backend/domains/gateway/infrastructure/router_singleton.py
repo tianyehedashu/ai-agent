@@ -947,6 +947,58 @@ async def _resolve_router_credential(
     return None
 
 
+async def _build_lazy_virtual_route_deployments(
+    db: AsyncSession,
+    *,
+    route: GatewayRoute | SystemGatewayRoute,
+    encoded: str,
+    pricing_lookup: PricingLookup | None,
+) -> list[dict[str, Any]]:
+    """增量装配：将路由 ``primary_models`` 解析为 deployment（含跨团队 slug 前缀）。"""
+    from domains.gateway.domain.route_model_ref import parse_route_model_ref
+    from domains.gateway.infrastructure.repositories.model_repository import GatewayModelRepository
+
+    route_owner = deployment_scope_team_id(route)
+    contexts = await build_route_owner_slug_contexts(
+        db, frozenset({route_owner}) if route_owner is not None else frozenset()
+    )
+    ctx = _route_owner_slug_context(route_owner, contexts)
+    route_num_retries = deployment_num_retries_from_policy(
+        route.retry_policy if isinstance(route.retry_policy, dict) else None
+    )
+    model_repo = GatewayModelRepository(db)
+    deployments: list[dict[str, Any]] = []
+    for primary in route.primary_models or ():
+        cleaned = primary.strip()
+        parsed_tenant = route_owner
+        model_name = cleaned
+        if ctx.enable_slug_prefix:
+            parsed = parse_route_model_ref(
+                route_owner_tenant_id=route_owner,
+                ref=cleaned,
+                slug_to_tenant=ctx.slug_to_tenant,
+            )
+            parsed_tenant = parsed.target_tenant_id or route_owner
+            model_name = parsed.model_name
+        src = await model_repo.resolve_by_name(parsed_tenant, model_name)
+        if src is None:
+            continue
+        cred = await _resolve_router_credential(db, src.credential_id)
+        if cred is None:
+            continue
+        deployments.append(
+            _build_deployment(
+                model_name=encoded,
+                src=src,
+                cred=cred,
+                via_route=route.virtual_model,
+                pricing_lookup=pricing_lookup,
+                num_retries=route_num_retries,
+            )
+        )
+    return deployments
+
+
 async def _build_deployments_for_encoded_model(
     db: AsyncSession,
     encoded: str,
@@ -976,24 +1028,12 @@ async def _build_deployments_for_encoded_model(
             if grant_deps:
                 return grant_deps
         if route is not None:
-            deployments: list[dict[str, Any]] = []
-            for primary in route.primary_models or ():
-                src = await model_repo.resolve_by_name(team_id, primary)
-                if src is None:
-                    continue
-                cred = await _resolve_router_credential(db, src.credential_id)
-                if cred is None:
-                    continue
-                deployments.append(
-                    _build_deployment(
-                        model_name=encoded,
-                        src=src,
-                        cred=cred,
-                        via_route=route.virtual_model,
-                        pricing_lookup=pricing_lookup,
-                    )
-                )
-            return deployments
+            return await _build_lazy_virtual_route_deployments(
+                db,
+                route=route,
+                encoded=encoded,
+                pricing_lookup=pricing_lookup,
+            )
 
     if record is None:
         return []
@@ -1019,12 +1059,10 @@ async def _build_grant_deployments_for_encoded(
     pricing_lookup: PricingLookup | None,
 ) -> list[dict[str, Any]]:
     """委派路由的增量 deployment 装配（owner 路由 + owner 凭据，键用消费团队编码）。"""
-    from domains.gateway.domain.route_model_ref import parse_route_model_ref
     from domains.gateway.infrastructure.repositories.gateway_route_grant_repository import (
         GatewayRouteTeamGrantRepository,
     )
     from domains.gateway.infrastructure.repositories.model_repository import (
-        GatewayModelRepository,
         GatewayRouteRepository,
     )
 
@@ -1036,41 +1074,12 @@ async def _build_grant_deployments_for_encoded(
     route = await GatewayRouteRepository(db).get(grant.route_id)
     if route is None or not route.enabled:
         return []
-    route_owner = deployment_scope_team_id(route)
-    contexts = await build_route_owner_slug_contexts(
-        db, frozenset({route_owner}) if route_owner is not None else frozenset()
+    return await _build_lazy_virtual_route_deployments(
+        db,
+        route=route,
+        encoded=encoded,
+        pricing_lookup=pricing_lookup,
     )
-    ctx = _route_owner_slug_context(route_owner, contexts)
-    model_repo = GatewayModelRepository(db)
-    deployments: list[dict[str, Any]] = []
-    for primary in route.primary_models or ():
-        cleaned = primary.strip()
-        parsed_tenant = route_owner
-        model_name = cleaned
-        if ctx.enable_slug_prefix:
-            parsed = parse_route_model_ref(
-                route_owner_tenant_id=route_owner,
-                ref=cleaned,
-                slug_to_tenant=ctx.slug_to_tenant,
-            )
-            parsed_tenant = parsed.target_tenant_id or route_owner
-            model_name = parsed.model_name
-        src = await model_repo.resolve_by_name(parsed_tenant, model_name)
-        if src is None:
-            continue
-        cred = await _resolve_router_credential(db, src.credential_id)
-        if cred is None:
-            continue
-        deployments.append(
-            _build_deployment(
-                model_name=encoded,
-                src=src,
-                cred=cred,
-                via_route=route.virtual_model,
-                pricing_lookup=pricing_lookup,
-            )
-        )
-    return deployments
 
 
 def get_router_sync() -> Router | None:

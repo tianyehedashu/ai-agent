@@ -129,7 +129,7 @@ curl -X POST "$BASE/gateway/my-routes" \
 
 ## 跨团队路由共享（Route Team Grants）
 
-**委派模式**：owner 把路由发布给协作团队，消费方以 **暴露别名** 调用；上游凭据按 owner 解析，**计费归消费团队**。与 vkey grant 互补：vkey 共享调用令牌，route grant 共享虚拟路由能力。
+**委派模式**：owner 把路由发布给协作团队，消费方以 **暴露别名** 调用；上游凭据按 owner 解析。**平台预算/团队切片**归消费团队 T，同时每条请求记 `user_id`（调用人）与 `route_snapshot.owner_user_id`（资源提供方）。与 vkey grant 互补：vkey 共享调用令牌，route grant 共享虚拟路由能力。
 
 路由文件：`backend/domains/gateway/presentation/routers/my_routes.py`（owner 侧）、`routes.py`（consumer 侧）；Schema `schemas/route_grants.py`
 
@@ -157,6 +157,21 @@ curl -X POST "$BASE/gateway/my-routes" \
 |------|------|------|
 | 跨团队路由聚合 | `GET` | `/gateway/managed-team-routes` |
 | 跨团队 vkey 聚合 | `GET` | `/gateway/managed-team-keys` |
+
+## CLI 映射（`scripts/gateway_client.py`）
+
+优先用 CLI，**禁止**为常规操作手写 Python/curl。
+
+| 操作 | 命令 |
+|------|------|
+| 列出个人路由 | `routes my-list` |
+| 发布路由到团队 | `routes route-grants-create --route-id <rid> --target-team-id <tid>` |
+| 批量发布全部个人路由 | `routes route-grants-publish --target-team-id <tid> --all-routes` |
+| 列出路由已有 grant | `routes route-grants-list --route-id <rid>` |
+| 列出团队内共享路由 | `routes shared-routes-list --team-id <tid>` |
+| 撤销共享 | `routes route-grants-delete --route-id <rid> --target-team-id <tid>` |
+| 代理端可见别名 | `proxy models --team-id <tid> --filter volcano` |
+| 验证归因 | `proxy chat` → `logs list` → `logs get --attribution-only` |
 
 ## 关键文件
 
