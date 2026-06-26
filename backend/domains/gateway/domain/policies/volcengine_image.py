@@ -52,6 +52,29 @@ def parse_volcengine_image_endpoint_id(extra: dict[str, Any] | None) -> str | No
     return None
 
 
+VOLCENGINE_IMAGE_CREDENTIAL_SETUP_MESSAGE = (
+    "火山生图模型须先在绑定凭据的 extra 中配置 image_endpoint_id（ep-m-xxx，与 API Key 同账号）；"
+    "可在 Gateway 凭据页编辑「生图接入点 ID」"
+)
+
+
+def assert_volcengine_image_credential_ready(
+    *,
+    provider: str,
+    capability: str,
+    extra: dict[str, Any] | None,
+) -> None:
+    """主调用面为 image 且 provider 为 volcengine 时，凭据 extra 须含 image_endpoint_id。"""
+    from libs.exceptions import ValidationError
+
+    if provider.strip().lower() != "volcengine":
+        return
+    if capability.strip().lower() != "image":
+        return
+    if parse_volcengine_image_endpoint_id(extra) is None:
+        raise ValidationError(VOLCENGINE_IMAGE_CREDENTIAL_SETUP_MESSAGE)
+
+
 def parse_image_dimensions(size: str) -> tuple[int, int] | None:
     """解析 ``WIDTHxHEIGHT``；非法格式返回 ``None``。"""
     parts = size.strip().lower().split("x")
@@ -196,6 +219,8 @@ __all__ = [
     "image_pixel_count",
     "parse_image_dimensions",
     "parse_volcengine_image_endpoint_id",
+    "assert_volcengine_image_credential_ready",
+    "VOLCENGINE_IMAGE_CREDENTIAL_SETUP_MESSAGE",
     "resolve_volcengine_image_size",
     "should_use_volcengine_direct_image",
 ]

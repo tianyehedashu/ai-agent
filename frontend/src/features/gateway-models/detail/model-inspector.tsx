@@ -49,6 +49,10 @@ import {
   parsePositiveInt,
   routesReferencingModel,
 } from '@/features/gateway-models/utils'
+import {
+  needsVolcengineImageEndpointSetup,
+  VOLCENGINE_IMAGE_ENDPOINT_HINT,
+} from '@/features/gateway-models/volcengine-image-readiness'
 import { UsageAggregationToggle } from '@/features/gateway-usage/usage-aggregation-toggle'
 import { useGatewayPermission } from '@/hooks/use-gateway-permission'
 import { useGatewayTeamId } from '@/hooks/use-gateway-team-id'
@@ -234,6 +238,17 @@ const ModelInspectorPanel = memo(function ModelInspectorPanel({
     return matching.length > 0 ? matching : pool
   }, [credentials, model.credential_id, model.provider])
 
+  const selectedCredential = useMemo(
+    () => credentials.find((c) => c.id === credentialId) ?? null,
+    [credentials, credentialId]
+  )
+
+  const volcengineImageSetupNeeded = needsVolcengineImageEndpointSetup(
+    model.provider,
+    capabilityValues.capability,
+    selectedCredential?.extra
+  )
+
   const isTestable = TESTABLE_CAPABILITIES.has(capabilityValues.capability)
   const testButtonLabel = model.last_test_status !== null ? '重新测试' : '测试连通性'
   const slice = usageScope === 'workspace' ? usageRow?.workspace : usageRow?.user
@@ -245,6 +260,10 @@ const ModelInspectorPanel = memo(function ModelInspectorPanel({
   const displayNameDirty = displayName.trim() !== baselineDisplayName.trim()
   const capabilityPatch = modelCapabilityPatchFromEditor(capabilityValues, capabilityBaseline)
   const capabilityDirty = Object.keys(capabilityPatch).length > 0
+  const switchingToVolcengineImage =
+    capabilityPatch.capability === 'image' &&
+    capabilityBaseline.capability !== 'image' &&
+    volcengineImageSetupNeeded
   const dirty =
     nameDirty ||
     displayNameDirty ||
@@ -269,6 +288,15 @@ const ModelInspectorPanel = memo(function ModelInspectorPanel({
   function handleSave(): void {
     const trimmedName = modelName.trim()
     if (!realModel.trim() || !credentialId) return
+
+    if (switchingToVolcengineImage) {
+      window.alert(
+        `${VOLCENGINE_IMAGE_ENDPOINT_HINT}\n\n请先在「Gateway → 凭据」中为「${
+          selectedCredential?.name ?? '当前火山凭据'
+        }」填写生图接入点 ID，再保存为主调用面「生图」。`
+      )
+      return
+    }
 
     if (isPersonal) {
       const trimmedDisplayName = displayName.trim()
@@ -505,6 +533,9 @@ const ModelInspectorPanel = memo(function ModelInspectorPanel({
                 onChange={setCapabilityValues}
                 hideUpstreamCallShape={isPersonal}
                 hideThinkingParam={isPersonal}
+                credentialProvider={model.provider}
+                credentialExtra={selectedCredential?.extra}
+                credentialName={selectedCredential?.name}
               />
             ) : (
               <ModelCapabilityBadges model={model} />

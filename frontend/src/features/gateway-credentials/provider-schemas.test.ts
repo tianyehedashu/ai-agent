@@ -88,7 +88,7 @@ describe('provider-schemas', () => {
     )
 
     const volcKeys = extraFieldsForProvider('volcengine').map((f) => f.key)
-    expect(volcKeys).toEqual(expect.arrayContaining(['region', 'endpoint_id']))
+    expect(volcKeys).toEqual(expect.arrayContaining(['region', 'endpoint_id', 'image_endpoint_id']))
 
     expect(extraFieldsForProvider('deepseek')).toHaveLength(0)
   })

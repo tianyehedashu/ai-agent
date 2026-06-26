@@ -21,6 +21,10 @@ import type { ModelType } from '@/types/user-model'
 import { CapabilityField } from './capability-field'
 import { CAPABILITIES, type GatewayCapability } from './constants'
 import { contextWindowEditorValue } from './context-window-display'
+import {
+  needsVolcengineImageEndpointSetup,
+  VOLCENGINE_IMAGE_ENDPOINT_HINT,
+} from './volcengine-image-readiness'
 
 const PRODUCT_TYPES: ModelType[] = ['text', 'image', 'image_gen', 'video']
 
@@ -141,6 +145,12 @@ export interface ModelCapabilityEditorProps {
   hideUpstreamCallShape?: boolean
   /** 隐藏思考模式选择（个人模型不支持出站调用形等字段时可选） */
   hideThinkingParam?: boolean
+  /** 绑定凭据 provider，用于火山生图前置校验提示 */
+  credentialProvider?: string
+  /** 绑定凭据 extra，用于检测 image_endpoint_id */
+  credentialExtra?: Record<string, unknown> | null
+  /** 绑定凭据展示名（提示文案用） */
+  credentialName?: string
   className?: string
 }
 
@@ -165,9 +175,15 @@ export function ModelCapabilityEditor({
   disabled = false,
   hideUpstreamCallShape = false,
   hideThinkingParam = false,
+  credentialProvider,
+  credentialExtra,
+  credentialName,
   className,
 }: ModelCapabilityEditorProps): React.JSX.Element {
   const allowed = allowedProductTypes(values.capability)
+  const showVolcengineImageSetup =
+    credentialProvider !== undefined &&
+    needsVolcengineImageEndpointSetup(credentialProvider, values.capability, credentialExtra)
 
   function setCapability(capability: string): void {
     const nextTypes = defaultModelTypesForCapability(capability, values.modelTypes)
@@ -200,6 +216,21 @@ export function ModelCapabilityEditor({
         showTooltip
         className={disabled ? 'pointer-events-none opacity-60' : undefined}
       />
+
+      {showVolcengineImageSetup ? (
+        <Alert variant="destructive">
+          <AlertTitle>火山生图凭据未就绪</AlertTitle>
+          <AlertDescription className="space-y-2 text-xs">
+            <p>{VOLCENGINE_IMAGE_ENDPOINT_HINT}</p>
+            {credentialName ? (
+              <p>
+                当前绑定凭据：<span className="font-medium">{credentialName}</span>
+              </p>
+            ) : null}
+            <p>请先在「Gateway → 凭据」中编辑该凭据，填写「生图接入点 ID」后再保存并测试连通性。</p>
+          </AlertDescription>
+        </Alert>
+      ) : null}
 
       <div className="grid gap-1.5">
         <Label>产品特性</Label>
@@ -367,8 +398,13 @@ export function modelCapabilityPatchFromEditor(
     upstream_call_shape?: string | null
     tags?: Record<string, unknown> | null
   } = {}
+  const tagsPatch: Record<string, unknown> = {}
   if (values.capability !== baseline.capability) {
     patch.capability = values.capability
+    if (values.capability === 'image' && baseline.capability !== 'image') {
+      tagsPatch.supports_image_gen = true
+      tagsPatch.supports_txt2img = true
+    }
   }
   const typesChanged =
     values.modelTypes.length !== baseline.modelTypes.length ||
@@ -380,7 +416,6 @@ export function modelCapabilityPatchFromEditor(
     patch.upstream_call_shape = values.upstreamCallShape.trim() || null
   }
   // tags 为增量合并（后端 merged_tags.update）：累加各 tag 变更后一次性赋值，避免相互覆盖。
-  const tagsPatch: Record<string, unknown> = {}
   if (values.thinkingParam !== baseline.thinkingParam) {
     if (values.thinkingParam === '') {
       // auto：清除显式设置

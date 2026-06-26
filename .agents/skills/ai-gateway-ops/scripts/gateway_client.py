@@ -365,6 +365,8 @@ def cmd_creds_update(args):
         body["is_active"] = args.is_active
     if args.profile_id:
         body["profile_id"] = args.profile_id
+    if args.extra:
+        body["extra"] = parse_json_arg(args.extra, "extra")
     return client.patch(f"/gateway/teams/{args.team_id}/credentials/{args.credential_id}", body=body)
 
 
@@ -1238,6 +1240,7 @@ def _build_credentials(sub):
     c.add_argument("--api-key")
     c.add_argument("--api-base")
     c.add_argument("--profile-id")
+    c.add_argument("--extra", help="扩展字段 JSON（全量替换 extra）")
     c.add_argument("--is-active", type=lambda x: x.lower() == "true", default=None)
     c.set_defaults(func=run(cmd_creds_update))
 

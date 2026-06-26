@@ -95,6 +95,28 @@ def _parse_gateway_capability(raw: str) -> str:
         raise ValidationError(f"不支持的 capability: {raw}") from exc
 
 
+def _credential_extra_dict(cred: object | None) -> dict[str, Any] | None:
+    if cred is None:
+        return None
+    extra = getattr(cred, "extra", None)
+    return extra if isinstance(extra, dict) else None
+
+
+def _assert_volcengine_image_credential_for_model(
+    *,
+    provider: str,
+    capability: str,
+    cred: object | None,
+) -> None:
+    from domains.gateway.domain.policies.volcengine_image import assert_volcengine_image_credential_ready
+
+    assert_volcengine_image_credential_ready(
+        provider=provider,
+        capability=capability,
+        extra=_credential_extra_dict(cred),
+    )
+
+
 @dataclass(frozen=True)
 class GatewayModelBatchOperationFailure:
     id: uuid.UUID
@@ -525,6 +547,16 @@ class ModelWritesMixin:
             primary_cap = capability_for_model_type(normalized_types[0])
             update_fields["capability"] = primary_cap
             validate_model_types_for_capability(normalized_types, primary_cap)
+            if primary_cap == "image" and str(existing.capability or "").strip().lower() != "image":
+                check_cred_id = update_fields.get("credential_id") or existing.credential_id
+                cred_check = (
+                    await self._creds.get(check_cred_id) if check_cred_id is not None else None
+                )
+                _assert_volcengine_image_credential_for_model(
+                    provider=str(existing.provider),
+                    capability=primary_cap,
+                    cred=cred_check,
+                )
         tags_patch: dict[str, Any] | None = None
         if tags_raw is not None:
             tags_patch = dict(tags_raw)
@@ -1092,6 +1124,12 @@ class ModelWritesMixin:
                 raise ValidationError(
                     f"凭据提供商为 {cred.provider}，与当前模型的 provider（{existing.provider}）不一致"
                 )
+            if str(existing.capability or "").strip().lower() == "image":
+                _assert_volcengine_image_credential_for_model(
+                    provider=str(existing.provider),
+                    capability="image",
+                    cred=cred,
+                )
         if "real_model" in update_fields and update_fields["real_model"] is not None:
             effective_cred_id = update_fields.get("credential_id") or existing.credential_id
             cred_for_rm: object | None = None
@@ -1136,6 +1174,23 @@ class ModelWritesMixin:
                     new_capability=new_capability,
                 )
             update_fields["capability"] = new_capability
+            if new_capability == "image" and existing_cap != "image":
+                check_cred_id = update_fields.get("credential_id") or existing.credential_id
+                cred_check: object | None = None
+                if check_cred_id is not None:
+                    if owner_tenant_id is None:
+                        cred_check = await self._system_creds.get(check_cred_id)
+                    else:
+                        cred_check = await self._creds.get_bindable_for_team_gateway_model(
+                            check_cred_id,
+                            tenant_id=tenant_id,
+                            is_platform_admin=is_platform_admin,
+                        )
+                _assert_volcengine_image_credential_for_model(
+                    provider=str(existing.provider),
+                    capability=new_capability,
+                    cred=cred_check,
+                )
         resync_capabilities = bool(update_fields.pop("resync_capabilities", False))
         if resync_capabilities and config_managed:
             raise ValidationError("配置托管的系统模型不可从 LiteLLM 同步能力")

@@ -276,7 +276,15 @@ export const PROVIDER_SCHEMAS: readonly ProviderCredentialSchema[] = [
         label: 'Endpoint ID（可选）',
         placeholder: 'ep-xxxxxxxxxxxxxxxx',
         type: 'text',
-        helpText: '账户级 fallback；模型粒度更建议在模型注册中填写',
+        helpText: '对话/视觉接入点 fallback；模型注册中可覆盖',
+      },
+      {
+        key: 'image_endpoint_id',
+        label: '生图接入点 ID',
+        placeholder: 'ep-m-xxxxxxxxxxxxxxxx',
+        type: 'text',
+        helpText:
+          'Seedream 等文生图必填：方舟控制台创建的生图推理接入点（ep-m-xxx），须与上方 API Key 同一火山账号。主调用面为「生图」的模型连通性测试依赖此字段。',
       },
     ],
   },

@@ -123,3 +123,36 @@ async def test_update_gateway_model_rejects_image_gen_on_chat_capability(
             fields={"model_types": ["image_gen"]},
             **team_owner_actor_kw(test_user),
         )
+
+
+@pytest.mark.asyncio
+async def test_update_gateway_model_rejects_volcengine_image_without_endpoint(
+    db_session, test_user
+) -> None:
+    team = await TeamService(db_session).ensure_personal_team(test_user.id)
+    cred = await create_tenant_test_credential(
+        db_session,
+        team.id,
+        name="volc-img-cred",
+        provider="volcengine",
+        api_base="https://ark.cn-beijing.volces.com/api/v3",
+        extra={"region": "cn-beijing"},
+    )
+    repo = GatewayModelRepository(db_session)
+    row = await repo.create(
+        tenant_id=team.id,
+        name=f"vm-volc-{uuid.uuid4().hex[:6]}",
+        capability="chat",
+        real_model="volcengine/doubao-seedream-4-5-251128",
+        credential_id=cred.id,
+        provider="volcengine",
+    )
+    writes = GatewayManagementWriteService(db_session)
+    with pytest.raises(ValidationError, match="image_endpoint_id"):
+        await writes.update_gateway_model(
+            row.id,
+            tenant_id=team.id,
+            is_platform_admin=False,
+            fields={"capability": "image", "model_types": ["image_gen"]},
+            **team_owner_actor_kw(test_user),
+        )

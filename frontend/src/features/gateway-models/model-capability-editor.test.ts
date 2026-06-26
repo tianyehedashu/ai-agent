@@ -98,4 +98,16 @@ describe('modelCapabilityPatchFromEditor context_window', () => {
       context_window: 32000,
     })
   })
+
+  it('sets image gen tags when switching capability to image', () => {
+    const patch = modelCapabilityPatchFromEditor(
+      { ...base, capability: 'image', modelTypes: ['image_gen'] },
+      base
+    )
+    expect(patch.capability).toBe('image')
+    expect(patch.tags).toEqual({
+      supports_image_gen: true,
+      supports_txt2img: true,
+    })
+  })
 })
