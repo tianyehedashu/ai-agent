@@ -2,7 +2,7 @@
  * 模型能力编辑：主调用面 capability + 产品特性 model_types + 出站调用形。
  */
 
-import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
