@@ -35,6 +35,7 @@ export function ModelDetailQuotaRuleRow({
 }: ModelDetailQuotaRuleRowProps): React.JSX.Element {
   const limitUsd = rule.limits.limit_usd
   const limitTok = rule.limits.limit_tokens
+  const limitReq = rule.limits.limit_requests
   const isPlatform = layer === 'platform'
   const canEditUsage = canAdjustUsage && isQuotaRuleUsageAdjustable(rule)
 
@@ -93,6 +94,7 @@ export function ModelDetailQuotaRuleRow({
           canEdit={canEditUsage}
           limitUsd={limitUsd}
           limitTok={limitTok}
+          limitReq={limitReq}
         />
       ) : (
         <p className="mt-2 text-xs text-muted-foreground">上限 {primaryMetric}</p>

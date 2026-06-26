@@ -12,10 +12,7 @@ Video Task Use Case - 视频生成任务用例
 from __future__ import annotations
 
 import asyncio
-import uuid
-from typing import Any
-
-from sqlalchemy.ext.asyncio import AsyncSession
+from typing import TYPE_CHECKING, Any
 
 from domains.agent.application.video_gen_catalog import (
     allowed_durations_for_video_model,
@@ -30,10 +27,16 @@ from domains.agent.infrastructure.repositories.video_gen_task_repository import 
 from domains.gateway.application.billing_context import resolve_billing_context
 from domains.gateway.application.gateway_proxy_factory import get_gateway_proxy
 from domains.gateway.application.ports import GatewayCallContext
-from domains.session.application.ports import SessionApplicationPort
 from libs.db.database import get_session_context
 from libs.exceptions import NotFoundError, ValidationError
 from utils.logging import get_logger
+
+if TYPE_CHECKING:
+    import uuid
+
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+    from domains.session.application.ports import SessionApplicationPort
 
 logger = get_logger(__name__)
 
@@ -163,7 +166,9 @@ async def _run_generation_background(
 
         video_url = _extract_video_url(result)
         vendor_task_id = result.get("id")
-        workflow_id = str(vendor_task_id) if isinstance(vendor_task_id, str) and vendor_task_id else None
+        workflow_id = (
+            str(vendor_task_id) if isinstance(vendor_task_id, str) and vendor_task_id else None
+        )
         if video_url:
             await repo.update_by_id(
                 task_id,

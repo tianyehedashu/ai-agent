@@ -790,7 +790,12 @@ export function computeQuotaRuleUsageRatio(rule: QuotaRule): {
   const usage = rule.usage
   const limitUsd = rule.limits.limit_usd
   const limitTok = rule.limits.limit_tokens
-  if (!usage || !quotaUsageHasMetrics(usage) || (limitUsd === null && limitTok === null)) {
+  const limitReq = rule.limits.limit_requests
+  if (
+    !usage ||
+    !quotaUsageHasMetrics(usage) ||
+    (limitUsd === null && limitTok === null && limitReq === null)
+  ) {
     return { ratio: 0, barColor: 'bg-muted' }
   }
   const usdRatio =
@@ -801,7 +806,11 @@ export function computeQuotaRuleUsageRatio(rule: QuotaRule): {
     limitTok !== null && limitTok > 0 && usage.current_tokens !== null
       ? parseQuotaNumeric(usage.current_tokens) / parseQuotaNumeric(limitTok)
       : 0
-  const ratio = Math.max(usdRatio, tokRatio)
+  const reqRatio =
+    limitReq !== null && limitReq > 0 && usage.current_requests !== null
+      ? parseQuotaNumeric(usage.current_requests) / parseQuotaNumeric(limitReq)
+      : 0
+  const ratio = Math.max(usdRatio, tokRatio, reqRatio)
   const barColor = ratio >= 1 ? 'bg-destructive' : ratio >= 0.9 ? 'bg-amber-500' : 'bg-emerald-500'
   return { ratio, barColor }
 }

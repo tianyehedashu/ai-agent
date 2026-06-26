@@ -32,6 +32,7 @@ export function QuotaUsageRow({
   const { ratio, barColor } = computeQuotaRuleUsageRatio(rule)
   const limitUsd = rule.limits.limit_usd
   const limitTok = rule.limits.limit_tokens
+  const limitReq = rule.limits.limit_requests
   const usage = rule.usage
   const layer = rule.key.layer
   const rowStyle = LAYER_ROW_STYLE[layer]
@@ -59,6 +60,9 @@ export function QuotaUsageRow({
             <div>
               Token {formatQuotaTokens(usage.current_tokens)} / {formatQuotaTokens(limitTok)}
             </div>
+            <div>
+              Requests {formatQuotaTokens(usage.current_requests)} / {formatQuotaTokens(limitReq)}
+            </div>
           </div>
           <div className="flex items-center gap-2">
             <div className="h-2 flex-1 overflow-hidden rounded bg-muted">
@@ -72,7 +76,8 @@ export function QuotaUsageRow({
         </>
       ) : (
         <div className="text-xs tabular-nums text-muted-foreground">
-          限额 USD {limitUsd ?? '∞'} · Token {formatQuotaTokens(limitTok)}
+          限额 USD {limitUsd ?? '∞'} · Token {formatQuotaTokens(limitTok)} · Requests{' '}
+          {formatQuotaTokens(limitReq)}
         </div>
       )}
       {formatQuotaRulePeriodWindow(rule) ? (

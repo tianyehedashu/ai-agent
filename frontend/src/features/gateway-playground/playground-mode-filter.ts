@@ -149,7 +149,7 @@ export function filterPlaygroundRouteCandidates(
     .map((r) => ({
       name: r.virtual_model,
       primaryModels: r.primary_models,
-      kind: r.isSharedRoute ? 'shared' : 'owned',
+      kind: r.isSharedRoute ? ('shared' as const) : ('owned' as const),
       ownerDisplay: r.ownerDisplay ?? null,
     }))
     .sort((a, b) => a.name.localeCompare(b.name))

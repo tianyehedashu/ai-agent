@@ -25,6 +25,7 @@ interface QuotaUsageInlineEditorProps {
   canEdit: boolean
   limitUsd: number | string | null
   limitTok: number | null
+  limitReq: number | null
 }
 
 function usageFieldStrings(rule: QuotaRule): { usd: string; tokens: string; requests: string } {
@@ -43,6 +44,7 @@ export function QuotaUsageInlineEditor({
   canEdit,
   limitUsd,
   limitTok,
+  limitReq,
 }: QuotaUsageInlineEditorProps): React.JSX.Element {
   const baseline = useMemo(() => usageFieldStrings(rule), [rule])
   const [usd, setUsd] = useState(baseline.usd)
@@ -76,13 +78,14 @@ export function QuotaUsageInlineEditor({
   const effectiveCanEdit = canEdit && !isRolling
 
   const { ratio, barColor } = computeQuotaRuleUsageRatio(previewRule)
-  const hasLimits = limitUsd !== null || limitTok !== null
+  const hasLimits = limitUsd !== null || limitTok !== null || limitReq !== null
   const showProgress =
     hasLimits && (effectiveCanEdit || (rule.usage !== null && quotaUsageHasMetrics(rule.usage)))
 
   const limitUsdLabel =
     limitUsd !== null ? `$${Number.parseFloat(String(limitUsd)).toFixed(2)}` : '∞'
   const limitTokLabel = formatQuotaTokens(limitTok)
+  const limitReqLabel = formatQuotaTokens(limitReq)
 
   const handleSave = (): void => {
     adjustUsage({
@@ -106,7 +109,7 @@ export function QuotaUsageInlineEditor({
     }
     return (
       <div className="mt-3 space-y-2">
-        <div className="grid gap-2 text-xs tabular-nums sm:grid-cols-2">
+        <div className="grid gap-2 text-xs tabular-nums sm:grid-cols-3">
           <div className="rounded bg-background/60 px-2 py-1.5">
             <p className="text-[10px] uppercase tracking-wide text-muted-foreground">已用费用</p>
             <p className="mt-0.5 font-medium">
@@ -117,6 +120,12 @@ export function QuotaUsageInlineEditor({
             <p className="text-[10px] uppercase tracking-wide text-muted-foreground">已用 Token</p>
             <p className="mt-0.5 font-medium">
               {formatQuotaTokens(usage.current_tokens)} / {limitTokLabel}
+            </p>
+          </div>
+          <div className="rounded bg-background/60 px-2 py-1.5">
+            <p className="text-[10px] uppercase tracking-wide text-muted-foreground">已用请求</p>
+            <p className="mt-0.5 font-medium">
+              {formatQuotaTokens(usage.current_requests)} / {limitReqLabel}
             </p>
           </div>
         </div>
@@ -132,7 +141,7 @@ export function QuotaUsageInlineEditor({
 
   return (
     <div className="mt-3 space-y-2">
-      <div className="grid gap-2 text-xs sm:grid-cols-2">
+      <div className="grid gap-2 text-xs sm:grid-cols-3">
         <label className="space-y-1 rounded bg-background/60 px-2 py-1.5">
           <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
             已用费用 (USD)
@@ -165,6 +174,23 @@ export function QuotaUsageInlineEditor({
               }}
             />
             <span className="shrink-0 text-muted-foreground">/ {limitTokLabel}</span>
+          </div>
+        </label>
+        <label className="space-y-1 rounded bg-background/60 px-2 py-1.5">
+          <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+            已用请求
+          </span>
+          <div className="flex items-center gap-1.5 tabular-nums">
+            <Input
+              inputMode="numeric"
+              className="h-7 flex-1 px-2 text-xs"
+              value={requests}
+              disabled={pending}
+              onChange={(e) => {
+                setRequests(e.target.value)
+              }}
+            />
+            <span className="shrink-0 text-muted-foreground">/ {limitReqLabel}</span>
           </div>
         </label>
       </div>

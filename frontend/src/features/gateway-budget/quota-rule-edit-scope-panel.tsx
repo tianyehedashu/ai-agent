@@ -33,6 +33,7 @@ export function QuotaRuleEditScopePanel({
   const periodWindow = formatQuotaRulePeriodWindow(rule)
   const limitUsd = rule.limits.limit_usd
   const limitTok = rule.limits.limit_tokens
+  const limitReq = rule.limits.limit_requests
 
   return (
     <div className="space-y-4 rounded-lg border bg-muted/20 p-4">
@@ -94,6 +95,7 @@ export function QuotaRuleEditScopePanel({
             canEdit
             limitUsd={limitUsd}
             limitTok={limitTok}
+            limitReq={limitReq}
           />
         </div>
       ) : rule.usage ? (

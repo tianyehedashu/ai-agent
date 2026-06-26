@@ -90,8 +90,10 @@ function getSortValue(rule: QuotaRule, key: SortKey, ctx: QuotaRuleLabelContext)
     case 'limit': {
       const lu = rule.limits.limit_usd
       const lt = rule.limits.limit_tokens
+      const lr = rule.limits.limit_requests
       if (lu !== null) return lu
       if (lt !== null) return lt
+      if (lr !== null) return lr
       return 0
     }
     default:
@@ -206,6 +208,7 @@ const QuotaCenterTableRow = memo(function QuotaCenterTableRow({
   const validityRange = formatQuotaRuleValidityRange(rule)
   const limitUsd = rule.limits.limit_usd
   const limitTok = rule.limits.limit_tokens
+  const limitReq = rule.limits.limit_requests
   const usage = rule.usage
   const canEdit = rule.source_ref.budget_id !== null || rule.source_ref.quota_id !== null
   const canDelete = isQuotaRuleDeletable(rule)
@@ -291,6 +294,8 @@ const QuotaCenterTableRow = memo(function QuotaCenterTableRow({
             {limitUsd !== null ? `$${Number.parseFloat(String(limitUsd)).toFixed(2)}` : '∞'}
             <br />
             Token {usage.current_tokens} / {limitTok ?? '∞'}
+            <br />
+            Requests {usage.current_requests} / {limitReq ?? '∞'}
           </>
         ) : (
           <span className="text-muted-foreground">—</span>
