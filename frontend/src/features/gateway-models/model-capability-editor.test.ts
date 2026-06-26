@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest'
 import {
   capabilityEditorValuesFromModel,
   capabilityEditorValuesFromPersonalModel,
+  modelCapabilityPatchFromEditor,
+  type ModelCapabilityEditorValues,
 } from './model-capability-editor'
 
 describe('capabilityEditorValuesFromPersonalModel', () => {
@@ -25,5 +27,58 @@ describe('capabilityEditorValuesFromModel', () => {
     })
     expect(values.modelTypes).toEqual(['text', 'image'])
     expect(values.legacyModelTypes).toEqual(['image_gen'])
+  })
+
+  it('reads context_window from tags', () => {
+    const values = capabilityEditorValuesFromModel({
+      capability: 'chat',
+      tags: { context_window: 262144 },
+    })
+    expect(values.contextWindow).toBe('262144')
+  })
+
+  it('defaults context_window to empty when absent or invalid', () => {
+    expect(capabilityEditorValuesFromModel({ capability: 'chat' }).contextWindow).toBe('')
+    expect(
+      capabilityEditorValuesFromModel({ capability: 'chat', tags: { context_window: 0 } })
+        .contextWindow
+    ).toBe('')
+  })
+})
+
+describe('modelCapabilityPatchFromEditor context_window', () => {
+  const base: ModelCapabilityEditorValues = {
+    capability: 'chat',
+    modelTypes: ['text'],
+    upstreamCallShape: '',
+    thinkingParam: '',
+    contextWindow: '',
+  }
+
+  it('emits context_window into tags when set to a positive integer', () => {
+    const patch = modelCapabilityPatchFromEditor({ ...base, contextWindow: '262144' }, base)
+    expect(patch.tags).toEqual({ context_window: 262144 })
+  })
+
+  it('emits null to clear context_window when cleared', () => {
+    const patch = modelCapabilityPatchFromEditor(base, { ...base, contextWindow: '128000' })
+    expect(patch.tags).toEqual({ context_window: null })
+  })
+
+  it('ignores invalid (non-positive) context_window input', () => {
+    const patch = modelCapabilityPatchFromEditor({ ...base, contextWindow: 'abc' }, base)
+    expect(patch.tags).toBeUndefined()
+  })
+
+  it('merges context_window with thinking_param changes without overwriting', () => {
+    const patch = modelCapabilityPatchFromEditor(
+      { ...base, contextWindow: '32000', thinkingParam: 'none' },
+      base
+    )
+    expect(patch.tags).toEqual({
+      thinking_param: 'none',
+      thinking_param_locked: true,
+      context_window: 32000,
+    })
   })
 })

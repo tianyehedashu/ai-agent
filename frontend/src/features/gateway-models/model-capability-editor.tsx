@@ -5,6 +5,7 @@
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
+import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
   Select,
@@ -125,6 +126,8 @@ export interface ModelCapabilityEditorValues {
   upstreamCallShape: string
   /** 思考模式：'' 表示自动（跟随后端推断），否则为 ThinkingParam 值 */
   thinkingParam: string
+  /** 上下文窗口（tokens）：'' 表示未设置，由 Router 跳过上下文窗口预检 */
+  contextWindow: string
   /** 读侧推导但当前 capability 下不可编辑的历史特性（如 chat 行的 image_gen） */
   legacyModelTypes?: ModelType[]
 }
@@ -137,6 +140,8 @@ export interface ModelCapabilityEditorProps {
   hideUpstreamCallShape?: boolean
   /** 隐藏思考模式选择（个人模型编辑 API 不支持 tags） */
   hideThinkingParam?: boolean
+  /** 隐藏上下文窗口输入（个人模型编辑 API 不支持 tags） */
+  hideContextWindow?: boolean
   className?: string
 }
 
@@ -161,6 +166,7 @@ export function ModelCapabilityEditor({
   disabled = false,
   hideUpstreamCallShape = false,
   hideThinkingParam = false,
+  hideContextWindow = false,
   className,
 }: ModelCapabilityEditorProps): React.JSX.Element {
   const allowed = allowedProductTypes(values.capability)
@@ -263,8 +269,37 @@ export function ModelCapabilityEditor({
           disabled={disabled}
         />
       ) : null}
+
+      {!hideContextWindow ? (
+        <div className="grid gap-1.5">
+          <Label htmlFor="model-context-window">上下文窗口（tokens）</Label>
+          <Input
+            id="model-context-window"
+            inputMode="numeric"
+            className="tabular-nums"
+            placeholder="如 262144（留空=不做上下文预检）"
+            value={values.contextWindow}
+            disabled={disabled}
+            onChange={(e) => {
+              onChange({ ...values, contextWindow: e.target.value })
+            }}
+          />
+          <p className="text-xs text-muted-foreground">
+            上游模型的最大输入 token；填写后 Router 会按此做请求超长预检与展示，留空则跳过。
+          </p>
+        </div>
+      ) : null}
     </div>
   )
+}
+
+/** 从 tags 解析 context_window 回显值；'' 表示未设置。 */
+function resolveContextWindowFromTags(tags?: Record<string, unknown> | null): string {
+  const raw = tags?.context_window
+  if (typeof raw === 'number' && Number.isInteger(raw) && raw > 0) {
+    return String(raw)
+  }
+  return ''
 }
 
 /** 从 tags 解析 thinking_param 回显值；'' 表示 auto（跟随推断）。 */
@@ -300,6 +335,7 @@ export function capabilityEditorValuesFromModel(model: {
     modelTypes: editableTypes.length > 0 ? editableTypes : ['text'],
     upstreamCallShape: model.upstream_call_shape ?? '',
     thinkingParam: resolveThinkingParamFromTags(model.tags),
+    contextWindow: resolveContextWindowFromTags(model.tags),
     legacyModelTypes: legacyTypes.length > 0 ? legacyTypes : undefined,
   }
 }
@@ -352,16 +388,36 @@ export function modelCapabilityPatchFromEditor(
   if (values.upstreamCallShape !== baseline.upstreamCallShape) {
     patch.upstream_call_shape = values.upstreamCallShape.trim() || null
   }
+  // tags 为增量合并（后端 merged_tags.update）：累加各 tag 变更后一次性赋值，避免相互覆盖。
+  const tagsPatch: Record<string, unknown> = {}
   if (values.thinkingParam !== baseline.thinkingParam) {
     if (values.thinkingParam === '') {
       // auto：清除显式设置
-      patch.tags = { thinking_param: null, thinking_param_locked: null }
+      tagsPatch.thinking_param = null
+      tagsPatch.thinking_param_locked = null
     } else if (values.thinkingParam === 'none') {
       // 显式禁用：锁定阻止推断覆盖
-      patch.tags = { thinking_param: 'none', thinking_param_locked: true }
+      tagsPatch.thinking_param = 'none'
+      tagsPatch.thinking_param_locked = true
     } else {
-      patch.tags = { thinking_param: values.thinkingParam, thinking_param_locked: null }
+      tagsPatch.thinking_param = values.thinkingParam
+      tagsPatch.thinking_param_locked = null
     }
+  }
+  if (values.contextWindow !== baseline.contextWindow) {
+    const trimmed = values.contextWindow.trim()
+    if (trimmed === '') {
+      tagsPatch.context_window = null
+    } else {
+      const parsed = Number.parseInt(trimmed, 10)
+      // 仅在有效正整数时落库；非法输入视为无变更，避免写入垃圾值。
+      if (Number.isInteger(parsed) && parsed > 0) {
+        tagsPatch.context_window = parsed
+      }
+    }
+  }
+  if (Object.keys(tagsPatch).length > 0) {
+    patch.tags = tagsPatch
   }
   return patch
 }

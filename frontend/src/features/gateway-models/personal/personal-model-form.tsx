@@ -293,6 +293,7 @@ export function PersonalModelForm({
               onChange={setCapabilityValues}
               hideUpstreamCallShape
               hideThinkingParam
+              hideContextWindow
             />
 
             {onResyncCapabilities ? (
@@ -517,6 +518,7 @@ export function PersonalModelForm({
                 values={capabilityValues}
                 onChange={setCapabilityValues}
                 hideUpstreamCallShape
+                hideContextWindow
               />
 
               <div className="flex justify-end gap-2">

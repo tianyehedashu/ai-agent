@@ -502,6 +502,7 @@ const ModelInspectorPanel = memo(function ModelInspectorPanel({
                 onChange={setCapabilityValues}
                 hideUpstreamCallShape={isPersonal}
                 hideThinkingParam={isPersonal}
+                hideContextWindow={isPersonal}
               />
             ) : (
               <ModelCapabilityBadges model={model} />
