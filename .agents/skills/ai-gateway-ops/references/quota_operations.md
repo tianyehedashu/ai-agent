@@ -40,11 +40,11 @@
 - `layer`、`budget_id`、`plan_id`、`quota_id`（定位底层行）
 
 **limits**（`QuotaRuleLimitsResponse`）：
-- `limit_usd`、`soft_limit_usd`、`limit_tokens`、`limit_requests`
+- `limit_usd`、`soft_limit_usd`、`limit_tokens`、`limit_requests`、`limit_images`
 - `unit_price_usd_per_token`、`unit_price_usd_per_request`
 
 **usage**（`QuotaRuleUsageResponse \| null`，当 `include_usage=true`）：
-- `current_usd`、`current_tokens`、`current_requests`
+- `current_usd`、`current_tokens`、`current_requests`、`current_images`
 - `window_start`、`reset_at`、`budget_reset_at`
 
 附加：`plan_label`、`is_active`、`valid_from`、`valid_until`
@@ -75,7 +75,7 @@
 | `quota_label` | str \| null | 否 | 规则标签（1-40 字符） |
 | `access_kind` `access_id` | - | 否 | 绑 vkey/apikey_grant |
 | `included_models` | list[str] | 否 | 覆盖模型列表 |
-| `limit_usd` `soft_limit_usd` `limit_tokens` `limit_requests` | Decimal/int \| null | 否 | 限额（至少一个） |
+| `limit_usd` `soft_limit_usd` `limit_tokens` `limit_requests` `limit_images` | Decimal/int \| null | 否 | 限额（至少一个）；`limit_images` 仅对 image 能力模型生效 |
 | `unit_price_usd_per_token` `unit_price_usd_per_request` | Decimal \| null | 否 | 单价 |
 | `plan_label` | str \| null | 否 | 套餐标签 |
 | `valid_from` `valid_until` | datetime \| null | 否 | 生效区间 |
@@ -130,7 +130,7 @@ curl -X PUT "$BASE/gateway/teams/$TEAM_ID/quota-rules/batch" \
 
 **`QuotaRuleEnablementRequest`**：`layer`、`budget_id`、`plan_id`、`quota_id`、`enabled`
 
-**`QuotaUsageAdjustmentRequest`**：`layer`、`budget_id`、`plan_id`、`quota_id`、`mode`（`set`/`reset_window`）、`current_usd`、`current_tokens`、`current_requests`
+**`QuotaUsageAdjustmentRequest`**：`layer`、`budget_id`、`plan_id`、`quota_id`、`mode`（`set`/`reset_window`）、`current_usd`、`current_tokens`、`current_requests`、`current_images`
 
 ## 删除配额
 
@@ -153,10 +153,10 @@ curl -X PUT "$BASE/gateway/teams/$TEAM_ID/quota-rules/batch" \
 `BudgetUpsert`：
 - `target_kind`（`system`/`tenant`/`key`/`user`）、`target_id`
 - `period`（`daily`/`monthly`/`total`）、`model_name`
-- `limit_usd`、`soft_limit_usd`、`limit_tokens`、`limit_requests`
+- `limit_usd`、`soft_limit_usd`、`limit_tokens`、`limit_requests`、`limit_images`
 - `period_timezone`、`period_reset_minutes`、`period_reset_day`
 
-`BudgetResponse` 含 `current_usd`/`current_tokens`/`current_requests`/`reset_at`/`budget_reset_at`。
+`BudgetResponse` 含 `current_usd`/`current_tokens`/`current_requests`/`current_images`/`reset_at`/`budget_reset_at`。
 
 > **注意**：`Budget` 是平台预算（`gateway_budgets` 表），不是上游凭据限额。上游凭据限额通过 `provider_quotas` + `quota-rules` API（`layer=upstream`）配置。
 

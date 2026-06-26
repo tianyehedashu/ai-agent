@@ -51,7 +51,6 @@ import sys
 import urllib.error
 import urllib.request
 
-
 DEFAULT_BASE_URL = "https://gateway.giimallai.com/ai-agent/api/v1"
 
 
@@ -88,7 +87,11 @@ def _normalize_api_error(status: int, raw: str) -> GatewayError:
     if isinstance(detail, dict):
         inner = detail.get("error", detail)
         if isinstance(inner, dict):
-            message = inner.get("message") or inner.get("type") or json.dumps(inner, ensure_ascii=False)
+            message = (
+                inner.get("message")
+                or inner.get("type")
+                or json.dumps(inner, ensure_ascii=False)
+            )
             return GatewayError(
                 status,
                 inner.get("code", inner.get("type", "HTTP_ERROR")),
@@ -114,14 +117,20 @@ class ApiClient:
     """HTTP API 客户端。"""
 
     def __init__(self, base_url=None, token=None):
-        self.base_url = (base_url or os.environ.get("GATEWAY_BASE_URL") or DEFAULT_BASE_URL).rstrip("/")
+        self.base_url = (
+            base_url or os.environ.get("GATEWAY_BASE_URL") or DEFAULT_BASE_URL
+        ).rstrip("/")
         # 优先 GATEWAY_API_KEY，回退 GATEWAY_TOKEN（兼容旧配置）
-        self.token = token or os.environ.get("GATEWAY_API_KEY") or os.environ.get("GATEWAY_TOKEN")
+        self.token = (
+            token
+            or os.environ.get("GATEWAY_API_KEY")
+            or os.environ.get("GATEWAY_TOKEN")
+        )
         if not self.token:
             sys.stderr.write(
                 "错误：未设置 GATEWAY_API_KEY 环境变量。\n"
                 "请在设置页创建 API Key（勾选 gateway:admin + gateway:read scope），然后：\n"
-                "  export GATEWAY_API_KEY=\"sk_xxxxxxxx_xxxxxxxxxxxx\"\n"
+                '  export GATEWAY_API_KEY="sk_xxxxxxxx_xxxxxxxxxxxx"\n'
                 "或使用 --token 参数传入。\n"
                 "（兼容：也可设置 GATEWAY_TOKEN 使用 JWT，但 JWT 会过期）\n"
             )
@@ -133,6 +142,7 @@ class ApiClient:
             clean = {k: v for k, v in params.items() if v is not None}
             if clean:
                 from urllib.parse import urlencode
+
                 url = f"{url}?{urlencode(clean)}"
 
         data = None
@@ -183,6 +193,7 @@ class ApiClient:
 # 辅助函数
 # ---------------------------------------------------------------------------
 
+
 def parse_json_arg(value, arg_name):
     """解析 JSON 字符串参数；若不是 JSON 则原样返回字符串。"""
     if value is None:
@@ -203,7 +214,9 @@ def print_json(data):
 
 def add_common_opts(parser):
     parser.add_argument("--base-url", default=None, help="覆盖 GATEWAY_BASE_URL")
-    parser.add_argument("--token", default=None, help="覆盖 GATEWAY_API_KEY（API Key 或 JWT）")
+    parser.add_argument(
+        "--token", default=None, help="覆盖 GATEWAY_API_KEY（API Key 或 JWT）"
+    )
     parser.add_argument("--raw", action="store_true", help="输出原始 JSON（不缩进）")
 
 
@@ -214,6 +227,7 @@ def make_client(args):
 
 def run(handler):
     """包装命令处理函数，统一异常处理。"""
+
     def wrapper(args):
         try:
             result = handler(args)
@@ -226,15 +240,20 @@ def run(handler):
             sys.stderr.write(f"API 错误: {e}\n")
             if e.details:
                 sys.stderr.write(f"详情: {json.dumps(e.details, ensure_ascii=False)}\n")
-            elif e.raw and e.message in ("HTTP Error 403: Forbidden", "HTTP Error 404: Not Found"):
+            elif e.raw and e.message in (
+                "HTTP Error 403: Forbidden",
+                "HTTP Error 404: Not Found",
+            ):
                 sys.stderr.write(f"原始响应: {e.raw[:800]}\n")
             sys.exit(1)
+
     return wrapper
 
 
 # ---------------------------------------------------------------------------
 # teams 命令
 # ---------------------------------------------------------------------------
+
 
 def cmd_teams_create(args):
     client = make_client(args)
@@ -259,7 +278,8 @@ def cmd_teams_find(args):
     matched = [
         t
         for t in teams
-        if needle in (t.get("name") or "").lower() or needle in (t.get("slug") or "").lower()
+        if needle in (t.get("name") or "").lower()
+        or needle in (t.get("slug") or "").lower()
     ]
     if args.kind:
         matched = [t for t in matched if t.get("kind") == args.kind]
@@ -302,6 +322,7 @@ def cmd_teams_members_add(args):
 # credentials 命令
 # ---------------------------------------------------------------------------
 
+
 def cmd_creds_create(args):
     client = make_client(args)
     body = {"provider": args.provider, "name": args.name, "api_key": args.api_key}
@@ -337,15 +358,21 @@ def cmd_creds_summaries(args):
 
 
 def cmd_creds_get(args):
-    return make_client(args).get(f"/gateway/teams/{args.team_id}/credentials/{args.credential_id}")
+    return make_client(args).get(
+        f"/gateway/teams/{args.team_id}/credentials/{args.credential_id}"
+    )
 
 
 def cmd_creds_reveal(args):
-    return make_client(args).get(f"/gateway/teams/{args.team_id}/credentials/{args.credential_id}/reveal")
+    return make_client(args).get(
+        f"/gateway/teams/{args.team_id}/credentials/{args.credential_id}/reveal"
+    )
 
 
 def cmd_creds_probe(args):
-    return make_client(args).post(f"/gateway/teams/{args.team_id}/credentials/{args.credential_id}/probe")
+    return make_client(args).post(
+        f"/gateway/teams/{args.team_id}/credentials/{args.credential_id}/probe"
+    )
 
 
 def cmd_creds_probe_personal(args):
@@ -367,11 +394,15 @@ def cmd_creds_update(args):
         body["profile_id"] = args.profile_id
     if args.extra:
         body["extra"] = parse_json_arg(args.extra, "extra")
-    return client.patch(f"/gateway/teams/{args.team_id}/credentials/{args.credential_id}", body=body)
+    return client.patch(
+        f"/gateway/teams/{args.team_id}/credentials/{args.credential_id}", body=body
+    )
 
 
 def cmd_creds_delete(args):
-    make_client(args).delete(f"/gateway/teams/{args.team_id}/credentials/{args.credential_id}")
+    make_client(args).delete(
+        f"/gateway/teams/{args.team_id}/credentials/{args.credential_id}"
+    )
     return {"deleted": True, "credential_id": args.credential_id}
 
 
@@ -449,14 +480,19 @@ def cmd_models_batch_import(args):
         body["enabled"] = args.enabled
     if args.tags:
         body["tags"] = parse_json_arg(args.tags, "tags")
-    return client.post(f"/gateway/teams/{args.team_id}/credentials/{args.credential_id}/batch-import-models", body=body)
+    return client.post(
+        f"/gateway/teams/{args.team_id}/credentials/{args.credential_id}/batch-import-models",
+        body=body,
+    )
 
 
 def cmd_models_create(args):
     client = make_client(args)
     body = {
-        "name": args.name, "capability": args.capability,
-        "real_model": args.real_model, "credential_id": args.credential_id,
+        "name": args.name,
+        "capability": args.capability,
+        "real_model": args.real_model,
+        "credential_id": args.credential_id,
         "provider": args.provider,
     }
     if args.weight is not None:
@@ -475,10 +511,17 @@ def cmd_models_create(args):
 def cmd_models_list(args):
     client = make_client(args)
     params = {
-        "page": args.page, "page_size": args.page_size, "q": args.q,
-        "connectivity": args.connectivity, "sort": args.sort, "order": args.order,
-        "provider": args.provider, "credential_id": args.credential_id,
-        "type": args.type, "enabled": args.enabled, "registry_scope": args.registry_scope,
+        "page": args.page,
+        "page_size": args.page_size,
+        "q": args.q,
+        "connectivity": args.connectivity,
+        "sort": args.sort,
+        "order": args.order,
+        "provider": args.provider,
+        "credential_id": args.credential_id,
+        "type": args.type,
+        "enabled": args.enabled,
+        "registry_scope": args.registry_scope,
     }
     if args.all:
         # 自动翻页拉取全部（page_size 上限 200，用 100 减少请求数）
@@ -491,10 +534,15 @@ def cmd_models_list(args):
             if not data.get("has_next"):
                 break
             params["page"] += 1
-        result = {"items": all_items, "total": data.get("total", len(all_items)),
-                "page": 1, "page_size": len(all_items),
-                "has_next": False, "has_prev": False,
-                "connectivity_summary": data.get("connectivity_summary")}
+        result = {
+            "items": all_items,
+            "total": data.get("total", len(all_items)),
+            "page": 1,
+            "page_size": len(all_items),
+            "has_next": False,
+            "has_prev": False,
+            "connectivity_summary": data.get("connectivity_summary"),
+        }
         if getattr(args, "capabilities", False):
             result["items"] = [_model_capabilities_summary(m) for m in all_items]
         return result
@@ -508,14 +556,18 @@ def cmd_models_list(args):
 def cmd_models_capabilities(args):
     client = make_client(args)
     params = {"registry_scope": args.registry_scope} if args.registry_scope else None
-    data = client.get(f"/gateway/teams/{args.team_id}/models/{args.model_id}", params=params)
+    data = client.get(
+        f"/gateway/teams/{args.team_id}/models/{args.model_id}", params=params
+    )
     return _model_capabilities_summary(data)
 
 
 def cmd_models_get(args):
     client = make_client(args)
     params = {"registry_scope": args.registry_scope} if args.registry_scope else None
-    return client.get(f"/gateway/teams/{args.team_id}/models/{args.model_id}", params=params)
+    return client.get(
+        f"/gateway/teams/{args.team_id}/models/{args.model_id}", params=params
+    )
 
 
 def cmd_models_update(args):
@@ -548,11 +600,15 @@ def cmd_models_update(args):
         body["enabled"] = args.enabled
     if args.upstream_call_shape:
         body["upstream_call_shape"] = args.upstream_call_shape
-    return client.patch(f"/gateway/teams/{args.team_id}/models/{args.model_id}", body=body)
+    return client.patch(
+        f"/gateway/teams/{args.team_id}/models/{args.model_id}", body=body
+    )
 
 
 def cmd_models_test(args):
-    return make_client(args).post(f"/gateway/teams/{args.team_id}/models/{args.model_id}/test")
+    return make_client(args).post(
+        f"/gateway/teams/{args.team_id}/models/{args.model_id}/test"
+    )
 
 
 def cmd_models_delete(args):
@@ -563,7 +619,10 @@ def cmd_models_delete(args):
 def cmd_models_batch_delete(args):
     client = make_client(args)
     model_ids = parse_json_arg(args.model_ids, "model_ids")
-    return client.post(f"/gateway/teams/{args.team_id}/models/batch-delete", body={"model_ids": model_ids})
+    return client.post(
+        f"/gateway/teams/{args.team_id}/models/batch-delete",
+        body={"model_ids": model_ids},
+    )
 
 
 def cmd_models_copy_to_team(args):
@@ -579,8 +638,10 @@ def cmd_models_copy_to_team(args):
 def cmd_models_resync(args):
     client = make_client(args)
     model_ids = parse_json_arg(args.model_ids, "model_ids")
-    return client.post(f"/gateway/teams/{args.team_id}/models/batch-resync-capabilities",
-                       body={"model_ids": model_ids})
+    return client.post(
+        f"/gateway/teams/{args.team_id}/models/batch-resync-capabilities",
+        body={"model_ids": model_ids},
+    )
 
 
 def cmd_models_presets(args):
@@ -610,6 +671,7 @@ def cmd_models_my_delete(args):
 # routes 命令
 # ---------------------------------------------------------------------------
 
+
 def cmd_routes_my_list(args):
     return make_client(args).get("/gateway/my-routes")
 
@@ -623,11 +685,17 @@ def cmd_routes_my_create(args):
     if args.strategy:
         body["strategy"] = args.strategy
     if args.fallbacks_general:
-        body["fallbacks_general"] = parse_json_arg(args.fallbacks_general, "fallbacks_general")
+        body["fallbacks_general"] = parse_json_arg(
+            args.fallbacks_general, "fallbacks_general"
+        )
     if args.fallbacks_content_policy:
-        body["fallbacks_content_policy"] = parse_json_arg(args.fallbacks_content_policy, "fallbacks_content_policy")
+        body["fallbacks_content_policy"] = parse_json_arg(
+            args.fallbacks_content_policy, "fallbacks_content_policy"
+        )
     if args.fallbacks_context_window:
-        body["fallbacks_context_window"] = parse_json_arg(args.fallbacks_context_window, "fallbacks_context_window")
+        body["fallbacks_context_window"] = parse_json_arg(
+            args.fallbacks_context_window, "fallbacks_context_window"
+        )
     if args.retry_policy:
         body["retry_policy"] = parse_json_arg(args.retry_policy, "retry_policy")
     return client.post("/gateway/my-routes", body=body)
@@ -679,17 +747,23 @@ def cmd_routes_team_delete(args):
 
 
 def cmd_grants_list(args):
-    return make_client(args).get(f"/gateway/teams/{args.team_id}/keys/{args.key_id}/grants")
+    return make_client(args).get(
+        f"/gateway/teams/{args.team_id}/keys/{args.key_id}/grants"
+    )
 
 
 def cmd_grants_create(args):
     client = make_client(args)
     body = {"tenant_ids": parse_json_arg(args.tenant_ids, "tenant_ids")}
-    return client.post(f"/gateway/teams/{args.team_id}/keys/{args.key_id}/grants", body=body)
+    return client.post(
+        f"/gateway/teams/{args.team_id}/keys/{args.key_id}/grants", body=body
+    )
 
 
 def cmd_grants_grantable(args):
-    return make_client(args).get(f"/gateway/teams/{args.team_id}/keys/{args.key_id}/grants/grantable-teams")
+    return make_client(args).get(
+        f"/gateway/teams/{args.team_id}/keys/{args.key_id}/grants/grantable-teams"
+    )
 
 
 def cmd_routes_route_grants_list(args):
@@ -705,8 +779,14 @@ def cmd_routes_route_grants_create(args):
 
 
 def cmd_routes_route_grants_delete(args):
-    make_client(args).delete(f"/gateway/my-routes/{args.route_id}/grants/{args.target_team_id}")
-    return {"revoked": True, "route_id": args.route_id, "target_team_id": args.target_team_id}
+    make_client(args).delete(
+        f"/gateway/my-routes/{args.route_id}/grants/{args.target_team_id}"
+    )
+    return {
+        "revoked": True,
+        "route_id": args.route_id,
+        "target_team_id": args.target_team_id,
+    }
 
 
 def cmd_routes_route_grants_grantable(args):
@@ -783,13 +863,16 @@ def cmd_routes_route_grants_publish(args):
             }
         )
     if failures:
-        sys.stderr.write(f"批量发布完成：{failures} 条失败（见 results 中 status=failed）\n")
+        sys.stderr.write(
+            f"批量发布完成：{failures} 条失败（见 results 中 status=failed）\n"
+        )
     return results
 
 
 # ---------------------------------------------------------------------------
 # auth / logs / stats
 # ---------------------------------------------------------------------------
+
 
 def cmd_auth_whoami(args):
     return make_client(args).get("/auth/me")
@@ -842,20 +925,27 @@ def cmd_stats_summary(args):
         "start": args.start,
         "end": args.end,
     }
-    return client.get(f"/gateway/teams/{args.team_id}/dashboard/statistics", params=params)
+    return client.get(
+        f"/gateway/teams/{args.team_id}/dashboard/statistics", params=params
+    )
 
 
 # ---------------------------------------------------------------------------
 # quotas 命令
 # ---------------------------------------------------------------------------
 
+
 def cmd_quotas_list(args):
     client = make_client(args)
     params = {
-        "layer": args.layer, "user_id": args.user_id,
-        "credential_id": args.credential_id, "model_name": args.model_name,
-        "period": args.period, "include_usage": args.include_usage,
-        "page": args.page, "page_size": args.page_size,
+        "layer": args.layer,
+        "user_id": args.user_id,
+        "credential_id": args.credential_id,
+        "model_name": args.model_name,
+        "period": args.period,
+        "include_usage": args.include_usage,
+        "page": args.page,
+        "page_size": args.page_size,
     }
     return client.get(f"/gateway/teams/{args.team_id}/quota-rules", params=params)
 
@@ -870,7 +960,9 @@ def _parse_reset_minutes(reset_at):
     if ":" in s:
         h, m = s.split(":", 1)
         return int(h) * 60 + int(m)
-    raise ValueError(f"无法解析重置时间: {reset_at}（用 HH:MM 或分钟数，如 17:00 或 1020）")
+    raise ValueError(
+        f"无法解析重置时间: {reset_at}（用 HH:MM 或分钟数，如 17:00 或 1020）"
+    )
 
 
 def cmd_quotas_batch_upsert(args):
@@ -885,7 +977,9 @@ def cmd_quotas_batch_upsert(args):
 
     if args.rules:
         rules = parse_json_arg(args.rules, "rules")
-        return client.put(f"/gateway/teams/{args.team_id}/quota-rules/batch", body={"rules": rules})
+        return client.put(
+            f"/gateway/teams/{args.team_id}/quota-rules/batch", body={"rules": rules}
+        )
 
     # 便捷模式：必须有 credential_id 和至少一个限额字段
     if not args.credential_id:
@@ -894,8 +988,10 @@ def cmd_quotas_batch_upsert(args):
             "便捷模式用法：--credential-id <cid> --limit-tokens 4800000 --all-models --reset-at 17:00\n"
         )
         sys.exit(2)
-    if not args.limit_tokens and not args.limit_usd:
-        sys.stderr.write("错误：便捷模式需要 --limit-tokens 或 --limit-usd。\n")
+    if not args.limit_tokens and not args.limit_usd and not args.limit_images:
+        sys.stderr.write(
+            "错误：便捷模式需要 --limit-tokens、--limit-usd 或 --limit-images。\n"
+        )
         sys.exit(2)
 
     # 确定 model_name 列表
@@ -903,13 +999,19 @@ def cmd_quotas_batch_upsert(args):
         model_names = [m.strip() for m in args.models.split(",") if m.strip()]
     elif args.all_models:
         # 从团队模型列表自动拉取该凭据下的全部模型
-        data = client.get(f"/gateway/teams/{args.team_id}/models",
-                          params={"credential_id": args.credential_id, "page_size": 200})
-        model_names = [m["real_model"] for m in data.get("items", []) if m.get("real_model")]
+        data = client.get(
+            f"/gateway/teams/{args.team_id}/models",
+            params={"credential_id": args.credential_id, "page_size": 200},
+        )
+        model_names = [
+            m["real_model"] for m in data.get("items", []) if m.get("real_model")
+        ]
         if not model_names:
             sys.stderr.write(f"错误：凭据 {args.credential_id} 下未找到任何模型。\n")
             sys.exit(1)
-        sys.stderr.write(f"[info] 从凭据 {args.credential_id} 下拉取到 {len(model_names)} 个模型\n")
+        sys.stderr.write(
+            f"[info] 从凭据 {args.credential_id} 下拉取到 {len(model_names)} 个模型\n"
+        )
     else:
         sys.stderr.write("错误：便捷模式需要 --models <逗号分隔> 或 --all-models。\n")
         sys.exit(2)
@@ -938,34 +1040,48 @@ def cmd_quotas_batch_upsert(args):
             rule["limit_tokens"] = int(args.limit_tokens)
         if args.limit_usd:
             rule["limit_usd"] = args.limit_usd
+        if args.limit_images:
+            rule["limit_images"] = int(args.limit_images)
         if args.soft_limit_usd:
             rule["soft_limit_usd"] = args.soft_limit_usd
         rules.append(rule)
 
     sys.stderr.write(f"[info] 准备 upsert {len(rules)} 条上游限额规则\n")
-    return client.put(f"/gateway/teams/{args.team_id}/quota-rules/batch", body={"rules": rules})
+    return client.put(
+        f"/gateway/teams/{args.team_id}/quota-rules/batch", body={"rules": rules}
+    )
 
 
 def cmd_quotas_self_batch(args):
     client = make_client(args)
     rules = parse_json_arg(args.rules, "rules")
-    return client.put(f"/gateway/teams/{args.team_id}/quota-rules/self-batch", body={"rules": rules})
+    return client.put(
+        f"/gateway/teams/{args.team_id}/quota-rules/self-batch", body={"rules": rules}
+    )
 
 
 def cmd_quotas_enablement(args):
     client = make_client(args)
     body = {
-        "layer": args.layer, "budget_id": args.budget_id,
-        "plan_id": args.plan_id, "quota_id": args.quota_id, "enabled": args.enabled,
+        "layer": args.layer,
+        "budget_id": args.budget_id,
+        "plan_id": args.plan_id,
+        "quota_id": args.quota_id,
+        "enabled": args.enabled,
     }
-    return client.post(f"/gateway/teams/{args.team_id}/quota-rules/enablement", body=body)
+    return client.post(
+        f"/gateway/teams/{args.team_id}/quota-rules/enablement", body=body
+    )
 
 
 def cmd_quotas_usage_adjustment(args):
     client = make_client(args)
     body = {
-        "layer": args.layer, "budget_id": args.budget_id,
-        "plan_id": args.plan_id, "quota_id": args.quota_id, "mode": args.mode,
+        "layer": args.layer,
+        "budget_id": args.budget_id,
+        "plan_id": args.plan_id,
+        "quota_id": args.quota_id,
+        "mode": args.mode,
     }
     if args.current_usd is not None:
         body["current_usd"] = args.current_usd
@@ -973,7 +1089,11 @@ def cmd_quotas_usage_adjustment(args):
         body["current_tokens"] = args.current_tokens
     if args.current_requests is not None:
         body["current_requests"] = args.current_requests
-    return client.post(f"/gateway/teams/{args.team_id}/quota-rules/usage-adjustments", body=body)
+    if args.current_images is not None:
+        body["current_images"] = args.current_images
+    return client.post(
+        f"/gateway/teams/{args.team_id}/quota-rules/usage-adjustments", body=body
+    )
 
 
 def cmd_quotas_delete(args):
@@ -994,9 +1114,15 @@ def cmd_budgets_list(args):
     return client.get(f"/gateway/teams/{args.team_id}/budgets", params=params)
 
 
+def cmd_budgets_delete(args):
+    client = make_client(args)
+    return client.delete(f"/gateway/teams/{args.team_id}/budgets/{args.budget_id}")
+
+
 # ---------------------------------------------------------------------------
 # vkeys 命令（Virtual Key 管理）
 # ---------------------------------------------------------------------------
+
 
 def _ensure_vkey(client, team_id, name):
     """智能获取 vkey 明文：同名存在则 reveal 复用，否则创建。
@@ -1029,7 +1155,9 @@ def cmd_vkeys_create(args):
 
 
 def cmd_vkeys_reveal(args):
-    return make_client(args).get(f"/gateway/teams/{args.team_id}/keys/{args.key_id}/reveal")
+    return make_client(args).get(
+        f"/gateway/teams/{args.team_id}/keys/{args.key_id}/reveal"
+    )
 
 
 def cmd_vkeys_ensure(args):
@@ -1051,6 +1179,7 @@ def cmd_vkeys_delete(args):
 # ---------------------------------------------------------------------------
 # proxy 命令（通过网关代理调用模型，自动 ensure vkey）
 # ---------------------------------------------------------------------------
+
 
 def cmd_proxy_chat(args):
     """聊天补全：自动 ensure vkey 后调 /openai/v1/chat/completions。"""
@@ -1113,6 +1242,7 @@ def cmd_proxy_models(args):
 # 参数解析构建
 # ---------------------------------------------------------------------------
 
+
 def build_parser():
     parser = argparse.ArgumentParser(
         prog="gateway_client",
@@ -1149,8 +1279,12 @@ def _build_teams(sub):
     c.set_defaults(func=run(cmd_teams_list))
 
     c = sp.add_parser("find", help="按名称/slug 子串查找团队（输出 id/name/slug）")
-    c.add_argument("--name-contains", required=True, help="名称或 slug 子串，如 研发API")
-    c.add_argument("--kind", choices=["personal", "shared", "system"], help="按团队类型过滤")
+    c.add_argument(
+        "--name-contains", required=True, help="名称或 slug 子串，如 研发API"
+    )
+    c.add_argument(
+        "--kind", choices=["personal", "shared", "system"], help="按团队类型过滤"
+    )
     c.add_argument(
         "--json-fields",
         default="id,name,slug,kind,team_role",
@@ -1193,7 +1327,12 @@ def _build_credentials(sub):
     c.add_argument("--api-key", required=True, help="明文 API Key")
     c.add_argument("--api-base", help="OpenAI-compat base URL")
     c.add_argument("--profile-id", help="上游方案 ID")
-    c.add_argument("--scope", choices=["team", "system"], default="team", help="写入目标（system 需平台 admin）")
+    c.add_argument(
+        "--scope",
+        choices=["team", "system"],
+        default="team",
+        help="写入目标（system 需平台 admin）",
+    )
     c.add_argument("--extra", help="扩展字段 JSON")
     c.set_defaults(func=run(cmd_creds_create))
 
@@ -1261,7 +1400,9 @@ def _build_models(sub):
     c.add_argument("--team-id", required=True)
     c.add_argument("--credential-id", required=True)
     c.add_argument("--provider", required=True)
-    c.add_argument("--items", required=True, help='JSON 数组，如 [{"upstream_model_id":"gpt-4o"}]')
+    c.add_argument(
+        "--items", required=True, help='JSON 数组，如 [{"upstream_model_id":"gpt-4o"}]'
+    )
     c.add_argument("--capability", default="chat", help="主调用面")
     c.add_argument("--weight", type=int)
     c.add_argument("--rpm-limit", type=int)
@@ -1280,37 +1421,62 @@ def _build_models(sub):
     c.add_argument("--weight", type=int)
     c.add_argument("--tags", help="标签 JSON（能力位）")
     c.add_argument("--display-name")
-    c.add_argument("--upstream-call-shape", choices=["openai_compat", "anthropic_native"])
+    c.add_argument(
+        "--upstream-call-shape", choices=["openai_compat", "anthropic_native"]
+    )
     c.add_argument("--enabled", type=lambda x: x.lower() == "true", default=None)
     c.set_defaults(func=run(cmd_models_create))
 
-    c = sp.add_parser("list", help="列出团队模型（默认 page_size=100；--all 自动翻页拉全部）")
+    c = sp.add_parser(
+        "list", help="列出团队模型（默认 page_size=100；--all 自动翻页拉全部）"
+    )
     c.add_argument("--team-id", required=True)
     c.add_argument("--page", type=int)
-    c.add_argument("--page-size", type=int, default=100, help="默认 100（API 默认 20 易分页不全）")
-    c.add_argument("--all", action="store_true", help="自动翻页拉取全部模型（忽略 --page/--page-size）")
+    c.add_argument(
+        "--page-size", type=int, default=100, help="默认 100（API 默认 20 易分页不全）"
+    )
+    c.add_argument(
+        "--all",
+        action="store_true",
+        help="自动翻页拉取全部模型（忽略 --page/--page-size）",
+    )
     c.add_argument("--q", help="模糊搜索")
     c.add_argument("--connectivity", choices=["all", "success", "failed", "unknown"])
-    c.add_argument("--sort", choices=["name", "created_at", "provider", "last_tested_at"])
+    c.add_argument(
+        "--sort", choices=["name", "created_at", "provider", "last_tested_at"]
+    )
     c.add_argument("--order", choices=["asc", "desc"])
     c.add_argument("--provider")
     c.add_argument("--credential-id")
     c.add_argument("--type", help="能力筛选")
     c.add_argument("--enabled", type=lambda x: x.lower() == "true", default=None)
-    c.add_argument("--registry-scope", choices=["team", "system", "callable", "requestable", "system_requestable"])
-    c.add_argument("--capabilities", action="store_true", help="仅输出能力摘要（含 context_window）")
+    c.add_argument(
+        "--registry-scope",
+        choices=["team", "system", "callable", "requestable", "system_requestable"],
+    )
+    c.add_argument(
+        "--capabilities",
+        action="store_true",
+        help="仅输出能力摘要（含 context_window）",
+    )
     c.set_defaults(func=run(cmd_models_list))
 
     c = sp.add_parser("capabilities", help="查看模型能力摘要（含 context_window）")
     c.add_argument("--team-id", required=True)
     c.add_argument("--model-id", required=True)
-    c.add_argument("--registry-scope", choices=["team", "system", "callable", "requestable", "system_requestable"])
+    c.add_argument(
+        "--registry-scope",
+        choices=["team", "system", "callable", "requestable", "system_requestable"],
+    )
     c.set_defaults(func=run(cmd_models_capabilities))
 
     c = sp.add_parser("get", help="模型详情")
     c.add_argument("--team-id", required=True)
     c.add_argument("--model-id", required=True)
-    c.add_argument("--registry-scope", choices=["team", "system", "callable", "requestable", "system_requestable"])
+    c.add_argument(
+        "--registry-scope",
+        choices=["team", "system", "callable", "requestable", "system_requestable"],
+    )
     c.set_defaults(func=run(cmd_models_get))
 
     c = sp.add_parser("update", help="修改模型（含能力位）")
@@ -1321,12 +1487,22 @@ def _build_models(sub):
     c.add_argument("--credential-id")
     c.add_argument("--capability")
     c.add_argument("--model-types", help='JSON 数组，如 ["text","image"]')
-    c.add_argument("--tags", help='标签 JSON，如 {"supports_vision":true,"context_window":262144}')
-    c.add_argument("--context-window", type=int, default=None, help="上下文窗口 tokens；0 表示清除")
+    c.add_argument(
+        "--tags", help='标签 JSON，如 {"supports_vision":true,"context_window":262144}'
+    )
+    c.add_argument(
+        "--context-window", type=int, default=None, help="上下文窗口 tokens；0 表示清除"
+    )
     c.add_argument("--display-name")
-    c.add_argument("--resync-capabilities", action="store_true", help="从 LiteLLM model_cost 重算能力（含 context_window）")
+    c.add_argument(
+        "--resync-capabilities",
+        action="store_true",
+        help="从 LiteLLM model_cost 重算能力（含 context_window）",
+    )
     c.add_argument("--enabled", type=lambda x: x.lower() == "true", default=None)
-    c.add_argument("--upstream-call-shape", choices=["openai_compat", "anthropic_native"])
+    c.add_argument(
+        "--upstream-call-shape", choices=["openai_compat", "anthropic_native"]
+    )
     c.set_defaults(func=run(cmd_models_update))
 
     c = sp.add_parser("test", help="测试模型连通性")
@@ -1347,7 +1523,11 @@ def _build_models(sub):
     c = sp.add_parser("copy-to-team", help="跨团队复制模型")
     c.add_argument("--model-ids", required=True, help="JSON 数组")
     c.add_argument("--destination-team-id", required=True)
-    c.add_argument("--credential-plans", required=True, help='JSON 数组，如 [{"source_credential_id":"...","mode":"existing","destination_credential_id":"..."}]')
+    c.add_argument(
+        "--credential-plans",
+        required=True,
+        help='JSON 数组，如 [{"source_credential_id":"...","mode":"existing","destination_credential_id":"..."}]',
+    )
     c.set_defaults(func=run(cmd_models_copy_to_team))
 
     c = sp.add_parser("resync", help="批量从 LiteLLM 重算模型能力（含 context_window）")
@@ -1359,7 +1539,9 @@ def _build_models(sub):
     c.add_argument("--team-id", required=True)
     c.set_defaults(func=run(cmd_models_presets))
 
-    c = sp.add_parser("callable-models", help="列出个人可调用模型（跨团队，用于路由引用）")
+    c = sp.add_parser(
+        "callable-models", help="列出个人可调用模型（跨团队，用于路由引用）"
+    )
     c.add_argument("--team-id", help="按归属团队过滤")
     c.set_defaults(func=run(cmd_models_callable))
 
@@ -1384,7 +1566,11 @@ def _build_routes(sub):
 
     c = sp.add_parser("my-create", help="创建个人路由（可跨团队引用）")
     c.add_argument("--virtual-model", required=True, help="虚拟模型名")
-    c.add_argument("--primary-models", required=True, help='JSON 数组，如 ["rd-team/gpt-4o","alias"]')
+    c.add_argument(
+        "--primary-models",
+        required=True,
+        help='JSON 数组，如 ["rd-team/gpt-4o","alias"]',
+    )
     c.add_argument("--strategy", help="调度策略")
     c.add_argument("--fallbacks-general", help="JSON 数组")
     c.add_argument("--fallbacks-content-policy", help="JSON 数组")
@@ -1465,7 +1651,9 @@ def _build_routes(sub):
     rg.add_argument("--team-id", required=True)
     rg.set_defaults(func=run(cmd_routes_shared_routes_list))
 
-    rg = sp.add_parser("route-grants-publish", help="批量发布个人路由到团队（跳过已授权）")
+    rg = sp.add_parser(
+        "route-grants-publish", help="批量发布个人路由到团队（跳过已授权）"
+    )
     rg.add_argument("--target-team-id", required=True)
     rg.add_argument("--all-routes", action="store_true", help="发布全部个人路由")
     rg.add_argument("--route-ids", help="逗号分隔的 route_id 列表")
@@ -1507,16 +1695,36 @@ def _build_quotas(sub):
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     c.add_argument("--team-id", required=True)
-    c.add_argument("--rules", help='显式规则 JSON 数组，如 [{"layer":"upstream","credential_id":"...","model_name":"volcengine/gpt-4o","limit_tokens":4800000,"window_seconds":86400,"reset_strategy":"calendar_daily_utc","period_timezone":"Asia/Shanghai","period_reset_minutes":1020,"enabled":true}]')
+    c.add_argument(
+        "--rules",
+        help='显式规则 JSON 数组，如 [{"layer":"upstream","credential_id":"...","model_name":"volcengine/gpt-4o","limit_tokens":4800000,"window_seconds":86400,"reset_strategy":"calendar_daily_utc","period_timezone":"Asia/Shanghai","period_reset_minutes":1020,"enabled":true}]',
+    )
     # 便捷模式参数
     c.add_argument("--credential-id", help="便捷模式：凭据 ID（自动拉取该凭据下模型）")
-    c.add_argument("--limit-tokens", type=int, help="便捷模式：每日 token 限额（如 4800000）")
+    c.add_argument(
+        "--limit-tokens", type=int, help="便捷模式：每日 token 限额（如 4800000）"
+    )
     c.add_argument("--limit-usd", help="便捷模式：每日金额限额（如 50.00）")
+    c.add_argument(
+        "--limit-images",
+        type=int,
+        help="便捷模式：每日图片张数限额（如 100，仅对 image 能力模型生效）",
+    )
     c.add_argument("--soft-limit-usd", help="便捷模式：软限额金额")
-    c.add_argument("--reset-at", help="便捷模式：每日重置时刻，HH:MM 或分钟数（如 17:00 或 1020）；不传则用服务端默认 0:00 UTC")
-    c.add_argument("--timezone", default="Asia/Shanghai", help="便捷模式：时区，默认 Asia/Shanghai")
-    c.add_argument("--models", help="便捷模式：逗号分隔的 model_name 列表（完整 real_model），不传则需 --all-models")
-    c.add_argument("--all-models", action="store_true", help="便捷模式：自动拉取该凭据下全部模型")
+    c.add_argument(
+        "--reset-at",
+        help="便捷模式：每日重置时刻，HH:MM 或分钟数（如 17:00 或 1020）；不传则用服务端默认 0:00 UTC",
+    )
+    c.add_argument(
+        "--timezone", default="Asia/Shanghai", help="便捷模式：时区，默认 Asia/Shanghai"
+    )
+    c.add_argument(
+        "--models",
+        help="便捷模式：逗号分隔的 model_name 列表（完整 real_model），不传则需 --all-models",
+    )
+    c.add_argument(
+        "--all-models", action="store_true", help="便捷模式：自动拉取该凭据下全部模型"
+    )
     c.set_defaults(func=run(cmd_quotas_batch_upsert))
 
     c = sp.add_parser("self-batch", help="成员自助 upsert（仅本人凭据）")
@@ -1526,7 +1734,9 @@ def _build_quotas(sub):
 
     c = sp.add_parser("enablement", help="启停单条配额")
     c.add_argument("--team-id", required=True)
-    c.add_argument("--layer", required=True, choices=["platform", "upstream", "downstream"])
+    c.add_argument(
+        "--layer", required=True, choices=["platform", "upstream", "downstream"]
+    )
     c.add_argument("--budget-id")
     c.add_argument("--plan-id")
     c.add_argument("--quota-id")
@@ -1535,7 +1745,9 @@ def _build_quotas(sub):
 
     c = sp.add_parser("usage-adjustment", help="手工调整用量/清零窗口")
     c.add_argument("--team-id", required=True)
-    c.add_argument("--layer", required=True, choices=["platform", "upstream", "downstream"])
+    c.add_argument(
+        "--layer", required=True, choices=["platform", "upstream", "downstream"]
+    )
     c.add_argument("--budget-id")
     c.add_argument("--plan-id")
     c.add_argument("--quota-id")
@@ -1543,6 +1755,7 @@ def _build_quotas(sub):
     c.add_argument("--current-usd")
     c.add_argument("--current-tokens", type=int)
     c.add_argument("--current-requests", type=int)
+    c.add_argument("--current-images", type=int)
     c.set_defaults(func=run(cmd_quotas_usage_adjustment))
 
     c = sp.add_parser("delete", help="删除上游/下游配额")
@@ -1558,6 +1771,11 @@ def _build_quotas(sub):
     c.add_argument("--model-name")
     c.set_defaults(func=run(cmd_budgets_list))
 
+    c = sp.add_parser("budgets-delete", help="删除平台预算（旧式）")
+    c.add_argument("--team-id", required=True)
+    c.add_argument("--budget-id", required=True)
+    c.set_defaults(func=run(cmd_budgets_delete))
+
 
 def _build_vkeys(sub):
     p = sub.add_parser("vkeys", help="Virtual Key 管理（代理调用凭据）")
@@ -1571,7 +1789,9 @@ def _build_vkeys(sub):
     c.add_argument("--team-id", required=True)
     c.add_argument("--name", required=True)
     c.add_argument("--description")
-    c.add_argument("--guardrail-enabled", type=lambda x: x.lower() == "true", default=None)
+    c.add_argument(
+        "--guardrail-enabled", type=lambda x: x.lower() == "true", default=None
+    )
     c.set_defaults(func=run(cmd_vkeys_create))
 
     c = sp.add_parser("reveal", help="解密 vkey 明文")
@@ -1579,7 +1799,9 @@ def _build_vkeys(sub):
     c.add_argument("--key-id", required=True)
     c.set_defaults(func=run(cmd_vkeys_reveal))
 
-    c = sp.add_parser("ensure", help="智能获取 vkey（同名复用 reveal，无则创建），返回明文")
+    c = sp.add_parser(
+        "ensure", help="智能获取 vkey（同名复用 reveal，无则创建），返回明文"
+    )
     c.add_argument("--team-id", required=True)
     c.add_argument("--name", required=True, help="vkey 名称（同名复用）")
     c.set_defaults(func=run(cmd_vkeys_ensure))
@@ -1598,7 +1820,11 @@ def _build_proxy(sub):
     c.add_argument("--team-id", required=True)
     c.add_argument("--model", required=True, help="模型名或路由名")
     c.add_argument("--message", required=True, help="用户消息")
-    c.add_argument("--vkey-name", default="gateway-proxy", help="vkey 名称（同名复用，默认 gateway-proxy）")
+    c.add_argument(
+        "--vkey-name",
+        default="gateway-proxy",
+        help="vkey 名称（同名复用，默认 gateway-proxy）",
+    )
     c.add_argument("--max-tokens", type=int)
     c.add_argument("--temperature", type=float)
     c.set_defaults(func=run(cmd_proxy_chat))
@@ -1672,9 +1898,21 @@ def _build_stats(sub):
     c.add_argument(
         "--group-by",
         default="user",
-        choices=["user", "team", "credential", "model", "vkey", "provider", "resource_owner"],
+        choices=[
+            "user",
+            "team",
+            "credential",
+            "model",
+            "vkey",
+            "provider",
+            "resource_owner",
+        ],
     )
-    c.add_argument("--usage-aggregation", default="workspace", choices=["workspace", "user", "platform"])
+    c.add_argument(
+        "--usage-aggregation",
+        default="workspace",
+        choices=["workspace", "user", "platform"],
+    )
     c.add_argument("--start", help="ISO 起始时间")
     c.add_argument("--end", help="ISO 结束时间")
     c.set_defaults(func=run(cmd_stats_summary))
