@@ -85,6 +85,28 @@ def test_resync_overwrites_vision_false() -> None:
     assert out.get("supports_vision") is False
 
 
+def test_merge_capability_hints_sets_context_window_fill_missing() -> None:
+    out = merge_litellm_capability_hints(
+        {},
+        provider="openai",
+        real_model="gpt-4o",
+        hint_port=_FakeHint({"context_window": 128000}),
+        mode="fill_missing",
+    )
+    assert out.get("context_window") == 128000
+
+
+def test_resync_overwrites_context_window() -> None:
+    out = merge_litellm_capability_hints(
+        {"context_window": 8192},
+        provider="openai",
+        real_model="gpt-4o",
+        hint_port=_FakeHint({"context_window": 256000}),
+        mode="resync",
+    )
+    assert out.get("context_window") == 256000
+
+
 def test_skip_hints_leaves_tags_unchanged() -> None:
     base = {"supports_vision": False}
     out = merge_litellm_capability_hints(

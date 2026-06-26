@@ -288,6 +288,11 @@ export function ModelCapabilityEditor({
             上游模型的最大输入 token；填写后 Router 会按此做请求超长预检与展示，留空则跳过。
           </p>
         </div>
+      ) : values.contextWindow ? (
+        <div className="grid gap-1.5">
+          <Label>上下文窗口（tokens）</Label>
+          <p className="text-sm tabular-nums">{values.contextWindow}</p>
+        </div>
       ) : null}
     </div>
   )
@@ -349,16 +354,20 @@ export function capabilityEditorValuesFromPersonalModel(model: {
 }): ModelCapabilityEditorValues {
   const base = capabilityEditorValuesFromModel(model)
   // 个人模型可能无 tags 暴露，从 selector_capabilities 回显
-  if (base.thinkingParam) return base
-  const scThinking = model.selector_capabilities?.thinking_param
-  if (
-    typeof scThinking === 'string' &&
-    scThinking !== 'none' &&
-    VALID_THINKING_PARAMS.includes(scThinking)
-  ) {
-    return { ...base, thinkingParam: scThinking }
+  const contextWindow =
+    base.contextWindow || resolveContextWindowFromTags(model.selector_capabilities)
+  let thinkingParam = base.thinkingParam
+  if (!thinkingParam) {
+    const scThinking = model.selector_capabilities?.thinking_param
+    if (
+      typeof scThinking === 'string' &&
+      scThinking !== 'none' &&
+      VALID_THINKING_PARAMS.includes(scThinking)
+    ) {
+      thinkingParam = scThinking
+    }
   }
-  return base
+  return { ...base, thinkingParam, contextWindow }
 }
 
 export function modelCapabilityPatchFromEditor(

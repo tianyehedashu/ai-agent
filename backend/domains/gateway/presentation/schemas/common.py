@@ -447,6 +447,7 @@ class ModelSelectorCapabilities(BaseModel):
     supports_video_gen: bool = False
     supports_image_to_video: bool = False
     max_reference_images: int = 0
+    context_window: int = 0
 
 
 class GatewayModelResponse(BaseModel):

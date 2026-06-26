@@ -17,6 +17,23 @@ describe('capabilityEditorValuesFromPersonalModel', () => {
     expect(values.modelTypes).toEqual(['text', 'image'])
     expect(values.capability).toBe('chat')
   })
+
+  it('reads context_window from selector_capabilities when tags absent', () => {
+    const values = capabilityEditorValuesFromPersonalModel({
+      capability: 'chat',
+      selector_capabilities: { context_window: 131072 },
+    })
+    expect(values.contextWindow).toBe('131072')
+  })
+
+  it('prefers tags context_window over selector_capabilities', () => {
+    const values = capabilityEditorValuesFromPersonalModel({
+      capability: 'chat',
+      tags: { context_window: 262144 },
+      selector_capabilities: { context_window: 131072 },
+    })
+    expect(values.contextWindow).toBe('262144')
+  })
 })
 
 describe('capabilityEditorValuesFromModel', () => {

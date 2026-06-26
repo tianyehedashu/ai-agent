@@ -291,6 +291,7 @@ def _selector_capabilities_payload(
         "supports_video_gen": snap.supports_video_gen,
         "supports_image_to_video": snap.supports_image_to_video,
         "max_reference_images": snap.max_reference_images,
+        "context_window": snap.context_window,
     }
 
 

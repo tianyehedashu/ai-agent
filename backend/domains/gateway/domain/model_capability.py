@@ -34,6 +34,7 @@ class ModelCapabilitySnapshot:
     supports_video_gen: bool = False
     supports_image_to_video: bool = False
     max_reference_images: int = 0
+    context_window: int = 0
 
     @property
     def features(self) -> frozenset[str]:
@@ -100,7 +101,19 @@ def tags_to_capability_snapshot(
         supports_video_gen=bool(tags.get("supports_video_gen", False)),
         supports_image_to_video=bool(tags.get("supports_image_to_video", False)),
         max_reference_images=int(tags.get("max_reference_images", 0) or 0),
+        context_window=_coerce_context_window(tags.get("context_window")),
     )
+
+
+def _coerce_context_window(value: Any) -> int:
+    """上下文窗口（tokens）；非正整数视为未知（0）。"""
+    if isinstance(value, bool):
+        return 0
+    if isinstance(value, int) and value > 0:
+        return value
+    if isinstance(value, float) and value.is_integer() and value > 0:
+        return int(value)
+    return 0
 
 
 __all__ = ["ModelCapabilitySnapshot", "tags_to_capability_snapshot"]

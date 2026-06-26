@@ -16,6 +16,18 @@ def test_tags_to_capability_snapshot_defaults() -> None:
     assert snap.supports_image_gen is False
     assert snap.supports_txt2img is False
     assert snap.thinking_param == THINKING_PARAM_NONE
+    assert snap.context_window == 0
+
+
+def test_tags_to_capability_snapshot_context_window() -> None:
+    assert tags_to_capability_snapshot({"context_window": 262144}).context_window == 262144
+    # 浮点整数归一化
+    assert tags_to_capability_snapshot({"context_window": 128000.0}).context_window == 128000
+    # 非正/非法值视为未知
+    assert tags_to_capability_snapshot({"context_window": 0}).context_window == 0
+    assert tags_to_capability_snapshot({"context_window": -1}).context_window == 0
+    assert tags_to_capability_snapshot({"context_window": True}).context_window == 0
+    assert tags_to_capability_snapshot({"context_window": "x"}).context_window == 0
 
 
 def test_tags_to_capability_snapshot_image_gen_defaults_txt2img() -> None:

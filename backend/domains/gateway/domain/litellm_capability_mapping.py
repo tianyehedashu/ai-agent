@@ -17,6 +17,11 @@ LITELLM_CAPABILITY_TAG_KEYS: frozenset[str] = frozenset(
     }
 )
 
+# resync 前剥离：能力布尔键 + LiteLLM 同步的数值元数据
+LITELLM_RESYNC_STRIP_TAG_KEYS: frozenset[str] = LITELLM_CAPABILITY_TAG_KEYS | frozenset(
+    {"context_window"}
+)
+
 
 class LitellmModelInfoHints(TypedDict, total=False):
     supports_vision: bool | None
@@ -24,6 +29,7 @@ class LitellmModelInfoHints(TypedDict, total=False):
     supports_function_calling: bool | None
     supports_response_schema: bool | None
     mode: str | None
+    context_window: int | None
 
 
 def hints_without_reasoning(hints: LitellmModelInfoHints) -> LitellmModelInfoHints:
@@ -35,12 +41,14 @@ def hints_without_reasoning(hints: LitellmModelInfoHints) -> LitellmModelInfoHin
 
 def hints_from_model_info(info: dict[str, Any]) -> LitellmModelInfoHints:
     """从 ``litellm.get_model_info`` 条目提取写侧 hint 子集。"""
+    context_window = _context_window_from_model_info(info)
     return LitellmModelInfoHints(
         supports_vision=_as_optional_bool(info.get("supports_vision")),
         supports_reasoning=_as_optional_bool(info.get("supports_reasoning")),
         supports_function_calling=_as_optional_bool(info.get("supports_function_calling")),
         supports_response_schema=_as_optional_bool(info.get("supports_response_schema")),
         mode=str(info["mode"]).strip() if info.get("mode") else None,
+        context_window=context_window,
     )
 
 
@@ -76,13 +84,20 @@ def apply_litellm_hints_to_tags(
             merged[key] = True
         elif value is False:
             merged[key] = False
+    ctx = hints.get("context_window")
+    if isinstance(ctx, int) and ctx > 0:
+        if mode == "fill_missing":
+            if "context_window" not in merged:
+                merged["context_window"] = ctx
+        else:
+            merged["context_window"] = ctx
     return merged
 
 
 def strip_litellm_capability_tags(tags: dict[str, Any]) -> dict[str, Any]:
     """resync 前剥离由 LiteLLM 映射的能力键。"""
     merged = dict(tags)
-    for key in LITELLM_CAPABILITY_TAG_KEYS:
+    for key in LITELLM_RESYNC_STRIP_TAG_KEYS:
         merged.pop(key, None)
     return merged
 
@@ -98,8 +113,28 @@ def _as_optional_bool(value: Any) -> bool | None:
     return None
 
 
+def _context_window_from_model_info(info: dict[str, Any]) -> int | None:
+    """优先 ``max_input_tokens``，其次 ``max_tokens``（与 Router 注册一致）。"""
+    for key in ("max_input_tokens", "max_tokens"):
+        parsed = _coerce_positive_int(info.get(key))
+        if parsed is not None:
+            return parsed
+    return None
+
+
+def _coerce_positive_int(value: object) -> int | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int) and value > 0:
+        return value
+    if isinstance(value, float) and value.is_integer() and value > 0:
+        return int(value)
+    return None
+
+
 __all__ = [
     "LITELLM_CAPABILITY_TAG_KEYS",
+    "LITELLM_RESYNC_STRIP_TAG_KEYS",
     "HintMergeMode",
     "LitellmModelInfoHints",
     "apply_litellm_hints_to_tags",
