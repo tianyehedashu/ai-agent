@@ -25,9 +25,13 @@ export interface GatewayBudget {
   soft_limit_usd?: number | null
   limit_tokens: number | null
   limit_requests: number | null
+  /** 图片生成张数上限（仅对 image 能力生效） */
+  limit_images: number | null
   current_usd: number
   current_tokens: number
   current_requests: number
+  /** 已用图片张数 */
+  current_images: number
   reset_at: string | null
   /** 下一次重置时间（含 rolling / calendar 策略） */
   budget_reset_at?: string | null
@@ -49,6 +53,7 @@ export interface BudgetUpsertBody {
   soft_limit_usd?: number | null
   limit_tokens?: number | null
   limit_requests?: number | null
+  limit_images?: number | null
   period_timezone?: string | null
   period_reset_minutes?: number | null
   period_reset_day?: number | null

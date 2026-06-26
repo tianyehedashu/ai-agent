@@ -78,6 +78,7 @@ class ProxyNonChatMixin:
         capability: GatewayCapability,
         model: str | None,
         require_model: bool = False,
+        image_count: int = 0,
     ) -> tuple[str | None, list[BudgetReservation], ResolvedModelName | None]:
         result = await run_proxy_inbound_preflight(
             self.guard,
@@ -85,6 +86,7 @@ class ProxyNonChatMixin:
             capability=capability,
             model=model,
             require_model=require_model,
+            image_count=image_count,
         )
         return result.model, result.reservations, result.resolved
 
@@ -144,10 +146,13 @@ class ProxyNonChatMixin:
         ctx: ProxyContext,
         body: dict[str, Any],
     ) -> dict[str, Any]:
+        # 估算张数：OpenAI Images API 的 ``n``（默认 1）；部分上游用 ``count``/``num_images``
+        estimated_images = int(body.get("n", 1) or body.get("count", 1) or 1)
         budget_model, reservations, preflight_resolved = await self._run_non_chat_preflight(
             ctx,
             capability=GatewayCapability.IMAGE,
             model=optional_body_model(body),
+            image_count=estimated_images,
         )
         prepared, kwargs = await self.prepare_litellm_invoke(ctx, body, resolved=preflight_resolved)
         meta, up_c, down_c = pricing_kwargs_from_litellm(kwargs)

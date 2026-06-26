@@ -34,6 +34,7 @@ export function QuotaRuleEditScopePanel({
   const limitUsd = rule.limits.limit_usd
   const limitTok = rule.limits.limit_tokens
   const limitReq = rule.limits.limit_requests
+  const limitImg = rule.limits.limit_images
 
   return (
     <div className="space-y-4 rounded-lg border bg-muted/20 p-4">
@@ -96,6 +97,7 @@ export function QuotaRuleEditScopePanel({
             limitUsd={limitUsd}
             limitTok={limitTok}
             limitReq={limitReq}
+            limitImg={limitImg}
           />
         </div>
       ) : rule.usage ? (

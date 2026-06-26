@@ -51,6 +51,7 @@ export function QuotaCardItem({
   const { ratio, barColor } = computeQuotaRuleUsageRatio(rule)
   const limitUsd = rule.limits.limit_usd
   const limitTok = rule.limits.limit_tokens
+  const limitImg = rule.limits.limit_images
   const usage = rule.usage
   const canEdit = rule.source_ref.budget_id !== null || rule.source_ref.quota_id !== null
   const canDelete = isQuotaRuleDeletable(rule)
@@ -176,6 +177,20 @@ export function QuotaCardItem({
               / {limitTok !== null ? parseQuotaNumeric(limitTok).toLocaleString() : '∞'}
             </span>
           </div>
+          {limitImg !== null ? (
+            <div>
+              <span className="text-muted-foreground">Images</span>{' '}
+              <span>
+                {usage && quotaUsageHasMetrics(usage)
+                  ? parseQuotaNumeric(usage.current_images).toLocaleString()
+                  : '—'}
+              </span>
+              <span className="text-muted-foreground">
+                {' '}
+                / {parseQuotaNumeric(limitImg).toLocaleString()}
+              </span>
+            </div>
+          ) : null}
         </div>
         {periodWindow ? <p className="text-[11px] text-muted-foreground">{periodWindow}</p> : null}
         <div>

@@ -30,7 +30,7 @@ BudgetTarget = tuple[str, uuid.UUID | None]
 
 @dataclass(frozen=True)
 class BudgetReservation:
-    """预算预扣句柄（请求数 / token 估算）。"""
+    """预算预扣句柄（请求数 / token 估算 / 图片张数）。"""
 
     target_kind: str
     target_id: str | None
@@ -38,6 +38,7 @@ class BudgetReservation:
     budget_model_name: str | None
     reserved_requests: int = 0
     reserved_tokens: int = 0
+    reserved_images: int = 0
     credential_id: uuid.UUID | None = None
     tenant_id: uuid.UUID | None = None
     period_reset_anchor: PeriodResetAnchor = DEFAULT_PERIOD_RESET_ANCHOR

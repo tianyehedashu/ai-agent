@@ -95,6 +95,8 @@ class QuotaRuleUpsertCommand:
 
     limit_requests: int | None = None
 
+    limit_images: int | None = None
+
     unit_price_usd_per_token: Decimal | None = None
 
     unit_price_usd_per_request: Decimal | None = None
@@ -359,6 +361,7 @@ class QuotaRuleWritesMixin:
             limit_usd=cmd.limit_usd,
             limit_tokens=cmd.limit_tokens,
             limit_requests=cmd.limit_requests,
+            limit_images=cmd.limit_images,
             period_timezone=cmd.period_timezone or cmd.reset_timezone,
             period_reset_minutes=cmd.period_reset_minutes
             if cmd.period_reset_minutes is not None
@@ -426,6 +429,7 @@ class QuotaRuleWritesMixin:
             "soft_limit_usd": None,
             "limit_tokens": cmd.limit_tokens,
             "limit_requests": cmd.limit_requests,
+            "limit_images": cmd.limit_images,
             "period_timezone": anchor.timezone,
             "period_reset_minutes": anchor.time_minutes,
             "period_reset_day": anchor.day_of_month,
@@ -459,6 +463,7 @@ class QuotaRuleWritesMixin:
                         "soft_limit_usd": None,
                         "limit_tokens": cmd.limit_tokens,
                         "limit_requests": cmd.limit_requests,
+                        "limit_images": cmd.limit_images,
                         "period_timezone": anchor.timezone,
                         "period_reset_minutes": anchor.time_minutes,
                         "period_reset_day": anchor.day_of_month,
@@ -534,6 +539,7 @@ class QuotaRuleWritesMixin:
             limit_usd=cmd.limit_usd,
             limit_tokens=cmd.limit_tokens,
             limit_requests=cmd.limit_requests,
+            limit_images=cmd.limit_images,
             enabled=cmd.enabled,
             valid_from=cmd.valid_from,
             valid_until=cmd.valid_until,
@@ -614,6 +620,7 @@ class QuotaRuleWritesMixin:
             "limit_usd": cmd.limit_usd,
             "limit_tokens": cmd.limit_tokens,
             "limit_requests": cmd.limit_requests,
+            "limit_images": cmd.limit_images,
             "enabled": cmd.enabled,
             "valid_from": cmd.valid_from,
             "valid_until": cmd.valid_until,

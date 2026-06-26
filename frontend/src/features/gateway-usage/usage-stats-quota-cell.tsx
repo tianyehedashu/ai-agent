@@ -20,6 +20,9 @@ function quotaUsageText(rule: QuotaRule): string {
   if (rule.limits.limit_requests !== null) {
     return `${(usage?.current_requests ?? 0).toLocaleString()} / ${rule.limits.limit_requests.toLocaleString()} 次`
   }
+  if (rule.limits.limit_images !== null) {
+    return `${(usage?.current_images ?? 0).toLocaleString()} / ${rule.limits.limit_images.toLocaleString()} 图`
+  }
   return '∞'
 }
 

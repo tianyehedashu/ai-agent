@@ -265,6 +265,7 @@ def _adjustment_to_command(body: QuotaUsageAdjustmentRequest) -> QuotaUsageAdjus
         current_usd=body.current_usd,
         current_tokens=body.current_tokens,
         current_requests=body.current_requests,
+        current_images=body.current_images,
     )
 
 
@@ -294,6 +295,7 @@ def _upsert_to_command(body: QuotaRuleUpsert) -> QuotaRuleUpsertCommand:
         soft_limit_usd=body.soft_limit_usd,
         limit_tokens=body.limit_tokens,
         limit_requests=body.limit_requests,
+        limit_images=body.limit_images,
         unit_price_usd_per_token=body.unit_price_usd_per_token,
         unit_price_usd_per_request=body.unit_price_usd_per_request,
         plan_label=body.plan_label,

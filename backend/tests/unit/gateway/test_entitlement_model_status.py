@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock
 import uuid
 
@@ -169,6 +169,7 @@ async def test_status_for_models_with_enforceable_quota_does_not_typeerror() -> 
         limit_usd: Decimal | None
         limit_tokens: int | None
         limit_requests: int | None
+        limit_images: int | None
         reset_timezone: str
         reset_time_minutes: int
         reset_day_of_month: int
@@ -185,6 +186,7 @@ async def test_status_for_models_with_enforceable_quota_does_not_typeerror() -> 
         limit_usd=None,
         limit_tokens=None,
         limit_requests=10,
+        limit_images=None,
         reset_timezone="UTC",
         reset_time_minutes=0,
         reset_day_of_month=1,

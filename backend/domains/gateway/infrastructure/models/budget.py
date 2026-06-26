@@ -92,6 +92,11 @@ class GatewayBudget(BaseModel):
     )
     limit_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
     limit_requests: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    limit_images: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+        comment="图片生成张数限额（仅 image capability 路径有意义）",
+    )
     max_parallel_requests: Mapped[int | None] = mapped_column(
         Integer,
         nullable=True,
@@ -110,6 +115,13 @@ class GatewayBudget(BaseModel):
     )
     current_requests: Mapped[int] = mapped_column(
         Integer, nullable=False, server_default="0", default=0
+    )
+    current_images: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        server_default="0",
+        default=0,
+        comment="图片生成张数累计用量",
     )
 
     # 重置

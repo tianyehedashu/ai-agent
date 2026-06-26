@@ -181,6 +181,7 @@ class BudgetRepository:
         soft_limit_usd: Decimal | None = None,
         limit_tokens: int | None = None,
         limit_requests: int | None = None,
+        limit_images: int | None = None,
         reset_at: datetime | None = None,
         period_timezone: str | None = None,
         period_reset_minutes: int | None = None,
@@ -211,6 +212,7 @@ class BudgetRepository:
                 soft_limit_usd=soft_limit_usd,
                 limit_tokens=limit_tokens,
                 limit_requests=limit_requests,
+                limit_images=limit_images,
                 reset_at=reset_at,
             )
             _apply_period_reset_fields(budget, period_reset_item)
@@ -221,6 +223,7 @@ class BudgetRepository:
         existing.soft_limit_usd = soft_limit_usd
         existing.limit_tokens = limit_tokens
         existing.limit_requests = limit_requests
+        existing.limit_images = limit_images
         if reset_at is not None:
             existing.reset_at = reset_at
         _apply_period_reset_fields(existing, period_reset_item)
@@ -312,6 +315,8 @@ class BudgetRepository:
                 existing.soft_limit_usd = item.get("soft_limit_usd")
                 existing.limit_tokens = item.get("limit_tokens")
                 existing.limit_requests = item.get("limit_requests")
+                if "limit_images" in item:
+                    existing.limit_images = item.get("limit_images")
                 reset_at = item.get("reset_at")
                 if reset_at is not None:
                     existing.reset_at = reset_at
@@ -330,6 +335,7 @@ class BudgetRepository:
                     soft_limit_usd=item.get("soft_limit_usd"),
                     limit_tokens=item.get("limit_tokens"),
                     limit_requests=item.get("limit_requests"),
+                    limit_images=item.get("limit_images"),
                     reset_at=item.get("reset_at"),
                 )
                 _apply_period_reset_fields(budget, item)
@@ -349,16 +355,18 @@ class BudgetRepository:
         delta_usd: Decimal,
         delta_tokens: int,
         delta_requests: int,
+        delta_images: int = 0,
     ) -> None:
         """正向结算：增加用量计数"""
+        values = {
+            "current_usd": GatewayBudget.current_usd + delta_usd,
+            "current_tokens": GatewayBudget.current_tokens + delta_tokens,
+            "current_requests": GatewayBudget.current_requests + delta_requests,
+        }
+        if delta_images:
+            values["current_images"] = GatewayBudget.current_images + delta_images
         await self._session.execute(
-            update(GatewayBudget)
-            .where(GatewayBudget.id == budget_id)
-            .values(
-                current_usd=GatewayBudget.current_usd + delta_usd,
-                current_tokens=GatewayBudget.current_tokens + delta_tokens,
-                current_requests=GatewayBudget.current_requests + delta_requests,
-            )
+            update(GatewayBudget).where(GatewayBudget.id == budget_id).values(**values)
         )
 
     async def reset(self, budget_id: uuid.UUID) -> None:
@@ -367,6 +375,7 @@ class BudgetRepository:
             current_usd=Decimal("0"),
             current_tokens=0,
             current_requests=0,
+            current_images=0,
         )
 
     async def set_usage(
@@ -376,6 +385,7 @@ class BudgetRepository:
         current_usd: Decimal,
         current_tokens: int,
         current_requests: int,
+        current_images: int = 0,
     ) -> None:
         await self._session.execute(
             update(GatewayBudget)
@@ -384,6 +394,7 @@ class BudgetRepository:
                 current_usd=current_usd,
                 current_tokens=current_tokens,
                 current_requests=current_requests,
+                current_images=current_images,
             )
         )
 

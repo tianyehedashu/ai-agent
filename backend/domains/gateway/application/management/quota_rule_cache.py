@@ -94,6 +94,7 @@ def _quota_rule_to_dict(rule: QuotaRuleReadModel) -> dict:
             else None,
             "limit_tokens": limits.limit_tokens,
             "limit_requests": limits.limit_requests,
+            "limit_images": limits.limit_images,
             "unit_price_usd_per_token": str(limits.unit_price_usd_per_token)
             if limits.unit_price_usd_per_token is not None
             else None,
@@ -110,6 +111,7 @@ def _quota_rule_to_dict(rule: QuotaRuleReadModel) -> dict:
             "current_usd": str(usage.current_usd) if usage.current_usd is not None else None,
             "current_tokens": usage.current_tokens,
             "current_requests": usage.current_requests,
+            "current_images": usage.current_images,
             "window_start": usage.window_start.isoformat() if usage.window_start else None,
             "reset_at": usage.reset_at.isoformat() if usage.reset_at else None,
             "budget_reset_at": usage.budget_reset_at.isoformat() if usage.budget_reset_at else None,
@@ -173,6 +175,7 @@ def _dict_to_quota_rule(data: dict) -> QuotaRuleReadModel:
         else None,
         limit_tokens=limits_data.get("limit_tokens"),
         limit_requests=limits_data.get("limit_requests"),
+        limit_images=limits_data.get("limit_images"),
         unit_price_usd_per_token=Decimal(limits_data["unit_price_usd_per_token"])
         if limits_data.get("unit_price_usd_per_token") is not None
         else None,
@@ -193,6 +196,9 @@ def _dict_to_quota_rule(data: dict) -> QuotaRuleReadModel:
             else None,
             current_requests=usage_data["current_requests"]
             if usage_data.get("current_requests") is not None
+            else None,
+            current_images=usage_data["current_images"]
+            if usage_data.get("current_images") is not None
             else None,
             window_start=datetime.fromisoformat(usage_data["window_start"])
             if usage_data.get("window_start")

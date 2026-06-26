@@ -138,10 +138,12 @@ function expandPreviewRules(
   usd: string
   tokens: string
   requests: string
+  images: string
 }[] {
   const lu = values.limit_usd.trim() ? `$${values.limit_usd}` : ''
   const lt = values.limit_tokens.trim() ? values.limit_tokens : ''
   const lr = values.limit_requests.trim() ? values.limit_requests : ''
+  const li = values.limit_images.trim() ? values.limit_images : ''
   const models = values.allModels ? [null] : values.modelNames.map((m) => m || null)
   const effectiveValues =
     values.layer === 'upstream' && options?.credentialIds
@@ -196,6 +198,7 @@ function expandPreviewRules(
             usd: lu,
             tokens: lt,
             requests: lr,
+            images: li,
           })
         }
       }
@@ -216,6 +219,7 @@ function expandPreviewRules(
           usd: lu,
           tokens: lt,
           requests: lr,
+          images: li,
         })
       }
     }
@@ -231,6 +235,7 @@ function expandPreviewRules(
           usd: lu,
           tokens: lt,
           requests: lr,
+          images: li,
         })
       }
     }
@@ -1091,6 +1096,7 @@ function StepLimits({
           usdId="qbw-usd"
           tokensId="qbw-tokens"
           requestsId="qbw-requests"
+          imagesId="qbw-images"
           limitUsd={values.limit_usd}
           onLimitUsdChange={(v) => {
             onChange({ ...values, limit_usd: v })
@@ -1103,6 +1109,10 @@ function StepLimits({
           limitRequests={values.limit_requests}
           onLimitRequestsChange={(v) => {
             onChange({ ...values, limit_requests: v })
+          }}
+          limitImages={values.limit_images}
+          onLimitImagesChange={(v) => {
+            onChange({ ...values, limit_images: v })
           }}
           disabled={disabled}
         />
@@ -1206,6 +1216,7 @@ function StepPreview({
                 <th className="px-3 py-1.5 text-left font-medium">USD</th>
                 <th className="px-3 py-1.5 text-left font-medium">Token</th>
                 <th className="px-3 py-1.5 text-left font-medium">请求</th>
+                <th className="px-3 py-1.5 text-left font-medium">图像</th>
               </tr>
             </thead>
             <tbody>
@@ -1226,11 +1237,12 @@ function StepPreview({
                   <td className="px-3 py-1.5 tabular-nums">{row.usd || '—'}</td>
                   <td className="px-3 py-1.5 tabular-nums">{row.tokens || '—'}</td>
                   <td className="px-3 py-1.5 tabular-nums">{row.requests || '—'}</td>
+                  <td className="px-3 py-1.5 tabular-nums">{row.images || '—'}</td>
                 </tr>
               ))}
               {rows.length > 50 ? (
                 <tr>
-                  <td colSpan={8} className="px-3 py-2 text-center text-muted-foreground">
+                  <td colSpan={9} className="px-3 py-2 text-center text-muted-foreground">
                     …还有 {rows.length - 50} 条未展示
                   </td>
                 </tr>
@@ -1331,7 +1343,8 @@ export function QuotaBatchWizard(props: QuotaBatchWizardProps): React.JSX.Elemen
       const hasLimit =
         values.limit_usd.trim() !== '' ||
         values.limit_tokens.trim() !== '' ||
-        values.limit_requests.trim() !== ''
+        values.limit_requests.trim() !== '' ||
+        values.limit_images.trim() !== ''
       if (!values.allModels && values.modelNames.length === 0) return false
       if (!hasLimit) return false
       if (values.layer === 'upstream' && !values.allModels) {

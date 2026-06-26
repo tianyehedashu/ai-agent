@@ -51,6 +51,7 @@ class ProviderQuotaConfigRow:
     enabled: bool = True
     valid_from: datetime | None = None
     valid_until: datetime | None = None
+    limit_images: int | None = None
 
 
 def quota_row_to_spec(row: ProviderQuotaConfigRow) -> PlanQuotaSpec:
@@ -61,6 +62,7 @@ def quota_row_to_spec(row: ProviderQuotaConfigRow) -> PlanQuotaSpec:
         limit_usd=row.limit_usd,
         limit_tokens=row.limit_tokens,
         limit_requests=row.limit_requests,
+        limit_images=row.limit_images,
         reset_strategy=normalize_reset_strategy(row.reset_strategy),
         period_reset_anchor=period_reset_anchor_from_plan_quota(
             reset_timezone=row.reset_timezone,
@@ -104,6 +106,7 @@ def provider_quota_rows_from_orm(rules: list[ProviderQuota]) -> tuple[ProviderQu
             enabled=q.enabled,
             valid_from=q.valid_from,
             valid_until=q.valid_until,
+            limit_images=getattr(q, "limit_images", None),
         )
         for q in rules
     )
@@ -114,9 +117,9 @@ def _lookup_key(credential_id: uuid.UUID, real_model: str | None) -> _LookupKey:
     return credential_id, model_key
 
 
-def _coord_to_local_key(version: str, credential_id: uuid.UUID, real_model: str | None) -> tuple[
-    str, uuid.UUID, str
-]:
+def _coord_to_local_key(
+    version: str, credential_id: uuid.UUID, real_model: str | None
+) -> tuple[str, uuid.UUID, str]:
     _, model_key = _lookup_key(credential_id, real_model)
     return version, credential_id, model_key if model_key is not None else "_"
 
@@ -273,6 +276,7 @@ def _encode_rows(rows: tuple[ProviderQuotaConfigRow, ...]) -> list[dict[str, obj
             "limit_usd": str(r.limit_usd) if r.limit_usd is not None else None,
             "limit_tokens": r.limit_tokens,
             "limit_requests": r.limit_requests,
+            "limit_images": r.limit_images,
             "enabled": r.enabled,
             "valid_from": r.valid_from.astimezone(UTC).isoformat() if r.valid_from else None,
             "valid_until": r.valid_until.astimezone(UTC).isoformat() if r.valid_until else None,
@@ -298,6 +302,7 @@ def _decode_rows(payload: list[object]) -> tuple[ProviderQuotaConfigRow, ...]:
                 limit_usd=Decimal(str(item["limit_usd"])) if item.get("limit_usd") else None,
                 limit_tokens=int(item["limit_tokens"]) if item.get("limit_tokens") else None,
                 limit_requests=int(item["limit_requests"]) if item.get("limit_requests") else None,
+                limit_images=int(item["limit_images"]) if item.get("limit_images") else None,
                 enabled=bool(item.get("enabled", True)),
                 valid_from=datetime.fromisoformat(str(item["valid_from"]))
                 if item.get("valid_from")

@@ -77,6 +77,7 @@ async def test_bucket_record_on_acquire(monkeypatch) -> None:
         "delta_tokens": 50,
         "delta_cost_usd": Decimal("0.02"),
         "delta_requests": 1,
+        "delta_images": 0,
     }
 
 

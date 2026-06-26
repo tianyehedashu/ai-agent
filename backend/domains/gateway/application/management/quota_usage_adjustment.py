@@ -60,19 +60,26 @@ class QuotaUsageAdjustmentCommand:
     current_usd: Decimal | None = None
     current_tokens: int | None = None
     current_requests: int | None = None
+    current_images: int | None = None
 
 
 def _resolved_usage_values(
     cmd: QuotaUsageAdjustmentCommand,
-) -> tuple[Decimal, int, int]:
+) -> tuple[Decimal, int, int, int]:
     if cmd.mode == "reset_window":
-        return Decimal("0"), 0, 0
-    if cmd.current_usd is None and cmd.current_tokens is None and cmd.current_requests is None:
+        return Decimal("0"), 0, 0, 0
+    if (
+        cmd.current_usd is None
+        and cmd.current_tokens is None
+        and cmd.current_requests is None
+        and cmd.current_images is None
+    ):
         raise ValidationError("set 模式至少填写一项已用额度")
     return (
         cmd.current_usd if cmd.current_usd is not None else Decimal("0"),
         cmd.current_tokens if cmd.current_tokens is not None else 0,
         cmd.current_requests if cmd.current_requests is not None else 0,
+        cmd.current_images if cmd.current_images is not None else 0,
     )
 
 
@@ -154,7 +161,7 @@ async def apply_quota_usage_adjustment(
     if not isinstance(session, AsyncSession):
         raise TypeError("session must be AsyncSession")
 
-    cost_usd, tokens, requests = _resolved_usage_values(cmd)
+    cost_usd, tokens, requests, images = _resolved_usage_values(cmd)
     now = datetime.now(UTC)
     bucket_repo = QuotaPlanUsageBucketRepository(session)
 
@@ -189,6 +196,7 @@ async def apply_quota_usage_adjustment(
             tokens=tokens,
             requests=requests,
             cost_usd=cost_usd,
+            images=images,
         )
         await BudgetService().set_budget_usage(
             target_kind=budget.target_kind,
@@ -200,6 +208,7 @@ async def apply_quota_usage_adjustment(
             budget_model_name=budget.model_name,
             credential_id=budget.credential_id,
             tenant_id=budget.tenant_id,
+            images=images,
             period_reset_anchor=anchor,
         )
         await BudgetRepository(session).set_usage(
@@ -207,6 +216,7 @@ async def apply_quota_usage_adjustment(
             current_usd=cost_usd,
             current_tokens=tokens,
             current_requests=requests,
+            current_images=images,
         )
         return
 
@@ -244,6 +254,7 @@ async def apply_quota_usage_adjustment(
         tokens=tokens,
         requests=requests,
         cost_usd=cost_usd,
+        images=images,
     )
     await get_quota_plan_service().set_window_usage(
         ns,
@@ -252,6 +263,7 @@ async def apply_quota_usage_adjustment(
         cost_usd=cost_usd,
         tokens=tokens,
         requests=requests,
+        images=images,
         now=now,
     )
 

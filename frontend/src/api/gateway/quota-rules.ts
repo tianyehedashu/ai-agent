@@ -42,6 +42,8 @@ export interface QuotaRuleLimits {
   soft_limit_usd: number | null
   limit_tokens: number | null
   limit_requests: number | null
+  /** 图片生成张数上限（仅对 image 能力生效） */
+  limit_images: number | null
   unit_price_usd_per_token: number | null
   unit_price_usd_per_request: number | null
 }
@@ -50,6 +52,8 @@ export interface QuotaRuleUsage {
   current_usd: number | null
   current_tokens: number | null
   current_requests: number | null
+  /** 已用图片张数 */
+  current_images: number | null
   window_start: string | null
   reset_at: string | null
   budget_reset_at: string | null
@@ -100,6 +104,7 @@ export interface QuotaRuleUpsertBody {
   soft_limit_usd?: number | null
   limit_tokens?: number | null
   limit_requests?: number | null
+  limit_images?: number | null
   unit_price_usd_per_token?: number | null
   unit_price_usd_per_request?: number | null
   /** 起止时间（ISO 字符串）；null 表示该侧不限 */
@@ -149,6 +154,7 @@ export interface QuotaUsageAdjustmentBody {
   current_usd?: number | null
   current_tokens?: number | null
   current_requests?: number | null
+  current_images?: number | null
 }
 
 export const quotaRulesApi = {

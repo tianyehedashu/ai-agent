@@ -57,6 +57,7 @@ class QuotaUsageTotals:
     cost_usd: Decimal
     tokens: int
     requests: int
+    images: int = 0
 
 
 @dataclass(frozen=True)
@@ -66,7 +67,7 @@ class _LogWindowKey:
     window_start: datetime
 
 
-_ZERO_TOTALS = QuotaUsageTotals(Decimal("0"), 0, 0)
+_ZERO_TOTALS = QuotaUsageTotals(Decimal("0"), 0, 0, 0)
 
 
 def resolve_quota_window_key(lookup: QuotaWindowLookup, *, now: datetime) -> QuotaWindowKey:
@@ -124,6 +125,7 @@ class QuotaPlanUsageReadService:
                         cost_usd=Decimal(row.cost_usd or 0),
                         tokens=int(row.tokens or 0),
                         requests=int(row.requests or 0),
+                        images=int(getattr(row, "images", 0) or 0),
                     )
                     continue
             log_key = _LogWindowKey(ns=key.ns, plan_id=key.plan_id, window_start=key.window_start)
@@ -150,9 +152,7 @@ class QuotaPlanUsageReadService:
                 GatewayQuotaPlanUsageBucket.plan_id,
                 GatewayQuotaPlanUsageBucket.quota_id,
                 GatewayQuotaPlanUsageBucket.window_start,
-            ).in_(
-                [(k.ns, k.plan_id, k.quota_id, k.window_start) for k in unique_keys]
-            )
+            ).in_([(k.ns, k.plan_id, k.quota_id, k.window_start) for k in unique_keys])
         )
         rows = (await self._session.execute(stmt)).scalars().all()
         out: dict[QuotaWindowKey, GatewayQuotaPlanUsageBucket] = {}
@@ -226,6 +226,7 @@ class QuotaPlanUsageReadService:
                     0,
                 ).label("tokens"),
                 func.coalesce(func.sum(GatewayRequestLog.cost_usd), 0).label("cost_usd"),
+                func.coalesce(func.sum(GatewayRequestLog.image_count), 0).label("images"),
             ).where(
                 and_(
                     plan_col == window.plan_id,
@@ -244,6 +245,7 @@ class QuotaPlanUsageReadService:
                 cost_usd=Decimal(row.cost_usd or 0),
                 tokens=int(row.tokens or 0),
                 requests=int(row.requests or 0),
+                images=int(row.images or 0),
             )
             for row in rows
         }

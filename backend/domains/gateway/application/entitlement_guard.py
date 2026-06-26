@@ -107,6 +107,7 @@ def _quota_to_spec(row: EntitlementPlanQuota) -> PlanQuotaSpec:
         limit_usd=row.limit_usd,
         limit_tokens=row.limit_tokens,
         limit_requests=row.limit_requests,
+        limit_images=row.limit_images,
         reset_strategy=normalize_reset_strategy(row.reset_strategy),
         period_reset_anchor=period_reset_anchor_from_plan_quota(
             reset_timezone=row.reset_timezone,
@@ -134,6 +135,7 @@ class EntitlementGuard:
         ctx: EntitlementContext,
         *,
         estimate_tokens: int = 0,
+        image_count: int = 0,
         now: datetime | None = None,
     ) -> EntitlementCheckResult:
         """没有匹配 plan = 默认放行；命中 plan 但任一桶耗尽 → 抛错。"""
@@ -172,6 +174,7 @@ class EntitlementGuard:
             plan.plan_id,
             specs,
             estimate_tokens=estimate_tokens,
+            image_count=image_count,
             now=when,
         )
         if not result.allowed:
@@ -205,6 +208,7 @@ class EntitlementGuard:
         delta_tokens: int,
         delta_usd: Decimal,
         delta_requests: int = 0,
+        delta_images: int = 0,
     ) -> None:
         if not specs:
             return
@@ -215,6 +219,7 @@ class EntitlementGuard:
             delta_tokens=delta_tokens,
             delta_usd=delta_usd,
             delta_requests=delta_requests,
+            delta_images=delta_images,
         )
 
     async def release(

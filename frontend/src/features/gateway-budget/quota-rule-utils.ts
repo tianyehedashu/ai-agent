@@ -710,7 +710,10 @@ export function parseQuotaNumeric(value: unknown): number {
 
 export function quotaUsageHasMetrics(usage: QuotaRuleUsage): boolean {
   return (
-    usage.current_usd !== null || usage.current_tokens !== null || usage.current_requests !== null
+    usage.current_usd !== null ||
+    usage.current_tokens !== null ||
+    usage.current_requests !== null ||
+    usage.current_images !== null
   )
 }
 
@@ -796,10 +799,11 @@ export function computeQuotaRuleUsageRatio(rule: QuotaRule): {
   const limitUsd = rule.limits.limit_usd
   const limitTok = rule.limits.limit_tokens
   const limitReq = rule.limits.limit_requests
+  const limitImg = rule.limits.limit_images
   if (
     !usage ||
     !quotaUsageHasMetrics(usage) ||
-    (limitUsd === null && limitTok === null && limitReq === null)
+    (limitUsd === null && limitTok === null && limitReq === null && limitImg === null)
   ) {
     return { ratio: 0, barColor: 'bg-muted' }
   }
@@ -815,7 +819,11 @@ export function computeQuotaRuleUsageRatio(rule: QuotaRule): {
     limitReq !== null && limitReq > 0 && usage.current_requests !== null
       ? parseQuotaNumeric(usage.current_requests) / parseQuotaNumeric(limitReq)
       : 0
-  const ratio = Math.max(usdRatio, tokRatio, reqRatio)
+  const imgRatio =
+    limitImg !== null && limitImg > 0 && usage.current_images !== null
+      ? parseQuotaNumeric(usage.current_images) / parseQuotaNumeric(limitImg)
+      : 0
+  const ratio = Math.max(usdRatio, tokRatio, reqRatio, imgRatio)
   const barColor = ratio >= 1 ? 'bg-destructive' : ratio >= 0.9 ? 'bg-amber-500' : 'bg-emerald-500'
   return { ratio, barColor }
 }

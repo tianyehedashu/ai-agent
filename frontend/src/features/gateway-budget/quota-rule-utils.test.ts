@@ -38,6 +38,7 @@ function tokenLimits(tokens: number): QuotaRule['limits'] {
     soft_limit_usd: null,
     limit_tokens: tokens,
     limit_requests: null,
+    limit_images: null,
     unit_price_usd_per_token: null,
     unit_price_usd_per_request: null,
   }
@@ -71,6 +72,7 @@ function platformRule(modelName: string, overrides: Partial<QuotaRule> = {}): Qu
       soft_limit_usd: null,
       limit_tokens: null,
       limit_requests: null,
+      limit_images: null,
       unit_price_usd_per_token: null,
       unit_price_usd_per_request: null,
     },
@@ -115,6 +117,7 @@ function upstreamRule(
       soft_limit_usd: null,
       limit_tokens: null,
       limit_requests: null,
+      limit_images: null,
       unit_price_usd_per_token: null,
       unit_price_usd_per_request: null,
     },
@@ -746,6 +749,7 @@ describe('formatQuotaRulePeriodWindow', () => {
         current_usd: null,
         current_tokens: null,
         current_requests: null,
+        current_images: null,
         window_start: '2026-06-16T01:00:00.000Z',
         reset_at: '2026-07-01T00:00:00.000Z',
         budget_reset_at: '2026-07-01T00:00:00.000Z',
@@ -763,6 +767,7 @@ describe('formatQuotaRulePeriodWindow', () => {
         current_usd: null,
         current_tokens: null,
         current_requests: null,
+        current_images: null,
         window_start: '1970-01-01T00:00:00.000Z',
         reset_at: null,
         budget_reset_at: null,
@@ -784,6 +789,7 @@ describe('formatQuotaRulePeriodWindow', () => {
         current_usd: null,
         current_tokens: null,
         current_requests: null,
+        current_images: null,
         window_start: '2026-06-17T07:00:00.000Z',
         reset_at: null,
         budget_reset_at: null,
@@ -827,6 +833,7 @@ describe('canAddFromRule', () => {
         soft_limit_usd: null,
         limit_tokens: null,
         limit_requests: null,
+        limit_images: null,
         unit_price_usd_per_token: null,
         unit_price_usd_per_request: null,
       },
@@ -866,6 +873,7 @@ describe('canAddFromRule', () => {
         soft_limit_usd: null,
         limit_tokens: null,
         limit_requests: null,
+        limit_images: null,
         unit_price_usd_per_token: null,
         unit_price_usd_per_request: null,
       },
@@ -965,6 +973,7 @@ describe('computeQuotaRuleUsageRatio', () => {
             soft_limit_usd: null,
             limit_tokens: null,
             limit_requests: null,
+            limit_images: null,
             unit_price_usd_per_token: null,
             unit_price_usd_per_request: null,
           },
@@ -972,6 +981,7 @@ describe('computeQuotaRuleUsageRatio', () => {
             current_usd: 0,
             current_tokens: 0,
             current_requests: 0,
+            current_images: 0,
             window_start: null,
             reset_at: null,
             budget_reset_at: null,
@@ -989,6 +999,7 @@ describe('computeQuotaRuleUsageRatio', () => {
           soft_limit_usd: null,
           limit_tokens: null,
           limit_requests: null,
+          limit_images: null,
           unit_price_usd_per_token: null,
           unit_price_usd_per_request: null,
         },
@@ -996,6 +1007,7 @@ describe('computeQuotaRuleUsageRatio', () => {
           current_usd: 50,
           current_tokens: null,
           current_requests: null,
+          current_images: null,
           window_start: null,
           reset_at: null,
           budget_reset_at: null,
@@ -1014,6 +1026,7 @@ describe('computeQuotaRuleUsageRatio', () => {
           soft_limit_usd: null,
           limit_tokens: 1000,
           limit_requests: null,
+          limit_images: null,
           unit_price_usd_per_token: null,
           unit_price_usd_per_request: null,
         },
@@ -1021,6 +1034,7 @@ describe('computeQuotaRuleUsageRatio', () => {
           current_usd: null,
           current_tokens: 800,
           current_requests: null,
+          current_images: null,
           window_start: null,
           reset_at: null,
           budget_reset_at: null,
@@ -1039,6 +1053,7 @@ describe('computeQuotaRuleUsageRatio', () => {
           soft_limit_usd: null,
           limit_tokens: null,
           limit_requests: 100,
+          limit_images: null,
           unit_price_usd_per_token: null,
           unit_price_usd_per_request: null,
         },
@@ -1046,6 +1061,7 @@ describe('computeQuotaRuleUsageRatio', () => {
           current_usd: null,
           current_tokens: null,
           current_requests: 95,
+          current_images: null,
           window_start: null,
           reset_at: null,
           budget_reset_at: null,
@@ -1056,6 +1072,88 @@ describe('computeQuotaRuleUsageRatio', () => {
     expect(result.barColor).toBe('bg-amber-500')
   })
 
+  it('calculates ratio for pure Images quota', () => {
+    const result = computeQuotaRuleUsageRatio(
+      makeRule({
+        limits: {
+          limit_usd: null,
+          soft_limit_usd: null,
+          limit_tokens: null,
+          limit_requests: null,
+          limit_images: 50,
+          unit_price_usd_per_token: null,
+          unit_price_usd_per_request: null,
+        },
+        usage: {
+          current_usd: null,
+          current_tokens: null,
+          current_requests: null,
+          current_images: 40,
+          window_start: null,
+          reset_at: null,
+          budget_reset_at: null,
+        },
+      })
+    )
+    expect(result.ratio).toBe(0.8)
+    expect(result.barColor).toBe('bg-emerald-500')
+  })
+
+  it('takes max ratio across all dimensions including images', () => {
+    const result = computeQuotaRuleUsageRatio(
+      makeRule({
+        limits: {
+          limit_usd: 100,
+          soft_limit_usd: null,
+          limit_tokens: 1000,
+          limit_requests: 50,
+          limit_images: 10,
+          unit_price_usd_per_token: null,
+          unit_price_usd_per_request: null,
+        },
+        usage: {
+          current_usd: 30,
+          current_tokens: 400,
+          current_requests: 25,
+          current_images: 9,
+          window_start: null,
+          reset_at: null,
+          budget_reset_at: null,
+        },
+      })
+    )
+    // usd=0.3, tok=0.4, req=0.5, img=0.9 → max=0.9
+    expect(result.ratio).toBe(0.9)
+    expect(result.barColor).toBe('bg-amber-500')
+  })
+
+  it('marks exceeded images quota as destructive', () => {
+    const result = computeQuotaRuleUsageRatio(
+      makeRule({
+        limits: {
+          limit_usd: null,
+          soft_limit_usd: null,
+          limit_tokens: null,
+          limit_requests: null,
+          limit_images: 50,
+          unit_price_usd_per_token: null,
+          unit_price_usd_per_request: null,
+        },
+        usage: {
+          current_usd: null,
+          current_tokens: null,
+          current_requests: null,
+          current_images: 55,
+          window_start: null,
+          reset_at: null,
+          budget_reset_at: null,
+        },
+      })
+    )
+    expect(result.ratio).toBe(1.1)
+    expect(result.barColor).toBe('bg-destructive')
+  })
+
   it('takes max ratio across all dimensions', () => {
     const result = computeQuotaRuleUsageRatio(
       makeRule({
@@ -1064,6 +1162,7 @@ describe('computeQuotaRuleUsageRatio', () => {
           soft_limit_usd: null,
           limit_tokens: 1000,
           limit_requests: 50,
+          limit_images: null,
           unit_price_usd_per_token: null,
           unit_price_usd_per_request: null,
         },
@@ -1071,6 +1170,7 @@ describe('computeQuotaRuleUsageRatio', () => {
           current_usd: 30,
           current_tokens: 400,
           current_requests: 45,
+          current_images: null,
           window_start: null,
           reset_at: null,
           budget_reset_at: null,
@@ -1089,6 +1189,7 @@ describe('computeQuotaRuleUsageRatio', () => {
           soft_limit_usd: null,
           limit_tokens: null,
           limit_requests: 100,
+          limit_images: null,
           unit_price_usd_per_token: null,
           unit_price_usd_per_request: null,
         },
@@ -1096,6 +1197,7 @@ describe('computeQuotaRuleUsageRatio', () => {
           current_usd: null,
           current_tokens: null,
           current_requests: 105,
+          current_images: null,
           window_start: null,
           reset_at: null,
           budget_reset_at: null,
@@ -1114,6 +1216,7 @@ describe('computeQuotaRuleUsageRatio', () => {
           soft_limit_usd: null,
           limit_tokens: null,
           limit_requests: 100,
+          limit_images: null,
           unit_price_usd_per_token: null,
           unit_price_usd_per_request: null,
         },
@@ -1121,6 +1224,7 @@ describe('computeQuotaRuleUsageRatio', () => {
           current_usd: 50,
           current_tokens: null,
           current_requests: 50,
+          current_images: null,
           window_start: null,
           reset_at: null,
           budget_reset_at: null,

@@ -24,6 +24,7 @@ class GatewayQuotaPlanUsageBucket(Base):
     window_start: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     tokens: Mapped[int] = mapped_column(BigInteger, nullable=False, server_default="0")
     requests: Mapped[int] = mapped_column(BigInteger, nullable=False, server_default="0")
+    images: Mapped[int] = mapped_column(BigInteger, nullable=False, server_default="0")
     cost_usd: Mapped[Decimal] = mapped_column(
         Numeric(14, 6), nullable=False, server_default="0", default=Decimal("0")
     )

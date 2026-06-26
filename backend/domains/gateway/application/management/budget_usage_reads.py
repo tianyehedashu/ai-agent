@@ -64,7 +64,7 @@ class BudgetWindowKey:
     window_start: datetime
 
 
-_ZERO_TOTALS = QuotaUsageTotals(Decimal("0"), 0, 0)
+_ZERO_TOTALS = QuotaUsageTotals(Decimal("0"), 0, 0, 0)
 
 
 def merge_platform_display_totals(
@@ -76,12 +76,15 @@ def merge_platform_display_totals(
         cost_usd=max(bucket.cost_usd, logs.cost_usd),
         tokens=max(bucket.tokens, logs.tokens),
         requests=max(bucket.requests, logs.requests),
+        images=max(bucket.images, logs.images),
     )
 
 
 def _is_explicit_zero_bucket(totals: QuotaUsageTotals) -> bool:
     """人工清零写入的全零桶：不再与日志 max 合并。"""
-    return totals.tokens == 0 and totals.requests == 0 and totals.cost_usd == 0
+    return (
+        totals.tokens == 0 and totals.requests == 0 and totals.cost_usd == 0 and totals.images == 0
+    )
 
 
 def resolve_budget_window_key(lookup: BudgetWindowLookup, *, now: datetime) -> BudgetWindowKey:
@@ -156,6 +159,7 @@ class PlatformBudgetUsageReadService:
                 cost_usd=Decimal(row.cost_usd or 0),
                 tokens=int(row.tokens or 0),
                 requests=int(row.requests or 0),
+                images=int(getattr(row, "images", 0) or 0),
             )
             if not _is_explicit_zero_bucket(bucket_usage):
                 needs_logs.append((key, lookup))
@@ -174,6 +178,7 @@ class PlatformBudgetUsageReadService:
                     cost_usd=Decimal(row.cost_usd or 0),
                     tokens=int(row.tokens or 0),
                     requests=int(row.requests or 0),
+                    images=int(getattr(row, "images", 0) or 0),
                 )
                 if row is not None
                 else _ZERO_TOTALS
@@ -204,12 +209,7 @@ class PlatformBudgetUsageReadService:
                 GatewayQuotaPlanUsageBucket.plan_id,
                 GatewayQuotaPlanUsageBucket.quota_id,
                 GatewayQuotaPlanUsageBucket.window_start,
-            ).in_(
-                [
-                    (PLATFORM_NS, k.budget_id, k.budget_id, k.window_start)
-                    for k in unique_keys
-                ]
-            )
+            ).in_([(PLATFORM_NS, k.budget_id, k.budget_id, k.window_start) for k in unique_keys])
         )
         rows = (await self._session.execute(stmt)).scalars().all()
         out: dict[tuple[str, uuid.UUID, uuid.UUID, datetime], GatewayQuotaPlanUsageBucket] = {}
@@ -236,6 +236,7 @@ class PlatformBudgetUsageReadService:
                     0,
                 ).label("tokens"),
                 func.coalesce(func.sum(GatewayRequestLog.cost_usd), 0).label("cost_usd"),
+                func.coalesce(func.sum(GatewayRequestLog.image_count), 0).label("images"),
             ).where(
                 and_(
                     GatewayRequestLog.status == "success",
@@ -249,10 +250,13 @@ class PlatformBudgetUsageReadService:
         stmt = subqueries[0] if len(subqueries) == 1 else union_all(*subqueries)
         rows = (await self._session.execute(stmt)).all()
         return {
-            BudgetWindowKey(budget_id=row.budget_id, window_start=row.window_start): QuotaUsageTotals(
+            BudgetWindowKey(
+                budget_id=row.budget_id, window_start=row.window_start
+            ): QuotaUsageTotals(
                 cost_usd=Decimal(row.cost_usd or 0),
                 tokens=int(row.tokens or 0),
                 requests=int(row.requests or 0),
+                images=int(row.images or 0),
             )
             for row in rows
         }

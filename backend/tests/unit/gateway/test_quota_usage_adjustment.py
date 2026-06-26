@@ -16,12 +16,13 @@ from libs.exceptions import ValidationError
 
 
 def test_resolved_usage_values_reset_window() -> None:
-    usd, tokens, requests = _resolved_usage_values(
+    usd, tokens, requests, images = _resolved_usage_values(
         QuotaUsageAdjustmentCommand(layer="platform", budget_id=uuid.uuid4(), mode="reset_window")
     )
     assert usd == Decimal("0")
     assert tokens == 0
     assert requests == 0
+    assert images == 0
 
 
 def test_resolved_usage_values_set_requires_field() -> None:

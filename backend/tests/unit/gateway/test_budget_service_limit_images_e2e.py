@@ -1,8 +1,11 @@
-"""BudgetService ``limit_requests`` 端到端单测。
+"""BudgetService ``limit_images`` 端到端单测。
 
-模拟实际代理调用流程：``check_budget`` → ``reserve``（Lua 原子预扣）→
+模拟图像生成调用流程：``check_budget`` → ``reserve``（Lua 原子预扣图片张数）→
 第二次 ``check_budget`` 拦截 → ``release`` 回滚 → 再次允许。
-覆盖 platform / upstream / downstream 三层路径的按次数配额执法。
+覆盖 platform 层路径的按图片张数配额执法。
+
+注：``_BudgetFakeRedis.eval`` 必须完整解释 ``_RESERVE_LUA_SCRIPT`` 的 7 个
+ARGV（requests/tokens/expire/images），并在图片张数超限时返回 ``[2, images_val]``。
 """
 
 from __future__ import annotations
@@ -166,10 +169,10 @@ def budget_fake_redis(monkeypatch: pytest.MonkeyPatch) -> _BudgetFakeRedis:
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_platform_limit_requests_blocks_when_exceeded(
+async def test_platform_limit_images_blocks_when_exceeded(
     budget_fake_redis: _BudgetFakeRedis,
 ) -> None:
-    """``limit_requests`` 达上限后第二次 check_budget 必须拒绝。"""
+    """``limit_images`` 达上限后第二次 check_budget 必须拒绝，reason=images。"""
     _ = budget_fake_redis
     service = BudgetService()
     team_id = uuid.uuid4()
@@ -181,19 +184,23 @@ async def test_platform_limit_requests_blocks_when_exceeded(
         period="daily",
         limit_usd=None,
         limit_tokens=None,
-        limit_requests=1,
+        limit_requests=None,
+        limit_images=2,
     )
     assert first.allowed
 
-    reserved_requests, _reserved_tokens, _reserved_images = await service.reserve(
+    reserved_requests, _reserved_tokens, reserved_images = await service.reserve(
         target_kind="tenant",
         target_id=target_id_str,
         period="daily",
-        limit_requests=1,
+        limit_requests=None,
         limit_tokens=None,
+        limit_images=2,
+        image_count=2,
         estimate_tokens=0,
     )
-    assert reserved_requests == 1
+    assert reserved_requests == 0
+    assert reserved_images == 2
 
     second = await service.check_budget(
         target_kind="tenant",
@@ -201,19 +208,20 @@ async def test_platform_limit_requests_blocks_when_exceeded(
         period="daily",
         limit_usd=None,
         limit_tokens=None,
-        limit_requests=1,
+        limit_requests=None,
+        limit_images=2,
     )
     assert not second.allowed
-    assert second.reason == "requests"
-    assert second.used_requests == 1
+    assert second.reason == "images"
+    assert second.used_images == 2
 
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_platform_limit_requests_release_restores_quota(
+async def test_platform_limit_images_release_restores_quota(
     budget_fake_redis: _BudgetFakeRedis,
 ) -> None:
-    """release 回滚预扣后，配额应再次可用。"""
+    """release 回滚预扣的图片张数后，配额应再次可用。"""
     _ = budget_fake_redis
     service = BudgetService()
     team_id = uuid.uuid4()
@@ -226,26 +234,30 @@ async def test_platform_limit_requests_release_restores_quota(
             period="daily",
             limit_usd=None,
             limit_tokens=None,
-            limit_requests=1,
+            limit_requests=None,
+            limit_images=2,
         )
     ).allowed
 
-    reserved_requests, _, _ = await service.reserve(
+    _reserved_requests, _reserved_tokens, reserved_images = await service.reserve(
         target_kind="tenant",
         target_id=target_id_str,
         period="daily",
-        limit_requests=1,
+        limit_requests=None,
         limit_tokens=None,
+        limit_images=2,
+        image_count=2,
         estimate_tokens=0,
     )
-    assert reserved_requests == 1
+    assert reserved_images == 2
 
     await service.release(
         target_kind="tenant",
         target_id=target_id_str,
         period="daily",
-        reserved_requests=1,
+        reserved_requests=0,
         reserved_tokens=0,
+        reserved_images=2,
     )
 
     assert (
@@ -255,17 +267,18 @@ async def test_platform_limit_requests_release_restores_quota(
             period="daily",
             limit_usd=None,
             limit_tokens=None,
-            limit_requests=1,
+            limit_requests=None,
+            limit_images=2,
         )
     ).allowed
 
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_platform_limit_requests_reserve_raises_when_lua_rejects(
+async def test_platform_limit_images_reserve_raises_when_lua_rejects(
     budget_fake_redis: _BudgetFakeRedis,
 ) -> None:
-    """reserve 在 Lua 脚本判定超限时应抛 ``BudgetExceededError``，而非静默放行。"""
+    """reserve 在 Lua 脚本判定图片超限时应抛 ``BudgetExceededError``，而非静默放行。"""
     _ = budget_fake_redis
     service = BudgetService()
     team_id = uuid.uuid4()
@@ -275,8 +288,10 @@ async def test_platform_limit_requests_reserve_raises_when_lua_rejects(
         target_kind="tenant",
         target_id=target_id_str,
         period="daily",
-        limit_requests=1,
+        limit_requests=None,
         limit_tokens=None,
+        limit_images=2,
+        image_count=2,
         estimate_tokens=0,
     )
 
@@ -285,19 +300,22 @@ async def test_platform_limit_requests_reserve_raises_when_lua_rejects(
             target_kind="tenant",
             target_id=target_id_str,
             period="daily",
-            limit_requests=1,
+            limit_requests=None,
             limit_tokens=None,
+            limit_images=2,
+            image_count=1,
             estimate_tokens=0,
         )
     assert exc_info.value.scope == "tenant"
+    assert exc_info.value.period == "daily"
 
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_platform_limit_requests_zero_means_unlimited(
+async def test_platform_limit_images_zero_means_unlimited(
     budget_fake_redis: _BudgetFakeRedis,
 ) -> None:
-    """``limit_requests=0`` 与 ``None`` 等价：不限制、不预扣。"""
+    """``limit_images=0`` 与 ``None`` 等价：不限制、不预扣图片张数。"""
     _ = budget_fake_redis
     service = BudgetService()
     team_id = uuid.uuid4()
@@ -309,27 +327,31 @@ async def test_platform_limit_requests_zero_means_unlimited(
         period="daily",
         limit_usd=None,
         limit_tokens=None,
-        limit_requests=0,
+        limit_requests=None,
+        limit_images=0,
     )
     assert check.allowed
 
-    reserved_requests, _, _ = await service.reserve(
+    reserved_requests, _reserved_tokens, reserved_images = await service.reserve(
         target_kind="tenant",
         target_id=target_id_str,
         period="daily",
-        limit_requests=0,
+        limit_requests=None,
         limit_tokens=None,
+        limit_images=0,
+        image_count=4,
         estimate_tokens=0,
     )
     assert reserved_requests == 0
+    assert reserved_images == 0
 
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_platform_limit_requests_read_batch_reflects_reservations(
+async def test_platform_limit_images_read_batch_reflects_reservations(
     budget_fake_redis: _BudgetFakeRedis,
 ) -> None:
-    """``read_budget_usage_batch`` 必须读到 reserve 累加的 requests 计数。"""
+    """``read_budget_usage_batch`` 必须读到 reserve 累加的 images 计数（4-tuple 解构）。"""
     _ = budget_fake_redis
     service = BudgetService()
     team_id = uuid.uuid4()
@@ -339,8 +361,10 @@ async def test_platform_limit_requests_read_batch_reflects_reservations(
         target_kind="tenant",
         target_id=target_id_str,
         period="daily",
-        limit_requests=5,
+        limit_requests=None,
         limit_tokens=None,
+        limit_images=10,
+        image_count=3,
         estimate_tokens=0,
     )
 
@@ -351,7 +375,8 @@ async def test_platform_limit_requests_read_batch_reflects_reservations(
         model_segment=None,
     )
     batch = await service.read_budget_usage_batch([coord])
-    used_cost, used_tokens, used_requests, _used_images = batch[coord]
-    assert used_requests == 1
+    used_cost, used_tokens, used_requests, used_images = batch[coord]
+    assert used_images == 3
     assert used_cost == Decimal("0")
     assert used_tokens == 0
+    assert used_requests == 0

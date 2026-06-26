@@ -116,6 +116,11 @@ class EntitlementPlanQuota(BaseModel):
     limit_usd: Mapped[Decimal | None] = mapped_column(Numeric(12, 4), nullable=True)
     limit_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
     limit_requests: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    limit_images: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+        comment="图片生成张数限额（仅 image capability 路径有意义）",
+    )
     unit_price_usd_per_token: Mapped[Decimal | None] = mapped_column(
         Numeric(12, 8),
         nullable=True,

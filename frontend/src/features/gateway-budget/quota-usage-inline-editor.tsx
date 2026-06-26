@@ -15,6 +15,7 @@ import {
   useQuotaUsageAdjust,
 } from '@/features/gateway-budget/use-quota-usage-adjust'
 import { Loader2 } from '@/lib/lucide-icons'
+import { cn } from '@/lib/utils'
 
 import type { QuotaCenterMode } from './use-quota-center'
 
@@ -26,14 +27,21 @@ interface QuotaUsageInlineEditorProps {
   limitUsd: number | string | null
   limitTok: number | null
   limitReq: number | null
+  limitImg?: number | null
 }
 
-function usageFieldStrings(rule: QuotaRule): { usd: string; tokens: string; requests: string } {
+function usageFieldStrings(rule: QuotaRule): {
+  usd: string
+  tokens: string
+  requests: string
+  images: string
+} {
   const body = buildQuotaUsageAdjustmentBody(rule)
   return {
     usd: String(body.current_usd ?? 0),
     tokens: String(body.current_tokens ?? 0),
     requests: String(body.current_requests ?? 0),
+    images: String(body.current_images ?? 0),
   }
 }
 
@@ -45,11 +53,13 @@ export function QuotaUsageInlineEditor({
   limitUsd,
   limitTok,
   limitReq,
+  limitImg = null,
 }: QuotaUsageInlineEditorProps): React.JSX.Element {
   const baseline = useMemo(() => usageFieldStrings(rule), [rule])
   const [usd, setUsd] = useState(baseline.usd)
   const [tokens, setTokens] = useState(baseline.tokens)
   const [requests, setRequests] = useState(baseline.requests)
+  const [images, setImages] = useState(baseline.images)
 
   const { adjustUsage, resetWindow, pending } = useQuotaUsageAdjust({ teamId, mode })
 
@@ -57,28 +67,34 @@ export function QuotaUsageInlineEditor({
     setUsd(baseline.usd)
     setTokens(baseline.tokens)
     setRequests(baseline.requests)
-  }, [baseline.requests, baseline.tokens, baseline.usd])
+    setImages(baseline.images)
+  }, [baseline.images, baseline.requests, baseline.tokens, baseline.usd])
 
-  const dirty = usd !== baseline.usd || tokens !== baseline.tokens || requests !== baseline.requests
+  const dirty =
+    usd !== baseline.usd ||
+    tokens !== baseline.tokens ||
+    requests !== baseline.requests ||
+    images !== baseline.images
 
   const previewRule = useMemo((): QuotaRule => {
     const usage: QuotaRuleUsage = {
       current_usd: Number.parseFloat(usd) || 0,
       current_tokens: Number.parseInt(tokens, 10) || 0,
       current_requests: Number.parseInt(requests, 10) || 0,
+      current_images: Number.parseInt(images, 10) || 0,
       window_start: rule.usage?.window_start ?? null,
       reset_at: rule.usage?.reset_at ?? null,
       budget_reset_at: rule.usage?.budget_reset_at ?? null,
     }
     return { ...rule, usage }
-  }, [requests, rule, tokens, usd])
+  }, [images, requests, rule, tokens, usd])
 
   // 滚动窗口用量由请求日志实时统计，桶写入不反映到展示，故不提供手工校正/清零。
   const isRolling = isSlidingRollingWindow(rule)
   const effectiveCanEdit = canEdit && !isRolling
 
   const { ratio, barColor } = computeQuotaRuleUsageRatio(previewRule)
-  const hasLimits = limitUsd !== null || limitTok !== null || limitReq !== null
+  const hasLimits = limitUsd !== null || limitTok !== null || limitReq !== null || limitImg !== null
   const showProgress =
     hasLimits && (effectiveCanEdit || (rule.usage !== null && quotaUsageHasMetrics(rule.usage)))
 
@@ -86,6 +102,9 @@ export function QuotaUsageInlineEditor({
     limitUsd !== null ? `$${Number.parseFloat(String(limitUsd)).toFixed(2)}` : '∞'
   const limitTokLabel = formatQuotaTokens(limitTok)
   const limitReqLabel = formatQuotaTokens(limitReq)
+  const limitImgLabel = formatQuotaTokens(limitImg)
+  const showImg = limitImg !== null
+  const gridCols = showImg ? 'sm:grid-cols-4' : 'sm:grid-cols-3'
 
   const handleSave = (): void => {
     adjustUsage({
@@ -94,6 +113,7 @@ export function QuotaUsageInlineEditor({
       current_usd: Number.parseFloat(usd) || 0,
       current_tokens: Number.parseInt(tokens, 10) || 0,
       current_requests: Number.parseInt(requests, 10) || 0,
+      current_images: Number.parseInt(images, 10) || 0,
     })
   }
 
@@ -109,7 +129,7 @@ export function QuotaUsageInlineEditor({
     }
     return (
       <div className="mt-3 space-y-2">
-        <div className="grid gap-2 text-xs tabular-nums sm:grid-cols-3">
+        <div className={cn('grid gap-2 text-xs tabular-nums', gridCols)}>
           <div className="rounded bg-background/60 px-2 py-1.5">
             <p className="text-[10px] uppercase tracking-wide text-muted-foreground">已用费用</p>
             <p className="mt-0.5 font-medium">
@@ -128,6 +148,14 @@ export function QuotaUsageInlineEditor({
               {formatQuotaTokens(usage.current_requests)} / {limitReqLabel}
             </p>
           </div>
+          {showImg ? (
+            <div className="rounded bg-background/60 px-2 py-1.5">
+              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">已用图像</p>
+              <p className="mt-0.5 font-medium">
+                {formatQuotaTokens(usage.current_images)} / {limitImgLabel}
+              </p>
+            </div>
+          ) : null}
         </div>
         {showProgress ? <UsageProgressBar ratio={ratio} barColor={barColor} /> : null}
         {canEdit && isRolling ? (
@@ -141,7 +169,7 @@ export function QuotaUsageInlineEditor({
 
   return (
     <div className="mt-3 space-y-2">
-      <div className="grid gap-2 text-xs sm:grid-cols-3">
+      <div className={cn('grid gap-2 text-xs', gridCols)}>
         <label className="space-y-1 rounded bg-background/60 px-2 py-1.5">
           <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
             已用费用 (USD)
@@ -193,6 +221,25 @@ export function QuotaUsageInlineEditor({
             <span className="shrink-0 text-muted-foreground">/ {limitReqLabel}</span>
           </div>
         </label>
+        {showImg ? (
+          <label className="space-y-1 rounded bg-background/60 px-2 py-1.5">
+            <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+              已用图像
+            </span>
+            <div className="flex items-center gap-1.5 tabular-nums">
+              <Input
+                inputMode="numeric"
+                className="h-7 flex-1 px-2 text-xs"
+                value={images}
+                disabled={pending}
+                onChange={(e) => {
+                  setImages(e.target.value)
+                }}
+              />
+              <span className="shrink-0 text-muted-foreground">/ {limitImgLabel}</span>
+            </div>
+          </label>
+        ) : null}
       </div>
 
       {showProgress ? <UsageProgressBar ratio={ratio} barColor={barColor} /> : null}

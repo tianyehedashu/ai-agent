@@ -142,6 +142,7 @@ async def commit_cached_platform_budgets(
     delta_tokens: int,
     loader: Callable[[tuple[BudgetCheckQuery, ...]], Awaitable[dict[_Coord, GatewayBudget]]],
     pinned_anchors: dict[_Coord, PeriodResetAnchor] | None = None,
+    delta_images: int = 0,
 ) -> set[_Coord]:
     """按配置缓存批量结算；无规则坐标不写 Redis。"""
     committed_coords: set[_Coord] = set()
@@ -183,6 +184,8 @@ async def commit_cached_platform_budgets(
             pinned_anchors=pinned_anchors,
         )
         try:
+            # 仅对配置了 ``limit_images`` 的预算行校正图片张数；其余行不写 images 维度
+            row_delta_images = delta_images if config.limit_images is not None else 0
             await budget.commit(
                 target_kind=query.target_kind,
                 target_id=target_id_str,
@@ -193,6 +196,7 @@ async def commit_cached_platform_budgets(
                 credential_id=query.credential_id,
                 tenant_id=query.tenant_id,
                 period_reset_anchor=anchor,
+                delta_images=row_delta_images,
             )
             committed_coords.add(coord)
         except Exception:

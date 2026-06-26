@@ -26,6 +26,7 @@ class PlanQuotaReadModel:
     enabled: bool = True
     valid_from: datetime | None = None
     valid_until: datetime | None = None
+    limit_images: int | None = None
 
 
 @dataclass(frozen=True)
@@ -47,6 +48,7 @@ class ProviderQuotaReadModel:
     enabled: bool = True
     valid_from: datetime | None = None
     valid_until: datetime | None = None
+    limit_images: int | None = None
 
 
 @dataclass(frozen=True)

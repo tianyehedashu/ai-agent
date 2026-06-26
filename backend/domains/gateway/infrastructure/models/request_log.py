@@ -140,6 +140,13 @@ class GatewayRequestLog(Base):
         default=Decimal("0"),
         comment="下游对客户计价（USD）",
     )
+    image_count: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        server_default="0",
+        default=0,
+        comment="本次调用生成的图片张数（image capability 路径专用）",
+    )
     pricing_snapshot: Mapped[dict[str, Any] | None] = mapped_column(
         JSONB,
         nullable=True,

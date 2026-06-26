@@ -62,6 +62,7 @@ class EntitlementQuotaConfigRow:
     enabled: bool = True
     valid_from: datetime | None = None
     valid_until: datetime | None = None
+    limit_images: int | None = None
 
 
 @dataclass(frozen=True)
@@ -81,6 +82,7 @@ def entitlement_quota_to_spec(row: EntitlementQuotaConfigRow) -> PlanQuotaSpec:
         limit_usd=row.limit_usd,
         limit_tokens=row.limit_tokens,
         limit_requests=row.limit_requests,
+        limit_images=row.limit_images,
         reset_strategy=normalize_reset_strategy(row.reset_strategy),
         period_reset_anchor=period_reset_anchor_from_plan_quota(
             reset_timezone=row.reset_timezone,
@@ -98,7 +100,11 @@ def select_active_plan_config(
 ) -> EntitlementPlanConfigRow | None:
     """复刻 ``get_active_for_scope``：按缓存顺序（created_at 倒序）取首个匹配白名单的 plan。"""
     for row in rows:
-        if row.included_models and virtual_model is not None and virtual_model not in row.included_models:
+        if (
+            row.included_models
+            and virtual_model is not None
+            and virtual_model not in row.included_models
+        ):
             continue
         if (
             row.included_capabilities
@@ -160,6 +166,7 @@ def entitlement_plan_rows_from_orm(
                     enabled=q.enabled,
                     valid_from=q.valid_from,
                     valid_until=q.valid_until,
+                    limit_images=getattr(q, "limit_images", None),
                 )
                 for q in quotas
             ),
@@ -313,6 +320,7 @@ def _encode_quota(q: EntitlementQuotaConfigRow) -> dict[str, object]:
         "limit_usd": str(q.limit_usd) if q.limit_usd is not None else None,
         "limit_tokens": q.limit_tokens,
         "limit_requests": q.limit_requests,
+        "limit_images": q.limit_images,
         "unit_price_usd_per_token": str(q.unit_price_usd_per_token)
         if q.unit_price_usd_per_token is not None
         else None,
@@ -354,6 +362,7 @@ def _decode_quota(item: dict[str, object]) -> EntitlementQuotaConfigRow:
         limit_usd=_decode_decimal(item.get("limit_usd")),
         limit_tokens=int(item["limit_tokens"]) if item.get("limit_tokens") else None,  # type: ignore[arg-type]
         limit_requests=int(item["limit_requests"]) if item.get("limit_requests") else None,  # type: ignore[arg-type]
+        limit_images=int(item["limit_images"]) if item.get("limit_images") else None,  # type: ignore[arg-type]
         unit_price_usd_per_token=_decode_decimal(item.get("unit_price_usd_per_token")),
         unit_price_usd_per_request=_decode_decimal(item.get("unit_price_usd_per_request")),
         enabled=bool(item.get("enabled", True)),

@@ -49,6 +49,7 @@ async def schedule_quota_plan_usage_upsert(
     delta_tokens: int,
     delta_cost_usd: Decimal,
     delta_requests: int = 1,
+    delta_images: int = 0,
     request_id: str | None,
     settled_at: datetime | None = None,
 ) -> None:
@@ -82,6 +83,7 @@ async def schedule_quota_plan_usage_upsert(
             delta_tokens=delta_tokens,
             delta_cost_usd=delta_cost_usd,
             delta_requests=delta_requests,
+            delta_images=delta_images,
         )
 
 

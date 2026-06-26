@@ -598,9 +598,9 @@ class AvailableModelsListResponse(BaseModel):
     default_for_vision: dict[str, str] | None = None
     default_for_image_gen: dict[str, str] | None = None
     connectivity_summary: ModelConnectivitySummary | None = None
-    chat_readiness: Literal["ready", "needs_model", "needs_connectivity_fix", "needs_credential"] | None = (
-        None
-    )
+    chat_readiness: (
+        Literal["ready", "needs_model", "needs_connectivity_fix", "needs_credential"] | None
+    ) = None
 
 
 class GatewayModelRouteUsageSlice(BaseModel):
@@ -978,6 +978,11 @@ class BudgetUpsert(BaseModel):
     soft_limit_usd: Decimal | None = None
     limit_tokens: int | None = None
     limit_requests: int | None = None
+    limit_images: int | None = Field(
+        default=None,
+        ge=0,
+        description="图片生成张数上限（仅对 image 能力生效）",
+    )
     period_timezone: str | None = None
     period_reset_minutes: int | None = Field(default=None, ge=0, le=1439)
     period_reset_day: int | None = Field(default=None, ge=1, le=31)
@@ -995,9 +1000,11 @@ class BudgetResponse(BaseModel):
     soft_limit_usd: Decimal | None = None
     limit_tokens: int | None = None
     limit_requests: int | None = None
+    limit_images: int | None = None
     current_usd: Decimal = Decimal("0")
     current_tokens: int = 0
     current_requests: int = 0
+    current_images: int = 0
     reset_at: datetime | None = None
     budget_reset_at: datetime | None = None
     period_timezone: str = "UTC"
@@ -1045,12 +1052,14 @@ class QuotaRuleLimitsResponse(BaseModel):
     limit_requests: int | None = None
     unit_price_usd_per_token: Decimal | None = None
     unit_price_usd_per_request: Decimal | None = None
+    limit_images: int | None = None
 
 
 class QuotaRuleUsageResponse(BaseModel):
     current_usd: Decimal | None = None
     current_tokens: int | None = None
     current_requests: int | None = None
+    current_images: int | None = None
     window_start: datetime | None = None
     reset_at: datetime | None = None
     budget_reset_at: datetime | None = None
@@ -1098,6 +1107,11 @@ class QuotaRuleUpsert(BaseModel):
     soft_limit_usd: Decimal | None = None
     limit_tokens: int | None = None
     limit_requests: int | None = None
+    limit_images: int | None = Field(
+        default=None,
+        ge=0,
+        description="图片生成张数上限（仅对 image 能力生效）",
+    )
     unit_price_usd_per_token: Decimal | None = None
     unit_price_usd_per_request: Decimal | None = None
     plan_label: str | None = Field(default=None, max_length=100)
@@ -1129,6 +1143,11 @@ class QuotaUsageAdjustmentRequest(BaseModel):
     current_usd: Decimal | None = None
     current_tokens: int | None = Field(default=None, ge=0)
     current_requests: int | None = Field(default=None, ge=0)
+    current_images: int | None = Field(
+        default=None,
+        ge=0,
+        description="图片生成张数已用值（仅对设置了 limit_images 的规则生效）",
+    )
 
 
 class QuotaRuleEnablementRequest(BaseModel):
@@ -1383,6 +1402,11 @@ class PlanQuotaUpsert(BaseModel):
     limit_usd: Decimal | None = None
     limit_tokens: int | None = None
     limit_requests: int | None = None
+    limit_images: int | None = Field(
+        default=None,
+        ge=0,
+        description="图片生成张数上限（仅对 image 能力生效）",
+    )
     reset_timezone: str | None = None
     reset_time_minutes: int | None = Field(default=None, ge=0, le=1439)
     reset_day_of_month: int | None = Field(default=None, ge=1, le=31)
@@ -1401,6 +1425,7 @@ class PlanQuotaResponse(BaseModel):
     limit_usd: Decimal | None = None
     limit_tokens: int | None = None
     limit_requests: int | None = None
+    limit_images: int | None = None
     reset_timezone: str = "UTC"
     reset_time_minutes: int = 0
     reset_day_of_month: int = 1

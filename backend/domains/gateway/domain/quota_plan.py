@@ -35,7 +35,7 @@ PROVIDER_NS: Final[QuotaPlanNamespace] = "provider"
 UsageBucketNamespace = Literal["entitlement", "provider", "platform"]
 PLATFORM_NS: Final[UsageBucketNamespace] = "platform"
 
-ExhaustedReason = Literal["usd", "tokens", "requests"]
+ExhaustedReason = Literal["usd", "tokens", "requests", "images"]
 
 # =============================================================================
 # 周期重置策略 - 解决 "本地滚动窗口 vs 厂商日历重置" 的对齐偏差
@@ -108,6 +108,7 @@ class PlanQuotaSpec:
         window_seconds: 窗口长度（秒）；``0`` 表示「整规则有效期作为一个桶」。
         reset_strategy: 见 ``ResetStrategy``；默认 ``rolling``，与历史行为一致。
         limit_*: 任意一项可为 ``None`` 表示该维度不限。任一非空维度耗尽即整桶耗尽。
+        limit_images: 图片生成张数限额（仅 image capability 路径有意义）。
     """
 
     quota_id: uuid.UUID
@@ -116,13 +117,19 @@ class PlanQuotaSpec:
     limit_usd: Decimal | None = None
     limit_tokens: int | None = None
     limit_requests: int | None = None
+    limit_images: int | None = None
     reset_strategy: ResetStrategy = RESET_STRATEGY_DEFAULT
     period_reset_anchor: PeriodResetAnchor = DEFAULT_PERIOD_RESET_ANCHOR
 
     def has_any_limit(self) -> bool:
         return any(
             v is not None and v > 0
-            for v in (self.limit_usd, self.limit_tokens, self.limit_requests)
+            for v in (
+                self.limit_usd,
+                self.limit_tokens,
+                self.limit_requests,
+                self.limit_images,
+            )
         )
 
 
@@ -134,6 +141,7 @@ class PlanQuotaSnapshot:
     used_usd: Decimal = Decimal("0")
     used_tokens: int = 0
     used_requests: int = 0
+    used_images: int = 0
     exhausted_reason: ExhaustedReason | None = None
     earliest_minute_in_window: int | None = None
 
@@ -167,6 +175,7 @@ class QuotaPlanReservation:
     spec: PlanQuotaSpec
     minute_unix: int
     reserved_requests: int = 1
+    reserved_images: int = 0
 
 
 @dataclass

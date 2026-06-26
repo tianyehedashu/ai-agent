@@ -64,11 +64,11 @@ class RecordingBudgetService(BudgetService):
         credential_id: uuid.UUID | str | None = None,
         tenant_id: uuid.UUID | str | None = None,
         **_kwargs: object,
-    ) -> tuple[int, int]:
+    ) -> tuple[int, int, int]:
         _ = _kwargs
         _ = limit_tokens, estimate_tokens, credential_id, tenant_id
         self.reserved.append((target_kind, target_id, period, budget_model_name))
-        return (1 if limit_requests else 0, 0)
+        return (1 if limit_requests else 0, 0, 0)
 
     async def release(
         self,

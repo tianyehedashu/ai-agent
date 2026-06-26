@@ -38,12 +38,14 @@ class _PendingBucket:
     delta_tokens: int
     delta_cost_usd: Decimal
     delta_requests: int
+    delta_images: int = 0
 
 
 def _merge_bucket(existing: _PendingBucket, new: _PendingBucket) -> _PendingBucket:
     existing.delta_tokens += new.delta_tokens
     existing.delta_cost_usd += new.delta_cost_usd
     existing.delta_requests += new.delta_requests
+    existing.delta_images += new.delta_images
     return existing
 
 
@@ -63,6 +65,7 @@ async def _flush_buckets(entries: list[tuple[BucketKey, _PendingBucket]]) -> Non
                     delta_tokens=pending.delta_tokens,
                     delta_requests=pending.delta_requests,
                     delta_cost_usd=pending.delta_cost_usd,
+                    delta_images=pending.delta_images,
                 )
 
 
@@ -89,6 +92,7 @@ def record_bucket_usage(
     delta_tokens: int,
     delta_cost_usd: Decimal,
     delta_requests: int,
+    delta_images: int = 0,
 ) -> None:
     """累加一个窗口桶增量；关闭合并时立即补刷一次（行为等价即时落库）。"""
     _bucket_flusher.add(
@@ -97,6 +101,7 @@ def record_bucket_usage(
             delta_tokens=delta_tokens,
             delta_cost_usd=delta_cost_usd,
             delta_requests=delta_requests,
+            delta_images=delta_images,
         ),
     )
     if not coalescing_enabled():

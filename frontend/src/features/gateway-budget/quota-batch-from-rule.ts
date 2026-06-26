@@ -62,6 +62,7 @@ export function quotaRuleToBatchFormValues(
       limit_usd: numberToStr(rule.limits.limit_usd),
       limit_tokens: numberToStr(rule.limits.limit_tokens),
       limit_requests: numberToStr(rule.limits.limit_requests),
+      limit_images: numberToStr(rule.limits.limit_images),
       validFrom: isoToLocalDateTime(rule.valid_from),
       validUntil: isoToLocalDateTime(rule.valid_until),
     }
@@ -125,6 +126,7 @@ export function quotaRuleToBatchFormValues(
         limit_usd: numberToStr(rule.limits.limit_usd),
         limit_tokens: numberToStr(rule.limits.limit_tokens),
         limit_requests: numberToStr(rule.limits.limit_requests),
+        limit_images: numberToStr(rule.limits.limit_images),
         validFrom: isoToLocalDateTime(rule.valid_from),
         validUntil: isoToLocalDateTime(rule.valid_until),
       },
@@ -161,6 +163,7 @@ export function quotaRuleToBatchFormValues(
       limit_usd: numberToStr(rule.limits.limit_usd),
       limit_tokens: numberToStr(rule.limits.limit_tokens),
       limit_requests: numberToStr(rule.limits.limit_requests),
+      limit_images: numberToStr(rule.limits.limit_images),
       validFrom: isoToLocalDateTime(rule.valid_from),
       validUntil: isoToLocalDateTime(rule.valid_until),
     },
@@ -202,6 +205,7 @@ export function quotaRuleToScopePrefill(rule: QuotaRule): QuotaBatchFormValues |
     limit_usd: '',
     limit_tokens: '',
     limit_requests: '',
+    limit_images: '',
     validFrom: '',
     validUntil: '',
     ...(info.layer === 'upstream' || info.layer === 'downstream'

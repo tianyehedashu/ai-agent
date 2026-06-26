@@ -166,35 +166,58 @@ class _FakeRedis:
         """同步执行脚本逻辑，建模 Redis 单线程原子 eval（脚本内不让出事件循环）。"""
         keys = list(args[:numkeys])
         argv = list(args[numkeys:])
-        if script == quota_plan_service_module._RESERVE_REQUESTS_LUA_SCRIPT:
+        if script == quota_plan_service_module._RESERVE_HARD_LUA_SCRIPT:
             ikey = keys[0]
             base = str(argv[0])
             current_minute = str(argv[1])
             window_start_minute = int(argv[2])
             request_count = int(argv[3])
-            limit_requests = int(argv[4])
+            image_count = int(argv[4])
+            limit_requests = int(argv[5])
+            limit_images = int(argv[6])
             zset = self.zsets.setdefault(ikey, {})
             if window_start_minute >= 0:
                 for member in [m for m, s in list(zset.items()) if s <= window_start_minute - 1]:
                     zset.pop(member, None)
-            used = 0
+            used_requests = 0
+            used_images = 0
             for member in zset:
-                raw = self.hashes.get(f"{base}:b:{member}", {}).get("requests")
-                if raw:
-                    used += int(raw)
-            if limit_requests > 0 and used + request_count > limit_requests:
-                return [0, used]
+                row = self.hashes.get(f"{base}:b:{member}", {})
+                raw_requests = row.get("requests")
+                if raw_requests:
+                    used_requests += int(raw_requests)
+                raw_images = row.get("images")
+                if raw_images:
+                    used_images += int(raw_images)
+            if limit_requests > 0 and used_requests + request_count > limit_requests:
+                return [0, used_requests, used_images]
+            if limit_images > 0 and used_images + image_count > limit_images:
+                return [2, used_requests, used_images]
             row = self.hashes.setdefault(f"{base}:b:{current_minute}", {})
-            row["requests"] = str(int(row.get("requests", "0")) + request_count)
+            if request_count > 0:
+                row["requests"] = str(int(row.get("requests", "0")) + request_count)
+            if image_count > 0:
+                row["images"] = str(int(row.get("images", "0")) + image_count)
             zset[current_minute] = float(current_minute)
-            return [1, used]
-        if script == quota_plan_service_module._RELEASE_REQUESTS_LUA_SCRIPT:
+            return [1, used_requests, used_images]
+        if script == quota_plan_service_module._RELEASE_HARD_LUA_SCRIPT:
             row = self.hashes.setdefault(keys[0], {})
-            value = int(row.get("requests", "0")) - int(argv[0])
-            if value < 0:
-                value = 0
-            row["requests"] = str(value)
-            return value
+            decr_requests = int(argv[0])
+            decr_images = int(argv[1])
+            if decr_requests > 0:
+                value = int(row.get("requests", "0")) - decr_requests
+                if value < 0:
+                    value = 0
+                row["requests"] = str(value)
+            if decr_images > 0:
+                value = int(row.get("images", "0")) - decr_images
+                if value < 0:
+                    value = 0
+                row["images"] = str(value)
+            return [
+                int(row.get("requests", "0")),
+                int(row.get("images", "0")),
+            ]
         raise NotImplementedError("FakeRedis.eval: unsupported script")
 
 
@@ -679,7 +702,9 @@ async def test_provider_quota_guard_exhaustion_raises_router_cooldown_signal(
         )
     ]
     monkeypatch.setattr(provider_quota_guard_module, "ProviderQuotaRepository", _FakeProviderRepo)
-    monkeypatch.setattr(provider_quota_guard_module, "get_session_context", lambda: _FakeSessionCM())
+    monkeypatch.setattr(
+        provider_quota_guard_module, "get_session_context", lambda: _FakeSessionCM()
+    )
 
     guard = ProviderQuotaGuard(quota_service=cast("QuotaPlanService", _ExhaustedQuota()))
     with pytest.raises(ProviderPlanExhaustedError) as exc_info:
@@ -722,7 +747,9 @@ async def test_provider_quota_guard_mark_upstream_exhausted_forces_quota(
         ),
     ]
     monkeypatch.setattr(provider_quota_guard_module, "ProviderQuotaRepository", _FakeProviderRepo)
-    monkeypatch.setattr(provider_quota_guard_module, "get_session_context", lambda: _FakeSessionCM())
+    monkeypatch.setattr(
+        provider_quota_guard_module, "get_session_context", lambda: _FakeSessionCM()
+    )
     quota = _RecordingProviderQuota()
 
     guard = ProviderQuotaGuard(quota_service=cast("QuotaPlanService", quota))

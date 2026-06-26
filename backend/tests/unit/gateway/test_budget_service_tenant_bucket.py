@@ -61,8 +61,8 @@ async def test_tenant_usage_batch_sums_primary_and_legacy_team_keys(monkeypatch)
 
         async def execute(self) -> list[list[bytes]]:
             return [
-                [b"1.25", b"10", b"2"],
-                [b"2.75", b"5", b"3"],
+                [b"1.25", b"10", b"2", b"0"],
+                [b"2.75", b"5", b"3", b"0"],
             ]
 
     class _Redis:
@@ -89,5 +89,5 @@ async def test_tenant_usage_batch_sums_primary_and_legacy_team_keys(monkeypatch)
     )
     usage = await BudgetService().read_budget_usage_batch([coord])
 
-    assert usage[coord] == (Decimal("4.00"), 15, 5)
+    assert usage[coord] == (Decimal("4.00"), 15, 5, 0)
     assert len(redis.pipeline_instance.hmget_calls) == 2

@@ -44,6 +44,8 @@ local incr_tokens = tonumber(ARGV[2])
 local limit_requests = tonumber(ARGV[3])
 local limit_tokens = tonumber(ARGV[4])
 local expire_seconds = tonumber(ARGV[5])
+local incr_images = tonumber(ARGV[6])
+local limit_images = tonumber(ARGV[7])
 
 local requests_val = 0
 if incr_requests > 0 then
@@ -68,6 +70,23 @@ if incr_tokens > 0 then
         end
         redis.call('HINCRBY', key, 'tokens', -incr_tokens)
         return {0, tokens_val}
+    end
+end
+
+if incr_images > 0 then
+    local images_val = redis.call('HINCRBY', key, 'images', incr_images)
+    if expire_seconds > 0 then
+        redis.call('EXPIRE', key, expire_seconds)
+    end
+    if limit_images > 0 and images_val > limit_images then
+        if incr_requests > 0 then
+            redis.call('HINCRBY', key, 'requests', -1)
+        end
+        if incr_tokens > 0 then
+            redis.call('HINCRBY', key, 'tokens', -incr_tokens)
+        end
+        redis.call('HINCRBY', key, 'images', -incr_images)
+        return {2, images_val}
     end
 end
 return {1, 0}
@@ -237,6 +256,7 @@ class BudgetCheckResult:
     used_usd: Decimal = Decimal("0")
     used_tokens: int = 0
     used_requests: int = 0
+    used_images: int = 0
 
 
 @dataclass
@@ -334,7 +354,7 @@ class BudgetService:
         credential_segment: str | None = None,
         tenant_segment: str | None = None,
         period_reset_anchor: PeriodResetAnchor | None = None,
-    ) -> tuple[Decimal, int, int]:
+    ) -> tuple[Decimal, int, int, int]:
         coord = BudgetUsageCoord(
             target_kind=target_kind,
             target_id=target_id,
@@ -345,13 +365,16 @@ class BudgetService:
             period_reset_anchor=period_reset_anchor or DEFAULT_PERIOD_RESET_ANCHOR,
         )
         batch = await self.read_budget_usage_batch([coord])
-        return batch.get(coord, (Decimal("0"), 0, 0))
+        return batch.get(coord, (Decimal("0"), 0, 0, 0))
 
     async def read_budget_usage_batch(
         self,
         coords: list[BudgetUsageCoord],
-    ) -> dict[BudgetUsageCoord, tuple[Decimal, int, int]]:
-        """Pipeline 批量读取预算 Redis 桶（含 tenant→team 迁移期 legacy key）。"""
+    ) -> dict[BudgetUsageCoord, tuple[Decimal, int, int, int]]:
+        """Pipeline 批量读取预算 Redis 桶（含 tenant→team 迁移期 legacy key）。
+
+        返回 ``(used_cost, used_tokens, used_requests, used_images)`` 4-tuple。
+        """
         if not coords:
             return {}
         unique_coords = list(dict.fromkeys(coords))
@@ -383,24 +406,26 @@ class BudgetService:
 
         pipe = client.pipeline()
         for _coord, key, _is_legacy in key_entries:
-            pipe.hmget(key, ["cost", "tokens", "requests"])
+            pipe.hmget(key, ["cost", "tokens", "requests", "images"])
         raw_results = await pipe.execute()
 
-        out: dict[BudgetUsageCoord, tuple[Decimal, int, int]] = {
-            c: (Decimal("0"), 0, 0) for c in unique_coords
+        out: dict[BudgetUsageCoord, tuple[Decimal, int, int, int]] = {
+            c: (Decimal("0"), 0, 0, 0) for c in unique_coords
         }
         for (coord, _key, _is_legacy), values in zip(key_entries, raw_results, strict=True):
-            used_cost, used_tokens, used_requests = out[coord]
+            used_cost, used_tokens, used_requests, used_images = out[coord]
             cost_raw = values[0]
             tokens_raw = values[1]
             requests_raw = values[2]
+            images_raw = values[3]
             # ``tenant`` Redis keys used to be written as ``team``. During the
             # migration window a single budget period can legitimately have
             # usage in both keys, so the effective usage is their sum.
             used_cost += Decimal(cost_raw.decode() if cost_raw else "0")
             used_tokens += int(tokens_raw.decode() if tokens_raw else "0")
             used_requests += int(requests_raw.decode() if requests_raw else "0")
-            out[coord] = (used_cost, used_tokens, used_requests)
+            used_images += int(images_raw.decode() if images_raw else "0")
+            out[coord] = (used_cost, used_tokens, used_requests, used_images)
         return out
 
     async def check_budget(
@@ -415,21 +440,22 @@ class BudgetService:
         budget_model_name: str | None = None,
         credential_id: uuid.UUID | str | None = None,
         tenant_id: uuid.UUID | str | None = None,
-        prefetched_usage: tuple[Decimal, int, int] | None = None,
+        prefetched_usage: tuple[Decimal, int, int, int] | None = None,
+        limit_images: int | None = None,
         period_reset_anchor: PeriodResetAnchor | None = None,
     ) -> BudgetCheckResult:
         """读取当前 budget 状态；超限返回 allowed=False
 
-        当前 cost/tokens/requests 来自 Redis 桶，由 commit 异步累加。
+        当前 cost/tokens/requests/images 来自 Redis 桶，由 commit 异步累加。
         """
         seg = _redis_model_segment(budget_model_name)
         cred_seg = _redis_credential_segment(credential_id)
         tenant_seg = redis_tenant_segment_for_budget(tenant_id)
         anchor = period_reset_anchor or DEFAULT_PERIOD_RESET_ANCHOR
         if prefetched_usage is not None:
-            used_cost, used_tokens, used_requests = prefetched_usage
+            used_cost, used_tokens, used_requests, used_images = prefetched_usage
         else:
-            used_cost, used_tokens, used_requests = await self._read_budget_usage(
+            used_cost, used_tokens, used_requests, used_images = await self._read_budget_usage(
                 target_kind=target_kind,
                 target_id=target_id,
                 period=period,
@@ -446,6 +472,7 @@ class BudgetService:
                 used_usd=used_cost,
                 used_tokens=used_tokens,
                 used_requests=used_requests,
+                used_images=used_images,
             )
         if limit_tokens and 0 < limit_tokens <= used_tokens:
             return BudgetCheckResult(
@@ -454,6 +481,7 @@ class BudgetService:
                 used_usd=used_cost,
                 used_tokens=used_tokens,
                 used_requests=used_requests,
+                used_images=used_images,
             )
         if limit_requests and 0 < limit_requests <= used_requests:
             return BudgetCheckResult(
@@ -462,12 +490,23 @@ class BudgetService:
                 used_usd=used_cost,
                 used_tokens=used_tokens,
                 used_requests=used_requests,
+                used_images=used_images,
+            )
+        if limit_images and 0 < limit_images <= used_images:
+            return BudgetCheckResult(
+                allowed=False,
+                reason="images",
+                used_usd=used_cost,
+                used_tokens=used_tokens,
+                used_requests=used_requests,
+                used_images=used_images,
             )
         return BudgetCheckResult(
             allowed=True,
             used_usd=used_cost,
             used_tokens=used_tokens,
             used_requests=used_requests,
+            used_images=used_images,
         )
 
     async def reserve(
@@ -482,16 +521,19 @@ class BudgetService:
         budget_model_name: str | None = None,
         credential_id: uuid.UUID | str | None = None,
         tenant_id: uuid.UUID | str | None = None,
+        limit_images: int | None = None,
+        image_count: int = 0,
         period_reset_anchor: PeriodResetAnchor | None = None,
-    ) -> tuple[int, int]:
-        """预扣请求名额与/或 token 估算（Lua 原子化，防止并发穿透）。
+    ) -> tuple[int, int, int]:
+        """预扣请求名额 / token 估算 / 图片张数（Lua 原子化，防止并发穿透）。
 
-        返回 ``(reserved_requests, reserved_tokens)``。
+        返回 ``(reserved_requests, reserved_tokens, reserved_images)``。
         """
         reserve_requests = limit_requests is not None and limit_requests > 0
         reserve_tokens = limit_tokens is not None and limit_tokens > 0 and estimate_tokens > 0
-        if not reserve_requests and not reserve_tokens:
-            return (0, 0)
+        reserve_images = limit_images is not None and limit_images > 0 and image_count > 0
+        if not reserve_requests and not reserve_tokens and not reserve_images:
+            return (0, 0, 0)
 
         client = await get_redis_client()
         seg = _redis_model_segment(budget_model_name)
@@ -506,7 +548,9 @@ class BudgetService:
             tenant_segment=tenant_seg,
             period_reset_anchor=period_reset_anchor,
         )
-        expire = 90000 if period == PERIOD_DAILY else (86400 * 35 if period == PERIOD_MONTHLY else 0)
+        expire = (
+            90000 if period == PERIOD_DAILY else (86400 * 35 if period == PERIOD_MONTHLY else 0)
+        )
         do_incr_requests = 1 if reserve_requests else 0
 
         result = await client.eval(
@@ -518,6 +562,8 @@ class BudgetService:
             int(limit_requests or 0),
             int(limit_tokens or 0),
             int(expire),
+            int(image_count if reserve_images else 0),
+            int(limit_images or 0),
         )
         assert isinstance(result, (list, tuple)) and len(result) >= 1
         status = int(result[0])
@@ -536,10 +582,18 @@ class BudgetService:
                 limit=float(limit_tokens or 0),
                 used=float(result[1]) - estimate_tokens,
             )
+        if status == 2:
+            raise BudgetExceededError(
+                scope=target_kind,
+                period=period,
+                limit=float(limit_images or 0),
+                used=float(result[1]) - image_count,
+            )
         # status == 1: success
         reserved_requests = 1 if reserve_requests else 0
         reserved_tokens = estimate_tokens if reserve_tokens else 0
-        return (reserved_requests, reserved_tokens)
+        reserved_images = image_count if reserve_images else 0
+        return (reserved_requests, reserved_tokens, reserved_images)
 
     async def release(
         self,
@@ -552,10 +606,11 @@ class BudgetService:
         tenant_id: uuid.UUID | str | None = None,
         reserved_requests: int = 1,
         reserved_tokens: int = 0,
+        reserved_images: int = 0,
         period_reset_anchor: PeriodResetAnchor | None = None,
     ) -> None:
-        """请求失败时回滚预扣的请求数 / token 估算。"""
-        if reserved_requests <= 0 and reserved_tokens <= 0:
+        """请求失败时回滚预扣的请求数 / token 估算 / 图片张数。"""
+        if reserved_requests <= 0 and reserved_tokens <= 0 and reserved_images <= 0:
             return
         client = await get_redis_client()
         seg = _redis_model_segment(budget_model_name)
@@ -574,6 +629,8 @@ class BudgetService:
             await client.hincrby(key, "requests", -reserved_requests)
         if reserved_tokens > 0:
             await client.hincrby(key, "tokens", -reserved_tokens)
+        if reserved_images > 0:
+            await client.hincrby(key, "images", -reserved_images)
 
     async def commit(
         self,
@@ -586,9 +643,10 @@ class BudgetService:
         budget_model_name: str | None = None,
         credential_id: uuid.UUID | str | None = None,
         tenant_id: uuid.UUID | str | None = None,
+        delta_images: int = 0,
         period_reset_anchor: PeriodResetAnchor | None = None,
     ) -> None:
-        """结算：在 Redis 中累加真实 cost/token；DB 由 rollup 任务异步同步"""
+        """结算：在 Redis 中累加真实 cost/token/images；DB 由 rollup 任务异步同步"""
         client = await get_redis_client()
         seg = _redis_model_segment(budget_model_name)
         cred_seg = _redis_credential_segment(credential_id)
@@ -605,6 +663,8 @@ class BudgetService:
         pipe = client.pipeline()
         pipe.hincrbyfloat(key, "cost", float(delta_cost))
         pipe.hincrby(key, "tokens", delta_tokens)
+        if delta_images:
+            pipe.hincrby(key, "images", delta_images)
         if period == PERIOD_DAILY:
             pipe.expire(key, 90000)
         elif period == PERIOD_MONTHLY:
@@ -623,6 +683,7 @@ class BudgetService:
         budget_model_name: str | None = None,
         credential_id: uuid.UUID | str | None = None,
         tenant_id: uuid.UUID | str | None = None,
+        images: int = 0,
         period_reset_anchor: PeriodResetAnchor | None = None,
     ) -> None:
         """管理面：将 Redis 预算桶设为绝对用量（与 commit 累加相对）。"""
@@ -646,6 +707,7 @@ class BudgetService:
                 "cost": str(cost),
                 "tokens": str(tokens),
                 "requests": str(requests),
+                "images": str(images),
             },
         )
         if period == PERIOD_DAILY:

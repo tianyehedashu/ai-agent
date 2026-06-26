@@ -92,6 +92,7 @@ def budget_to_quota_rule(
             soft_limit_usd=budget.soft_limit_usd,
             limit_tokens=budget.limit_tokens,
             limit_requests=budget.limit_requests,
+            limit_images=getattr(budget, "limit_images", None),
         ),
         usage=QuotaRuleUsage(
             window_start=window_start,
@@ -113,6 +114,7 @@ def _plan_quota_limits(quota: PlanQuotaReadModel) -> QuotaRuleLimits:
         limit_requests=quota.limit_requests,
         unit_price_usd_per_token=quota.unit_price_usd_per_token,
         unit_price_usd_per_request=quota.unit_price_usd_per_request,
+        limit_images=quota.limit_images,
     )
 
 
@@ -238,6 +240,7 @@ def provider_quota_to_quota_rule(
         enabled=quota.enabled,
         valid_from=quota.valid_from,
         valid_until=quota.valid_until,
+        limit_images=quota.limit_images,
     )
     return QuotaRuleReadModel(
         key=key,

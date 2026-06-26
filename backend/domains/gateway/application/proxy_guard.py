@@ -264,7 +264,7 @@ class ProxyGuard:
         )
 
     async def check_budget(
-        self, ctx: ProxyContext, *, estimate_tokens: int = 0
+        self, ctx: ProxyContext, *, estimate_tokens: int = 0, image_count: int = 0
     ) -> list[BudgetReservation]:
         """按 ``BudgetCheckPlan`` 顺序扫描 system/tenant/user/key 维度预算。"""
         repo = self._budget_repo_factory(self._session)
@@ -281,9 +281,7 @@ class ProxyGuard:
         )
 
         async def load_budget_rows() -> dict[
-            tuple[
-                str, uuid.UUID | None, str, str | None, uuid.UUID | None, uuid.UUID | None
-            ],
+            tuple[str, uuid.UUID | None, str, str | None, uuid.UUID | None, uuid.UUID | None],
             GatewayBudget,
         ]:
             return await repo.get_many_by_plan(plan)
@@ -292,9 +290,7 @@ class ProxyGuard:
 
         now = datetime.now(UTC)
         anchor_pins: dict[BudgetAnchorCoord, PeriodResetAnchor] = {}
-        check_items: list[
-            tuple[BudgetCheckQuery, BudgetConfigRow, BudgetUsageCoord, str]
-        ] = []
+        check_items: list[tuple[BudgetCheckQuery, BudgetConfigRow, BudgetUsageCoord, str]] = []
         for query in plan:
             coord: BudgetAnchorCoord = (
                 query.target_kind,
@@ -344,6 +340,7 @@ class ProxyGuard:
                 budget_model_name=budget.model_name,
                 tenant_id=query.tenant_id,
                 prefetched_usage=prefetched,
+                limit_images=budget.limit_images,
                 period_reset_anchor=budget.period_reset_anchor,
             )
             if not check.allowed:
@@ -357,6 +354,7 @@ class ProxyGuard:
                                 budget.limit_usd,
                                 budget.limit_tokens,
                                 budget.limit_requests,
+                                budget.limit_images,
                             )
                         )
                     ),
@@ -365,16 +363,22 @@ class ProxyGuard:
                         if check.reason == "usd"
                         else check.used_tokens
                         if check.reason == "tokens"
+                        else check.used_images
+                        if check.reason == "images"
                         else check.used_requests
                     ),
                 )
-            # 无 token/request 限额时跳过 reserve，减少 Redis 写入
-            if (budget.limit_requests is None or budget.limit_requests <= 0) and (
-                budget.limit_tokens is None or budget.limit_tokens <= 0 or estimate_tokens <= 0
+            # 无 token/request/images 限额时跳过 reserve，减少 Redis 写入
+            if (
+                (budget.limit_requests is None or budget.limit_requests <= 0)
+                and (
+                    budget.limit_tokens is None or budget.limit_tokens <= 0 or estimate_tokens <= 0
+                )
+                and (budget.limit_images is None or budget.limit_images <= 0 or image_count <= 0)
             ):
                 continue
             try:
-                reserved_requests, reserved_tokens = await self._budget.reserve(
+                reserved_requests, reserved_tokens, reserved_images = await self._budget.reserve(
                     target_kind=query.target_kind,
                     target_id=target_id_str,
                     period=query.period,
@@ -384,12 +388,14 @@ class ProxyGuard:
                     budget_model_name=budget.model_name,
                     credential_id=query.credential_id,
                     tenant_id=query.tenant_id,
+                    limit_images=budget.limit_images,
+                    image_count=image_count,
                     period_reset_anchor=budget.period_reset_anchor,
                 )
             except Exception:
                 await self.release_budget_reservations(reservations)
                 raise
-            if reserved_requests or reserved_tokens:
+            if reserved_requests or reserved_tokens or reserved_images:
                 reservations.append(
                     BudgetReservation(
                         target_kind=query.target_kind,
@@ -398,6 +404,7 @@ class ProxyGuard:
                         budget_model_name=budget.model_name,
                         reserved_requests=reserved_requests,
                         reserved_tokens=reserved_tokens,
+                        reserved_images=reserved_images,
                         credential_id=query.credential_id,
                         tenant_id=query.tenant_id,
                         period_reset_anchor=budget.period_reset_anchor,
@@ -420,6 +427,7 @@ class ProxyGuard:
                     credential_id=reservation.credential_id,
                     reserved_requests=reservation.reserved_requests,
                     reserved_tokens=reservation.reserved_tokens,
+                    reserved_images=reservation.reserved_images,
                     tenant_id=reservation.tenant_id,
                     period_reset_anchor=reservation.period_reset_anchor,
                 )
@@ -429,7 +437,12 @@ class ProxyGuard:
     # ---------------------------------------------------------------------
 
     async def check_entitlement(
-        self, ctx: ProxyContext, model: str | None, *, estimate_tokens: int = 0
+        self,
+        ctx: ProxyContext,
+        model: str | None,
+        *,
+        estimate_tokens: int = 0,
+        image_count: int = 0,
     ) -> None:
         """根据 ctx (vkey_id 或 apikey_grant_id) 解析活跃 entitlement plan 并预扣。
 
@@ -444,7 +457,7 @@ class ProxyGuard:
             capability=ctx.capability.value if ctx.capability is not None else None,
         )
         result = await self._entitlement_guard.check_and_reserve(
-            ent_ctx, estimate_tokens=estimate_tokens
+            ent_ctx, estimate_tokens=estimate_tokens, image_count=image_count
         )
         if result.plan_id is None:
             ctx.entitlement_state = None

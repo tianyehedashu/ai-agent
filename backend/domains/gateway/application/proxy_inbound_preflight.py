@@ -35,8 +35,13 @@ async def run_proxy_inbound_preflight(
     require_model: bool = False,
     match_registered_capability: bool = True,
     estimate_tokens: int = 0,
+    image_count: int = 0,
 ) -> ProxyInboundPreflightResult:
-    """校验、限流、预算预扣、entitlement 预扣（与具体出站 API 无关）。"""
+    """校验、限流、预算预扣、entitlement 预扣（与具体出站 API 无关）。
+
+    ``image_count`` 用于图片生成入口预扣图片张数维度配额（capability=IMAGE 时由
+    调用方按 ``body.n`` 估算传入）。其它入口保持默认 0，不影响原有计数。
+    """
     ctx.capability = capability
     cleaned = (model or "").strip()
     if require_model and not cleaned:
@@ -61,12 +66,15 @@ async def run_proxy_inbound_preflight(
             reservations: list[BudgetReservation] = []
             ctx.platform_budget_preflight = PlatformBudgetPreflightState()
         else:
-            reservations = await guard.check_budget(ctx, estimate_tokens=estimate_tokens)
+            reservations = await guard.check_budget(
+                ctx, estimate_tokens=estimate_tokens, image_count=image_count
+            )
         try:
             await guard.check_entitlement(
                 ctx,
                 cleaned or None,
                 estimate_tokens=estimate_tokens,
+                image_count=image_count,
             )
         except EntitlementPlanExhaustedError:
             await guard.release_budget_reservations(reservations)

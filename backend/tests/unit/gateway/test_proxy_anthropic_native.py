@@ -103,8 +103,10 @@ def _patch_anthropic_preflight(
         _ = estimate_tokens
         return None
 
-    async def _budget(_ctx: ProxyContext, *, estimate_tokens: int = 0) -> list[object]:
-        _ = estimate_tokens
+    async def _budget(
+        _ctx: ProxyContext, *, estimate_tokens: int = 0, image_count: int = 0
+    ) -> list[object]:
+        _ = estimate_tokens, image_count
         return []
 
     monkeypatch.setattr(use_case.guard, "resolve_and_validate_request_model", _resolve)

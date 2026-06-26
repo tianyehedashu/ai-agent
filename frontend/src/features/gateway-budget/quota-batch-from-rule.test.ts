@@ -35,6 +35,7 @@ function downstreamVkeyRule(overrides: Partial<QuotaRule> = {}): QuotaRule {
       soft_limit_usd: null,
       limit_tokens: 1000,
       limit_requests: null,
+      limit_images: null,
       unit_price_usd_per_token: null,
       unit_price_usd_per_request: null,
     },
@@ -58,6 +59,28 @@ describe('quotaRuleToBatchFormValues downstream', () => {
     expect(parsed?.values.limit_usd).toBe('50')
     expect(parsed?.values.limit_tokens).toBe('1000')
     expect(parsed?.info.originalTargetId).toBe('vkey-1')
+  })
+
+  it('maps limit_images to batch form for image-capable rule', () => {
+    const parsed = quotaRuleToBatchFormValues(
+      downstreamVkeyRule({
+        limits: {
+          limit_usd: null,
+          soft_limit_usd: null,
+          limit_tokens: null,
+          limit_requests: null,
+          limit_images: 50,
+          unit_price_usd_per_token: null,
+          unit_price_usd_per_request: null,
+        },
+      })
+    )
+    expect(parsed).not.toBeNull()
+    expect(parsed?.values.limit_images).toBe('50')
+    // 其它限额字段应为空
+    expect(parsed?.values.limit_usd).toBe('')
+    expect(parsed?.values.limit_tokens).toBe('')
+    expect(parsed?.values.limit_requests).toBe('')
   })
 
   it('returns null for apikey_grant downstream', () => {
@@ -91,9 +114,28 @@ describe('quotaRuleToScopePrefill', () => {
     expect(prefill?.limit_usd).toBe('')
     expect(prefill?.limit_tokens).toBe('')
     expect(prefill?.limit_requests).toBe('')
+    expect(prefill?.limit_images).toBe('')
     expect(prefill?.validFrom).toBe('')
     expect(prefill?.validUntil).toBe('')
     expect(prefill?.keyIds).toEqual(['vkey-1'])
+  })
+
+  it('clears limit_images even when rule has images quota set', () => {
+    const prefill = quotaRuleToScopePrefill(
+      downstreamVkeyRule({
+        limits: {
+          limit_usd: null,
+          soft_limit_usd: null,
+          limit_tokens: null,
+          limit_requests: null,
+          limit_images: 100,
+          unit_price_usd_per_token: null,
+          unit_price_usd_per_request: null,
+        },
+      })
+    )
+    expect(prefill).not.toBeNull()
+    expect(prefill?.limit_images).toBe('')
   })
 
   it('dedupes quota label for upstream/downstream copy', () => {

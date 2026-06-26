@@ -69,6 +69,7 @@ export function QuotaOverviewCards({
   let totalUsd = 0
   let totalTokens = 0
   let totalRequests = 0
+  let totalImages = 0
   let nearResetCount = 0
   const now = Date.now()
   const resetThreshold = 24 * 60 * 60 * 1000 // 24h
@@ -83,6 +84,7 @@ export function QuotaOverviewCards({
         totalUsd += parseQuotaNumeric(rule.usage.current_usd)
         totalTokens += parseQuotaNumeric(rule.usage.current_tokens)
         totalRequests += parseQuotaNumeric(rule.usage.current_requests)
+        totalImages += parseQuotaNumeric(rule.usage.current_images)
       }
 
       const { ratio } = computeQuotaRuleUsageRatio(rule)
@@ -149,7 +151,7 @@ export function QuotaOverviewCards({
       <KpiCard
         title="平台层用量合计"
         value={`$${parseQuotaNumeric(totalUsd).toFixed(2)}`}
-        sub={`${totalTokens.toLocaleString()} Token · ${totalRequests.toLocaleString()} 请求`}
+        sub={`${totalTokens.toLocaleString()} Token · ${totalRequests.toLocaleString()} 请求 · ${totalImages.toLocaleString()} 图`}
         isLoading={isLoading}
       />
       <KpiCard

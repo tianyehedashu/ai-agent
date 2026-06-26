@@ -97,6 +97,7 @@ class ProviderQuotaRepository:
         limit_usd: Any | None = None,
         limit_tokens: int | None = None,
         limit_requests: int | None = None,
+        limit_images: int | None = None,
         enabled: bool = True,
         valid_from: Any | None = None,
         valid_until: Any | None = None,
@@ -118,6 +119,7 @@ class ProviderQuotaRepository:
             existing.limit_usd = limit_usd
             existing.limit_tokens = limit_tokens
             existing.limit_requests = limit_requests
+            existing.limit_images = limit_images
             existing.enabled = enabled
             existing.valid_from = valid_from
             existing.valid_until = valid_until
@@ -136,6 +138,7 @@ class ProviderQuotaRepository:
             limit_usd=limit_usd,
             limit_tokens=limit_tokens,
             limit_requests=limit_requests,
+            limit_images=limit_images,
             enabled=enabled,
             valid_from=valid_from,
             valid_until=valid_until,

@@ -60,6 +60,7 @@ def validate_platform_budget_upsert(
     limit_usd: object,
     limit_tokens: object,
     limit_requests: object,
+    limit_images: object = None,
     period_timezone: str | None = None,
     period_reset_minutes: int | None = None,
     period_reset_day: int | None = None,
@@ -71,8 +72,15 @@ def validate_platform_budget_upsert(
     if credential_id is not None and target_kind != "user":
         raise ValidationError("credential_id 仅允许配合 target_kind=user 使用")
 
-    if limit_usd is None and limit_tokens is None and limit_requests is None:
-        raise ValidationError("配额需至少设置 limit_usd / limit_tokens / limit_requests 之一")
+    if (
+        limit_usd is None
+        and limit_tokens is None
+        and limit_requests is None
+        and limit_images is None
+    ):
+        raise ValidationError(
+            "配额需至少设置 limit_usd / limit_tokens / limit_requests / limit_images 之一"
+        )
 
     return resolve_platform_period_reset_anchor(
         period=period,

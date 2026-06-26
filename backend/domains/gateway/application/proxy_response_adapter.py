@@ -40,6 +40,7 @@ from domains.gateway.application.proxy_stream_settlement import (
 )
 from domains.gateway.application.quota_plan_usage_persist import schedule_quota_plan_usage_upsert
 from domains.gateway.domain.period_reset_anchor import period_reset_anchor_from_row
+from domains.gateway.domain.policies.non_token_cost import response_image_count
 from domains.gateway.domain.proxy_policy import (
     BudgetReservation,
     budget_model_keys,
@@ -213,12 +214,14 @@ async def adapt_response(
 
     upstream = _calc_upstream_cost(response, metadata=metadata, model=ctx.budget_model)
     cost = proxy_budget_cost_usd(metadata, upstream)
+    images = response_image_count(response)
     await schedule_settle_usage(
         ctx,
         budget,
         tokens=tokens,
         cost=cost,
         requests=1,
+        image_count=images,
         entitlement_guard=entitlement_guard,
         request_id=ctx.request_id,
     )
@@ -291,9 +294,28 @@ async def settle_usage(
     tokens: int,
     cost: Decimal,
     requests: int,
+    image_count: int = 0,
     entitlement_guard: EntitlementGuard | None = None,
     request_id: str | None = None,
 ) -> None:
+    # 估算预扣张数（来自 reserve 阶段）：用于 commit 时校正为响应真实张数
+    estimated_platform_images = 0
+    if ctx.platform_budget_preflight and ctx.platform_budget_preflight.reservations:
+        for r in ctx.platform_budget_preflight.reservations:
+            if r.reserved_images > 0:
+                estimated_platform_images = r.reserved_images
+                break
+    platform_delta_images = image_count - estimated_platform_images
+
+    estimated_entitlement_images = 0
+    state = ctx.entitlement_state
+    if state and state.reservations:
+        for r in state.reservations:
+            if r.reserved_images > 0:
+                estimated_entitlement_images = r.reserved_images
+                break
+    entitlement_delta_images = image_count - estimated_entitlement_images
+
     scope_items = budget_targets(
         tenant_id=ctx.team_id,
         user_id=ctx.user_id,
@@ -320,6 +342,7 @@ async def settle_usage(
         delta_tokens=tokens,
         loader=_load_plan,
         pinned_anchors=pinned_anchors,
+        delta_images=platform_delta_images,
     )
     committed_coords = raw_committed_coords if isinstance(raw_committed_coords, set) else None
     await release_platform_budget_token_reservations(
@@ -328,7 +351,6 @@ async def settle_usage(
         committed_coords=committed_coords,
     )
 
-    state = ctx.entitlement_state
     entitlement_committed = False
     if entitlement_guard is not None and state is not None and state.specs:
         try:
@@ -337,6 +359,7 @@ async def settle_usage(
                 state.specs,
                 delta_tokens=tokens,
                 delta_usd=cost,
+                delta_images=entitlement_delta_images,
             )
             entitlement_committed = True
         except Exception:
@@ -348,13 +371,14 @@ async def settle_usage(
                 )
 
                 await record_proxy_entitlement_commit(request_id)
-        if entitlement_committed and request_id and (tokens > 0 or cost > 0):
+        if entitlement_committed and request_id and (tokens > 0 or cost > 0 or image_count > 0):
             await schedule_quota_plan_usage_upsert(
                 ns=ENTITLEMENT_NS,
                 plan_id=state.plan_id,
                 specs=state.specs,
                 delta_tokens=tokens,
                 delta_cost_usd=cost,
+                delta_images=image_count,
                 request_id=request_id,
                 settled_at=datetime.now(UTC),
             )
@@ -395,6 +419,7 @@ async def settle_usage(
                             delta_usd=cost,
                             delta_tokens=tokens,
                             delta_requests=requests,
+                            delta_images=image_count,
                         )
                         anchor = period_reset_anchor_from_row(
                             timezone=record.period_timezone,
@@ -434,6 +459,7 @@ async def settle_usage(
             delta_tokens=tokens,
             delta_cost_usd=cost,
             delta_requests=requests,
+            delta_images=image_count,
             request_id=request_id,
             source="proxy",
         )
@@ -502,6 +528,7 @@ async def schedule_settle_usage(
     tokens: int,
     cost: Decimal,
     requests: int,
+    image_count: int = 0,
     entitlement_guard: EntitlementGuard | None = None,
     request_id: str | None = None,
 ) -> None:
@@ -522,6 +549,7 @@ async def schedule_settle_usage(
                 tokens=tokens,
                 cost=cost,
                 requests=requests,
+                image_count=image_count,
                 entitlement_guard=entitlement_guard,
                 request_id=request_id,
             )

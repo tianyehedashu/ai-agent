@@ -57,7 +57,12 @@ def merge_non_token_extra_from_litellm(entry: dict[str, Any]) -> dict[str, float
     return out
 
 
-def _response_image_count(response: Any) -> int:
+def response_image_count(response: Any) -> int:
+    """从响应中提取生成的图片张数。
+
+    - OpenAI Images API 风格：``response.data`` 是数组，长度即张数。
+    - 兼容单对象响应（``data`` 非数组但非空）按 1 张计。
+    """
     if response is None:
         return 0
     data = getattr(response, "data", None)
@@ -95,7 +100,7 @@ def estimate_non_token_cost_from_extra(
 
     per_image = extra.get("input_cost_per_image") or extra.get("output_cost_per_image")
     if per_image is not None:
-        n = _response_image_count(response)
+        n = response_image_count(response)
         if n > 0:
             total += Decimal(str(per_image)) * Decimal(n)
             counted = True
@@ -118,4 +123,5 @@ __all__ = [
     "capability_default_billing_mode",
     "estimate_non_token_cost_from_extra",
     "merge_non_token_extra_from_litellm",
+    "response_image_count",
 ]

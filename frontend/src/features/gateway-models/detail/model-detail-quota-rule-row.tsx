@@ -36,6 +36,7 @@ export function ModelDetailQuotaRuleRow({
   const limitUsd = rule.limits.limit_usd
   const limitTok = rule.limits.limit_tokens
   const limitReq = rule.limits.limit_requests
+  const limitImg = rule.limits.limit_images
   const isPlatform = layer === 'platform'
   const canEditUsage = canAdjustUsage && isQuotaRuleUsageAdjustable(rule)
 
@@ -48,7 +49,9 @@ export function ModelDetailQuotaRuleRow({
       ? `$${Number.parseFloat(String(limitUsd)).toFixed(2)}`
       : limitTok !== null
         ? formatQuotaTokens(limitTok)
-        : '未设上限'
+        : limitImg !== null
+          ? `${limitImg.toLocaleString()} 图`
+          : '未设上限'
 
   const periodWindow = formatQuotaRulePeriodWindow(rule)
 
@@ -95,6 +98,7 @@ export function ModelDetailQuotaRuleRow({
           limitUsd={limitUsd}
           limitTok={limitTok}
           limitReq={limitReq}
+          limitImg={limitImg}
         />
       ) : (
         <p className="mt-2 text-xs text-muted-foreground">上限 {primaryMetric}</p>

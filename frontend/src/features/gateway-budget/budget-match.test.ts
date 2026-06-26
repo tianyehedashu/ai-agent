@@ -14,9 +14,11 @@ function budget(partial: Partial<GatewayBudget> & Pick<GatewayBudget, 'id'>): Ga
     limit_usd: 100,
     limit_tokens: null,
     limit_requests: null,
+    limit_images: null,
     current_usd: 0,
     current_tokens: 0,
     current_requests: 0,
+    current_images: 0,
     reset_at: null,
     ...partial,
   }

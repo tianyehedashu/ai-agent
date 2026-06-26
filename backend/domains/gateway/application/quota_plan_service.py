@@ -21,6 +21,7 @@ from decimal import Decimal
 import uuid
 
 from domains.gateway.domain.quota_plan import (
+    ExhaustedReason,
     PlanQuotaSnapshot,
     PlanQuotaSpec,
     QuotaPlanCheckResult,
@@ -66,56 +67,89 @@ def _bucket_ttl_seconds(spec: PlanQuotaSpec) -> int:
     return spec.window_seconds + 120
 
 
-# 原子预扣 requests（硬计数维度）：窗口内对所有分钟桶求和后判定 limit，通过才写入当前分钟桶。
+# 原子预扣硬计数维度（requests + images）：窗口内对所有分钟桶求和后判定 limit，通过才写入当前分钟桶。
 # 单脚本单往返、无显式锁，消除「读快照→判断→写预扣」之间的 TOCTOU 超额放行。
 # token/usd 维度允许一定漂移，仍由 check_and_reserve 的 snapshot 预检负责，不在此处强一致。
 # 注：脚本经 base 派生 bucket key（未在 KEYS 声明），与 _compute_snapshot 的多键 pipeline
 # 读取同源，依赖单实例 Redis（本部署为单实例阿里云 Redis，非 Cluster）。
-_RESERVE_REQUESTS_LUA_SCRIPT = """
+#
+# 返回值：
+#   {1, used_requests, used_images}              成功
+#   {0, used_requests, used_images}              requests 超限
+#   {2, used_requests, used_images}              images 超限
+_RESERVE_HARD_LUA_SCRIPT = """
 local ikey = KEYS[1]
 local base = ARGV[1]
 local current_minute = ARGV[2]
 local window_start_minute = tonumber(ARGV[3])
 local request_count = tonumber(ARGV[4])
-local limit_requests = tonumber(ARGV[5])
-local bucket_ttl = tonumber(ARGV[6])
-local index_ttl = tonumber(ARGV[7])
+local image_count = tonumber(ARGV[5])
+local limit_requests = tonumber(ARGV[6])
+local limit_images = tonumber(ARGV[7])
+local bucket_ttl = tonumber(ARGV[8])
+local index_ttl = tonumber(ARGV[9])
 
 if window_start_minute >= 0 then
     redis.call('zremrangebyscore', ikey, 0, window_start_minute - 1)
 end
 
-local used = 0
+local used_requests = 0
+local used_images = 0
 local minutes = redis.call('zrange', ikey, 0, -1)
 for i = 1, #minutes do
-    local r = redis.call('hget', base .. ':b:' .. minutes[i], 'requests')
-    if r then
-        used = used + tonumber(r)
+    local vals = redis.call('hmget', base .. ':b:' .. minutes[i], 'requests', 'images')
+    if vals[1] then
+        used_requests = used_requests + tonumber(vals[1])
+    end
+    if vals[2] then
+        used_images = used_images + tonumber(vals[2])
     end
 end
 
-if limit_requests > 0 and used + request_count > limit_requests then
-    return {0, used}
+if limit_requests > 0 and used_requests + request_count > limit_requests then
+    return {0, used_requests, used_images}
+end
+
+if limit_images > 0 and used_images + image_count > limit_images then
+    return {2, used_requests, used_images}
 end
 
 local bkey = base .. ':b:' .. current_minute
-redis.call('hincrby', bkey, 'requests', request_count)
+if request_count > 0 then
+    redis.call('hincrby', bkey, 'requests', request_count)
+end
+if image_count > 0 then
+    redis.call('hincrby', bkey, 'images', image_count)
+end
 redis.call('zadd', ikey, tonumber(current_minute), current_minute)
 redis.call('expire', bkey, bucket_ttl)
 redis.call('expire', ikey, index_ttl)
-return {1, used}
+return {1, used_requests, used_images}
 """
 
 
-# release 回滚 requests 并钳制下限为 0，避免分钟桶被减成负值（双重 release / 桶过期重建）
+# release 回滚硬计数维度并钳制下限为 0，避免分钟桶被减成负值（双重 release / 桶过期重建）
 # 导致后续窗口求和偏低、变相放行。
-_RELEASE_REQUESTS_LUA_SCRIPT = """
-local v = redis.call('hincrby', KEYS[1], 'requests', -tonumber(ARGV[1]))
-if v < 0 then
-    redis.call('hset', KEYS[1], 'requests', 0)
-    v = 0
+_RELEASE_HARD_LUA_SCRIPT = """
+local key = KEYS[1]
+local decr_requests = tonumber(ARGV[1])
+local decr_images = tonumber(ARGV[2])
+
+if decr_requests > 0 then
+    local rv = redis.call('hincrby', key, 'requests', -decr_requests)
+    if rv < 0 then
+        redis.call('hset', key, 'requests', 0)
+    end
 end
-return v
+
+if decr_images > 0 then
+    local iv = redis.call('hincrby', key, 'images', -decr_images)
+    if iv < 0 then
+        redis.call('hset', key, 'images', 0)
+    end
+end
+
+return {redis.call('hget', key, 'requests') or 0, redis.call('hget', key, 'images') or 0}
 """
 
 
@@ -134,12 +168,14 @@ class QuotaPlanService:
         estimate_tokens: int = 0,
         estimate_usd: Decimal = Decimal("0"),
         request_count: int = 1,
+        image_count: int = 0,
         now: datetime | None = None,
     ) -> QuotaPlanCheckResult:
         """读取所有 quotas 的当前用量，任一耗尽则整体拒绝；否则按单请求预扣。
 
-        预扣只增加 requests = ``request_count``；token / cost 在 ``commit`` 阶段
-        按真实用量结算（与 BudgetService 同形态，避免 estimate 与真实偏离时双账）。
+        预扣只增加 requests = ``request_count`` / images = ``image_count``；
+        token / cost 在 ``commit`` 阶段按真实用量结算（与 BudgetService 同形态，
+        避免 estimate 与真实偏离时双账）。
         """
         if not specs:
             return QuotaPlanCheckResult(allowed=True)
@@ -147,11 +183,12 @@ class QuotaPlanService:
         snapshots = await self.snapshot(ns, plan_id, specs, now=when)
         for snap in snapshots:
             spec = snap.spec
-            # 检查 estimate 是否会让该桶超限（仅 request_count 维度精确，
+            # 检查 estimate 是否会让该桶超限（仅 requests/images 维度精确，
             # token/usd 在 commit 时再校验；这里给出 ``estimate_tokens`` 边界保护）
             limit_usd = spec.limit_usd
             limit_tokens = spec.limit_tokens
             limit_requests = spec.limit_requests
+            limit_images = spec.limit_images
             if limit_usd is not None and 0 < limit_usd <= snap.used_usd + estimate_usd:
                 return QuotaPlanCheckResult(
                     allowed=False,
@@ -161,6 +198,7 @@ class QuotaPlanService:
                         used_usd=snap.used_usd,
                         used_tokens=snap.used_tokens,
                         used_requests=snap.used_requests,
+                        used_images=snap.used_images,
                         exhausted_reason="usd",
                         earliest_minute_in_window=snap.earliest_minute_in_window,
                     ),
@@ -174,6 +212,7 @@ class QuotaPlanService:
                         used_usd=snap.used_usd,
                         used_tokens=snap.used_tokens,
                         used_requests=snap.used_requests,
+                        used_images=snap.used_images,
                         exhausted_reason="tokens",
                         earliest_minute_in_window=snap.earliest_minute_in_window,
                     ),
@@ -190,12 +229,27 @@ class QuotaPlanService:
                         used_usd=snap.used_usd,
                         used_tokens=snap.used_tokens,
                         used_requests=snap.used_requests,
+                        used_images=snap.used_images,
                         exhausted_reason="requests",
                         earliest_minute_in_window=snap.earliest_minute_in_window,
                     ),
                 )
+            if limit_images is not None and 0 < limit_images < snap.used_images + image_count:
+                return QuotaPlanCheckResult(
+                    allowed=False,
+                    snapshots=snapshots,
+                    exhausted_snapshot=PlanQuotaSnapshot(
+                        spec=spec,
+                        used_usd=snap.used_usd,
+                        used_tokens=snap.used_tokens,
+                        used_requests=snap.used_requests,
+                        used_images=snap.used_images,
+                        exhausted_reason="images",
+                        earliest_minute_in_window=snap.earliest_minute_in_window,
+                    ),
+                )
 
-        # 逐 spec 原子预扣 requests（硬计数维度）：Lua 在窗口求和后判定 limit 并写当前分钟桶，
+        # 逐 spec 原子预扣硬计数维度（requests + images）：Lua 在窗口求和后判定 limit 并写当前分钟桶，
         # 关闭并发下「快照预检通过 → 写入」之间的超额窗口。token/usd 仍由上方预检兜底（可容忍漂移）。
         minute_unix = compute_minute_index(when)
         client = await get_redis_client()
@@ -216,28 +270,32 @@ class QuotaPlanService:
                     window_start_minute = -1
                 ttl = _bucket_ttl_seconds(spec)
                 limit_requests = (
-                    spec.limit_requests
-                    if spec.limit_requests and spec.limit_requests > 0
-                    else 0
+                    spec.limit_requests if spec.limit_requests and spec.limit_requests > 0 else 0
+                )
+                limit_images = (
+                    spec.limit_images if spec.limit_images and spec.limit_images > 0 else 0
                 )
                 result = await client.eval(
-                    _RESERVE_REQUESTS_LUA_SCRIPT,
+                    _RESERVE_HARD_LUA_SCRIPT,
                     1,
                     ikey,
                     base,
                     str(minute_unix),
                     str(int(window_start_minute)),
                     str(int(request_count)),
+                    str(int(image_count)),
                     str(int(limit_requests)),
+                    str(int(limit_images)),
                     str(int(ttl)),
                     str(int(ttl)),
                 )
                 status = int(result[0])
-                if status == 0:
-                    # 并发下原子拒绝：回滚已预扣项，返回 requests 耗尽快照（重算以填齐 reset 锚点）
+                if status != 1:
+                    # 并发下原子拒绝：回滚已预扣项，返回耗尽快照（重算以填齐 reset 锚点）
                     for r in reservations:
                         await self._release_one(ns, plan_id, r)
                     exhausted = await self._compute_snapshot(ns, plan_id, spec, when)
+                    reason: ExhaustedReason = "images" if status == 2 else "requests"
                     return QuotaPlanCheckResult(
                         allowed=False,
                         snapshots=snapshots,
@@ -245,8 +303,9 @@ class QuotaPlanService:
                             spec=spec,
                             used_usd=exhausted.used_usd,
                             used_tokens=exhausted.used_tokens,
-                            used_requests=max(exhausted.used_requests, int(result[1])),
-                            exhausted_reason="requests",
+                            used_requests=exhausted.used_requests,
+                            used_images=exhausted.used_images,
+                            exhausted_reason=reason,
                             earliest_minute_in_window=exhausted.earliest_minute_in_window,
                         ),
                     )
@@ -256,6 +315,7 @@ class QuotaPlanService:
                         spec=spec,
                         minute_unix=minute_unix,
                         reserved_requests=request_count,
+                        reserved_images=image_count,
                     )
                 )
         except Exception:
@@ -277,9 +337,13 @@ class QuotaPlanService:
         delta_tokens: int,
         delta_usd: Decimal,
         delta_requests: int = 0,
+        delta_images: int = 0,
         now: datetime | None = None,
     ) -> None:
-        """请求成功后累加真实 cost / tokens（不再增 requests，因为 reserve 已加）。"""
+        """请求成功后累加真实 cost / tokens（不再增 requests/images，因为 reserve 已加）。
+
+        ``delta_images`` 用于 reserve 阶段预估张数与响应真实张数差额的校正（多扣负值、少扣正值）。
+        """
         if not specs:
             return
         when = now or datetime.now(UTC)
@@ -296,6 +360,8 @@ class QuotaPlanService:
                 pipe.hincrbyfloat(bkey, "cost", float(delta_usd))
             if delta_requests:
                 pipe.hincrby(bkey, "requests", delta_requests)
+            if delta_images:
+                pipe.hincrby(bkey, "images", delta_images)
             pipe.zadd(ikey, {str(minute_unix): minute_unix})
             ttl = _bucket_ttl_seconds(spec)
             pipe.expire(bkey, ttl)
@@ -325,10 +391,11 @@ class QuotaPlanService:
         bkey = _bucket_key(base, reservation.minute_unix)
         try:
             await client.eval(
-                _RELEASE_REQUESTS_LUA_SCRIPT,
+                _RELEASE_HARD_LUA_SCRIPT,
                 1,
                 bkey,
                 str(int(reservation.reserved_requests)),
+                str(int(reservation.reserved_images)),
             )
         except Exception as exc:  # pragma: no cover - 不影响主路径
             logger.warning("QuotaPlanService.release failed for %s: %s", bkey, exc)
@@ -345,6 +412,7 @@ class QuotaPlanService:
         cost_usd: Decimal,
         tokens: int,
         requests: int,
+        images: int = 0,
         now: datetime | None = None,
     ) -> None:
         """将当前窗口累计用量设为绝对值（清空窗口内旧分钟桶，写入当前分钟桶）。"""
@@ -381,6 +449,7 @@ class QuotaPlanService:
                 "cost": str(cost_usd),
                 "tokens": str(tokens),
                 "requests": str(requests),
+                "images": str(images),
             },
         )
         pipe.zadd(ikey, {str(minute_unix): minute_unix})
@@ -436,6 +505,10 @@ class QuotaPlanService:
                     delta_u = max(float(spec.limit_usd - snap.used_usd), 0.0)
                     if delta_u > 0:
                         pipe.hincrbyfloat(bkey, "cost", delta_u)
+                if spec.limit_images is not None and spec.limit_images > 0:
+                    delta_i = max(spec.limit_images - snap.used_images, 0)
+                    if delta_i:
+                        pipe.hincrby(bkey, "images", delta_i)
                 pipe.zadd(ikey, {str(minute_unix): minute_unix})
                 ttl = _bucket_ttl_seconds(spec)
                 pipe.expire(bkey, ttl)
@@ -537,21 +610,24 @@ class QuotaPlanService:
         used_cost = Decimal("0")
         used_tokens = 0
         used_requests = 0
+        used_images = 0
         if minutes:
             pipe = client.pipeline()
             for m in minutes:
-                pipe.hmget(_bucket_key(base, m), ["cost", "tokens", "requests"])
+                pipe.hmget(_bucket_key(base, m), ["cost", "tokens", "requests", "images"])
             rows = await pipe.execute()
             for row in rows:
                 if not row:
                     continue
-                c, t, r = row
+                c, t, r, im = row
                 if c:
                     used_cost += Decimal(c.decode() if isinstance(c, bytes) else str(c))
                 if t:
                     used_tokens += int(t.decode() if isinstance(t, bytes) else t)
                 if r:
                     used_requests += int(r.decode() if isinstance(r, bytes) else r)
+                if im:
+                    used_images += int(im.decode() if isinstance(im, bytes) else im)
 
         exhausted_reason = None
         if spec.limit_usd is not None and spec.limit_usd > 0 and used_cost >= spec.limit_usd:
@@ -568,9 +644,21 @@ class QuotaPlanService:
             and used_requests >= spec.limit_requests
         ):
             exhausted_reason = "requests"
+        elif (
+            spec.limit_images is not None
+            and spec.limit_images > 0
+            and used_images >= spec.limit_images
+        ):
+            exhausted_reason = "images"
         elif forced_exhausted:
             exhausted_reason = (
-                "requests" if spec.limit_requests else "tokens" if spec.limit_tokens else "usd"
+                "requests"
+                if spec.limit_requests
+                else "images"
+                if spec.limit_images
+                else "tokens"
+                if spec.limit_tokens
+                else "usd"
             )
 
         return PlanQuotaSnapshot(
@@ -578,9 +666,11 @@ class QuotaPlanService:
             used_usd=used_cost,
             used_tokens=used_tokens,
             used_requests=used_requests,
+            used_images=used_images,
             exhausted_reason=exhausted_reason,
             earliest_minute_in_window=min(minutes) if minutes else None,
         )
+
 
 _quota_plan_service_singleton: QuotaPlanService | None = None
 

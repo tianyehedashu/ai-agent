@@ -20,6 +20,8 @@ export interface PlanQuotaInput {
   limit_usd?: number | string | null
   limit_tokens?: number | null
   limit_requests?: number | null
+  /** 图片生成张数上限（仅对 image 能力生效） */
+  limit_images?: number | null
   reset_timezone?: string | null
   reset_time_minutes?: number | null
   reset_day_of_month?: number | null
@@ -40,6 +42,8 @@ export interface PlanQuota {
   limit_usd: number | string | null
   limit_tokens: number | null
   limit_requests: number | null
+  /** 图片生成张数上限（仅对 image 能力生效） */
+  limit_images: number | null
   reset_timezone: string
   reset_time_minutes: number
   reset_day_of_month: number

@@ -59,6 +59,7 @@ class ProviderQuotaGuard:
         credential_id: uuid.UUID,
         real_model: str | None,
         estimate_tokens: int = 0,
+        image_count: int = 0,
         now: datetime | None = None,
         deployment_id: str | None = None,
     ) -> list[ProviderQuotaReservation]:
@@ -89,6 +90,7 @@ class ProviderQuotaGuard:
                     spec.quota_id,
                     [spec],
                     estimate_tokens=estimate_tokens,
+                    image_count=image_count,
                     now=when,
                 )
                 if not result.allowed:
@@ -152,6 +154,7 @@ class ProviderQuotaGuard:
         *,
         delta_tokens: int,
         delta_usd: Decimal,
+        delta_images: int = 0,
     ) -> None:
         await self._quota.commit(
             PROVIDER_NS,
@@ -159,6 +162,7 @@ class ProviderQuotaGuard:
             [spec],
             delta_tokens=delta_tokens,
             delta_usd=delta_usd,
+            delta_images=delta_images,
         )
 
     async def release_rule(self, item: ProviderQuotaReservation) -> None:
@@ -182,9 +186,7 @@ class ProviderQuotaGuard:
     ) -> None:
         unique_ids = list(dict.fromkeys(rule_ids))
         for rule_id in unique_ids:
-            await self._mark_single_upstream_exhausted(
-                rule_id, reason=reason, until=until
-            )
+            await self._mark_single_upstream_exhausted(rule_id, reason=reason, until=until)
 
     async def _mark_single_upstream_exhausted(
         self,

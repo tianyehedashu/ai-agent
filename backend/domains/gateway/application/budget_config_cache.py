@@ -63,6 +63,7 @@ class BudgetConfigRow:
     enabled: bool = True
     valid_from: datetime | None = None
     valid_until: datetime | None = None
+    limit_images: int | None = None
 
 
 def budget_config_row_from_orm(row: GatewayBudget) -> BudgetConfigRow:
@@ -84,6 +85,7 @@ def budget_config_row_from_orm(row: GatewayBudget) -> BudgetConfigRow:
         enabled=getattr(row, "enabled", True),
         valid_from=getattr(row, "valid_from", None),
         valid_until=getattr(row, "valid_until", None),
+        limit_images=getattr(row, "limit_images", None),
     )
 
 
@@ -285,6 +287,7 @@ async def _get_redis_by_coord(version: str, coord: _Coord) -> BudgetConfigRow | 
             valid_until=datetime.fromisoformat(payload["valid_until"])
             if payload.get("valid_until")
             else None,
+            limit_images=payload.get("limit_images"),
         )
     except (TypeError, ValueError, json.JSONDecodeError, KeyError):
         return _MISS
@@ -310,6 +313,7 @@ async def _put_redis_by_coord(version: str, coord: _Coord, row: BudgetConfigRow)
         "enabled": row.enabled,
         "valid_from": row.valid_from.isoformat() if row.valid_from is not None else None,
         "valid_until": row.valid_until.isoformat() if row.valid_until is not None else None,
+        "limit_images": row.limit_images,
     }
     try:
         await redis.set(

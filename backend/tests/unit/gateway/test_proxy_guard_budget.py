@@ -90,7 +90,7 @@ async def test_check_budget_raises_when_tenant_usd_exceeded(monkeypatch) -> None
     )
     budget_service = BudgetService()
     budget_service.read_budget_usage_batch = AsyncMock(
-        return_value={usage_coord: (Decimal("10"), 0, 0)}
+        return_value={usage_coord: (Decimal("10"), 0, 0, 0)}
     )
     budget_service.check_budget = AsyncMock(
         return_value=BudgetCheckResult(
@@ -145,10 +145,10 @@ async def test_check_budget_reserves_requests_when_under_limit(monkeypatch) -> N
     )
     budget_service = BudgetService()
     budget_service.read_budget_usage_batch = AsyncMock(
-        return_value={usage_coord: (Decimal("0"), 0, 0)}
+        return_value={usage_coord: (Decimal("0"), 0, 0, 0)}
     )
     budget_service.check_budget = AsyncMock(return_value=BudgetCheckResult(allowed=True))
-    budget_service.reserve = AsyncMock(return_value=(1, 0))
+    budget_service.reserve = AsyncMock(return_value=(1, 0, 0))
 
     guard = ProxyGuard(MagicMock(), budget_service, MagicMock())
     reservations = await guard.check_budget(ctx)

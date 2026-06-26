@@ -97,7 +97,8 @@ export function buildBatchRules(
   const lu = parseOptionalUsd(values.limit_usd)
   const lt = parseOptionalInt(values.limit_tokens)
   const lr = parseOptionalInt(values.limit_requests)
-  if (lu === null && lt === null && lr === null) return null
+  const li = parseOptionalInt(values.limit_images)
+  if (lu === null && lt === null && lr === null && li === null) return null
 
   const models = values.allModels ? [null] : values.modelNames.map((m) => m || null)
   if (!values.allModels && models.length === 0) return null
@@ -136,6 +137,7 @@ export function buildBatchRules(
           if (lu !== null) body.limit_usd = lu
           if (lt !== null) body.limit_tokens = lt
           if (lr !== null) body.limit_requests = lr
+          if (li !== null) body.limit_images = li
           applyPeriodResetToBody(body, values)
           applyValidityToBody(body, values)
           rules.push(body)
@@ -167,6 +169,7 @@ export function buildBatchRules(
         if (lu !== null) body.limit_usd = lu
         if (lt !== null) body.limit_tokens = lt
         if (lr !== null) body.limit_requests = lr
+        if (li !== null) body.limit_images = li
         applyPeriodResetToBody(body, values)
         applyValidityToBody(body, values)
         rules.push(body)
@@ -190,6 +193,7 @@ export function buildBatchRules(
       if (lu !== null) body.limit_usd = lu
       if (lt !== null) body.limit_tokens = lt
       if (lr !== null) body.limit_requests = lr
+      if (li !== null) body.limit_images = li
       applyPeriodResetToBody(body, values)
       applyValidityToBody(body, values)
       rules.push(body)

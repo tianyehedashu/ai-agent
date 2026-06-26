@@ -40,6 +40,7 @@ def _entitlement_quota_from_orm(row: EntitlementPlanQuota) -> PlanQuotaReadModel
         enabled=row.enabled,
         valid_from=row.valid_from,
         valid_until=row.valid_until,
+        limit_images=getattr(row, "limit_images", None),
     )
 
 
@@ -60,6 +61,7 @@ def provider_quota_from_orm(row: ProviderQuota) -> ProviderQuotaReadModel:
         enabled=row.enabled,
         valid_from=row.valid_from,
         valid_until=row.valid_until,
+        limit_images=getattr(row, "limit_images", None),
     )
 
 
@@ -71,6 +73,7 @@ def provider_quota_to_spec(row: ProviderQuota) -> PlanQuotaSpec:
         limit_usd=row.limit_usd,
         limit_tokens=row.limit_tokens,
         limit_requests=row.limit_requests,
+        limit_images=getattr(row, "limit_images", None),
         reset_strategy=normalize_reset_strategy(row.reset_strategy),
         period_reset_anchor=period_reset_anchor_from_plan_quota(
             reset_timezone=row.reset_timezone,
@@ -88,6 +91,7 @@ def entitlement_plan_quota_to_spec(row: EntitlementPlanQuota) -> PlanQuotaSpec:
         limit_usd=row.limit_usd,
         limit_tokens=row.limit_tokens,
         limit_requests=row.limit_requests,
+        limit_images=getattr(row, "limit_images", None),
         reset_strategy=normalize_reset_strategy(row.reset_strategy),
         period_reset_anchor=period_reset_anchor_from_plan_quota(
             reset_timezone=row.reset_timezone,

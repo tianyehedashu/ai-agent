@@ -48,6 +48,7 @@ class QuotaRuleLimits:
     limit_requests: int | None
     unit_price_usd_per_token: Decimal | None = None
     unit_price_usd_per_request: Decimal | None = None
+    limit_images: int | None = None
 
 
 @dataclass(frozen=True)
@@ -55,6 +56,7 @@ class QuotaRuleUsage:
     current_usd: Decimal | None = None
     current_tokens: int | None = None
     current_requests: int | None = None
+    current_images: int | None = None
     window_start: datetime | None = None
     reset_at: datetime | None = None
     budget_reset_at: datetime | None = None

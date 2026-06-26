@@ -35,6 +35,7 @@ class QuotaPlanUsageBucketRepository:
         delta_tokens: int,
         delta_requests: int,
         delta_cost_usd: Decimal,
+        delta_images: int = 0,
     ) -> None:
         now = datetime.now(UTC)
         stmt = pg_insert(GatewayQuotaPlanUsageBucket).values(
@@ -44,6 +45,7 @@ class QuotaPlanUsageBucketRepository:
             window_start=window_start,
             tokens=delta_tokens,
             requests=delta_requests,
+            images=delta_images,
             cost_usd=delta_cost_usd,
             updated_at=now,
         )
@@ -52,6 +54,7 @@ class QuotaPlanUsageBucketRepository:
             set_={
                 "tokens": GatewayQuotaPlanUsageBucket.tokens + stmt.excluded.tokens,
                 "requests": GatewayQuotaPlanUsageBucket.requests + stmt.excluded.requests,
+                "images": GatewayQuotaPlanUsageBucket.images + stmt.excluded.images,
                 "cost_usd": GatewayQuotaPlanUsageBucket.cost_usd + stmt.excluded.cost_usd,
                 "updated_at": now,
             },
@@ -68,6 +71,7 @@ class QuotaPlanUsageBucketRepository:
         tokens: int,
         requests: int,
         cost_usd: Decimal,
+        images: int = 0,
     ) -> None:
         """覆盖写入当前窗口用量（管理面手工校正）。"""
         now = datetime.now(UTC)
@@ -78,6 +82,7 @@ class QuotaPlanUsageBucketRepository:
             window_start=window_start,
             tokens=tokens,
             requests=requests,
+            images=images,
             cost_usd=cost_usd,
             updated_at=now,
         )
@@ -86,6 +91,7 @@ class QuotaPlanUsageBucketRepository:
             set_={
                 "tokens": tokens,
                 "requests": requests,
+                "images": images,
                 "cost_usd": cost_usd,
                 "updated_at": now,
             },

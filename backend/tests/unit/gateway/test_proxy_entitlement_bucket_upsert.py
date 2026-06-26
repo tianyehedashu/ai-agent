@@ -25,8 +25,9 @@ class _CommitRecordingEntitlementGuard:
         *,
         delta_tokens: int,
         delta_usd: Decimal,
+        delta_images: int = 0,
     ) -> None:
-        _ = plan_id, specs, delta_tokens, delta_usd
+        _ = plan_id, specs, delta_tokens, delta_usd, delta_images
         self.committed = True
 
 

@@ -32,6 +32,7 @@ export function buildQuotaUsageAdjustmentBody(rule: QuotaRule): QuotaUsageAdjust
         : 0,
     current_tokens: rule.usage?.current_tokens ?? 0,
     current_requests: rule.usage?.current_requests ?? 0,
+    current_images: rule.usage?.current_images ?? 0,
   }
 }
 

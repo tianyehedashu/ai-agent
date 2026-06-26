@@ -7,6 +7,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { cn } from '@/lib/utils'
 
 import {
   applyQuotaWindowPreset,
@@ -139,6 +140,41 @@ export function QuotaRequestLimitField({
   )
 }
 
+export interface QuotaImageLimitFieldProps {
+  id?: string
+  value: string
+  onChange: (value: string) => void
+  disabled?: boolean
+}
+
+export function QuotaImageLimitField({
+  id,
+  value,
+  onChange,
+  disabled = false,
+}: QuotaImageLimitFieldProps): React.JSX.Element {
+  return (
+    <div className="space-y-1">
+      <Label htmlFor={id} className="text-xs text-muted-foreground">
+        图片张数限额
+      </Label>
+      <Input
+        id={id}
+        type="number"
+        step="1"
+        min="0"
+        value={value}
+        disabled={disabled}
+        placeholder="如 50（仅图像模型）"
+        className="h-9 tabular-nums"
+        onChange={(e) => {
+          onChange(e.target.value)
+        }}
+      />
+    </div>
+  )
+}
+
 export interface QuotaLimitValueFieldsProps {
   limitUsd: string
   onLimitUsdChange: (value: string) => void
@@ -147,6 +183,8 @@ export interface QuotaLimitValueFieldsProps {
   onLimitTokensChange: (value: string) => void
   limitRequests?: string
   onLimitRequestsChange?: (value: string) => void
+  limitImages?: string
+  onLimitImagesChange?: (value: string) => void
   disabled?: boolean
   layout?: 'stack' | 'grid'
   usdLabel?: string
@@ -154,6 +192,7 @@ export interface QuotaLimitValueFieldsProps {
   usdId?: string
   tokensId?: string
   requestsId?: string
+  imagesId?: string
 }
 
 export function QuotaLimitValueFields({
@@ -164,6 +203,8 @@ export function QuotaLimitValueFields({
   onLimitTokensChange,
   limitRequests,
   onLimitRequestsChange,
+  limitImages,
+  onLimitImagesChange,
   disabled = false,
   layout = 'stack',
   usdLabel,
@@ -171,12 +212,15 @@ export function QuotaLimitValueFields({
   usdId,
   tokensId,
   requestsId,
+  imagesId,
 }: QuotaLimitValueFieldsProps): React.JSX.Element {
   const showRequests = limitRequests !== undefined && onLimitRequestsChange !== undefined
+  const showImages = limitImages !== undefined && onLimitImagesChange !== undefined
+  const gridCols = showRequests && showImages ? 'sm:grid-cols-4' : 'sm:grid-cols-3'
 
   if (layout === 'grid') {
     return (
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <div className={cn('grid grid-cols-1 gap-3', gridCols)}>
         <QuotaUsdLimitField
           id={usdId}
           label="USD 限额"
@@ -199,6 +243,14 @@ export function QuotaLimitValueFields({
             id={requestsId}
             value={limitRequests}
             onChange={onLimitRequestsChange}
+            disabled={disabled}
+          />
+        ) : null}
+        {showImages ? (
+          <QuotaImageLimitField
+            id={imagesId}
+            value={limitImages}
+            onChange={onLimitImagesChange}
             disabled={disabled}
           />
         ) : null}

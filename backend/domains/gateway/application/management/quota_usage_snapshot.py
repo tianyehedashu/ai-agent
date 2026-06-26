@@ -38,12 +38,14 @@ def _usage_with_reset_at(
     current_usd: Decimal,
     current_tokens: int,
     current_requests: int,
+    current_images: int = 0,
 ) -> QuotaRuleUsage:
     prior = rule.usage
     return QuotaRuleUsage(
         current_usd=current_usd,
         current_tokens=current_tokens,
         current_requests=current_requests,
+        current_images=current_images,
         window_start=prior.window_start if prior is not None else None,
         reset_at=prior.reset_at if prior is not None else None,
         budget_reset_at=prior.budget_reset_at if prior is not None else None,
@@ -143,6 +145,7 @@ async def enrich_quota_rules_with_usage(
                 current_usd=totals.cost_usd,
                 current_tokens=totals.tokens,
                 current_requests=totals.requests,
+                current_images=totals.images,
             )
 
     plan_usage: dict[int, QuotaRuleUsage] = {}
@@ -160,6 +163,7 @@ async def enrich_quota_rules_with_usage(
                 current_usd=totals.cost_usd,
                 current_tokens=totals.tokens,
                 current_requests=totals.requests,
+                current_images=totals.images,
             )
 
     result: list[QuotaRuleReadModel] = []

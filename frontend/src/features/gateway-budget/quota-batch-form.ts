@@ -18,6 +18,8 @@ export interface QuotaBatchFormValues {
   limit_usd: string
   limit_tokens: string
   limit_requests: string
+  /** 图片生成张数上限（仅对 image 能力生效） */
+  limit_images: string
   /** 起止时间（datetime-local 字符串）；空表示该侧不限 */
   validFrom: string
   validUntil: string
@@ -41,6 +43,7 @@ export const DEFAULT_BATCH_FORM: QuotaBatchFormValues = {
   limit_usd: '',
   limit_tokens: '',
   limit_requests: '',
+  limit_images: '',
   validFrom: '',
   validUntil: '',
 }

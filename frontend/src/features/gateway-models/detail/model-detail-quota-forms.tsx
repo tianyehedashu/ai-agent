@@ -236,6 +236,10 @@ export function ModelDetailPlatformQuotaForm({
         tokenMode="wan"
         limitTokens={limitTokensWan}
         onLimitTokensChange={setLimitTokensWan}
+        limitImages={values.limit_images}
+        onLimitImagesChange={(v) => {
+          update('limit_images', v)
+        }}
       />
     </QuotaFormShell>
   )
@@ -326,6 +330,10 @@ export function ModelDetailUpstreamQuotaForm({
         tokenMode="wan"
         limitTokens={limitTokensWan}
         onLimitTokensChange={setLimitTokensWan}
+        limitImages={values.limit_images}
+        onLimitImagesChange={(v) => {
+          update('limit_images', v)
+        }}
         usdLabel="厂商费用上限 (USD)"
         usdPlaceholder="例如 500"
       />

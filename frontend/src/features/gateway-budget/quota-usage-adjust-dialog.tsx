@@ -40,6 +40,7 @@ export function QuotaUsageAdjustDialog({
   const [usd, setUsd] = useState('')
   const [tokens, setTokens] = useState('')
   const [requests, setRequests] = useState('')
+  const [images, setImages] = useState('')
   const { adjustUsage, resetWindow, pending } = useQuotaUsageAdjust({
     teamId,
     mode,
@@ -54,9 +55,11 @@ export function QuotaUsageAdjustDialog({
     setUsd(String(body.current_usd ?? 0))
     setTokens(String(body.current_tokens ?? 0))
     setRequests(String(body.current_requests ?? 0))
+    setImages(String(body.current_images ?? 0))
   }, [rule, open])
 
   const periodLabel = rule ? formatQuotaRulePeriodWindow(rule) : null
+  const showImages = rule ? rule.limits.limit_images !== null : false
 
   const handleSave = (): void => {
     if (!rule) return
@@ -66,6 +69,7 @@ export function QuotaUsageAdjustDialog({
       current_usd: Number.parseFloat(usd) || 0,
       current_tokens: Number.parseInt(tokens, 10) || 0,
       current_requests: Number.parseInt(requests, 10) || 0,
+      current_images: Number.parseInt(images, 10) || 0,
     })
   }
 
@@ -128,6 +132,20 @@ export function QuotaUsageAdjustDialog({
               }}
             />
           </div>
+          {showImages ? (
+            <div className="space-y-1.5">
+              <Label htmlFor="quota-usage-images">已用图片张数</Label>
+              <Input
+                id="quota-usage-images"
+                inputMode="numeric"
+                className="tabular-nums"
+                value={images}
+                onChange={(e) => {
+                  setImages(e.target.value)
+                }}
+              />
+            </div>
+          ) : null}
         </div>
         <DialogFooter className="flex-col gap-2 sm:flex-row sm:justify-between">
           <Button type="button" variant="outline" disabled={pending || !rule} onClick={handleReset}>
