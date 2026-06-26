@@ -130,10 +130,12 @@ class VideoGenTask(BaseModel, TenantScopedMixin):
 
     @property
     def video_url(self) -> str | None:
-        """从 result 中提取视频 URL，支持厂商 API 的多种数据结构。
+        """从 result 中提取视频 URL，支持 Gateway 与历史厂商返回的多种数据结构。
 
         支持的路径（按优先级）：
-        - result.result.video_handle.generate_videos[0].video_url
+        - result.video.url（Gateway / OpenAI 兼容）
+        - result.url
+        - result.result.video_handle.generate_videos[0].video_url（历史 GIIKIN）
         - result.video_handle.generate_videos[0].video_url
         - result.generate_videos[0].video_url
         - result.video_url
@@ -142,9 +144,13 @@ class VideoGenTask(BaseModel, TenantScopedMixin):
         if not self.result:
             return None
 
-        # 尝试多种路径（与 VideoAPIClient.extract_video_url 保持一致）
+        # 按优先级尝试多种路径（Gateway 优先，历史厂商结构向后兼容）
         paths_to_try = [
-            # 标准路径: result.result.video_handle.generate_videos[0].video_url
+            # Gateway / OpenAI 兼容: result.video.url
+            lambda r: r.get("video", {}).get("url"),
+            # Gateway 直接: result.url
+            lambda r: r.get("url"),
+            # 历史 GIIKIN 标准路径: result.result.video_handle.generate_videos[0].video_url
             lambda r: r.get("result", {})
             .get("video_handle", {})
             .get("generate_videos", [{}])[0]

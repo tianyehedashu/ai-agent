@@ -109,6 +109,8 @@ export function routeSupportsMode(
 export interface PlaygroundRouteCandidate {
   name: string
   primaryModels: string[]
+  kind?: 'owned' | 'shared'
+  ownerDisplay?: string | null
 }
 
 export function buildModelCandidateIndex(
@@ -119,7 +121,13 @@ export function buildModelCandidateIndex(
 
 export function filterPlaygroundRouteCandidates(
   routes:
-    | readonly { enabled: boolean; primary_models: string[]; virtual_model: string }[]
+    | readonly {
+        enabled: boolean
+        primary_models: string[]
+        virtual_model: string
+        isSharedRoute?: boolean
+        ownerDisplay?: string | null
+      }[]
     | undefined,
   credentialId: string,
   candidateModels: readonly ModelCandidate[],
@@ -133,10 +141,17 @@ export function filterPlaygroundRouteCandidates(
       if (r.primary_models.length === 0) return false
       // 未选凭据：直接展示已配置主模型的路由，不等待模型分页加载
       if (!credentialId) return true
+      // 共享路由主模型可能在 owner 个人池，消费团队模型列表未必包含
+      if (r.isSharedRoute) return true
       return r.primary_models.every((name) => modelNames.has(name))
     })
     .filter((r) => routeSupportsMode(r.primary_models, playgroundMode, modelsByName))
-    .map((r) => ({ name: r.virtual_model, primaryModels: r.primary_models }))
+    .map((r) => ({
+      name: r.virtual_model,
+      primaryModels: r.primary_models,
+      kind: r.isSharedRoute ? 'shared' : 'owned',
+      ownerDisplay: r.ownerDisplay ?? null,
+    }))
     .sort((a, b) => a.name.localeCompare(b.name))
 }
 

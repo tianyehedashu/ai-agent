@@ -491,7 +491,11 @@ def _credential_from_model_info_kwargs(
 def _deployment_from_model_info_kwargs(
     kwargs: dict[str, Any],
 ) -> tuple[uuid.UUID | None, str | None]:
-    """从 LiteLLM Router deployment 的 ``model_info`` 取 ``GatewayModel`` 主键与注册别名。"""
+    """从 LiteLLM Router deployment 的 ``model_info`` 取 ``GatewayModel`` 主键与注册别名。
+
+    模型身份取 ``gateway_model_id``（用量按模型聚合的 SSOT），而非 ``id``——后者已是
+    每条 deployment 行唯一的 Router 行 id（``router_deployment_row_id``），不再等于 ``GatewayModel.id``。
+    """
     for container_key in ("litellm_params", "standard_logging_object"):
         container = kwargs.get(container_key)
         if not isinstance(container, dict):
@@ -499,7 +503,7 @@ def _deployment_from_model_info_kwargs(
         mi = container.get("model_info")
         if not isinstance(mi, dict):
             continue
-        gid = _to_uuid(mi.get("id"))
+        gid = _to_uuid(mi.get("gateway_model_id"))
         raw_alias = mi.get("gateway_model_name")
         alias: str | None = None
         if isinstance(raw_alias, str) and raw_alias.strip():

@@ -120,6 +120,8 @@ export interface SharedRoute {
   tenant_id: string
   exposed_alias: string
   virtual_model?: string | null
+  primary_models?: string[]
+  enabled?: boolean
   owner_user_id?: string | null
   owner_display?: string | null
   created_at: string

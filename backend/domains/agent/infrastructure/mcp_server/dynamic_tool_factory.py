@@ -8,11 +8,18 @@ MCP Dynamic Tool Factory - 动态工具工厂
 from collections.abc import Callable
 import json
 from typing import Any
+from uuid import UUID
 
 import httpx
 
+from domains.agent.application.video_task_use_case import VideoTaskUseCase
 from domains.agent.domain.mcp.dynamic_tool import DynamicToolType
-from domains.agent.infrastructure.video_api.client import VideoAPIClient, VideoAPIError
+from domains.agent.infrastructure.mcp_server.context import get_mcp_user_id
+from domains.identity.application.permission_context_composer import (
+    PermissionContextComposer,
+)
+from libs.db.database import get_session_context
+from libs.iam.permission_context import clear_permission_context
 
 
 def build_http_call_fn(config: dict[str, Any]) -> Callable[..., Any]:
@@ -56,7 +63,8 @@ def build_http_call_fn(config: dict[str, Any]) -> Callable[..., Any]:
 def build_amazon_video_submit_fn(config: dict[str, Any]) -> Callable[..., Any]:
     """构建亚马逊视频提交函数
 
-    通过 MCP 动态工具调用视频提交服务。
+    通过 MCP 动态工具调用视频任务用例（走 Gateway），与 Web 端 / llm-server 同一入口。
+    需在 MCP 请求上下文内执行（依赖 ``get_mcp_user_id``）。
     """
 
     async def _amazon_video_submit(
@@ -64,39 +72,48 @@ def build_amazon_video_submit_fn(config: dict[str, Any]) -> Callable[..., Any]:
         reference_images: list[str] | None = None,
         marketplace: str = "jp",
     ) -> str:
-        try:
-            client = VideoAPIClient()
-            workflow_id, run_id = await client.submit(
-                prompt=prompt,
-                reference_images=reference_images or [],
-                marketplace=marketplace,
+        user_id = get_mcp_user_id()
+        if not user_id:
+            return json.dumps(
+                {"success": False, "error": "MCP 视频任务需要已认证用户（API Key）"},
+                ensure_ascii=False,
             )
+        try:
+            async with get_session_context() as db:
+                composer = PermissionContextComposer(db)
+                composer.install(await composer.compose_for_user_id(user_id))
+                from libs.api.deps import (
+                    build_session_use_case,  # pylint: disable=import-outside-toplevel
+                )
+
+                use_case = VideoTaskUseCase(db, session_use_case=build_session_use_case(db))
+                task = await use_case.create_task(
+                    principal_id=str(user_id),
+                    session_id=None,
+                    prompt_text=prompt,
+                    prompt_source="agent_generated",
+                    reference_images=reference_images or [],
+                    marketplace=marketplace,
+                    auto_submit=True,
+                )
             return json.dumps(
                 {
                     "success": True,
-                    "workflow_id": workflow_id,
-                    "run_id": run_id,
-                    "message": "视频生成任务已提交",
+                    "task_id": task["id"],
+                    "status": task["status"],
+                    "workflow_id": task.get("workflow_id"),
+                    "run_id": task.get("run_id"),
+                    "message": "视频生成任务已提交到 Gateway",
                 },
                 ensure_ascii=False,
             )
-        except VideoAPIError as e:
+        except Exception as e:  # pylint: disable=broad-except
             return json.dumps(
-                {
-                    "success": False,
-                    "error": e.message,
-                    "code": e.code,
-                },
+                {"success": False, "error": str(e)},
                 ensure_ascii=False,
             )
-        except Exception as e:
-            return json.dumps(
-                {
-                    "success": False,
-                    "error": str(e),
-                },
-                ensure_ascii=False,
-            )
+        finally:
+            clear_permission_context()
 
     return _amazon_video_submit
 
@@ -104,58 +121,57 @@ def build_amazon_video_submit_fn(config: dict[str, Any]) -> Callable[..., Any]:
 def build_amazon_video_poll_fn(config: dict[str, Any]) -> Callable[..., Any]:
     """构建亚马逊视频轮询函数
 
-    通过 MCP 动态工具调用视频轮询服务。
+    通过 MCP 动态工具查询视频任务状态（只读 DB，后台 task 完成后自动写入终态）。
+    需在 MCP 请求上下文内执行（依赖 ``get_mcp_user_id``）。
     """
 
-    async def _amazon_video_poll(
-        workflow_id: str,
-        run_id: str,
-    ) -> str:
+    async def _amazon_video_poll(task_id: str) -> str:
+        user_id = get_mcp_user_id()
+        if not user_id:
+            return json.dumps(
+                {"success": False, "error": "MCP 视频任务需要已认证用户（API Key）"},
+                ensure_ascii=False,
+            )
         try:
-            client = VideoAPIClient()
-            status, result = await client.poll(
-                workflow_id=workflow_id,
-                run_id=run_id,
+            UUID(task_id)
+        except ValueError:
+            return json.dumps(
+                {"success": False, "error": f"无效的 task_id: {task_id}"},
+                ensure_ascii=False,
             )
+        try:
+            async with get_session_context() as db:
+                composer = PermissionContextComposer(db)
+                composer.install(await composer.compose_for_user_id(user_id))
+                from libs.api.deps import (
+                    build_session_use_case,  # pylint: disable=import-outside-toplevel
+                )
 
-            video_url = client.extract_video_url(result) if status == 2 else None
-
+                use_case = VideoTaskUseCase(db, session_use_case=build_session_use_case(db))
+                task = await use_case.poll_task(UUID(task_id), once=True)
+            result_data = {
+                "success": True,
+                "task_id": task["id"],
+                "status": task["status"],
+                "workflow_id": task.get("workflow_id"),
+                "run_id": task.get("run_id"),
+            }
+            if task["status"] == "completed":
+                result_data["video_url"] = task.get("video_url")
+                result_data["message"] = "视频生成已完成"
+            elif task["status"] == "failed":
+                result_data["error_message"] = task.get("error_message")
+                result_data["message"] = "视频生成失败"
+            else:
+                result_data["message"] = "视频正在生成中"
+            return json.dumps(result_data, ensure_ascii=False)
+        except Exception as e:  # pylint: disable=broad-except
             return json.dumps(
-                {
-                    "success": True,
-                    "status": status,
-                    "status_text": {
-                        0: "未知",
-                        1: "运行中",
-                        2: "已完成",
-                        3: "失败",
-                        4: "已取消",
-                        5: "已终止",
-                        6: "已重新创建",
-                        7: "超时",
-                    }.get(status, f"状态码 {status}"),
-                    "video_url": video_url,
-                    "result": result if status == 2 else None,
-                },
+                {"success": False, "error": str(e)},
                 ensure_ascii=False,
             )
-        except VideoAPIError as e:
-            return json.dumps(
-                {
-                    "success": False,
-                    "error": e.message,
-                    "code": e.code,
-                },
-                ensure_ascii=False,
-            )
-        except Exception as e:
-            return json.dumps(
-                {
-                    "success": False,
-                    "error": str(e),
-                },
-                ensure_ascii=False,
-            )
+        finally:
+            clear_permission_context()
 
     return _amazon_video_poll
 

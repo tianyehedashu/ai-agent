@@ -1,24 +1,9 @@
 /**
  * 视频任务相关常量 - 与后端 video_task 能力保持一致，避免多处重复定义
+ *
+ * 视频模型目录与 durations 由后端 ``GET /video-tasks/models`` 提供（网关
+ * ``model_type=video``）；模型选择 UX 统一用 ``ModelSelector``（``listMode='video'``）。
  */
-
-import type { VideoModel, VideoDuration } from '@/types/video-task'
-
-export interface VideoModelOption {
-  value: VideoModel
-  label: string
-  description?: string
-}
-
-export const VIDEO_MODELS: VideoModelOption[] = [
-  { value: 'openai::sora1.0', label: 'Sora 1.0', description: '快速生成' },
-  { value: 'openai::sora2.0', label: 'Sora 2.0', description: '高质量' },
-]
-
-export function getVideoDurations(model: VideoModel): VideoDuration[] {
-  if (model === 'openai::sora2.0') return [5, 10, 15]
-  return [5, 10, 15, 20]
-}
 
 export interface MarketplaceOption {
   value: string

@@ -96,4 +96,12 @@ async def test_lazy_build_resolves_slug_prefixed_primary(db_session: AsyncSessio
     assert len(deployments) == 1
     assert deployments[0]["model_name"] == encoded
     assert deployments[0]["model_info"]["gateway_model_name"] == "doubao-1-5-lite-32k-250115"
+    # 团队过滤键须等于 model_name 作用域团队（消费/owner 命名空间），而非底层 src 的 tenant；
+    # 否则 LiteLLM filter_team_based_models 会把跨团队委派 deployment 剔除（无可用部署）。
+    assert deployments[0]["model_info"]["team_id"] == str(personal_team)
+    assert deployments[0]["model_info"]["team_id"] != str(shared_team)
+    # 模型身份（用量归因 SSOT）落在 gateway_model_id；行 id 唯一且不等于 GatewayModel.id，
+    # 避免同一 src 在多 model_group 下复用 id 造成 cooldown/统计串台。
+    assert deployments[0]["model_info"]["gateway_model_id"] == str(src.id)
+    assert deployments[0]["model_info"]["id"] != str(src.id)
     model_repo.resolve_by_name.assert_awaited_with(shared_team, "doubao-1-5-lite-32k-250115")

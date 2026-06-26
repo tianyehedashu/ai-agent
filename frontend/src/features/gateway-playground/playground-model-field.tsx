@@ -34,6 +34,7 @@ import {
   PLAYGROUND_MODE_LABELS,
   type ModelCandidate,
   type PlaygroundMode,
+  type PlaygroundRouteCandidate,
 } from './playground-mode-filter'
 
 import type { PlaygroundTeamModelGroup } from './playground-proxy-team'
@@ -43,10 +44,8 @@ export const CUSTOM_MODEL_SENTINEL = '__custom__'
 const MODEL_POPOVER_WIDTH_CLASS =
   'w-[max(var(--radix-popover-trigger-width),28rem)] max-w-[min(36rem,calc(100vw-2rem))]'
 
-export interface RouteCandidate {
-  name: string
-  primaryModels: string[]
-}
+/** @deprecated 使用 ``PlaygroundRouteCandidate`` */
+export type RouteCandidate = PlaygroundRouteCandidate
 
 export interface PlaygroundModelFieldProps {
   modelSelectId: string
@@ -55,14 +54,14 @@ export interface PlaygroundModelFieldProps {
   customModel: boolean
   onModelChange: (value: string) => void
   onCustomModelChange: (custom: boolean, model?: string) => void
-  routeCandidates: RouteCandidate[]
+  routeCandidates: PlaygroundRouteCandidate[]
   teamCandidates: ModelCandidate[]
   /** multi-grant vkey：按工作区分组的团队模型（优先于扁平 teamCandidates） */
   teamModelGroups?: readonly PlaygroundTeamModelGroup[]
   personalCandidates: ModelCandidate[]
   filteredModels: ModelCandidate[]
   selectedCandidate: ModelCandidate | undefined
-  selectedRoute: RouteCandidate | undefined
+  selectedRoute: PlaygroundRouteCandidate | undefined
   priceByName: Map<string, MyPriceRow>
   currency: DisplayCurrency
   playgroundMode: PlaygroundMode
@@ -78,8 +77,48 @@ function modelCommandItemValue(item: ModelCandidate): string {
   return [item.name, item.provider, item.capability, item.teamSlug].filter(Boolean).join(' ')
 }
 
-function routeCommandItemValue(item: RouteCandidate): string {
-  return [item.name, ...item.primaryModels, '路由'].join(' ')
+function routeCommandItemValue(item: PlaygroundRouteCandidate): string {
+  return [item.name, ...item.primaryModels, item.ownerDisplay, '路由'].filter(Boolean).join(' ')
+}
+
+function RouteCommandItem({
+  item,
+  selected,
+  onPick,
+  badgeLabel,
+}: Readonly<{
+  item: PlaygroundRouteCandidate
+  selected: boolean
+  onPick: (value: string) => void
+  badgeLabel: string
+}>): React.JSX.Element {
+  return (
+    <CommandItem
+      key={`route-${item.kind ?? 'owned'}-${item.name}`}
+      value={routeCommandItemValue(item)}
+      onSelect={() => {
+        onPick(item.name)
+      }}
+    >
+      <Check
+        className={cn('mr-2 h-4 w-4 shrink-0', selected ? 'opacity-100' : 'opacity-0')}
+        aria-hidden="true"
+      />
+      <span className="flex min-w-0 flex-1 items-start justify-between gap-3">
+        <span className="min-w-0 flex-1 break-all font-mono leading-snug" translate="no">
+          {item.name}
+          {item.ownerDisplay ? (
+            <span className="mt-0.5 block font-sans text-xs text-muted-foreground">
+              {item.ownerDisplay}
+            </span>
+          ) : null}
+        </span>
+        <Badge variant="outline" className="shrink-0 text-muted-foreground">
+          {badgeLabel}
+        </Badge>
+      </span>
+    </CommandItem>
+  )
 }
 
 export function PlaygroundModelField({
@@ -107,6 +146,8 @@ export function PlaygroundModelField({
   const [open, setOpen] = useState(false)
 
   const listEmpty = filteredModels.length === 0 && routeCandidates.length === 0
+  const ownedRouteCandidates = routeCandidates.filter((item) => item.kind !== 'shared')
+  const sharedRouteCandidates = routeCandidates.filter((item) => item.kind === 'shared')
   const triggerPlaceholder = listEmpty
     ? `暂无支持「${PLAYGROUND_MODE_LABELS[playgroundMode]}」的模型或路由`
     : '选择模型或虚拟路由'
@@ -199,35 +240,29 @@ export function PlaygroundModelField({
                 <CommandInput placeholder="搜索模型别名、路由…" />
                 <CommandList>
                   <CommandEmpty>未找到匹配的模型或路由</CommandEmpty>
-                  {routeCandidates.length > 0 ? (
+                  {ownedRouteCandidates.length > 0 ? (
                     <CommandGroup heading="虚拟路由">
-                      {routeCandidates.map((item) => (
-                        <CommandItem
-                          key={`route-${item.name}`}
-                          value={routeCommandItemValue(item)}
-                          onSelect={() => {
-                            handlePick(item.name)
-                          }}
-                        >
-                          <Check
-                            className={cn(
-                              'mr-2 h-4 w-4 shrink-0',
-                              model === item.name ? 'opacity-100' : 'opacity-0'
-                            )}
-                            aria-hidden="true"
-                          />
-                          <span className="flex min-w-0 flex-1 items-start justify-between gap-3">
-                            <span
-                              className="min-w-0 flex-1 break-all font-mono leading-snug"
-                              translate="no"
-                            >
-                              {item.name}
-                            </span>
-                            <Badge variant="outline" className="shrink-0 text-muted-foreground">
-                              路由
-                            </Badge>
-                          </span>
-                        </CommandItem>
+                      {ownedRouteCandidates.map((item) => (
+                        <RouteCommandItem
+                          key={`route-owned-${item.name}`}
+                          item={item}
+                          selected={model === item.name}
+                          onPick={handlePick}
+                          badgeLabel="路由"
+                        />
+                      ))}
+                    </CommandGroup>
+                  ) : null}
+                  {sharedRouteCandidates.length > 0 ? (
+                    <CommandGroup heading="共享路由">
+                      {sharedRouteCandidates.map((item) => (
+                        <RouteCommandItem
+                          key={`route-shared-${item.name}`}
+                          item={item}
+                          selected={model === item.name}
+                          onPick={handlePick}
+                          badgeLabel="共享"
+                        />
                       ))}
                     </CommandGroup>
                   ) : null}
@@ -400,7 +435,7 @@ function ModelHint({
 }: Readonly<{
   loading: boolean
   selected: ModelCandidate | undefined
-  selectedRoute: RouteCandidate | undefined
+  selectedRoute: PlaygroundRouteCandidate | undefined
   empty: boolean
   mode: PlaygroundMode
 }>): React.JSX.Element | null {

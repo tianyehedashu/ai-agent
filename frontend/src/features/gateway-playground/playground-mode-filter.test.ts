@@ -65,6 +65,27 @@ describe('filterPlaygroundRouteCandidates', () => {
     const result = filterPlaygroundRouteCandidates(routes, '', [chatModel, visionModel], 'vision')
     expect(result.map((r) => r.name)).toEqual(['route-a'])
   })
+
+  it('keeps shared routes when team credential filter omits owner primary models', () => {
+    const sharedRoutes = [
+      {
+        enabled: true,
+        virtual_model: 'shared-alias',
+        primary_models: ['owner-only-model'],
+        isSharedRoute: true,
+        ownerDisplay: 'Alice',
+      },
+    ]
+    const result = filterPlaygroundRouteCandidates(sharedRoutes, 'cred-team', [chatModel], 'chat')
+    expect(result).toEqual([
+      {
+        name: 'shared-alias',
+        primaryModels: ['owner-only-model'],
+        kind: 'shared',
+        ownerDisplay: 'Alice',
+      },
+    ])
+  })
 })
 
 describe('ensurePlaygroundSelectionModelLoaded', () => {

@@ -124,7 +124,11 @@ class TestRouteGrantE2E:
                 headers=auth_headers,
             )
             assert r_shared.status_code == 200, r_shared.text
-            assert any(s["exposed_alias"] == alias for s in r_shared.json())
+            shared_payload = r_shared.json()
+            assert any(s["exposed_alias"] == alias for s in shared_payload)
+            shared_row = next(s for s in shared_payload if s["exposed_alias"] == alias)
+            assert shared_row["primary_models"] == [model_name]
+            assert shared_row["enabled"] is True
 
             # 消费团队 vkey
             r_key = await dev_client.post(

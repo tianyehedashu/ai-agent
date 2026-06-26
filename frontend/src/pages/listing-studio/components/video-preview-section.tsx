@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 视频预览区：等待状态、播放展示、创建入口
  * 整合到Listing 创作页，无需跳转视频任务页
  *
@@ -6,11 +6,12 @@
  * 查询和展示时只显示属于当前 job 的视频。
  */
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect, useMemo } from 'react'
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { videoTaskApi } from '@/api/videoTask'
+import { ModelSelector } from '@/components/model-selector'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -19,7 +20,6 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Textarea } from '@/components/ui/textarea'
-import { VIDEO_MODELS, getVideoDurations } from '@/constants/video-task'
 import type { ListingStudioCapabilitiesConfig } from '@/hooks/use-listing-studio-capabilities'
 import { useToast } from '@/hooks/use-toast'
 import {
@@ -29,11 +29,15 @@ import {
   XCircle,
   ChevronDown,
   ChevronUp,
-  Sparkles,
   Clock,
 } from '@/lib/lucide-icons'
 import { OverlayScope } from '@/lib/ui-overlay'
-import type { VideoGenTask, VideoModel, VideoDuration } from '@/types/video-task'
+import type {
+  VideoCatalogModelOption,
+  VideoDuration,
+  VideoGenTask,
+  VideoModel,
+} from '@/types/video-task'
 
 function makePromptSource(jobId: string): string {
   return `product_info::${jobId}`
@@ -59,10 +63,40 @@ export function VideoPreviewSection({
 }: VideoPreviewSectionProps): React.JSX.Element {
   const [showCreate, setShowCreate] = useState(false)
   const [promptText, setPromptText] = useState('')
-  const [model, setModel] = useState<VideoModel>('openai::sora2.0')
-  const [duration, setDuration] = useState<VideoDuration>(15)
+  const [model, setModel] = useState<VideoModel | null>(null)
+  const [duration, setDuration] = useState<VideoDuration>(5)
   const queryClient = useQueryClient()
   const { toast } = useToast()
+
+  // 视频模型目录（网关 model_type=video）：提供 durations 元数据
+  const { data: catalog } = useQuery({
+    queryKey: ['video-tasks', 'models'],
+    queryFn: () => videoTaskApi.listModels(),
+    staleTime: 60_000,
+  })
+  const catalogMap = useMemo(() => {
+    const m = new Map<string, VideoCatalogModelOption>()
+    for (const item of catalog ?? []) m.set(item.value, item)
+    return m
+  }, [catalog])
+
+  useEffect(() => {
+    if (model === null && catalog && catalog.length > 0) {
+      setModel(catalog[0].value)
+    }
+  }, [model, catalog])
+
+  const availableDurations = useMemo(() => {
+    const entry = model ? catalogMap.get(model) : undefined
+    if (entry) return entry.durations
+    return [5, 10, 15]
+  }, [model, catalogMap])
+
+  useEffect(() => {
+    if (availableDurations.length > 0 && !availableDurations.includes(duration)) {
+      setDuration(availableDurations[0])
+    }
+  }, [availableDurations, duration])
 
   const promptSource = jobId ? makePromptSource(jobId) : null
 
@@ -111,7 +145,7 @@ export function VideoPreviewSection({
         promptSource,
         referenceImages: imageUrls,
         marketplace: 'jp',
-        model,
+        model: model ?? undefined,
         duration,
         autoSubmit: true,
       })
@@ -222,27 +256,14 @@ export function VideoPreviewSection({
                 className="min-h-[80px] resize-none text-sm"
               />
               <div className="flex flex-wrap items-center gap-2">
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="outline" size="sm" className="h-8 gap-1.5 rounded-lg text-sm">
-                      <Sparkles className="h-3.5 w-3.5" />
-                      {VIDEO_MODELS.find((m) => m.value === model)?.label ?? model}
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="start">
-                    {VIDEO_MODELS.map((m) => (
-                      <DropdownMenuItem
-                        key={m.value}
-                        onClick={() => {
-                          setModel(m.value)
-                        }}
-                        className={model === m.value ? 'bg-accent' : undefined}
-                      >
-                        {m.label}
-                      </DropdownMenuItem>
-                    ))}
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                <ModelSelector
+                  modelType="video"
+                  listMode="video"
+                  value={model}
+                  onChange={setModel}
+                  placeholder="视频模型"
+                  className="h-8 w-[8.5rem] rounded-lg border-0 bg-transparent text-sm shadow-none focus:ring-0"
+                />
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button variant="outline" size="sm" className="h-8 gap-1.5 rounded-lg text-sm">
@@ -251,7 +272,7 @@ export function VideoPreviewSection({
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="start">
-                    {getVideoDurations(model).map((d) => (
+                    {availableDurations.map((d) => (
                       <DropdownMenuItem
                         key={d}
                         onClick={() => {

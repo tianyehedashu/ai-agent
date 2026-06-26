@@ -7,6 +7,19 @@ import uuid
 ROUTER_TEAM_PREFIX = "gw/t/"
 ROUTER_SYS_PREFIX = "gw/s/"
 
+# 派生 Router deployment 行 id 的命名空间（稳定、与业务 UUID 隔离）。
+_ROUTER_DEPLOYMENT_ID_NS = uuid.UUID("6f9619ff-8b86-d011-b42d-00cf4fc964ff")
+
+
+def router_deployment_row_id(model_name: str, gateway_model_id: uuid.UUID) -> str:
+    """Router deployment 行的稳定唯一 id（供 LiteLLM 路由/cooldown/负载均衡）。
+
+    同一 ``GatewayModel`` 会在多个 ``model_name``（直连 / owner 路由 / 各消费团队委派）
+    中各注册一行；LiteLLM 要求 ``model_info.id`` 全局唯一，否则部署表/cooldown/统计互相
+    覆盖、跨团队串台。以 ``(model_name, gateway_model_id)`` 派生即保证唯一又跨 reload 稳定。
+    """
+    return str(uuid.uuid5(_ROUTER_DEPLOYMENT_ID_NS, f"{model_name}|{gateway_model_id}"))
+
 
 def deployment_scope_team_id(row: object) -> uuid.UUID | None:
     """Router deployment 作用域：系统级行返回 ``None``（``gw/s/``），租户行返回 ``tenant_id``。"""
@@ -55,4 +68,5 @@ __all__ = [
     "deployment_scope_team_id",
     "encode_router_model_name",
     "is_router_encoded_model_name",
+    "router_deployment_row_id",
 ]

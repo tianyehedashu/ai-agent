@@ -42,6 +42,8 @@ class SharedRouteResponse(BaseModel):
     tenant_id: uuid.UUID
     exposed_alias: str
     virtual_model: str | None = None
+    primary_models: list[str] = Field(default_factory=list)
+    enabled: bool = True
     owner_user_id: uuid.UUID | None = None
     owner_display: str | None = None
     created_at: datetime

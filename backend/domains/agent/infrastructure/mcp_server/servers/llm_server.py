@@ -20,7 +20,6 @@ from domains.agent.infrastructure.llm import get_configured_models
 from domains.agent.infrastructure.llm.agent_llm_facade import AgentLlmFacade
 from domains.agent.infrastructure.mcp_server.context import (
     get_mcp_user_id,
-    get_mcp_vendor_creator_id,
 )
 from domains.identity.application.permission_context_composer import PermissionContextComposer
 from libs.config import get_llm_config
@@ -81,21 +80,21 @@ async def video_create_task(
     prompt: str,
     reference_images: list[str] | None = None,
     marketplace: str = "jp",
-    model: str = "openai::sora1.0",
+    model: str | None = None,
     duration: int = 5,
     auto_submit: bool = True,
 ) -> str:
     """创建视频生成任务（封装后端视频任务 API）
 
-    使用当前 MCP 认证用户创建一条视频任务，可选自动提交到厂商。与 Web 端「视频任务」页面同一套后端接口。
+    使用当前 MCP 认证用户创建一条视频任务，可选自动提交到 Gateway 执行。与 Web 端「视频任务」页面同一套后端接口。
 
     Args:
         prompt: 视频生成提示词（必填）
         reference_images: 参考图片 URL 列表，可选
         marketplace: 目标站点 jp/us/de/uk/fr/it/es，默认 jp
-        model: 模型 openai::sora1.0 或 openai::sora2.0，默认 sora1.0
-        duration: 时长（秒），sora1 支持 5/10/15/20，sora2 支持 5/10/15，默认 5
-        auto_submit: 是否创建后自动提交到厂商，默认 True
+        model: 视频生成模型（网关 model_type=video 的模型 ID）；为空时取可见目录首个
+        duration: 时长（秒），允许值见该模型 catalog 的 durations，默认 5
+        auto_submit: 是否创建后自动提交到 Gateway，默认 True
 
     Returns:
         JSON 字符串，含 id、status、workflow_id、run_id、error 等；失败时含 success=false 与 error
@@ -111,7 +110,6 @@ async def video_create_task(
         async with get_session_context() as db:
             composer = PermissionContextComposer(db)
             composer.install(await composer.compose_for_user_id(user_id))
-            vendor_creator_id = get_mcp_vendor_creator_id()
             from libs.api.deps import build_session_use_case
 
             use_case = VideoTaskUseCase(db, session_use_case=build_session_use_case(db))
@@ -125,7 +123,6 @@ async def video_create_task(
                 model=model,
                 duration=duration,
                 auto_submit=auto_submit,
-                vendor_creator_id=vendor_creator_id,
             )
         return json.dumps(
             {
@@ -134,7 +131,7 @@ async def video_create_task(
                 "status": task["status"],
                 "workflow_id": task.get("workflow_id"),
                 "run_id": task.get("run_id"),
-                "message": "视频任务已创建" + ("并已提交到厂商" if auto_submit else ""),
+                "message": "视频任务已创建" + ("并已提交到 Gateway" if auto_submit else ""),
             },
             ensure_ascii=False,
         )

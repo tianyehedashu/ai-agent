@@ -62,6 +62,7 @@ def test_merge_probe_litellm_kwargs_sets_metadata_and_model_info() -> None:
     assert merged["metadata"]["gateway_team_id"] == str(tenant_id)
     mi = merged["litellm_params"]["model_info"]
     assert mi["id"] == str(target.model_id)
+    assert mi["gateway_model_id"] == str(target.model_id)
     # 注册别名 = 调用名（GatewayModel.name）；上游 canonical id 单列 gateway_real_model
     assert mi["gateway_model_name"] == "doubao-test-chat"
     assert mi["gateway_real_model"] == "doubao-test"

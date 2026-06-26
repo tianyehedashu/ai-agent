@@ -51,10 +51,12 @@ def gateway_deployment_credential_id(kwargs: dict[str, Any]) -> uuid.UUID | None
 
 
 def gateway_deployment_id(kwargs: dict[str, Any]) -> str | None:
-    """从 LiteLLM callback kwargs 提取当前 deployment 的 stable id。
+    """从 LiteLLM callback kwargs 提取当前 deployment 的 stable 行 id（供 Router cooldown）。
 
-    该 id 与 ``router_singleton._build_deployment`` 写入的
-    ``model_info.id = str(GatewayModel.id)`` 一致，可用于 Router cooldown。
+    该 id 与 ``router_singleton._build_deployment`` 写入的 ``model_info.id``
+    （``router_deployment_row_id(model_name, GatewayModel.id)``）一致：每条 deployment 行唯一，
+    故 cooldown 只作用于被选中的那一行，不会跨 model_group/团队串台。模型身份（用量归因）
+    另见 ``model_info.gateway_model_id``。
     """
     model_info = litellm_model_info_from_kwargs(kwargs)
     if model_info is None:

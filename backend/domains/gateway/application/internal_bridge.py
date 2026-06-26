@@ -296,6 +296,48 @@ class GatewayBridge:
             return [item.get("embedding") for item in data if isinstance(item, dict)]
         return []
 
+    async def video_generation(
+        self,
+        prompt: str,
+        *,
+        ctx: GatewayCallContext,
+        model: str,
+        seconds: int | None = None,
+        reference_image_urls: list[str] | None = None,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        body: dict[str, Any] = {
+            "model": model,
+            "prompt": prompt,
+        }
+        if seconds is not None:
+            body["seconds"] = seconds
+        if reference_image_urls:
+            body["image_urls"] = reference_image_urls
+        body.update(kwargs)
+
+        _merge_gateway_ctx_metadata(body, ctx)
+
+        async with get_session_context() as session:
+            team_id = await _resolve_bridge_team_id(session, ctx)
+            vkey = await _ensure_system_vkey(session, team_id)
+            store_full_messages = (
+                ctx.store_full_messages
+                if ctx.store_full_messages is not None
+                else vkey.store_full_messages
+            )
+            proxy_ctx = await _build_bridge_proxy_context(
+                session,
+                ctx,
+                team_id=team_id,
+                vkey=vkey,
+                capability=GatewayCapability.VIDEO_GENERATION,
+                store_full_messages=store_full_messages,
+            )
+            await _commit_bridge_setup(session)
+            result = await ProxyUseCase(session).video_generation(proxy_ctx, body)
+        return result if isinstance(result, dict) else {}
+
     async def count_tokens(self, text: str, model: str | None = None) -> int:
         try:
             from litellm import token_counter

@@ -78,6 +78,37 @@ describe('PlaygroundModelField', () => {
     expect(within(listbox).queryByText('deepseek-chat')).not.toBeInTheDocument()
   })
 
+  it('renders shared routes in a dedicated group', () => {
+    render(
+      <PlaygroundModelField
+        {...baseProps}
+        routeCandidates={[
+          {
+            name: 'team-route',
+            primaryModels: ['m1'],
+            kind: 'owned',
+          },
+          {
+            name: 'shared-alias',
+            primaryModels: ['m2'],
+            kind: 'shared',
+            ownerDisplay: 'Alice',
+          },
+        ]}
+        filteredModels={[]}
+        teamCandidates={[]}
+      />
+    )
+
+    fireEvent.click(screen.getByRole('combobox'))
+
+    expect(screen.getByText('虚拟路由')).toBeInTheDocument()
+    expect(screen.getByText('共享路由')).toBeInTheDocument()
+    expect(screen.getByText('shared-alias')).toBeInTheDocument()
+    expect(screen.getByText('Alice')).toBeInTheDocument()
+    expect(screen.getByText('共享')).toBeInTheDocument()
+  })
+
   it('switches to manual input mode', async () => {
     const onCustomModelChange = vi.fn()
     render(<PlaygroundModelField {...baseProps} onCustomModelChange={onCustomModelChange} />)

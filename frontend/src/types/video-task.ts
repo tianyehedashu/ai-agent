@@ -12,11 +12,11 @@ export type VideoTaskStatus = 'pending' | 'running' | 'completed' | 'failed' | '
 // Video Task Types
 // ============================================
 
-/** 视频生成模型（以后端 /video-tasks/models 为准，含内置 Sora 等） */
+/** 视频生成模型（网关 model_type=video 的模型 ID） */
 export type VideoModel = string
 
-/** 视频时长（秒） */
-export type VideoDuration = 5 | 10 | 15 | 20
+/** 视频时长（秒）；允许值由后端 /video-tasks/models 的 durations 决定 */
+export type VideoDuration = number
 
 export interface VideoCatalogModelOption {
   value: string

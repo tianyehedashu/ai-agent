@@ -29,11 +29,16 @@ import { buildPlaygroundCandidateModels } from './playground-model-sources'
 import { fetchPlaygroundProxyModels } from './playground-proxy-models'
 import { isPersonalGatewayTeam, resolvePlaygroundProxyTeamId } from './playground-proxy-team'
 import {
+  mergePlaygroundRouteRows,
+  resolvePlaygroundRouteFetchPolicy,
+} from './playground-route-sources'
+import {
   filterPlaygroundManagedTeamModels,
   shouldQueryManagedTeamModelsForPlayground,
 } from './playground-team-models-query'
 
 import type { ModelCandidate } from './playground-mode-filter'
+import type { PlaygroundRouteRow } from './playground-route-sources'
 
 export interface UsePlaygroundFilteredModelsOptions {
   credentialId?: string
@@ -66,8 +71,10 @@ export interface UsePlaygroundFilteredModelsResult {
   includeTeamModels: boolean
   includeMyModels: boolean
   includeRoutes: boolean
+  includeOwnedRoutes: boolean
+  includeSharedRoutes: boolean
   candidateModels: ModelCandidate[]
-  routes: Awaited<ReturnType<typeof gatewayApi.listRoutes>> | undefined
+  routes: PlaygroundRouteRow[] | undefined
   modelsLoading: boolean
   teamModelsLoaded: boolean
   myModelsLoaded: boolean
@@ -148,11 +155,16 @@ export function usePlaygroundFilteredModels(
     !usingProxyModelList &&
     (!credentialId || isPersonalCredential) &&
     (!selectedKeyTeamId || isPersonalProxyTeam)
-  const includeRoutes =
-    !usingProxyModelList &&
-    fetchRoutes &&
-    Boolean(proxyTeamId) &&
-    !(credentialId && isPersonalCredential)
+  const routeFetchPolicy = resolvePlaygroundRouteFetchPolicy({
+    fetchRoutes,
+    proxyTeamId,
+    isPersonalProxyTeam,
+    credentialId,
+    isPersonalCredential,
+    usingProxyModelList,
+  })
+  const { includeOwnedRoutes, includeSharedRoutes } = routeFetchPolicy
+  const includeRoutes = includeOwnedRoutes || includeSharedRoutes
 
   const proxyModelsQuery = useQuery({
     queryKey: ['gateway', 'playground', 'proxy-models', proxyVkeyId, proxyVkeyBaseUrl] as const,
@@ -204,19 +216,33 @@ export function usePlaygroundFilteredModels(
     staleTime: GATEWAY_MODELS_STALE_MS,
   })
 
-  const [routesQuery] = useQueries({
+  const [ownedRoutesQuery, sharedRoutesQuery] = useQueries({
     queries: [
       {
-        queryKey: ['gateway', 'routes', proxyTeamId, credentialId],
+        queryKey: ['gateway', 'routes', proxyTeamId, credentialId] as const,
         queryFn: () => {
           if (!proxyTeamId) return Promise.reject(new Error('未选择团队'))
           return gatewayApi.listRoutes(proxyTeamId)
         },
-        enabled: includeRoutes,
+        enabled: includeOwnedRoutes,
+        staleTime: GATEWAY_MODELS_STALE_MS,
+      },
+      {
+        queryKey: ['gateway', 'shared-routes', proxyTeamId] as const,
+        queryFn: () => {
+          if (!proxyTeamId) return Promise.reject(new Error('未选择团队'))
+          return gatewayApi.listSharedRoutes(proxyTeamId)
+        },
+        enabled: includeSharedRoutes,
         staleTime: GATEWAY_MODELS_STALE_MS,
       },
     ],
   })
+
+  const playgroundRoutes = useMemo(
+    () => mergePlaygroundRouteRows(ownedRoutesQuery.data, sharedRoutesQuery.data),
+    [ownedRoutesQuery.data, sharedRoutesQuery.data]
+  )
 
   const {
     fetchNextPage: fetchNextTeamPage,
@@ -356,17 +382,24 @@ export function usePlaygroundFilteredModels(
 
   const myModelsLoaded = usingProxyModelList ? true : !includeMyModels || myModelsSuccess
 
+  const routesLoading =
+    (includeOwnedRoutes && ownedRoutesQuery.isLoading) ||
+    (includeSharedRoutes && sharedRoutesQuery.isLoading)
+  const routesFetching =
+    (includeOwnedRoutes && ownedRoutesQuery.isFetching) ||
+    (includeSharedRoutes && sharedRoutesQuery.isFetching)
+
   const modelsLoading =
     teamModelsLoading ||
     myModelsLoading ||
-    routesQuery.isLoading ||
+    routesLoading ||
     credentialsLoading ||
     proxyModelsLoading
 
   const isRefreshing =
     teamModelsFetching ||
     myModelsFetching ||
-    routesQuery.isFetching ||
+    routesFetching ||
     credentialsFetching ||
     (usingProxyModelList && proxyModelsQuery.isFetching)
 
@@ -374,7 +407,8 @@ export function usePlaygroundFilteredModels(
     void Promise.all([
       usingProxyModelList ? refetchProxyModels() : refetchTeamModels(),
       usingProxyModelList ? Promise.resolve() : refetchMyModels(),
-      usingProxyModelList ? Promise.resolve() : routesQuery.refetch(),
+      includeOwnedRoutes ? ownedRoutesQuery.refetch() : Promise.resolve(),
+      includeSharedRoutes ? sharedRoutesQuery.refetch() : Promise.resolve(),
       queryClient.invalidateQueries({ queryKey: [...PLAYGROUND_CREDENTIAL_SUMMARIES_QUERY_KEY] }),
       queryClient.invalidateQueries({ queryKey: [...MANAGED_TEAM_MODELS_QUERY_KEY] }),
     ])
@@ -383,7 +417,10 @@ export function usePlaygroundFilteredModels(
     refetchMyModels,
     refetchTeamModels,
     refetchProxyModels,
-    routesQuery,
+    ownedRoutesQuery,
+    sharedRoutesQuery,
+    includeOwnedRoutes,
+    includeSharedRoutes,
     usingProxyModelList,
   ])
 
@@ -401,8 +438,10 @@ export function usePlaygroundFilteredModels(
     includeTeamModels,
     includeMyModels,
     includeRoutes,
+    includeOwnedRoutes,
+    includeSharedRoutes,
     candidateModels,
-    routes: routesQuery.data,
+    routes: includeRoutes ? playgroundRoutes : undefined,
     modelsLoading,
     teamModelsLoaded,
     myModelsLoaded,

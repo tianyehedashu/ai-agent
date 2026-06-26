@@ -34,18 +34,24 @@ async def _team_display_by_ids(
     return {row.id: (row.name, row.slug) for row in result.all()}
 
 
-async def _route_virtual_models_by_ids(
+async def _route_rows_by_ids(
     session: AsyncSession, route_ids: list[uuid.UUID]
-) -> dict[uuid.UUID, str]:
+) -> dict[uuid.UUID, tuple[str, list[str], bool]]:
     if not route_ids:
         return {}
     from domains.gateway.infrastructure.models.gateway_route import GatewayRoute
 
-    stmt = select(GatewayRoute.id, GatewayRoute.virtual_model).where(
-        GatewayRoute.id.in_(route_ids)
-    )
+    stmt = select(
+        GatewayRoute.id,
+        GatewayRoute.virtual_model,
+        GatewayRoute.primary_models,
+        GatewayRoute.enabled,
+    ).where(GatewayRoute.id.in_(route_ids))
     result = await session.execute(stmt)
-    return {row.id: row.virtual_model for row in result.all()}
+    return {
+        row.id: (row.virtual_model, list(row.primary_models or ()), bool(row.enabled))
+        for row in result.all()
+    }
 
 
 async def _user_display_by_ids(
@@ -108,8 +114,8 @@ async def list_route_grants_for_route(
     grants = await repo.list_active_for_route(route_id)
     tenant_ids = [g.tenant_id for g in grants]
     team_map = await _team_display_by_ids(session, tenant_ids)
-    vm_map = await _route_virtual_models_by_ids(session, [route_id])
-    virtual_model = vm_map.get(route_id)
+    route_map = await _route_rows_by_ids(session, [route_id])
+    virtual_model = route_map.get(route_id, (None, [], True))[0]
     return [
         RouteGrantResponse(
             id=g.id,
@@ -132,22 +138,29 @@ async def list_shared_routes_for_team(
     repo = GatewayRouteTeamGrantRepository(session)
     grants = await repo.list_active_for_tenant(tenant_id)
     route_ids = [g.route_id for g in grants]
-    vm_map = await _route_virtual_models_by_ids(session, route_ids)
+    route_map = await _route_rows_by_ids(session, route_ids)
     owner_ids = [g.granted_by_user_id for g in grants]
     owner_map = await _user_display_by_ids(session, owner_ids)
-    return [
-        SharedRouteResponse(
-            grant_id=g.id,
-            route_id=g.route_id,
-            tenant_id=g.tenant_id,
-            exposed_alias=g.exposed_alias,
-            virtual_model=vm_map.get(g.route_id),
-            owner_user_id=g.granted_by_user_id,
-            owner_display=owner_map.get(g.granted_by_user_id),
-            created_at=g.created_at,
+    rows: list[SharedRouteResponse] = []
+    for g in grants:
+        virtual_model, primary_models, enabled = route_map.get(
+            g.route_id, (None, [], True)
         )
-        for g in grants
-    ]
+        rows.append(
+            SharedRouteResponse(
+                grant_id=g.id,
+                route_id=g.route_id,
+                tenant_id=g.tenant_id,
+                exposed_alias=g.exposed_alias,
+                virtual_model=virtual_model,
+                primary_models=primary_models,
+                enabled=enabled,
+                owner_user_id=g.granted_by_user_id,
+                owner_display=owner_map.get(g.granted_by_user_id),
+                created_at=g.created_at,
+            )
+        )
+    return rows
 
 
 async def list_grantable_teams_for_route(

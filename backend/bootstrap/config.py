@@ -141,12 +141,6 @@ class Settings(BaseSettings):
     # 本地模型 (Ollama)
     local_llm_url: str = "http://localhost:11434"
 
-    # GIIKIN 视频生成 API
-    giikin_client_id: str | None = None
-    giikin_client_secret: str | None = None
-    giikin_base_url: str = "https://openapi.giikin.com"
-    giikin_creator_id: int | None = None  # 操作用户 ID，用于厂商追踪
-
     # ==========================================================================
     # 场景化模型配置（环境变量；空值时由 Gateway 可见目录兜底）
     # ==========================================================================

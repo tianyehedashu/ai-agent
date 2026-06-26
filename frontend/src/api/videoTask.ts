@@ -9,7 +9,6 @@ import type {
   VideoTaskUpdateInput,
   VideoTaskListResponse,
   VideoTaskStatus,
-  VideoDuration,
   VideoPromptOptimizeInput,
   VideoPromptOptimizeResult,
   VideoPromptTemplate,
@@ -69,7 +68,7 @@ function toFrontendVideoTask(backend: BackendVideoTask): VideoGenTask {
     referenceImages: backend.reference_images,
     marketplace: backend.marketplace,
     model: backend.model,
-    duration: backend.duration as VideoDuration,
+    duration: backend.duration,
     result: backend.result ?? undefined,
     errorMessage: backend.error_message ?? undefined,
     videoUrl: backend.video_url ?? undefined,
@@ -88,7 +87,7 @@ function toBackendCreateRequest(data: VideoTaskCreateInput): Record<string, unkn
     prompt_source: data.promptSource,
     reference_images: data.referenceImages ?? [],
     marketplace: data.marketplace ?? 'jp',
-    model: data.model ?? 'openai::sora1.0',
+    model: data.model ?? null,
     duration: data.duration ?? 5,
     auto_submit: data.autoSubmit ?? false,
   }
@@ -110,7 +109,7 @@ function toBackendUpdateRequest(data: VideoTaskUpdateInput): Record<string, unkn
 // ============================================
 
 export const videoTaskApi = {
-  /** 获取后端提供的视频模型目录（内置 + 未来网关扩展） */
+  /** 获取后端提供的视频模型目录（网关 model_type=video，含 durations 元数据） */
   async listModels(): Promise<VideoCatalogModelOption[]> {
     const raw = await apiClient.get<
       Array<{
@@ -128,7 +127,7 @@ export const videoTaskApi = {
       durations: x.durations,
       maxReferenceImages: x.max_reference_images,
       supportsImageToVideo: x.supports_image_to_video,
-      source: x.source ?? 'builtin',
+      source: x.source ?? 'gateway',
     }))
   },
 

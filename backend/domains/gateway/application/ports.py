@@ -133,6 +133,24 @@ class GatewayProxyProtocol(Protocol):
         """embedding 调用入口"""
         ...
 
+    async def video_generation(
+        self,
+        prompt: str,
+        *,
+        ctx: GatewayCallContext,
+        model: str,
+        seconds: int | None = None,
+        reference_image_urls: list[str] | None = None,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        """视频生成调用入口（对应 OpenAI /v1/videos）。
+
+        返回 OpenAI 兼容响应 dict（含 ``id`` / ``status`` / ``video.url`` 等）。
+        LiteLLM ``avideo_generation`` 为同步阻塞调用（默认 600s），由调用方决定
+        是否在后台 task 中等待。
+        """
+        ...
+
     async def count_tokens(self, text: str, model: str | None = None) -> int:
         """token 计数"""
         ...

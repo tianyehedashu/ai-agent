@@ -64,12 +64,12 @@ class VideoTaskCreate(BaseModel):
     prompt_source: str | None = Field(default=None, description="提示词来源")
     reference_images: list[str] = Field(default_factory=list, description="参考图片URL列表")
     marketplace: str = Field(default="jp", description="目标站点")
-    model: str = Field(
-        default="openai::sora1.0",
-        description="视频生成模型（厂商 config.model）；见 GET /video-tasks/models 合并目录",
+    model: str | None = Field(
+        default=None,
+        description="视频生成模型（网关 model_type=video 的模型 ID）；为空时取可见目录首个",
     )
     duration: int = Field(
-        default=5, description="视频时长（秒）: sora1支持5/10/15/20, sora2支持5/10/15"
+        default=5, description="视频时长（秒）；允许值见 GET /video-tasks/models 的 durations"
     )
     auto_submit: bool = Field(default=False, description="是否自动提交到厂商")
 
@@ -138,7 +138,7 @@ class VideoModelOptionResponse(BaseModel):
     durations: list[int]
     max_reference_images: int
     supports_image_to_video: bool
-    source: str = "builtin"
+    source: str = "gateway"
 
 
 class VideoTaskListResponse(BaseModel):
@@ -157,11 +157,16 @@ class VideoTaskListResponse(BaseModel):
 
 @router.get("/models", response_model=list[VideoModelOptionResponse])
 async def list_video_models(
-    _current_user: AuthUser,
+    current_user: AuthUser,
     db: AsyncSession = Depends(get_db),
 ) -> list[VideoModelOptionResponse]:
-    """列出当前可用的视频生成模型（内置 + 网关 ``model_type=video`` 且配置 vendor id）。"""
-    raw = await list_merged_video_models(db)
+    """列出当前可用的视频生成模型（网关 ``model_type=video``）。
+
+    供前端解析各模型允许的 ``durations``；模型选择 UX 统一用
+    ``ModelSelector``（``listMode='video'``，数据源 ``GET /gateway/models/available``）。
+    """
+    user_id = uuid.UUID(current_user.id)
+    raw = await list_merged_video_models(db, user_id=user_id)
     return [VideoModelOptionResponse.model_validate(x) for x in raw]
 
 
@@ -237,7 +242,6 @@ async def create_video_task(
             )
         raise AuthenticationError("Authentication required")
 
-    vendor_creator_id = current_user.vendor_creator_id
     session_uuid = parse_optional_uuid(data.session_id, "session_id")
 
     task = await video_task_service.create_task(
@@ -250,7 +254,7 @@ async def create_video_task(
         model=data.model,
         duration=data.duration,
         auto_submit=data.auto_submit,
-        vendor_creator_id=vendor_creator_id,
+        catalog_user_id=uuid.UUID(current_user.id),
     )
     return VideoTaskResponse.model_validate(task)
 

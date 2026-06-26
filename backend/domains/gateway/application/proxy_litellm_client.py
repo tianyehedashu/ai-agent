@@ -32,6 +32,8 @@ from domains.gateway.domain.policies.volcengine_image import (
 )
 from domains.gateway.domain.policies.volcengine_video import (
     build_volcengine_video_create_request,
+    build_volcengine_video_get_request,
+    is_volcengine_video_in_progress_status,
     map_volcengine_video_task_to_openai,
 )
 from domains.gateway.domain.proxy_policy import (
@@ -57,6 +59,7 @@ from domains.gateway.infrastructure.upstream.volcengine_image_client import (
 )
 from domains.gateway.infrastructure.upstream.volcengine_video_client import (
     perform_volcengine_video_create,
+    poll_volcengine_video_task,
 )
 from libs.db.session_lifecycle import release_request_db_connection
 from libs.exceptions import ValidationError
@@ -550,6 +553,18 @@ class ProxyLiteLLMClient:
         )
         await self._release_session_before_upstream()
         task_data = await perform_volcengine_video_create(request)
+        status = task_data.get("status")
+        if is_volcengine_video_in_progress_status(
+            status if isinstance(status, str) else None
+        ):
+            task_id = task_data.get("id")
+            if isinstance(task_id, str) and task_id.strip():
+                get_request = build_volcengine_video_get_request(
+                    api_key=api_key.strip(),
+                    api_base=dep.get("api_base") if isinstance(dep.get("api_base"), str) else None,
+                    task_id=task_id,
+                )
+                task_data = await poll_volcengine_video_task(get_request)
         return map_volcengine_video_task_to_openai(task_data, fallback_model=model_id)
 
     async def direct_video_generation(self, kwargs: dict[str, Any]) -> Any:

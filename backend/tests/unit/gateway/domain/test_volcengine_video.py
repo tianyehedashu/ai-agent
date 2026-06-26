@@ -61,3 +61,30 @@ def test_map_volcengine_video_task_to_openai() -> None:
         "status": "queued",
         "model": "doubao-seedance-1-0-lite-t2v-250428",
     }
+
+
+def test_map_volcengine_video_task_includes_video_url_when_succeeded() -> None:
+    mapped = map_volcengine_video_task_to_openai(
+        {
+            "id": "cgt-123",
+            "status": "succeeded",
+            "model": "doubao-seedance-1-0-lite-t2v-250428",
+            "content": {"video_url": "https://example.com/out.mp4"},
+        },
+        fallback_model="fallback-model",
+    )
+    assert mapped["video"]["url"] == "https://example.com/out.mp4"
+    assert mapped["url"] == "https://example.com/out.mp4"
+
+
+def test_is_volcengine_video_terminal_status() -> None:
+    from domains.gateway.domain.policies.volcengine_video import (
+        is_volcengine_video_in_progress_status,
+        is_volcengine_video_terminal_status,
+    )
+
+    assert is_volcengine_video_terminal_status("succeeded")
+    assert is_volcengine_video_terminal_status("failed")
+    assert not is_volcengine_video_terminal_status("running")
+    assert is_volcengine_video_in_progress_status("queued")
+    assert is_volcengine_video_in_progress_status("running")

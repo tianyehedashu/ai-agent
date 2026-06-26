@@ -38,8 +38,10 @@ from domains.gateway.domain.route_retry_policy import (
     routes_to_model_group_retry_policy,
 )
 from domains.gateway.domain.router_model_name import (
+    decode_router_model_name,
     deployment_scope_team_id,
     encode_router_model_name,
+    router_deployment_row_id,
 )
 from domains.gateway.domain.types import RoutingStrategy, credential_api_scope
 from domains.gateway.domain.upstream_call_shape_policy import (
@@ -286,16 +288,22 @@ def _build_deployment(
     litellm_params["weight"] = deployment_weight
     if num_retries is not None:
         litellm_params["num_retries"] = num_retries
+    # model_info.team_id 是 LiteLLM ``filter_team_based_models`` 的过滤键，必须等于请求侧
+    # ``user_api_key_team_id``（即编码进 ``model_name`` 的作用域团队），而非底层模型的 tenant。
+    # 跨团队路由 / 委派授权下二者不同：deployment 注册在「路由 owner / 消费团队」命名空间，
+    # 但底层 src 属于资源提供方团队；若取 src.tenant 会被团队过滤剔除（无可用部署）。
+    decoded_scope = decode_router_model_name(model_name)
+    scope_team_id = decoded_scope[0] if decoded_scope is not None else None
     return {
         "model_name": model_name,
         "litellm_params": litellm_params,
         "model_info": {
-            "id": str(src.id),
-            "team_id": (
-                str(src_tenant_id)
-                if (src_tenant_id := getattr(src, "tenant_id", None)) is not None
-                else None
-            ),
+            # LiteLLM 要求 deployment id 全局唯一；同一 GatewayModel 在多个 model_name 下
+            # 各注册一行，故按 (model_name, model_id) 派生唯一行 id，避免 cooldown/统计串台。
+            # 模型身份（计费/用量归因 SSOT）单独落在 ``gateway_model_id``。
+            "id": router_deployment_row_id(model_name, src.id),
+            "gateway_model_id": str(src.id),
+            "team_id": str(scope_team_id) if scope_team_id is not None else None,
             "capability": src.capability,
             "weight": deployment_weight,
             "gateway_model_name": src.name,
@@ -1003,7 +1011,6 @@ async def _build_deployments_for_encoded_model(
     db: AsyncSession,
     encoded: str,
 ) -> list[dict[str, Any]]:
-    from domains.gateway.domain.router_model_name import decode_router_model_name
     from domains.gateway.infrastructure.repositories.model_repository import (
         GatewayModelRepository,
         GatewayRouteRepository,

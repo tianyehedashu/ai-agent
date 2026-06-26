@@ -48,6 +48,7 @@ def probe_litellm_model_info(target: ProbeTarget, credential_name: str) -> dict[
     """供 ``_deployment_from_model_info_kwargs`` / ``_credential_from_model_info_kwargs`` 解析。"""
     return {
         "id": str(target.model_id),
+        "gateway_model_id": str(target.model_id),
         # 注册别名快照 = 调用名；上游 canonical id 用 gateway_real_model。
         "gateway_model_name": target.model_name,
         "gateway_real_model": target.real_model,

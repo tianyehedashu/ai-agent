@@ -1,21 +1,12 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react'
 
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { motion, AnimatePresence } from 'framer-motion'
-import {
-  ImagePlus,
-  Loader2,
-  X,
-  AlertCircle,
-  Plus,
-  Sparkles,
-  Clock,
-  Wand2,
-  Settings2,
-} from 'lucide-react'
+import { ImagePlus, Loader2, X, AlertCircle, Plus, Clock, Wand2, Settings2 } from 'lucide-react'
 
 import { ApiError } from '@/api/client'
 import { videoTaskApi } from '@/api/videoTask'
+import { ModelSelector } from '@/components/model-selector'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -24,12 +15,17 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
-import { VIDEO_TASK_MARKETPLACES, VIDEO_MODELS, getVideoDurations } from '@/constants/video-task'
+import { VIDEO_TASK_MARKETPLACES } from '@/constants/video-task'
 import { useToast } from '@/hooks/use-toast'
 import { cn } from '@/lib/utils'
 import { useCurrentUser } from '@/stores/user'
 import { useVideoSettingsStore } from '@/stores/video-settings'
-import type { VideoGenTask, VideoModel, VideoDuration } from '@/types/video-task'
+import type {
+  VideoCatalogModelOption,
+  VideoDuration,
+  VideoGenTask,
+  VideoModel,
+} from '@/types/video-task'
 
 import { PromptOptimizeDialog } from './prompt-optimize-dialog'
 
@@ -59,8 +55,8 @@ export default function VideoTaskCreateForm({
 }: VideoTaskCreateFormProps): React.JSX.Element {
   const [promptText, setPromptText] = useState(initialPrompt ?? '')
   const [marketplace, setMarketplace] = useState('jp')
-  const [model, setModel] = useState<VideoModel>('openai::sora2.0')
-  const [duration, setDuration] = useState<VideoDuration>(15)
+  const [model, setModel] = useState<VideoModel | null>(null)
+  const [duration, setDuration] = useState<VideoDuration>(5)
   const [referenceImages, setReferenceImages] = useState('')
   const [showImageInput, setShowImageInput] = useState(false)
   const [isFocused, setIsFocused] = useState(false)
@@ -86,16 +82,38 @@ export default function VideoTaskCreateForm({
   )
 
   const selectedMarketplace = VIDEO_TASK_MARKETPLACES.find((m) => m.value === marketplace)
-  const selectedModel = VIDEO_MODELS.find((m) => m.value === model)
-  const availableDurations = useMemo(() => getVideoDurations(model), [model])
+
+  // 视频模型目录（网关 model_type=video）：提供 durations / max_reference_images 元数据
+  const { data: catalog } = useQuery({
+    queryKey: ['video-tasks', 'models'],
+    queryFn: () => videoTaskApi.listModels(),
+    staleTime: 60_000,
+  })
+  const catalogMap = useMemo(() => {
+    const m = new Map<string, VideoCatalogModelOption>()
+    for (const item of catalog ?? []) m.set(item.value, item)
+    return m
+  }, [catalog])
+
+  // 目录加载后，若未选模型，默认取首个
+  useEffect(() => {
+    if (model === null && catalog && catalog.length > 0) {
+      setModel(catalog[0].value)
+    }
+  }, [model, catalog])
+
+  const availableDurations = useMemo(() => {
+    const entry = model ? catalogMap.get(model) : undefined
+    if (entry) return entry.durations
+    return [5, 10, 15]
+  }, [model, catalogMap])
 
   // 当模型变化时，确保时长在可用范围内
   useEffect(() => {
-    const durations = getVideoDurations(model)
-    if (!durations.includes(duration)) {
-      setDuration(durations[0])
+    if (availableDurations.length > 0 && !availableDurations.includes(duration)) {
+      setDuration(availableDurations[0])
     }
-  }, [model, duration])
+  }, [availableDurations, duration])
 
   // 解析图片 URL 列表
   const imageUrls = useMemo(() => {
@@ -175,7 +193,7 @@ export default function VideoTaskCreateForm({
         promptText: promptText || undefined,
         promptSource: 'user_provided',
         marketplace,
-        model,
+        model: model ?? undefined,
         duration,
         referenceImages: referenceImages
           .split('\n')
@@ -380,36 +398,16 @@ export default function VideoTaskCreateForm({
             </DropdownMenuContent>
           </DropdownMenu>
 
-          {/* 模型选择 */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                aria-label={`模型：${selectedModel?.label ?? model}`}
-                className="h-7 gap-1.5 rounded-lg px-2 text-xs text-muted-foreground/60 hover:text-foreground"
-              >
-                <Sparkles className="h-3 w-3" />
-                <span>{selectedModel?.label}</span>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="min-w-[140px]">
-              {VIDEO_MODELS.map((m) => (
-                <DropdownMenuItem
-                  key={m.value}
-                  onClick={() => {
-                    setModel(m.value)
-                  }}
-                  className={cn('text-sm', model === m.value && 'bg-accent')}
-                >
-                  <div className="flex flex-col">
-                    <span>{m.label}</span>
-                    <span className="text-xs text-muted-foreground">{m.description}</span>
-                  </div>
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
+          {/* 模型选择 - 与聊天统一用 ModelSelector（listMode='video'） */}
+          <ModelSelector
+            modelType="video"
+            listMode="video"
+            value={model}
+            onChange={setModel}
+            disabled={disabled}
+            placeholder="视频模型"
+            className="h-7 w-[8.5rem] rounded-lg border-0 bg-transparent text-xs shadow-none focus:ring-0"
+          />
 
           {/* 时长选择 */}
           <DropdownMenu>

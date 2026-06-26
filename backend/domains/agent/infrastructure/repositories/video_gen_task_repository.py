@@ -3,7 +3,7 @@
 from typing import Any
 import uuid
 
-from sqlalchemy import update
+from sqlalchemy import select, update
 
 from domains.agent.infrastructure.models.video_gen_task import VideoGenTask
 from libs.db.base_repository import TenantScopedRepositoryBase
@@ -57,3 +57,8 @@ class VideoGenTaskRepository(TenantScopedRepositoryBase[VideoGenTask]):
     async def update_by_id(self, task_id: uuid.UUID, values: dict[str, Any]) -> None:
         q = update(VideoGenTask).where(VideoGenTask.id == task_id).values(**values)
         await self.db.execute(q)
+
+    async def get_status_by_id(self, task_id: uuid.UUID) -> str | None:
+        """按主键读取任务状态（后台 task 用，不依赖 tenant 上下文）。"""
+        stmt = select(VideoGenTask.status).where(VideoGenTask.id == task_id)
+        return (await self.db.execute(stmt)).scalar_one_or_none()
