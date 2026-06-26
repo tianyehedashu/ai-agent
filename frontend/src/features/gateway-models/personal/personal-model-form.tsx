@@ -22,6 +22,7 @@ import { NO_CREDENTIAL } from '@/features/gateway-models/constants'
 import {
   ModelCapabilityEditor,
   capabilityEditorValuesFromPersonalModel,
+  modelCapabilityPatchFromEditor,
   type ModelCapabilityEditorValues,
 } from '@/features/gateway-models/model-capability-editor'
 import { personalCredentialsIndexHref } from '@/features/gateway-models/paths'
@@ -39,8 +40,7 @@ export interface PersonalModelFormValues {
   credential_id: string
   model_types: ModelType[]
   resync_capabilities?: boolean
-  /** 思考模式（创建时可通过 tags 传递；编辑时 API 不支持 tags） */
-  thinkingParam?: string
+  tags?: Record<string, unknown> | null
 }
 
 const EMPTY_FORM: PersonalModelFormValues = {
@@ -122,10 +122,17 @@ export function PersonalModelForm({
       ? capabilityEditorValuesFromPersonalModel(initial)
       : capabilityEditorValuesFromPersonalModel({ capability: 'chat', model_types: ['text'] })
   )
+  const [capabilityBaseline, setCapabilityBaseline] = useState<ModelCapabilityEditorValues>(() =>
+    initial && mode === 'edit'
+      ? capabilityEditorValuesFromPersonalModel(initial)
+      : capabilityEditorValuesFromPersonalModel({ capability: 'chat', model_types: ['text'] })
+  )
 
   useEffect(() => {
     if (mode !== 'edit' || !initial) return
-    setCapabilityValues(capabilityEditorValuesFromPersonalModel(initial))
+    const next = capabilityEditorValuesFromPersonalModel(initial)
+    setCapabilityValues(next)
+    setCapabilityBaseline(next)
   }, [mode, initial])
   const [manualOpen, setManualOpen] = useState(false)
   const [probeUnsupported, setProbeUnsupported] = useState(false)
@@ -196,19 +203,21 @@ export function PersonalModelForm({
   }, [])
 
   function handleSubmit(): void {
+    const capabilityPatch = modelCapabilityPatchFromEditor(capabilityValues, capabilityBaseline)
+    const modelTypes =
+      capabilityValues.modelTypes.length > 0 ? capabilityValues.modelTypes : form.model_types
     if (mode === 'edit') {
       onSubmit({
         ...form,
-        model_types:
-          capabilityValues.modelTypes.length > 0 ? capabilityValues.modelTypes : form.model_types,
+        model_types: modelTypes,
+        tags: capabilityPatch.tags,
       })
       return
     }
     onSubmit({
       ...form,
-      model_types:
-        capabilityValues.modelTypes.length > 0 ? capabilityValues.modelTypes : form.model_types,
-      thinkingParam: capabilityValues.thinkingParam,
+      model_types: modelTypes,
+      tags: capabilityPatch.tags,
     })
   }
 
@@ -293,7 +302,6 @@ export function PersonalModelForm({
               onChange={setCapabilityValues}
               hideUpstreamCallShape
               hideThinkingParam
-              hideContextWindow
             />
 
             {onResyncCapabilities ? (
@@ -518,7 +526,6 @@ export function PersonalModelForm({
                 values={capabilityValues}
                 onChange={setCapabilityValues}
                 hideUpstreamCallShape
-                hideContextWindow
               />
 
               <div className="flex justify-end gap-2">

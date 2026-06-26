@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
+import { listContextWindowLabel } from '@/features/gateway-models/context-window-display'
 import { fromGatewayModel, fromPersonalModel } from '@/features/gateway-models/list/adapters'
 import {
   clientInvokeModelName,
@@ -113,5 +114,31 @@ describe('model-list-columns', () => {
       updated_at: null,
     })
     expect(listCapabilityLabel(item)).toBe('聊天 · 文本 · 图片理解')
+  })
+
+  it('resolves context window label for list column', () => {
+    const item = fromGatewayModel(
+      {
+        id: 'g3',
+        tenant_id: 't1',
+        team_id: 't1',
+        name: 'team/kimi',
+        capability: 'chat',
+        real_model: 'kimi-k2',
+        credential_id: 'c1',
+        provider: 'volcengine',
+        weight: 1,
+        rpm_limit: null,
+        tpm_limit: null,
+        enabled: true,
+        selector_capabilities: { context_window: 131072 },
+        last_test_status: null,
+        last_tested_at: null,
+        last_test_reason: null,
+        created_at: '2026-01-01T00:00:00.000Z',
+      },
+      'team'
+    )
+    expect(listContextWindowLabel(item)).toBe('128K')
   })
 })

@@ -30,6 +30,7 @@ describe('model-list-column-layout', () => {
   it('clamps column width to minimum', () => {
     expect(clampModelListColumnWidth('invokeName', 40)).toBe(100)
     expect(clampModelListColumnWidth('invokeName', 240)).toBe(240)
+    expect(clampModelListColumnWidth('contextWindow', 40)).toBe(64)
   })
 
   it('computes table min width from columns', () => {

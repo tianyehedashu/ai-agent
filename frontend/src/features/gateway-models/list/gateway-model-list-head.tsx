@@ -107,6 +107,7 @@ function ColumnsModelListHead({
         <ResizableColumnHeader columnKey="displayName">显示名</ResizableColumnHeader>
         <ResizableColumnHeader columnKey="channel">通道</ResizableColumnHeader>
         <ResizableColumnHeader columnKey="upstream">上游</ResizableColumnHeader>
+        <ResizableColumnHeader columnKey="contextWindow">上下文</ResizableColumnHeader>
         <ResizableColumnHeader columnKey="capability">能力</ResizableColumnHeader>
         <ResizableColumnHeader columnKey="credential">凭据</ResizableColumnHeader>
         <ResizableColumnHeader columnKey="status">状态</ResizableColumnHeader>

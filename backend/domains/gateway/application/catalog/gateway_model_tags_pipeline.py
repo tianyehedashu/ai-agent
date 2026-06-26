@@ -18,6 +18,27 @@ from domains.gateway.domain.thinking_param import (
 )
 
 
+def merge_tags_patch(
+    base: dict[str, Any] | None,
+    patch: dict[str, Any],
+) -> dict[str, Any]:
+    """增量合并 tags；``None`` 值表示删除对应键。
+
+    ``context_window`` 显式清空时写入 ``0``（与 ``model_capability._coerce_context_window``
+    未知语义一致），避免 LiteLLM ``fill_missing`` 再次注入。
+    """
+    merged = dict(base or {})
+    for key, value in patch.items():
+        if value is None:
+            if key == "context_window":
+                merged[key] = 0
+            else:
+                merged.pop(key, None)
+        else:
+            merged[key] = value
+    return merged
+
+
 def build_gateway_model_tags(
     base_tags: dict[str, Any] | None,
     *,
@@ -49,4 +70,4 @@ def build_gateway_model_tags(
     return tags
 
 
-__all__ = ["build_gateway_model_tags"]
+__all__ = ["build_gateway_model_tags", "merge_tags_patch"]

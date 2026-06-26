@@ -13,6 +13,11 @@ import { CopyableText } from '../components/copyable-text'
 import { ModelAffiliationCell } from '../components/model-affiliation-cell'
 import { modelTypeLabel } from '../constants'
 import {
+  contextWindowBadgeLabel,
+  listContextWindowLabel,
+  resolveContextWindow,
+} from '../context-window-display'
+import {
   clientInvokeModelName,
   listCapabilityLabel,
   listCapabilityFullLabel,
@@ -36,8 +41,15 @@ function isGatewayModelSource(
   return 'real_model' in source
 }
 
-function PersonalTypeBadges({ types }: { types: readonly string[] }): React.JSX.Element | null {
-  if (types.length === 0) return null
+function PersonalTypeBadges({
+  types,
+  selectorCapabilities,
+}: {
+  types: readonly string[]
+  selectorCapabilities?: Record<string, unknown>
+}): React.JSX.Element | null {
+  const contextLabel = contextWindowBadgeLabel(selectorCapabilities)
+  if (types.length === 0 && !contextLabel) return null
   return (
     <div className="flex flex-wrap items-center gap-1">
       {types.map((t) => (
@@ -45,6 +57,11 @@ function PersonalTypeBadges({ types }: { types: readonly string[] }): React.JSX.
           {modelTypeLabel(t)}
         </Badge>
       ))}
+      {contextLabel ? (
+        <Badge variant="outline" className="shrink-0 text-xs font-normal">
+          {contextLabel}
+        </Badge>
+      ) : null}
     </div>
   )
 }
@@ -134,7 +151,7 @@ export const GatewayModelListRow = memo(function GatewayModelListRow({
   )
 
   const capabilityBadges = isPersonal ? (
-    <PersonalTypeBadges types={item.modelTypes} />
+    <PersonalTypeBadges types={item.modelTypes} selectorCapabilities={item.selectorCapabilities} />
   ) : isGatewayModelSource(item.source) ? (
     <ModelCapabilityBadges model={item.source} compact />
   ) : null
@@ -349,6 +366,8 @@ export const GatewayModelListRow = memo(function GatewayModelListRow({
     const capabilityText = listCapabilityLabel(item)
     const capabilityFullText = listCapabilityFullLabel(item)
     const credentialName = listCredentialName(item)
+    const contextWindowLabel = listContextWindowLabel(item)
+    const contextWindowTokens = resolveContextWindow(item.selectorCapabilities)
 
     return (
       <li
@@ -406,6 +425,22 @@ export const GatewayModelListRow = memo(function GatewayModelListRow({
               value={item.upstreamModelId}
               ariaLabel={`复制上游模型 ${item.upstreamModelId}`}
             />
+          </div>
+          <div className="min-w-0 px-3 py-2.5">
+            {contextWindowTokens > 0 ? (
+              <TooltipProvider delayDuration={200}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="text-sm tabular-nums">{contextWindowLabel}</span>
+                  </TooltipTrigger>
+                  <TooltipContent className="text-xs tabular-nums">
+                    {String(contextWindowTokens)} tokens
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            ) : (
+              <span className="text-sm text-muted-foreground/70">—</span>
+            )}
           </div>
           <div className="min-w-0 px-3 py-2.5">
             <ListCellText value={capabilityText} tooltip={capabilityFullText} />

@@ -10,7 +10,10 @@ import uuid
 if TYPE_CHECKING:
     from domains.gateway.application.management.model_copy_types import ModelCopyCredentialPlan
 
-from domains.gateway.application.catalog.gateway_model_tags_pipeline import build_gateway_model_tags
+from domains.gateway.application.catalog.gateway_model_tags_pipeline import (
+    build_gateway_model_tags,
+    merge_tags_patch,
+)
 from domains.gateway.application.litellm_real_model_prefix import litellm_prefix_violation_message
 from domains.gateway.application.management.credential_read_mappers import (
     bindable_credential_scope,
@@ -465,6 +468,11 @@ class ModelWritesMixin:
         if resync_capabilities and is_config_managed_system_gateway_model(tags=existing.tags):
             raise ValidationError("配置托管的系统模型不可从 LiteLLM 同步能力")
 
+        config_managed = is_config_managed_system_gateway_model(tags=existing.tags)
+        tags_raw = incoming.pop("tags", None)
+        if tags_raw is not None and config_managed and "context_window" in tags_raw:
+            raise ValidationError("配置托管的系统模型不可修改上下文窗口")
+
         update_fields: dict[str, Any] = {}
         if new_name_raw is not None:
             new_name = str(new_name_raw).strip()
@@ -517,12 +525,16 @@ class ModelWritesMixin:
             primary_cap = capability_for_model_type(normalized_types[0])
             update_fields["capability"] = primary_cap
             validate_model_types_for_capability(normalized_types, primary_cap)
+        tags_patch: dict[str, Any] | None = None
+        if tags_raw is not None:
+            tags_patch = dict(tags_raw)
         if incoming.get("display_name") is not None:
-            merged_tags = dict(existing.tags or {})
-            merged_tags["display_name"] = incoming["display_name"]
-            update_fields["tags"] = merged_tags
+            if tags_patch is None:
+                tags_patch = {}
+            tags_patch["display_name"] = incoming["display_name"]
+        if tags_patch is not None:
+            update_fields["tags"] = merge_tags_patch(existing.tags, tags_patch)
 
-        config_managed = is_config_managed_system_gateway_model(tags=existing.tags)
         needs_tags_pipeline = (
             resync_capabilities
             or model_types_raw is not None
@@ -531,9 +543,11 @@ class ModelWritesMixin:
             or "credential_id" in update_fields
         )
         if needs_tags_pipeline:
-            merged_tags = dict(existing.tags or {})
-            if isinstance(update_fields.get("tags"), dict):
-                merged_tags.update(update_fields["tags"])
+            merged_tags = (
+                dict(update_fields["tags"])
+                if isinstance(update_fields.get("tags"), dict)
+                else dict(existing.tags or {})
+            )
             effective_capability = str(
                 update_fields.get("capability") or existing.capability
             ).strip()
@@ -1034,16 +1048,23 @@ class ModelWritesMixin:
     ) -> dict[str, Any]:
         repo = self._models
         update_fields = dict(fields)
+        tags_patch_raw = update_fields.pop("tags", None)
         display_name_raw = update_fields.pop("display_name", None)
+        config_managed = is_config_managed_system_gateway_model(tags=existing.tags)
+        if tags_patch_raw is not None and config_managed and "context_window" in tags_patch_raw:
+            raise ValidationError("配置托管的系统模型不可修改上下文窗口")
+        tags_patch: dict[str, Any] | None = (
+            dict(tags_patch_raw) if tags_patch_raw is not None else None
+        )
         if display_name_raw is not None:
             trimmed_display = str(display_name_raw).strip()
             if not trimmed_display:
                 raise ValidationError("显示名不能为空")
-            merged_tags = dict(existing.tags or {})
-            if isinstance(update_fields.get("tags"), dict):
-                merged_tags.update(update_fields["tags"])
-            merged_tags["display_name"] = trimmed_display
-            update_fields["tags"] = merged_tags
+            if tags_patch is None:
+                tags_patch = {}
+            tags_patch["display_name"] = trimmed_display
+        if tags_patch is not None:
+            update_fields["tags"] = merge_tags_patch(existing.tags, tags_patch)
         if "credential_id" in update_fields and update_fields["credential_id"] is not None:
             new_cid_raw = update_fields["credential_id"]
             new_cid = (
@@ -1102,7 +1123,6 @@ class ModelWritesMixin:
                         f"upstream_call_shape 须为 {sorted(_ALLOWED_UPSTREAM_CALL_SHAPES)} 之一"
                     )
                 update_fields["upstream_call_shape"] = shape
-        config_managed = is_config_managed_system_gateway_model(tags=existing.tags)
         model_types_raw = update_fields.pop("model_types", None)
         if "capability" in update_fields and update_fields["capability"] is not None:
             new_capability = _parse_gateway_capability(str(update_fields["capability"]))
@@ -1135,9 +1155,11 @@ class ModelWritesMixin:
             or "credential_id" in update_fields
         )
         if needs_tags_pipeline:
-            merged_tags = dict(existing.tags or {})
-            if isinstance(update_fields.get("tags"), dict):
-                merged_tags.update(update_fields["tags"])
+            merged_tags = (
+                dict(update_fields["tags"])
+                if isinstance(update_fields.get("tags"), dict)
+                else dict(existing.tags or {})
+            )
             if model_types_raw is not None:
                 merged_tags = tags_from_model_types(
                     model_types_raw,

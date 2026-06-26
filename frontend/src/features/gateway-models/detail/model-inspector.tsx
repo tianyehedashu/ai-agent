@@ -284,6 +284,9 @@ const ModelInspectorPanel = memo(function ModelInspectorPanel({
       if (capabilityPatch.model_types) {
         body.model_types = capabilityPatch.model_types
       }
+      if (capabilityPatch.tags) {
+        body.tags = capabilityPatch.tags
+      }
       onSavePersonal?.(model.id, body)
       return
     }
@@ -502,7 +505,6 @@ const ModelInspectorPanel = memo(function ModelInspectorPanel({
                 onChange={setCapabilityValues}
                 hideUpstreamCallShape={isPersonal}
                 hideThinkingParam={isPersonal}
-                hideContextWindow={isPersonal}
               />
             ) : (
               <ModelCapabilityBadges model={model} />

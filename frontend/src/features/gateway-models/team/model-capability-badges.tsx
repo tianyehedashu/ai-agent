@@ -8,33 +8,7 @@ import {
 import { Info } from '@/lib/lucide-icons'
 
 import { capabilityLabel, modelTypeLabel } from '../constants'
-
-/** 优先 selector_capabilities，回退 tags；非正整数视为未知（0）。 */
-function resolveContextWindow(
-  sc: Record<string, unknown> | undefined,
-  tags: Record<string, unknown> | null | undefined
-): number {
-  for (const raw of [sc?.context_window, tags?.context_window]) {
-    if (typeof raw === 'number' && Number.isInteger(raw) && raw > 0) {
-      return raw
-    }
-  }
-  return 0
-}
-
-/** 262144 → "256K"；1000000 → "1M"。 */
-function formatTokenCount(tokens: number): string {
-  if (tokens >= 1_000_000 && tokens % 1_000_000 === 0) {
-    return `${String(tokens / 1_000_000)}M`
-  }
-  if (tokens >= 1024 && tokens % 1024 === 0) {
-    return `${String(tokens / 1024)}K`
-  }
-  if (tokens >= 1000) {
-    return `${String(Math.round(tokens / 1000))}K`
-  }
-  return String(tokens)
-}
+import { contextWindowBadgeLabel } from '../context-window-display'
 
 export function ModelCapabilityBadges({
   model,
@@ -54,9 +28,9 @@ export function ModelCapabilityBadges({
     extraTags.push('reasoning')
   }
   if (sc?.supports_json_mode === false) extraTags.push('无 JSON 模式')
-  const contextWindow = resolveContextWindow(sc, model.tags)
-  if (contextWindow) {
-    extraTags.push(`上下文 ${formatTokenCount(contextWindow)}`)
+  const contextLabel = contextWindowBadgeLabel(sc, model.tags)
+  if (contextLabel) {
+    extraTags.push(contextLabel)
   }
 
   return (

@@ -70,6 +70,7 @@ export interface PersonalGatewayModelUpdateBody {
   is_active?: boolean
   /** weighted-pick 策略下的加权随机权重；正整数 */
   weight?: number
+  tags?: Record<string, unknown> | null
 }
 
 // 测试结果与团队侧共用类型，从 models 模块导出，避免重复声明

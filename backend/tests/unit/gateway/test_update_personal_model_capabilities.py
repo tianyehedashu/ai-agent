@@ -261,3 +261,62 @@ async def test_update_personal_model_rejects_duplicate_name(
         await writes.update_personal_model(
             user_uuid, model_id, fields={"name": "existing-name"}
         )
+
+
+@pytest.mark.asyncio
+async def test_update_personal_model_persists_context_window(
+    db_session, test_user, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    tenant_id, model_id, user_uuid = await _seed_personal_model(db_session, test_user)
+    writes = GatewayManagementWriteService(db_session)
+
+    monkeypatch.setattr(
+        writes,
+        "_ensure_personal_tenant_id",
+        AsyncMock(return_value=tenant_id),
+    )
+    monkeypatch.setattr(writes, "reload_litellm_router", AsyncMock(return_value=None))
+
+    updated = await writes.update_personal_model(
+        user_uuid,
+        model_id,
+        fields={"tags": {"context_window": 131072}},
+    )
+    assert updated.tags is not None
+    assert updated.tags.get("context_window") == 131072
+
+    repo = GatewayModelRepository(db_session)
+    reloaded = await repo.get_for_tenant(model_id, tenant_id)
+    assert reloaded is not None
+    assert reloaded.tags.get("context_window") == 131072
+
+
+@pytest.mark.asyncio
+async def test_update_personal_model_clears_context_window(
+    db_session, test_user, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    tenant_id, model_id, user_uuid = await _seed_personal_model(db_session, test_user)
+    repo = GatewayModelRepository(db_session)
+    existing = await repo.get_for_tenant(model_id, tenant_id)
+    assert existing is not None
+    await repo.update(
+        model_id,
+        tags={**(existing.tags or {}), "context_window": 65536},
+    )
+    await db_session.flush()
+
+    writes = GatewayManagementWriteService(db_session)
+    monkeypatch.setattr(
+        writes,
+        "_ensure_personal_tenant_id",
+        AsyncMock(return_value=tenant_id),
+    )
+    monkeypatch.setattr(writes, "reload_litellm_router", AsyncMock(return_value=None))
+
+    updated = await writes.update_personal_model(
+        user_uuid,
+        model_id,
+        fields={"tags": {"context_window": None}},
+    )
+    assert updated.tags is not None
+    assert updated.tags.get("context_window") in (0, None)

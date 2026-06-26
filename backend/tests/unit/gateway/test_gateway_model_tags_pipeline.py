@@ -1,6 +1,9 @@
 """GatewayModel.tags 写侧 pipeline 单测。"""
 
-from domains.gateway.application.catalog.gateway_model_tags_pipeline import build_gateway_model_tags
+from domains.gateway.application.catalog.gateway_model_tags_pipeline import (
+    build_gateway_model_tags,
+    merge_tags_patch,
+)
 from domains.gateway.domain.litellm_capability_mapping import LitellmModelInfoHints
 from domains.gateway.domain.thinking_param import THINKING_PARAM_ANTHROPIC, THINKING_PARAM_NONE
 
@@ -62,3 +65,14 @@ def test_upstream_profile_id_denormalized_into_tags() -> None:
     )
     assert tags["upstream_profile_id"] == "moonshot.coding_plan"
     assert tags["temperature_policy"] == "fixed_1"
+
+
+def test_merge_tags_patch_clears_context_window_as_zero() -> None:
+    merged = merge_tags_patch({"context_window": 65536, "display_name": "x"}, {"context_window": None})
+    assert merged["context_window"] == 0
+    assert merged["display_name"] == "x"
+
+
+def test_merge_tags_patch_removes_other_null_keys() -> None:
+    merged = merge_tags_patch({"thinking_param": "none"}, {"thinking_param": None})
+    assert "thinking_param" not in merged

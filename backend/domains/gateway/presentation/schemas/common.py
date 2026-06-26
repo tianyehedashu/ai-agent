@@ -692,6 +692,7 @@ class PersonalModelUpdate(BaseModel):
         ge=MIN_DEPLOYMENT_WEIGHT,
         description="weighted-pick 路由策略下的加权随机权重；正整数，留空保持原值",
     )
+    tags: dict[str, Any] | None = None
 
     @model_validator(mode="after")
     def _normalize_enabled(self) -> Self:
