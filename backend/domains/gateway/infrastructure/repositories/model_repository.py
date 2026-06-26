@@ -52,6 +52,36 @@ class GatewayModelRepository:
         rows.sort(key=lambda pair: pair[0])
         return rows
 
+    async def count_registrations_for_credential_real_model(
+        self,
+        credential_id: uuid.UUID,
+        real_model: str,
+        *,
+        exclude_tenant_model_id: uuid.UUID | None = None,
+        exclude_system_model_id: uuid.UUID | None = None,
+    ) -> int:
+        """同凭据 + real_model 的注册行数（租户 + 系统）；删除前判断是否为最后一条。"""
+        rm = real_model.strip()
+        if not rm:
+            return 0
+        tenant_clauses = [
+            GatewayModel.credential_id == credential_id,
+            GatewayModel.real_model == rm,
+        ]
+        if exclude_tenant_model_id is not None:
+            tenant_clauses.append(GatewayModel.id != exclude_tenant_model_id)
+        tenant_stmt = select(func.count()).select_from(GatewayModel).where(*tenant_clauses)
+        system_clauses = [
+            SystemGatewayModel.credential_id == credential_id,
+            SystemGatewayModel.real_model == rm,
+        ]
+        if exclude_system_model_id is not None:
+            system_clauses.append(SystemGatewayModel.id != exclude_system_model_id)
+        system_stmt = select(func.count()).select_from(SystemGatewayModel).where(*system_clauses)
+        tenant_count = int((await self._session.execute(tenant_stmt)).scalar_one() or 0)
+        system_count = int((await self._session.execute(system_stmt)).scalar_one() or 0)
+        return tenant_count + system_count
+
     async def list_system(
         self,
         *,

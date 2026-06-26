@@ -23,6 +23,9 @@
 | `supports_video_gen` | bool | 视频生成 |
 | `supports_image_to_video` | bool | 图生视频 |
 | `max_reference_images` | int | 最大参考图数 |
+| `context_window` | int | 上下文窗口（tokens）；用于 Router 超长预检；0 表示未知 |
+
+> **读取路径**：`GET` 模型详情时 `selector_capabilities.context_window` 与 `tags.context_window` 对齐；列表接口同理。
 
 ### 主调用面（capability）
 
@@ -31,6 +34,18 @@
 ### model_types（产品特性类型）
 
 `text` / `image` / `image_gen` / `video`，写入 `tags.supports_*`。
+
+### 能力自动填充（导入 / 同步）
+
+| 时机 | 行为 |
+|------|------|
+| **批量导入** `batch-import-models` | 创建时经 `build_gateway_model_tags` 合并 LiteLLM `model_cost`；已知模型自动写入 `tags.context_window` 与 `supports_*` |
+| **单模型同步** `PATCH` + `resync_capabilities: true` | 剥离旧 LiteLLM 映射字段后重算（含 `context_window`） |
+| **批量同步** `batch-resync-capabilities` | 同上，最多 200 个 model_id |
+
+LiteLLM 字段映射：`max_input_tokens`（优先）或 `max_tokens` → `tags.context_window`。
+
+未映射模型（如部分火山自定义 endpoint）LiteLLM 查不到时需**手动**写入 `tags.context_window`，或依赖 Router 侧 `register_model` 注册后再同步。
 
 ## 批量导入上游模型到团队（推荐）
 
@@ -154,12 +169,34 @@
 | `enabled` | bool \| null | 启用 |
 | `tags` | dict \| null | 标签（直接覆盖；改 `supports_vision`/`supports_tools`/`supports_reasoning`/`thinking_param`/`temperature_policy` 等用此字段） |
 | `display_name` | str \| null | 写入 `tags.display_name` |
-| `resync_capabilities` | bool | true 时从 LiteLLM `model_cost` 重算能力 tags（字段本身不持久化） |
+| `resync_capabilities` | bool | true 时从 LiteLLM `model_cost` 重算能力 tags（含 `context_window`；字段本身不持久化） |
 | `upstream_call_shape` | str \| null | `openai_compat`/`anthropic_native` |
 
 **响应**：`GatewayModelResponse`
 
-**修改能力示例**：
+**CLI 示例**（`gateway_client.py`）：
+
+```bash
+# 查看能力摘要（context_window + selector_capabilities）
+python gateway_client.py models capabilities --team-id <tid> --model-id <mid>
+
+# 列出全部模型并仅输出能力列（审计缺 context_window）
+python gateway_client.py models list --team-id <tid> --all --capabilities
+
+# 从 LiteLLM 同步单模型能力（含 context_window）
+python gateway_client.py models update --team-id <tid> --model-id <mid> --resync-capabilities
+
+# 手动补充上下文窗口
+python gateway_client.py models update --team-id <tid> --model-id <mid> --context-window 262144
+
+# 清除 context_window（跳过 Router 预检）
+python gateway_client.py models update --team-id <tid> --model-id <mid> --context-window 0
+
+# 批量同步
+python gateway_client.py models resync --team-id <tid> --model-ids '["uuid1","uuid2"]'
+```
+
+**curl 修改能力示例**：
 
 ```bash
 curl -X PATCH "$BASE/gateway/teams/$TEAM_ID/models/$MODEL_ID" \

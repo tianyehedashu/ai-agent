@@ -586,11 +586,18 @@ class ModelWritesMixin:
         if existing is None:
             raise ManagementEntityNotFoundError("model", str(model_id))
         model_name = existing.name
+        quotas_removed = await self._cascade_delete_provider_quotas_for_model(
+            credential_id=existing.credential_id,
+            real_model=existing.real_model,
+            exclude_tenant_model_id=model_id,
+        )
         await self._models.delete(model_id)
         await self._finalize_gateway_model_deletions(
             deleted_ids=frozenset({model_id}),
             deleted_names=frozenset({model_name}),
             tenant_id=tenant_id,
+            actor_user_id=user_id,
+            provider_quotas_removed=quotas_removed,
         )
 
     async def delete_personal_models_batch(
@@ -1237,9 +1244,20 @@ class ModelWritesMixin:
                 fields=fields,
                 block_config_managed_rename=block_rename,
             )
+            quotas_rekeyed = await self._rekey_provider_quotas_for_model(
+                old_credential_id=existing.credential_id,
+                new_credential_id=update_fields.get("credential_id") or existing.credential_id,
+                old_real_model=str(existing.real_model or ""),
+                new_real_model=str(update_fields.get("real_model") or existing.real_model or ""),
+            )
             updated = await repo.update(model_id, **update_fields)
             if updated is None:
                 raise ManagementEntityNotFoundError("model", str(model_id))
+            if quotas_rekeyed > 0:
+                await self._invalidate_upstream_quota_rule_list_cache(
+                    tenant_id=tenant_id,
+                    actor_user_id=actor_user_id,
+                )
             if reload_router:
                 await self.reload_litellm_router(tenant_id=tenant_id)
             return updated
@@ -1262,9 +1280,22 @@ class ModelWritesMixin:
                 tags=system_existing.tags
             ),
         )
+        quotas_rekeyed = await self._rekey_provider_quotas_for_model(
+            old_credential_id=system_existing.credential_id,
+            new_credential_id=update_fields.get("credential_id") or system_existing.credential_id,
+            old_real_model=str(system_existing.real_model or ""),
+            new_real_model=str(
+                update_fields.get("real_model") or system_existing.real_model or ""
+            ),
+        )
         updated = await repo.update_system(model_id, **update_fields)
         if updated is None:
             raise ManagementEntityNotFoundError("model", str(model_id))
+        if quotas_rekeyed > 0:
+            await self._invalidate_upstream_quota_rule_list_cache(
+                tenant_id=tenant_id,
+                actor_user_id=actor_user_id,
+            )
         if reload_router:
             await self.reload_litellm_router()
         return updated
@@ -1277,8 +1308,8 @@ class ModelWritesMixin:
         actor_user_id: uuid.UUID | None,
         team_role: str,
         is_platform_admin: bool,
-    ) -> tuple[uuid.UUID, str]:
-        """删除单行并返回 (model_id, model_name)；不触发 prune / reload。"""
+    ) -> tuple[uuid.UUID, str, int]:
+        """删除单行并返回 (model_id, model_name, provider_quotas_removed)；不触发 prune / reload。"""
         repo = self._models
         existing = await repo.get(model_id)
         if existing is not None:
@@ -1293,9 +1324,14 @@ class ModelWritesMixin:
                 mutation="delete",
                 model_created_by_user_id=existing.created_by_user_id,
             )
+            quotas_removed = await self._cascade_delete_provider_quotas_for_model(
+                credential_id=existing.credential_id,
+                real_model=existing.real_model,
+                exclude_tenant_model_id=model_id,
+            )
             model_name = existing.name
             await repo.delete(model_id)
-            return model_id, model_name
+            return model_id, model_name, quotas_removed
 
         system_existing = await repo.get_system(model_id)
         if system_existing is None:
@@ -1311,9 +1347,14 @@ class ModelWritesMixin:
             raise ValidationError(
                 "配置同步托管的系统模型不可删除；请通过 gateway-catalog 或配置管理"
             )
+        quotas_removed = await self._cascade_delete_provider_quotas_for_model(
+            credential_id=system_existing.credential_id,
+            real_model=system_existing.real_model,
+            exclude_system_model_id=model_id,
+        )
         model_name = system_existing.name
         await repo.delete_system(model_id)
-        return model_id, model_name
+        return model_id, model_name, quotas_removed
 
     @staticmethod
     def _batch_operation_failure(
@@ -1334,6 +1375,8 @@ class ModelWritesMixin:
         deleted_ids: frozenset[uuid.UUID],
         deleted_names: frozenset[str],
         tenant_id: uuid.UUID | None = None,
+        actor_user_id: uuid.UUID | None = None,
+        provider_quotas_removed: int = 0,
     ) -> tuple[int, int]:
         if not deleted_names:
             return 0, 0
@@ -1352,6 +1395,11 @@ class ModelWritesMixin:
             model_ids=deleted_ids,
             model_names=deleted_names,
         )
+        if provider_quotas_removed > 0 and tenant_id is not None:
+            await self._invalidate_upstream_quota_rule_list_cache(
+                tenant_id=tenant_id,
+                actor_user_id=actor_user_id,
+            )
         await self.reload_litellm_router(tenant_id=tenant_id)
         return grants_removed, budgets_removed
 
@@ -1364,7 +1412,7 @@ class ModelWritesMixin:
         team_role: str,
         is_platform_admin: bool = False,
     ) -> None:
-        deleted_id, deleted_name = await self._delete_gateway_model_row(
+        deleted_id, deleted_name, quotas_removed = await self._delete_gateway_model_row(
             model_id,
             tenant_id=tenant_id,
             actor_user_id=actor_user_id,
@@ -1375,6 +1423,8 @@ class ModelWritesMixin:
             deleted_ids=frozenset({deleted_id}),
             deleted_names=frozenset({deleted_name}),
             tenant_id=tenant_id,
+            actor_user_id=actor_user_id,
+            provider_quotas_removed=quotas_removed,
         )
 
     async def delete_gateway_models_batch(
@@ -1395,10 +1445,11 @@ class ModelWritesMixin:
         failed: list[GatewayModelBatchOperationFailure] = []
         deleted_ids: set[uuid.UUID] = set()
         deleted_names: set[str] = set()
+        provider_quotas_removed = 0
 
         for model_id in unique_ids:
             try:
-                deleted_id, deleted_name = await self._delete_gateway_model_row(
+                deleted_id, deleted_name, quotas_removed = await self._delete_gateway_model_row(
                     model_id,
                     tenant_id=tenant_id,
                     actor_user_id=actor_user_id,
@@ -1411,6 +1462,7 @@ class ModelWritesMixin:
             succeeded.append(deleted_id)
             deleted_ids.add(deleted_id)
             deleted_names.add(deleted_name)
+            provider_quotas_removed += quotas_removed
 
         grants_removed = 0
         budgets_removed = 0
@@ -1419,6 +1471,8 @@ class ModelWritesMixin:
                 deleted_ids=frozenset(deleted_ids),
                 deleted_names=frozenset(deleted_names),
                 tenant_id=tenant_id,
+                actor_user_id=actor_user_id,
+                provider_quotas_removed=provider_quotas_removed,
             )
 
         return GatewayModelBatchDeleteResult(

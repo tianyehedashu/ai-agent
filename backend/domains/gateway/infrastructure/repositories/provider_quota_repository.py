@@ -152,6 +152,81 @@ class ProviderQuotaRepository:
         await self._session.flush()
         return True
 
+    async def list_for_credential_real_model_exact(
+        self,
+        credential_id: uuid.UUID,
+        real_model: str,
+    ) -> list[ProviderQuota]:
+        """仅精确匹配 ``real_model`` 的规则（不含整凭据 ``real_model IS NULL`` 行）。"""
+        rm = real_model.strip()
+        if not rm:
+            return []
+        stmt = (
+            select(ProviderQuota)
+            .where(
+                ProviderQuota.credential_id == credential_id,
+                ProviderQuota.real_model == rm,
+            )
+            .order_by(ProviderQuota.label.asc(), ProviderQuota.window_seconds.asc())
+        )
+        result = await self._session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def delete_all_for_credential_real_model(
+        self,
+        credential_id: uuid.UUID,
+        real_model: str,
+    ) -> int:
+        rows = await self.list_for_credential_real_model_exact(credential_id, real_model)
+        removed = 0
+        for row in rows:
+            await self._session.delete(row)
+            removed += 1
+        if removed:
+            await self._session.flush()
+        return removed
+
+    async def rebind_quotas(
+        self,
+        *,
+        old_credential_id: uuid.UUID,
+        old_real_model: str,
+        new_credential_id: uuid.UUID,
+        new_real_model: str,
+    ) -> int:
+        """模型凭据 / real_model 变更时，迁移上游配额绑定键（自旧坐标查找）。"""
+        old_rm = old_real_model.strip()
+        new_rm = new_real_model.strip()
+        if not old_rm or not new_rm:
+            return 0
+        if old_credential_id == new_credential_id and old_rm == new_rm:
+            return 0
+        rows = await self.list_for_credential_real_model_exact(old_credential_id, old_rm)
+        for row in rows:
+            row.credential_id = new_credential_id
+            row.real_model = new_rm
+        if rows:
+            await self._session.flush()
+        return len(rows)
+
+    async def rekey_real_model(
+        self,
+        credential_id: uuid.UUID,
+        old_real_model: str,
+        new_real_model: str,
+    ) -> int:
+        """模型 ``real_model`` 变更时，同步迁移上游配额绑定键。"""
+        old_rm = old_real_model.strip()
+        new_rm = new_real_model.strip()
+        if not old_rm or not new_rm or old_rm == new_rm:
+            return 0
+        rows = await self.list_for_credential_real_model_exact(credential_id, old_rm)
+        for row in rows:
+            row.real_model = new_rm
+        if rows:
+            await self._session.flush()
+        return len(rows)
+
     async def delete(self, rule_id: uuid.UUID) -> bool:
         row = await self.get(rule_id)
         if row is None:

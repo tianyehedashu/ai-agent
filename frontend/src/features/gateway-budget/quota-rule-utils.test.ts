@@ -376,6 +376,19 @@ describe('formatQuotaRuleInvokeNameLabel', () => {
       })
     ).toBe('加载中…')
   })
+
+  it('falls back to upstream short name when model is not registered', () => {
+    expect(
+      formatQuotaRuleInvokeNameLabel(
+        upstreamRule('cred-a', 'volcengine/doubao-1-5-pro-256k-250115'),
+        {
+          memberLabels: new Map(),
+          keyLabels: new Map(),
+          credentialLabels: new Map(),
+        }
+      )
+    ).toBe('（未注册）doubao-1-5-pro-256k-250115')
+  })
 })
 
 describe('hasUpstreamQuotaRules', () => {

@@ -477,7 +477,12 @@ export function formatQuotaRuleInvokeNameLabel(
   const identity = resolveQuotaRuleModelIdentity(rule, ctx)
   if (identity.invokeName) return identity.invokeName
   if (ctx?.quotaModelLookupLoading) return '加载中…'
-  // 上游 model_name 存 real_model；目录未命中说明模型未注册或已删除
+  // 上游 model_name 存 real_model；目录未命中时回退展示上游 id 短名
+  const upstream = rule.key.model_name.trim()
+  if (upstream) {
+    const short = upstream.includes('/') ? upstream.split('/', 2)[1] : upstream
+    return short ? `（未注册）${short}` : '（未注册调用名）'
+  }
   return '（未注册调用名）'
 }
 

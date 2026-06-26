@@ -106,6 +106,47 @@ class GatewayManagementWriteBaseMixin:
         if cred is None or cred.scope != "user" or cred.scope_id != user_id:
             raise CredentialNotFoundError(str(credential_id))
 
+    async def _cascade_delete_provider_quotas_for_model(
+        self,
+        *,
+        credential_id: uuid.UUID | None,
+        real_model: str | None,
+        exclude_tenant_model_id: uuid.UUID | None = None,
+        exclude_system_model_id: uuid.UUID | None = None,
+    ) -> int:
+        """删除模型时清理上游配额：仅当同凭据 + real_model 无其它注册行时。"""
+        if credential_id is None:
+            return 0
+        rm = (real_model or "").strip()
+        if not rm:
+            return 0
+        remaining = await self._models.count_registrations_for_credential_real_model(
+            credential_id,
+            rm,
+            exclude_tenant_model_id=exclude_tenant_model_id,
+            exclude_system_model_id=exclude_system_model_id,
+        )
+        if remaining > 0:
+            return 0
+        return await self._provider_quotas.delete_all_for_credential_real_model(credential_id, rm)
+
+    async def _rekey_provider_quotas_for_model(
+        self,
+        *,
+        old_credential_id: uuid.UUID | None,
+        new_credential_id: uuid.UUID | None,
+        old_real_model: str,
+        new_real_model: str,
+    ) -> int:
+        if old_credential_id is None or new_credential_id is None:
+            return 0
+        return await self._provider_quotas.rebind_quotas(
+            old_credential_id=old_credential_id,
+            old_real_model=old_real_model,
+            new_credential_id=new_credential_id,
+            new_real_model=new_real_model,
+        )
+
     async def _cascade_delete_models_for_credential(self, credential_id: uuid.UUID) -> int:
         """删除引用该凭据的全部注册模型（租户 + 系统），并修剪 vkey / 路由中的模型名。"""
         tenant_models = await self._models.list_by_credential_id(credential_id)

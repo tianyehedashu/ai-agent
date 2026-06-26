@@ -218,6 +218,11 @@ function useQuotaCenterImpl(): QuotaCenterState {
     () => needsQuotaModelIdentityLookup(quotaRules) || batchOpen,
     [quotaRules, batchOpen]
   )
+  /** 上游配额按凭据全局共享，模型可能注册在其它可写团队。 */
+  const hasUpstreamModelQuotas = useMemo(
+    () => quotaRules.some((r) => r.key.layer === 'upstream' && Boolean(r.key.model_name?.trim())),
+    [quotaRules]
+  )
   const needsLabelData =
     batchOpen ||
     listTotal > 0 ||
@@ -256,11 +261,12 @@ function useQuotaCenterImpl(): QuotaCenterState {
       'plan-rule-model-lookup',
       teamId,
       isPlatformAdmin ? 'managed' : 'callable',
+      hasUpstreamModelQuotas ? 'upstream' : 'none',
     ],
     queryFn: async () => {
       const [callableModels, managedModels, personalModels] = await Promise.all([
         fetchAllGatewayModelPages(teamId, { registry_scope: 'callable' }),
-        isPlatformAdmin || adminTeamIds.size > 1
+        isPlatformAdmin || adminTeamIds.size > 1 || hasUpstreamModelQuotas
           ? fetchAllManagedTeamModelPages()
           : Promise.resolve([] as GatewayModel[]),
         fetchAllPersonalGatewayModels(),

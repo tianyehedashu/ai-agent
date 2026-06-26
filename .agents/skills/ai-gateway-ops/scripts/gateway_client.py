@@ -26,6 +26,8 @@
   python gateway_client.py credentials create --team-id <tid> --provider openai --name main --api-key sk-xxx
   python gateway_client.py credentials probe --team-id <tid> --credential-id <cid>
   python gateway_client.py models batch-import --team-id <tid> --credential-id <cid> --provider openai --items '[{"upstream_model_id":"gpt-4o"}]'
+  python gateway_client.py models capabilities --team-id <tid> --model-id <mid>   # 查看能力摘要（含 context_window）
+  python gateway_client.py models update --team-id <tid> --model-id <mid> --resync-capabilities  # 从 LiteLLM 同步能力
   python gateway_client.py models list --team-id <tid> --all   # 自动翻页拉全部
   python gateway_client.py models test --team-id <tid> --model-id <mid>
 
@@ -379,6 +381,56 @@ def cmd_creds_profiles(args):
 # models 命令
 # ---------------------------------------------------------------------------
 
+_CAPABILITY_TAG_KEYS: frozenset[str] = frozenset(
+    {
+        "supports_vision",
+        "supports_reasoning",
+        "supports_tools",
+        "supports_json_mode",
+        "supports_image_gen",
+        "supports_txt2img",
+        "supports_img2img",
+        "supports_video_gen",
+        "supports_image_to_video",
+        "thinking_param",
+        "thinking_param_locked",
+        "context_window",
+        "max_reference_images",
+    }
+)
+
+
+def _coerce_positive_int(value: object) -> int | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int) and value > 0:
+        return value
+    if isinstance(value, float) and value.is_integer() and value > 0:
+        return int(value)
+    return None
+
+
+def _model_capabilities_summary(model: dict) -> dict:
+    """从 GatewayModelResponse 提取能力运维视图（含 context_window）。"""
+    tags = model.get("tags") or {}
+    sc = model.get("selector_capabilities") or {}
+    ctx = _coerce_positive_int(sc.get("context_window")) or _coerce_positive_int(
+        tags.get("context_window")
+    )
+    tag_caps = {k: tags[k] for k in _CAPABILITY_TAG_KEYS if k in tags}
+    return {
+        "id": model.get("id"),
+        "name": model.get("name"),
+        "real_model": model.get("real_model"),
+        "provider": model.get("provider"),
+        "capability": model.get("capability"),
+        "model_types": model.get("model_types") or [],
+        "context_window": ctx,
+        "selector_capabilities": sc,
+        "tags": tag_caps,
+    }
+
+
 def cmd_models_batch_import(args):
     client = make_client(args)
     items = parse_json_arg(args.items, "items")
@@ -437,11 +489,25 @@ def cmd_models_list(args):
             if not data.get("has_next"):
                 break
             params["page"] += 1
-        return {"items": all_items, "total": data.get("total", len(all_items)),
+        result = {"items": all_items, "total": data.get("total", len(all_items)),
                 "page": 1, "page_size": len(all_items),
                 "has_next": False, "has_prev": False,
                 "connectivity_summary": data.get("connectivity_summary")}
-    return client.get(f"/gateway/teams/{args.team_id}/models", params=params)
+        if getattr(args, "capabilities", False):
+            result["items"] = [_model_capabilities_summary(m) for m in all_items]
+        return result
+    data = client.get(f"/gateway/teams/{args.team_id}/models", params=params)
+    if getattr(args, "capabilities", False):
+        items = [_model_capabilities_summary(m) for m in data.get("items", [])]
+        return {**data, "items": items}
+    return data
+
+
+def cmd_models_capabilities(args):
+    client = make_client(args)
+    params = {"registry_scope": args.registry_scope} if args.registry_scope else None
+    data = client.get(f"/gateway/teams/{args.team_id}/models/{args.model_id}", params=params)
+    return _model_capabilities_summary(data)
 
 
 def cmd_models_get(args):
@@ -465,6 +531,13 @@ def cmd_models_update(args):
         body["model_types"] = parse_json_arg(args.model_types, "model_types")
     if args.tags:
         body["tags"] = parse_json_arg(args.tags, "tags")
+    if args.context_window is not None:
+        tags_body = dict(body.get("tags") or {})
+        if args.context_window <= 0:
+            tags_body["context_window"] = None
+        else:
+            tags_body["context_window"] = args.context_window
+        body["tags"] = tags_body
     if args.display_name:
         body["display_name"] = args.display_name
     if args.resync_capabilities:
@@ -903,7 +976,12 @@ def cmd_quotas_usage_adjustment(args):
 
 def cmd_quotas_delete(args):
     client = make_client(args)
-    params = {"layer": args.layer, "quota_id": args.quota_id, "plan_id": args.plan_id}
+    params = {"layer": args.layer, "quota_id": args.quota_id}
+    if args.plan_id:
+        params["plan_id"] = args.plan_id
+    elif args.layer != "upstream":
+        sys.stderr.write("错误：downstream 删除需要 --plan-id。\n")
+        sys.exit(2)
     client.delete(f"/gateway/teams/{args.team_id}/quota-rules/plan", params=params)
     return {"deleted": True, "layer": args.layer, "quota_id": args.quota_id}
 
@@ -1217,7 +1295,14 @@ def _build_models(sub):
     c.add_argument("--type", help="能力筛选")
     c.add_argument("--enabled", type=lambda x: x.lower() == "true", default=None)
     c.add_argument("--registry-scope", choices=["team", "system", "callable", "requestable", "system_requestable"])
+    c.add_argument("--capabilities", action="store_true", help="仅输出能力摘要（含 context_window）")
     c.set_defaults(func=run(cmd_models_list))
+
+    c = sp.add_parser("capabilities", help="查看模型能力摘要（含 context_window）")
+    c.add_argument("--team-id", required=True)
+    c.add_argument("--model-id", required=True)
+    c.add_argument("--registry-scope", choices=["team", "system", "callable", "requestable", "system_requestable"])
+    c.set_defaults(func=run(cmd_models_capabilities))
 
     c = sp.add_parser("get", help="模型详情")
     c.add_argument("--team-id", required=True)
@@ -1233,9 +1318,10 @@ def _build_models(sub):
     c.add_argument("--credential-id")
     c.add_argument("--capability")
     c.add_argument("--model-types", help='JSON 数组，如 ["text","image"]')
-    c.add_argument("--tags", help='标签 JSON，如 {"supports_vision":true}')
+    c.add_argument("--tags", help='标签 JSON，如 {"supports_vision":true,"context_window":262144}')
+    c.add_argument("--context-window", type=int, default=None, help="上下文窗口 tokens；0 表示清除")
     c.add_argument("--display-name")
-    c.add_argument("--resync-capabilities", action="store_true", help="从 LiteLLM 重算能力")
+    c.add_argument("--resync-capabilities", action="store_true", help="从 LiteLLM model_cost 重算能力（含 context_window）")
     c.add_argument("--enabled", type=lambda x: x.lower() == "true", default=None)
     c.add_argument("--upstream-call-shape", choices=["openai_compat", "anthropic_native"])
     c.set_defaults(func=run(cmd_models_update))
@@ -1261,7 +1347,7 @@ def _build_models(sub):
     c.add_argument("--credential-plans", required=True, help='JSON 数组，如 [{"source_credential_id":"...","mode":"existing","destination_credential_id":"..."}]')
     c.set_defaults(func=run(cmd_models_copy_to_team))
 
-    c = sp.add_parser("resync", help="批量重算模型能力")
+    c = sp.add_parser("resync", help="批量从 LiteLLM 重算模型能力（含 context_window）")
     c.add_argument("--team-id", required=True)
     c.add_argument("--model-ids", required=True, help="JSON 数组")
     c.set_defaults(func=run(cmd_models_resync))
@@ -1460,7 +1546,7 @@ def _build_quotas(sub):
     c.add_argument("--team-id", required=True)
     c.add_argument("--layer", required=True, choices=["upstream", "downstream"])
     c.add_argument("--quota-id", required=True)
-    c.add_argument("--plan-id", required=True)
+    c.add_argument("--plan-id", help="downstream 必填；upstream 可省略")
     c.set_defaults(func=run(cmd_quotas_delete))
 
     c = sp.add_parser("budgets-list", help="列出平台预算（旧式）")

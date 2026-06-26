@@ -46,7 +46,7 @@ API Key：设置页 → API Key → 创建 → 勾选 `gateway_full` 或 `gatewa
 | **auth** | `whoami` |
 | **teams** | `list` · `find --name-contains` · `create` |
 | **credentials** | `list` · `create` · `probe` |
-| **models** | `list --all` · `test` · `batch-import` · `batch-delete` |
+| **models** | `list --all` · `capabilities` · `get` · `update --resync-capabilities` · `update --context-window` · `resync` · `test` · `batch-import` · `batch-delete` |
 | **routes** | `my-list` · `my-create` · `my-callable-models` |
 | **routes 共享** | `route-grants-publish --all-routes` · `route-grants-create` · `shared-routes-list` · `route-grants-list` |
 | **routes vkey** | `grants-create`（vkey 跨团队，非路由共享） |
@@ -104,9 +104,25 @@ python gateway_client.py routes shared-routes-list --team-id <tid>
 
 `routes my-callable-models` → `routes my-create` →（可选）`routes route-grants-publish`
 
-### C：调整模型能力
+### C：调整模型能力（含 context_window）
 
-`models get` → `models update`（`tags` 或 `resync_capabilities`）
+```bash
+# 查看当前能力
+python gateway_client.py models capabilities --team-id <tid> --model-id <mid>
+
+# 从 LiteLLM 同步（supports_* + context_window）
+python gateway_client.py models update --team-id <tid> --model-id <mid> --resync-capabilities
+
+# 手动补充 / 清除上下文窗口
+python gateway_client.py models update --team-id <tid> --model-id <mid> --context-window 262144
+python gateway_client.py models update --team-id <tid> --model-id <mid> --context-window 0
+
+# 批量同步（导入后缺 context_window 时）
+python gateway_client.py models list --team-id <tid> --all --capabilities   # 审计
+python gateway_client.py models resync --team-id <tid> --model-ids '["uuid1","uuid2"]'
+```
+
+也可用 `models update --tags '{"supports_vision":true}'` 逐项修改；详见 [model_operations.md](references/model_operations.md)。
 
 ### D：批量清理 + 上游日限额
 
