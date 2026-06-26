@@ -49,6 +49,9 @@ from domains.gateway.domain.upstream_call_shape_policy import (
 )
 from domains.gateway.domain.upstream_endpoint import resolve_upstream_endpoint
 from domains.gateway.domain.upstream_profile import UpstreamCallShape, UpstreamProtocol
+from domains.gateway.infrastructure.litellm_router_model_registry import (
+    register_router_deployments_in_litellm_registry,
+)
 from libs.crypto import decrypt_value, derive_encryption_key
 from libs.db.redis import build_authenticated_redis_url
 from utils.logging import get_logger
@@ -294,10 +297,7 @@ def _build_deployment(
     # 但底层 src 属于资源提供方团队；若取 src.tenant 会被团队过滤剔除（无可用部署）。
     decoded_scope = decode_router_model_name(model_name)
     scope_team_id = decoded_scope[0] if decoded_scope is not None else None
-    return {
-        "model_name": model_name,
-        "litellm_params": litellm_params,
-        "model_info": {
+    model_info: dict[str, Any] = {
             # LiteLLM 要求 deployment id 全局唯一；同一 GatewayModel 在多个 model_name 下
             # 各注册一行，故按 (model_name, model_id) 派生唯一行 id，避免 cooldown/统计串台。
             # 模型身份（计费/用量归因 SSOT）单独落在 ``gateway_model_id``。
@@ -322,7 +322,17 @@ def _build_deployment(
                 else None
             ),
             "gateway_via_route": via_route,
-        },
+        }
+    tags_dict = src.tags if isinstance(getattr(src, "tags", None), dict) else {}
+    ctx_raw = tags_dict.get("context_window")
+    if isinstance(ctx_raw, int) and ctx_raw > 0:
+        model_info["max_input_tokens"] = ctx_raw
+    elif isinstance(ctx_raw, float) and ctx_raw.is_integer() and ctx_raw > 0:
+        model_info["max_input_tokens"] = int(ctx_raw)
+    return {
+        "model_name": model_name,
+        "litellm_params": litellm_params,
+        "model_info": model_info,
     }
 
 
@@ -772,6 +782,8 @@ async def _build_router_kwargs(
 
     model_group_retry_policy = routes_to_model_group_retry_policy(routes)
 
+    register_router_deployments_in_litellm_registry(deployments)
+
     # LiteLLM Router 仅接受 redis_url 字符串（无单独 username 参数），而阿里云 Redis
     # 启用 ACL 后必须用 username+password 鉴权，否则连接被拒 → 熔断打开、cooldown/TPM
     # 全部退回内存与 DB，加重后台连接池压力。这里把凭据注入 URL 后再交给 Router。
@@ -914,6 +926,7 @@ async def _try_incremental_router_deployment(db: AsyncSession, encoded: str) -> 
     deployments = await _build_deployments_for_encoded_model(db, encoded)
     if not deployments:
         return False
+    register_router_deployments_in_litellm_registry(deployments)
     router = get_router_sync()
     if router is None:
         return False
