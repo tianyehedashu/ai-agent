@@ -190,6 +190,7 @@ class RequestLogRepository:
         resource_owner_user_id: UUID | None = None,
         client_type: str | None = None,
         client_ua: str | None = None,
+        image_count: int = 0,
     ) -> GatewayRequestLog:
         log = GatewayRequestLog(
             tenant_id=team_id,
@@ -231,6 +232,7 @@ class RequestLogRepository:
             metadata_extra=metadata_extra,
             client_type=client_type,
             client_ua=client_ua,
+            image_count=image_count,
         )
         self._session.add(log)
         await self._session.flush()
@@ -377,8 +379,12 @@ class RequestLogRepository:
                 func.sum(GatewayRequestLog.cached_tokens).label("cached_tokens"),
                 func.sum(GatewayRequestLog.cache_creation_tokens).label("cache_creation_tokens"),
                 func.sum(GatewayRequestLog.cost_usd).label("cost_usd"),
-                func.sum(case((GatewayRequestLog.status == "success", 1), else_=0)).label("success"),
-                func.sum(case((GatewayRequestLog.status != "success", 1), else_=0)).label("failure"),
+                func.sum(case((GatewayRequestLog.status == "success", 1), else_=0)).label(
+                    "success"
+                ),
+                func.sum(case((GatewayRequestLog.status != "success", 1), else_=0)).label(
+                    "failure"
+                ),
                 func.avg(_success_only_metric(GatewayRequestLog.latency_ms)).label("avg_latency"),
                 func.avg(_success_only_metric(GatewayRequestLog.ttfb_ms)).label("avg_ttfb"),
             ).where(_sql_and(*variant))
@@ -1018,9 +1024,7 @@ class RequestLogRepository:
             if not fetch_all_groups:
                 rows_stmt = rows_stmt.offset(offset).limit(page_size)
             result = await self._session.execute(rows_stmt)
-            items = [
-                self._usage_statistics_row_to_item(row, group_exprs) for row in result.all()
-            ]
+            items = [self._usage_statistics_row_to_item(row, group_exprs) for row in result.all()]
             group_total_subq = select(func.count()).select_from(grouped_subq).scalar_subquery()
             totals_stmt = select(
                 group_total_subq.label("group_total"),
@@ -1083,7 +1087,9 @@ class RequestLogRepository:
                 cache_hit_case=cache_hit_case,
             )
             merged_totals = (
-                partial if merged_totals is None else merge_statistics_totals(merged_totals, partial)
+                partial
+                if merged_totals is None
+                else merge_statistics_totals(merged_totals, partial)
             )
         assert merged_totals is not None
         return items, self._usage_statistics_totals_from_dict(merged_totals), group_total

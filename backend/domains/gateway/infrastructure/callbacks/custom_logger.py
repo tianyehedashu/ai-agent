@@ -664,7 +664,9 @@ def resolve_detail_jsonb_for_persist(
     return None, None, None, None
 
 
-def _should_build_detail_jsonb(*, status: str, verbose_log: bool, persist_detail_jsonb: bool) -> bool:
+def _should_build_detail_jsonb(
+    *, status: str, verbose_log: bool, persist_detail_jsonb: bool
+) -> bool:
     return verbose_log or status != "success" or persist_detail_jsonb
 
 
@@ -795,6 +797,7 @@ async def _write_log_to_db(
     user_email_snapshot: Any,
     vkey_name_snapshot: Any,
     route_snapshot: Any,
+    image_count: int = 0,
 ) -> None:
     """写入 gateway_request_logs（按月分区）。"""
     try:
@@ -850,6 +853,7 @@ async def _write_log_to_db(
                 metadata_extra=metadata_extra,
                 client_type=client_type,
                 client_ua=client_ua,
+                image_count=image_count,
             )
     except Exception as exc:  # pragma: no cover
         logger.warning("Failed to persist gateway request log: %s", exc)
@@ -868,6 +872,7 @@ async def _settle_budgets(
     cred_id: uuid.UUID | None,
     deploy_name: str | None,
     kwargs: dict[str, Any] | None = None,
+    image_count: int = 0,
 ) -> None:
     """预算 commit / release；上游 ProviderPlan 同步结算。"""
     total_tokens = input_tokens + output_tokens
@@ -921,6 +926,7 @@ async def _settle_budgets(
             cost_usd=cost_usd,
             total_tokens=total_tokens,
             request_id=request_id_str,
+            image_count=image_count,
         )
 
     with suppress(Exception):
@@ -1139,6 +1145,13 @@ async def _persist_event(
         status=status,
     )
 
+    # 2.5 图片张数（仅 image 能力）
+    image_count = 0
+    if capability == "image":
+        from domains.gateway.domain.policies.non_token_cost import response_image_count
+
+        image_count = response_image_count(response_obj)
+
     # 3. 时间 + 延迟
     _start_dt, _end_dt, latency_ms, ttfb_ms = _resolve_time_latency(start_time, end_time, metadata)
 
@@ -1241,6 +1254,7 @@ async def _persist_event(
             user_email_snapshot=user_email_snapshot,
             vkey_name_snapshot=vkey_name_snapshot,
             route_snapshot=route_snapshot,
+            image_count=image_count,
         )
 
     # 8. 预算结算
@@ -1256,6 +1270,7 @@ async def _persist_event(
         cred_id=cred_id,
         deploy_name=deploy_name,
         kwargs=kwargs,
+        image_count=image_count,
     )
 
     # 9. Redis + 配额耗尽

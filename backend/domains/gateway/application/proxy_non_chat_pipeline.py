@@ -159,6 +159,21 @@ class ProxyNonChatMixin:
         provider = prepared.resolved.record.provider if prepared.resolved is not None else ""
         volcengine_direct = provider != "" and should_use_volcengine_direct_image(provider)
         agnes_direct = provider != "" and should_use_agnes_direct_image(provider)
+        # 直连请求不走 LiteLLM pre_call_hook，需手动做上游配额预扣
+        provider_quota_reservations: list[Any] = []
+        if (volcengine_direct or agnes_direct) and prepared.resolved is not None:
+            from domains.gateway.application.provider_quota_guard import (
+                get_provider_quota_guard,
+                reserve_and_stamp_provider_quota,
+            )
+
+            provider_quota_reservations = await reserve_and_stamp_provider_quota(
+                credential_id=prepared.resolved.record.credential_id,
+                real_model=prepared.resolved.record.real_model,
+                image_count=estimated_images,
+                deployment_id=str(prepared.resolved.record.id),
+                data=kwargs,
+            )
         try:
             if volcengine_direct:
                 client_model = prepared.client_model or budget_model or ""
@@ -187,6 +202,13 @@ class ProxyNonChatMixin:
         except Exception:
             await self.guard.release_budget_reservations(reservations)
             await self.guard.release_entitlement_reservations(ctx)
+            if provider_quota_reservations:
+                from contextlib import suppress
+
+                guard = get_provider_quota_guard()
+                for res in provider_quota_reservations:
+                    with suppress(Exception):
+                        await guard.release_rule(res)
             raise
         return await adapt_response(
             response,
@@ -359,6 +381,20 @@ class ProxyNonChatMixin:
         volcengine_direct = prepared.resolved is not None and should_use_volcengine_direct_video(
             prepared.resolved.record.provider
         )
+        # 直连请求不走 LiteLLM pre_call_hook，需手动做上游配额预扣
+        provider_quota_reservations: list[Any] = []
+        if volcengine_direct:
+            from domains.gateway.application.provider_quota_guard import (
+                get_provider_quota_guard,
+                reserve_and_stamp_provider_quota,
+            )
+
+            provider_quota_reservations = await reserve_and_stamp_provider_quota(
+                credential_id=prepared.resolved.record.credential_id,
+                real_model=prepared.resolved.record.real_model,
+                deployment_id=str(prepared.resolved.record.id),
+                data=invoke_kwargs,
+            )
         try:
             if volcengine_direct:
                 response = await self.litellm.volcengine_direct_video_generation(
@@ -379,6 +415,13 @@ class ProxyNonChatMixin:
         except Exception:
             await self.guard.release_budget_reservations(reservations)
             await self.guard.release_entitlement_reservations(ctx)
+            if provider_quota_reservations:
+                from contextlib import suppress
+
+                guard = get_provider_quota_guard()
+                for res in provider_quota_reservations:
+                    with suppress(Exception):
+                        await guard.release_rule(res)
             raise
         return await adapt_response(
             response,

@@ -363,10 +363,37 @@ def build_provider_quota_pre_call_logger() -> Any:
     return _Impl()
 
 
+async def reserve_and_stamp_provider_quota(
+    *,
+    credential_id: uuid.UUID,
+    real_model: str | None,
+    image_count: int = 0,
+    deployment_id: str | None = None,
+    data: dict[str, Any] | None = None,
+) -> list[ProviderQuotaReservation]:
+    """直连请求的上游配额预扣 + metadata 标记。
+
+    直连请求（volcengine_direct / agnes_direct）不走 LiteLLM pre_call_hook，
+    需在调用上游前显式调用本函数完成预扣，并将 reservation 写入 metadata，
+    使后续 ``settle_usage`` → ``settle_provider_quota_from_callback`` 能正常结算。
+    """
+    guard = get_provider_quota_guard()
+    reserved = await guard.check_and_reserve(
+        credential_id=credential_id,
+        real_model=real_model,
+        image_count=image_count,
+        deployment_id=deployment_id,
+    )
+    if reserved and data is not None:
+        _stamp_provider_quotas_on_call(data, reserved=reserved)
+    return reserved
+
+
 __all__ = [
     "ProviderQuotaGuard",
     "ProviderQuotaReservation",
     "build_provider_quota_pre_call_logger",
     "get_provider_quota_guard",
+    "reserve_and_stamp_provider_quota",
     "upstream_rule_ids_from_call_data",
 ]

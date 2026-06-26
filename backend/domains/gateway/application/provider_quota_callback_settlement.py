@@ -88,6 +88,7 @@ async def settle_provider_quota_from_callback(
     cost_usd: Decimal,
     total_tokens: int,
     request_id: str | None,
+    image_count: int = 0,
 ) -> None:
     raw = _reservations_raw(metadata)
     rule_ids = _rule_ids_from_raw(raw, metadata) if raw is not None else []
@@ -130,6 +131,7 @@ async def settle_provider_quota_from_callback(
                 res.spec,
                 delta_tokens=total_tokens,
                 delta_usd=cost_usd,
+                delta_images=image_count,
             )
             if request_id:
                 await schedule_quota_plan_usage_upsert(
@@ -138,6 +140,7 @@ async def settle_provider_quota_from_callback(
                     specs=[res.spec],
                     delta_tokens=total_tokens,
                     delta_cost_usd=cost_usd,
+                    delta_images=image_count,
                     request_id=request_id,
                     settled_at=settled_at,
                 )

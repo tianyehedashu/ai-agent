@@ -224,6 +224,7 @@ async def adapt_response(
         image_count=images,
         entitlement_guard=entitlement_guard,
         request_id=ctx.request_id,
+        metadata=metadata,
     )
     return enrich_openai_compat_response_cost(
         data,
@@ -297,6 +298,7 @@ async def settle_usage(
     image_count: int = 0,
     entitlement_guard: EntitlementGuard | None = None,
     request_id: str | None = None,
+    metadata: dict[str, Any] | None = None,
 ) -> None:
     # 估算预扣张数（来自 reserve 阶段）：用于 commit 时校正为响应真实张数
     estimated_platform_images = 0
@@ -464,6 +466,22 @@ async def settle_usage(
             source="proxy",
         )
 
+    # 上游配额结算（直连客户端不走 LiteLLM callback，需在此处理）
+    if metadata is not None and request_id:
+        with suppress(Exception):
+            from domains.gateway.application.provider_quota_callback_settlement import (
+                settle_provider_quota_from_callback,
+            )
+
+            await settle_provider_quota_from_callback(
+                metadata=metadata,
+                status="success",
+                cost_usd=cost,
+                total_tokens=tokens,
+                request_id=request_id,
+                image_count=image_count,
+            )
+
 
 async def release_platform_budget_token_reservations(
     ctx: ProxyContext,
@@ -531,6 +549,7 @@ async def schedule_settle_usage(
     image_count: int = 0,
     entitlement_guard: EntitlementGuard | None = None,
     request_id: str | None = None,
+    metadata: dict[str, Any] | None = None,
 ) -> None:
     """登记响应后结算到 **有界执行器**（不阻塞响应返回）。
 
@@ -552,6 +571,7 @@ async def schedule_settle_usage(
                 image_count=image_count,
                 entitlement_guard=entitlement_guard,
                 request_id=request_id,
+                metadata=metadata,
             )
 
     with suppress(RuntimeError):
