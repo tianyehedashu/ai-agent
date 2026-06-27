@@ -396,7 +396,7 @@ class CredentialWritesMixin:
                 credential_id,
                 is_active=is_active,
             )
-        await self.reload_litellm_router()
+        await self.reload_litellm_router(tenant_id=tenant_id)
         return ensure_credential_read_model(updated)
 
     async def delete_managed_credential(
@@ -513,9 +513,7 @@ class CredentialWritesMixin:
         )
 
         personal_team_id = await self._ensure_personal_tenant_id(actor_user_id)
-        source_models_tenant_id = (
-            personal_team_id if source.kind == "personal" else source.team_id
-        )
+        source_models_tenant_id = personal_team_id if source.kind == "personal" else source.team_id
         assert source_models_tenant_id is not None
 
         permission_denied_tenant_id = (
@@ -611,9 +609,7 @@ class CredentialWritesMixin:
         models_failed: list[ModelImportFailure] = []
 
         dest_models_tenant_id = (
-            personal_team_id
-            if destination.kind == "personal"
-            else destination.team_id
+            personal_team_id if destination.kind == "personal" else destination.team_id
         )
         assert dest_models_tenant_id is not None
 

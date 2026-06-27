@@ -47,6 +47,20 @@ async def run_gateway_startup(app: FastAPI) -> None:
 
             await get_router(session)
 
+        # 启动跨进程 Router 重载订阅：多 worker 部署下，写路径在某个 worker
+        # 完成本地重载后会 publish 事件，本 worker 收到后同步重载，避免持有旧配置。
+        try:
+            from domains.gateway.infrastructure.router_reload_notifier import (
+                start_router_reload_subscriber,
+            )
+
+            await start_router_reload_subscriber()
+        except Exception:
+            logger.warning(
+                "router reload subscriber failed to start (multi-worker may go stale)",
+                exc_info=True,
+            )
+
         schedule_gateway_jobs(app)
         logger.info("AI Gateway initialized: Router + background jobs scheduled")
     except Exception as e:
@@ -57,4 +71,9 @@ async def run_gateway_shutdown(_app: FastAPI) -> None:
     """Gateway deferred tasks and related teardown."""
     from domains.gateway.application.proxy_deferred_tasks import shutdown_proxy_deferred_tasks
 
+    from domains.gateway.infrastructure.router_reload_notifier import (
+        stop_router_reload_subscriber,
+    )
+
+    await stop_router_reload_subscriber()
     await shutdown_proxy_deferred_tasks()

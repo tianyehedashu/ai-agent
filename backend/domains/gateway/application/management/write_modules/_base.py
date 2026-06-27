@@ -266,9 +266,7 @@ class GatewayManagementWriteBaseMixin:
                 f"模型别名 {model_name!r} 未注册在该凭据下；多凭据路由请使用「别名--凭据」具体别名"
             )
 
-    async def _resolve_registered_real_model(
-        self, credential_id: uuid.UUID, model_ref: str
-    ) -> str:
+    async def _resolve_registered_real_model(self, credential_id: uuid.UUID, model_ref: str) -> str:
         """将别名或 ``GatewayModel.real_model`` 归一为落库用的 canonical real_model。"""
         ref = model_ref.strip()
         pairs = await self._models.list_name_real_model_pairs_for_credential(credential_id)
@@ -465,10 +463,16 @@ class GatewayManagementWriteBaseMixin:
             invalidate_all()
             clear_route_snapshot_cache_for_tests()
 
+        from domains.gateway.infrastructure.router_reload_notifier import (
+            publish_router_reload,
+        )
         from domains.gateway.infrastructure.router_singleton import reload_router
 
         try:
             await reload_router(self._session)
+            # 本地重载成功后，发布跨进程事件，通知其他 worker 同步重载并按
+            # tenant_id 失效 L1 缓存（多 worker 部署下凭据/模型/路由变更必须广播）
+            await publish_router_reload(source="mgmt_write", tenant_id=tenant_id)
         except Exception:
             logger.exception("LiteLLM Router reload failed")
 

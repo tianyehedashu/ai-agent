@@ -354,12 +354,13 @@ async def resolve_model_or_route(
     from bootstrap.config import settings
     from domains.gateway.application.resolve_model_cache import (
         CACHE_MISS,
+        _fetch_tenant_version,
         peek_resolve_cache_entry,
         put_resolve_cache_entry,
     )
 
     if settings.gateway_resolve_model_cache_enabled:
-        cached = peek_resolve_cache_entry(team_id, cleaned, user_id=user_id)
+        cached = await peek_resolve_cache_entry(team_id, cleaned, user_id=user_id)
         if cached is not CACHE_MISS:
             return cached  # type: ignore[return-value]
 
@@ -368,7 +369,12 @@ async def resolve_model_or_route(
         enable_personal_fallback=enable_personal_fallback,
     )
     if settings.gateway_resolve_model_cache_enabled:
-        put_resolve_cache_entry(team_id, cleaned, user_id=user_id, resolved=resolved)
+        # 写入时绑定当前版本号，便于读路径比较；版本拉取失败退化为空串
+        # （仍可由 TTL 兜底，与旧版行为一致）
+        version = await _fetch_tenant_version(team_id)
+        put_resolve_cache_entry(
+            team_id, cleaned, user_id=user_id, resolved=resolved, version=version
+        )
     return resolved
 
 
