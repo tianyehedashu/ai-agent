@@ -70,6 +70,11 @@ _ASYNCPG_DIRTY_CONNECTION_MARKERS: tuple[str, ...] = (
     # asyncpg 在协议层进入不一致状态后再次使用会报 "another operation is in progress"，
     # 同样表示连接不可复用。
     "another operation is in progress",
+    # asyncpg ConnectionDoesNotExistError：查询执行中途连接被对端关闭。
+    # 消息文本 "connection was closed in the middle of operation" 与 SQLAlchemy
+    # 默认 is_disconnect 识别的 "connection is closed" 不匹配，需显式标记，
+    # 否则 pool 不会重建连接、异常直接抛给应用层变 500。
+    "connection was closed",
 )
 _SESSION_HAS_WRITES_KEY = "_ai_agent_has_writes"
 
