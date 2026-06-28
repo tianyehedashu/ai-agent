@@ -28,6 +28,7 @@ class ModelCapabilitySnapshot:
     temperature_default: float = DEFAULT_CLIENT_TEMPERATURE
     supports_json_mode: bool = True
     supports_vision: bool = False
+    supports_streaming: bool = True
     supports_image_gen: bool = False
     supports_txt2img: bool = True
     supports_img2img: bool = False
@@ -47,6 +48,8 @@ class ModelCapabilitySnapshot:
             result.add("reasoning")
         if self.supports_json_mode:
             result.add("json_mode")
+        if self.supports_streaming:
+            result.add("streaming")
         if self.supports_image_gen:
             result.add("image_gen")
         if self.supports_txt2img:
@@ -95,6 +98,7 @@ def tags_to_capability_snapshot(
         temperature_default=temperature_default,
         supports_json_mode=bool(tags.get("supports_json_mode", True)),
         supports_vision=bool(tags.get("supports_vision", False)),
+        supports_streaming=bool(tags.get("supports_streaming", True)),
         supports_image_gen=supports_image_gen,
         supports_txt2img=bool(tags.get("supports_txt2img", default_txt2)),
         supports_img2img=bool(tags.get("supports_img2img", default_img2)),

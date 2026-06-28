@@ -51,6 +51,7 @@ def test_features_property() -> None:
         supports_vision=True,
         supports_tools=False,
         supports_json_mode=False,
+        supports_streaming=False,
         supports_txt2img=False,
     )
     assert snap.features == frozenset({"vision"})

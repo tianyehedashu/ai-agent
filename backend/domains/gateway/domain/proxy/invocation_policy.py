@@ -114,6 +114,11 @@ def validate_invocation_kwargs(
     由 ``_apply_thinking_kwargs`` 静默剥离（兼容 Claude Code 等默认携带 Extended Thinking
     的客户端）。显式开启思考仍走 ``validate_client_thinking_toggle``。
     """
+    if not snap.supports_streaming and kwargs.get("stream") is True:
+        raise InvocationPolicyViolationError(
+            "当前模型不支持流式调用，请设置 stream: false 或改用支持流式的模型"
+        )
+
     if snap.thinking_param == THINKING_PARAM_NONE:
         return
 

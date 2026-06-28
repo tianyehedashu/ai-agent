@@ -102,6 +102,9 @@ class ResolvedModelName:
         exposed_alias: 委派时消费团队内的暴露别名（= 客户端 model）。
         delegated_grant_id: 命中的 ``gateway_route_team_grants`` 行 id；写入日志
             ``route_snapshot`` 供按 grant 维度审计/聚合。
+        primary_records: 命中路由时，所有可解析的 primary 模型快照（含 ``record``）。
+            用于路由级能力交集聚合，保证 Router 调度到任一 deployment 均安全。
+            非路由场景为 ``None``；路由场景至少含 1 条。
     """
 
     record: ResolvedGatewayModel
@@ -110,6 +113,7 @@ class ResolvedModelName:
     delegated_grant_team_id: uuid.UUID | None = None
     exposed_alias: str | None = None
     delegated_grant_id: uuid.UUID | None = None
+    primary_records: tuple[ResolvedGatewayModel, ...] | None = None
 
 
 def _uuid_or_none(value: object) -> uuid.UUID | None:
@@ -187,6 +191,9 @@ def cache_safe_resolved_model_name(
     """将解析结果转换为可跨 Session 缓存的纯值对象。"""
     if resolved is None:
         return None
+    primary_records: tuple[GatewayModelResolveSnapshot, ...] | None = None
+    if resolved.primary_records is not None:
+        primary_records = tuple(_model_snapshot(r) for r in resolved.primary_records)
     return ResolvedModelName(
         record=_model_snapshot(resolved.record),
         route=_route_snapshot(resolved.route) if resolved.route is not None else None,
@@ -194,6 +201,7 @@ def cache_safe_resolved_model_name(
         delegated_grant_team_id=resolved.delegated_grant_team_id,
         exposed_alias=resolved.exposed_alias,
         delegated_grant_id=resolved.delegated_grant_id,
+        primary_records=primary_records,
     )
 
 
@@ -244,6 +252,30 @@ async def _resolve_route_primary_record(
     )
 
 
+async def _resolve_route_primary_records(
+    session: AsyncSession,
+    route: ResolvedGatewayRoute,
+    *,
+    user_id: uuid.UUID | None,
+) -> list[GatewayModel | SystemGatewayModel]:
+    """解析路由所有 primary_models，返回可解析的记录列表（保持 primary 顺序）。
+
+    用于路由级能力交集聚合：必须解析全部 primary 才能保证 Router 调度到任一 deployment
+    时出站 kwargs 均合规。空列表表示无 primary 可解析（调用方应返回 ``None``）。
+    """
+    records: list[GatewayModel | SystemGatewayModel] = []
+    for primary in route.primary_models or ():
+        primary_record = await _resolve_route_primary_record(
+            session,
+            route.tenant_id,
+            primary,
+            user_id=user_id,
+        )
+        if primary_record is not None:
+            records.append(primary_record)
+    return records
+
+
 async def _resolve_granted_route(
     session: AsyncSession,
     team_id: uuid.UUID,
@@ -267,23 +299,18 @@ async def _resolve_granted_route(
     owner_id = route.created_by_user_id
     if owner_id is None:
         return None
-    for primary in route.primary_models or ():
-        primary_record = await _resolve_route_primary_record(
-            session,
-            route.tenant_id,
-            primary,
-            user_id=owner_id,
-        )
-        if primary_record is not None:
-            return ResolvedModelName(
-                record=primary_record,
-                route=route,
-                via_route=route.virtual_model,
-                delegated_grant_team_id=team_id,
-                exposed_alias=grant.exposed_alias,
-                delegated_grant_id=grant.id,
-            )
-    return None
+    records = await _resolve_route_primary_records(session, route, user_id=owner_id)
+    if not records:
+        return None
+    return ResolvedModelName(
+        record=records[0],
+        route=route,
+        via_route=route.virtual_model,
+        delegated_grant_team_id=team_id,
+        exposed_alias=grant.exposed_alias,
+        delegated_grant_id=grant.id,
+        primary_records=tuple(records),
+    )
 
 
 async def _resolve_model_or_route_uncached(
@@ -319,20 +346,15 @@ async def _resolve_model_or_route_uncached(
         if settings.gateway_route_sharing_enabled:
             return await _resolve_granted_route(session, team_id, cleaned)
         return None
-    for primary in route.primary_models or ():
-        primary_record = await _resolve_route_primary_record(
-            session,
-            team_id,
-            primary,
-            user_id=user_id,
-        )
-        if primary_record is not None:
-            return ResolvedModelName(
-                record=primary_record,
-                route=route,
-                via_route=route.virtual_model,
-            )
-    return None
+    records = await _resolve_route_primary_records(session, route, user_id=user_id)
+    if not records:
+        return None
+    return ResolvedModelName(
+        record=records[0],
+        route=route,
+        via_route=route.virtual_model,
+        primary_records=tuple(records),
+    )
 
 
 async def resolve_model_or_route(
@@ -366,7 +388,10 @@ async def resolve_model_or_route(
             return cached  # type: ignore[return-value]
 
     resolved = await _resolve_model_or_route_uncached(
-        session, team_id, cleaned, user_id=user_id,
+        session,
+        team_id,
+        cleaned,
+        user_id=user_id,
         enable_personal_fallback=enable_personal_fallback,
     )
     if settings.gateway_resolve_model_cache_enabled:

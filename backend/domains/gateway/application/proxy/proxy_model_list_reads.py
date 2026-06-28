@@ -8,6 +8,7 @@ import uuid
 
 from domains.gateway.application.catalog.config_catalog_sync import (
     model_types_for_gateway_registration,
+    selector_capabilities_for_route,
     selector_capabilities_from_tags,
 )
 from domains.gateway.application.catalog.gateway_model_listing import GatewayRegistryModelRow
@@ -39,9 +40,7 @@ def _route_owner_tenant_id(route: ProxyRouteListSource) -> uuid.UUID | None:
 def _models_by_team_name(
     pool: list[GatewayRegistryModelRow],
 ) -> dict[tuple[str | None, str], GatewayRegistryModelRow]:
-    return {
-        (registry_lookup_key(getattr(m, "tenant_id", None)), m.name): m for m in pool
-    }
+    return {(registry_lookup_key(getattr(m, "tenant_id", None)), m.name): m for m in pool}
 
 
 def _resolve_primary_model_row(
@@ -121,7 +120,9 @@ def build_openai_model_list_item(
     }
 
 
-def _aggregate_connectivity(models: list[GatewayRegistryModelRow]) -> ModelConnectivityStatus | None:
+def _aggregate_connectivity(
+    models: list[GatewayRegistryModelRow],
+) -> ModelConnectivityStatus | None:
     """路由级连通性聚合：任一 success 即 success；全 failed 即 failed。"""
     statuses = {connectivity_status_from_last_test(m.last_test_status) for m in models}
     if "success" in statuses:
@@ -170,11 +171,15 @@ def _build_route_model_list_item(
     if not primary:
         return None
 
-    owner_tid = route_owner_tenant_id if route_owner_tenant_id is not None else _route_owner_tenant_id(
-        route
+    owner_tid = (
+        route_owner_tenant_id
+        if route_owner_tenant_id is not None
+        else _route_owner_tenant_id(route)
     )
-    team_name_index = models_by_team_name if models_by_team_name is not None else _models_by_team_name(
-        list(models_by_name.values())
+    team_name_index = (
+        models_by_team_name
+        if models_by_team_name is not None
+        else _models_by_team_name(list(models_by_name.values()))
     )
 
     resolved_models: list[GatewayRegistryModelRow] = []
@@ -205,9 +210,6 @@ def _build_route_model_list_item(
 
     registry_name = route.virtual_model
     effective_list_id = list_id if list_id is not None else route.virtual_model
-    profile_id = (
-        credential_profiles.get(base.credential_id) if credential_profiles is not None else None
-    )
     gateway_meta: dict[str, object] = {
         "display_name": route.virtual_model,
         "real_model": base.real_model,
@@ -219,11 +221,9 @@ def _build_route_model_list_item(
             connectivity_status=connectivity,
             entitlement_status=entitlement,
         ),
-        "selector_capabilities": selector_capabilities_from_tags(
-            tags,
-            provider=base.provider,
-            real_model=base.real_model,
-            credential_profile_id=profile_id,
+        "selector_capabilities": selector_capabilities_for_route(
+            resolved_models,
+            credential_profiles=credential_profiles,
         ),
     }
     if (

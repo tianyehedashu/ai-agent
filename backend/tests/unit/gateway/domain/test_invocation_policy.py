@@ -211,3 +211,35 @@ def test_apply_invocation_kwargs_returns_new_object_when_changes_needed() -> Non
     assert "enable_thinking" not in out
     assert out["temperature"] == 1.0
     assert kwargs["temperature"] == 0.5
+
+
+def test_stream_rejected_when_unsupported() -> None:
+    """supports_streaming=False 时 stream=True 应被校验拒绝（HTTP 400 语义）。"""
+    snap = ModelCapabilitySnapshot(supports_streaming=False)
+    with pytest.raises(InvocationPolicyViolationError):
+        validate_invocation_kwargs(snap, {"stream": True})
+
+
+def test_stream_allowed_when_supported() -> None:
+    """supports_streaming=True 时 stream=True 不应被拒。"""
+    snap = ModelCapabilitySnapshot(supports_streaming=True)
+    validate_invocation_kwargs(snap, {"stream": True})  # 不抛
+
+
+def test_stream_false_passes_when_unsupported() -> None:
+    """不支持流式时 stream=False 应放行。"""
+    snap = ModelCapabilitySnapshot(supports_streaming=False)
+    validate_invocation_kwargs(snap, {"stream": False})  # 不抛
+
+
+def test_stream_absent_passes_when_unsupported() -> None:
+    """不支持流式时未显式声明 stream 应放行（默认非流式）。"""
+    snap = ModelCapabilitySnapshot(supports_streaming=False)
+    validate_invocation_kwargs(snap, {"model": "x"})  # 不抛
+
+
+def test_stream_bypassed_when_validate_false() -> None:
+    """validate=False（探活路径）应绕过流式校验，避免探活被能力位误拒。"""
+    snap = ModelCapabilitySnapshot(supports_streaming=False)
+    out = apply_invocation_kwargs(snap, {"stream": True}, validate=False)
+    assert out["stream"] is True  # 不改写、不拒绝

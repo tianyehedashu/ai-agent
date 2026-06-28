@@ -1,7 +1,10 @@
 """UpstreamAdapter 单元测试。"""
 
+import pytest
+
 from domains.gateway.application.catalog.model_or_route_resolution import ResolvedModelName
 from domains.gateway.application.upstream.upstream_adapter import UpstreamAdapter
+from domains.gateway.domain.errors import InvocationPolicyViolationError
 
 
 class _FakeRecord:
@@ -15,6 +18,13 @@ class _FakeRecord:
         self.provider = provider
         self.real_model = real_model
         self.tags = tags or {"context_window": 8192}
+
+
+class _FakeRoute:
+    """最小路由占位：UpstreamAdapter 仅依赖 record/route 是否非 None。"""
+
+    def __init__(self, virtual_model: str = "route-x") -> None:
+        self.virtual_model = virtual_model
 
 
 def test_deepseek_reasoner_pads_reasoning_content() -> None:
@@ -326,3 +336,128 @@ def test_adapt_returns_new_object_when_changes_needed() -> None:
     assert out is not kwargs
     assert "response_format" in kwargs
     assert "response_format" not in out
+
+
+def test_route_rejects_stream_when_any_primary_unsupported() -> None:
+    """路由含一个不支持流式的 primary 时，stream=True 应被拒绝（保证调度安全）。"""
+    primary_a = _FakeRecord(
+        provider="deepseek",
+        real_model="deepseek-chat",
+        tags={"context_window": 8192, "supports_streaming": True},
+    )
+    primary_b = _FakeRecord(
+        provider="deepseek",
+        real_model="deepseek-chat-mirror",
+        tags={"context_window": 8192, "supports_streaming": False},
+    )
+    route = _FakeRoute(virtual_model="deepseek-route")
+    resolved = ResolvedModelName(
+        record=primary_a,
+        route=route,
+        via_route="deepseek-route",
+        primary_records=(primary_a, primary_b),
+    )
+    with pytest.raises(InvocationPolicyViolationError):
+        UpstreamAdapter().adapt(
+            {"stream": True, "max_tokens": 100},
+            client_model="deepseek-route",
+            resolved=resolved,
+        )
+
+
+def test_route_allows_stream_when_all_primaries_supported() -> None:
+    """路由所有 primary 均支持流式时，stream=True 应放行。"""
+    primary_a = _FakeRecord(
+        provider="deepseek",
+        real_model="deepseek-chat",
+        tags={"context_window": 8192, "supports_streaming": True},
+    )
+    primary_b = _FakeRecord(
+        provider="deepseek",
+        real_model="deepseek-chat-mirror",
+        tags={"context_window": 8192, "supports_streaming": True},
+    )
+    route = _FakeRoute(virtual_model="deepseek-route")
+    resolved = ResolvedModelName(
+        record=primary_a,
+        route=route,
+        via_route="deepseek-route",
+        primary_records=(primary_a, primary_b),
+    )
+    out = UpstreamAdapter().adapt(
+        {"stream": True, "max_tokens": 100},
+        client_model="deepseek-route",
+        resolved=resolved,
+    )
+    assert out["stream"] is True
+
+
+def test_route_uses_intersection_for_tools() -> None:
+    """路由含一个不支持 tools 的 primary 时，tools 应被剥离。"""
+    primary_a = _FakeRecord(
+        provider="openai",
+        real_model="gpt-4o",
+        tags={"context_window": 8192, "supports_tools": True},
+    )
+    primary_b = _FakeRecord(
+        provider="openai",
+        real_model="gpt-4o-mini",
+        tags={"context_window": 8192, "supports_tools": False},
+    )
+    route = _FakeRoute(virtual_model="gpt-route")
+    resolved = ResolvedModelName(
+        record=primary_a,
+        route=route,
+        via_route="gpt-route",
+        primary_records=(primary_a, primary_b),
+    )
+    out = UpstreamAdapter().adapt(
+        {"tools": [{"type": "function", "function": {"name": "f"}}], "max_tokens": 100},
+        client_model="gpt-route",
+        resolved=resolved,
+    )
+    assert "tools" not in out
+
+
+def test_route_single_primary_falls_back_to_record_snapshot() -> None:
+    """primary_records 仅 1 条时退化为单模型路径（用 record 自身能力）。"""
+    primary = _FakeRecord(
+        provider="openai",
+        real_model="gpt-4",
+        tags={"context_window": 8192, "supports_json_mode": False},
+    )
+    route = _FakeRoute(virtual_model="gpt-route")
+    resolved = ResolvedModelName(
+        record=primary,
+        route=route,
+        via_route="gpt-route",
+        primary_records=(primary,),
+    )
+    out = UpstreamAdapter().adapt(
+        {"response_format": {"type": "json_object"}, "max_tokens": 100},
+        client_model="gpt-route",
+        resolved=resolved,
+    )
+    assert "response_format" not in out
+
+
+def test_route_without_primary_records_falls_back_to_record() -> None:
+    """primary_records=None（旧缓存项兼容）时退化为 record 自身能力。"""
+    primary = _FakeRecord(
+        provider="openai",
+        real_model="gpt-4",
+        tags={"context_window": 8192, "supports_streaming": False},
+    )
+    route = _FakeRoute(virtual_model="gpt-route")
+    resolved = ResolvedModelName(
+        record=primary,
+        route=route,
+        via_route="gpt-route",
+        primary_records=None,
+    )
+    with pytest.raises(InvocationPolicyViolationError):
+        UpstreamAdapter().adapt(
+            {"stream": True, "max_tokens": 100},
+            client_model="gpt-route",
+            resolved=resolved,
+        )

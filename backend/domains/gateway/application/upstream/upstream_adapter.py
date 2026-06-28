@@ -5,7 +5,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
-from domains.gateway.domain.catalog.model_capability import tags_to_capability_snapshot
+from domains.gateway.domain.catalog.model_capability import (
+    ModelCapabilitySnapshot,
+    tags_to_capability_snapshot,
+)
 from domains.gateway.domain.provider.moonshot_message_sanitize import (
     is_moonshot_provider,
     sanitize_messages_for_moonshot,
@@ -16,6 +19,7 @@ from domains.gateway.domain.provider.volcengine_message_sanitize import (
 )
 from domains.gateway.domain.proxy.coding_agent_ua import apply_coding_agent_ua_litellm_params
 from domains.gateway.domain.proxy.invocation_policy import apply_invocation_kwargs
+from domains.gateway.domain.route.route_capability import route_capability_snapshot
 from domains.gateway.domain.upstream.upstream_policy import (
     clamp_max_tokens,
     flatten_text_only_content_arrays,
@@ -83,12 +87,7 @@ class UpstreamAdapter:
             )
         record = resolved.record
         tags = record.tags if isinstance(record.tags, dict) else {}
-        snap = tags_to_capability_snapshot(
-            tags,
-            provider=record.provider,
-            real_model=record.real_model,
-            credential_profile_id=credential_profile_id,
-        )
+        snap = _resolve_effective_snapshot(resolved, credential_profile_id=credential_profile_id)
         adapted = apply_invocation_kwargs(snap, kwargs)
         limit = max_output_tokens_limit(tags, record.provider)
         adapted = clamp_max_tokens(adapted, limit)
@@ -128,6 +127,55 @@ class UpstreamAdapter:
             provider=provider,
             real_model=real_model,
         )
+
+
+def _resolve_effective_snapshot(
+    resolved: ResolvedModelName,
+    *,
+    credential_profile_id: str | None,
+) -> ModelCapabilitySnapshot:
+    """解析用于 ``apply_invocation_kwargs`` 的能力快照。
+
+    路由场景（``primary_records`` 非空）：取所有 primary 能力交集，保证 Router 调度到
+    任一 deployment 时出站 kwargs 均合规。单模型场景：取 ``record`` 自身能力。
+
+    注：``credential_profile_id`` 来自调用上下文（vkey 绑定凭据），路由内各 primary 可能
+    各自绑定不同 profile；此处用同一 profile_id 构建各 primary 快照属已知近似——影响仅限
+    ``temperature_policy`` 的 profile-driven 推导，路由通常同质化 profile，可接受。
+    """
+    primary_records = resolved.primary_records
+    if primary_records is None or len(primary_records) <= 1:
+        record = resolved.record
+        tags = record.tags if isinstance(record.tags, dict) else {}
+        return tags_to_capability_snapshot(
+            tags,
+            provider=record.provider,
+            real_model=record.real_model,
+            credential_profile_id=credential_profile_id,
+        )
+    snapshots: list[ModelCapabilitySnapshot] = []
+    for rec in primary_records:
+        rec_tags = rec.tags if isinstance(rec.tags, dict) else {}
+        snapshots.append(
+            tags_to_capability_snapshot(
+                rec_tags,
+                provider=rec.provider,
+                real_model=rec.real_model,
+                credential_profile_id=credential_profile_id,
+            )
+        )
+    aggregated = route_capability_snapshot(snapshots)
+    # route_capability_snapshot 对非空输入必返回快照；此处防御性回退
+    if aggregated is None:
+        record = resolved.record
+        tags = record.tags if isinstance(record.tags, dict) else {}
+        return tags_to_capability_snapshot(
+            tags,
+            provider=record.provider,
+            real_model=record.real_model,
+            credential_profile_id=credential_profile_id,
+        )
+    return aggregated
 
 
 __all__ = ["UpstreamAdapter"]

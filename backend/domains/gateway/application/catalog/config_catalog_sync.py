@@ -18,7 +18,10 @@ from domains.gateway.domain.catalog.catalog_provider_availability import (
     build_catalog_provider_retirement_plan,
 )
 from domains.gateway.domain.catalog.catalog_seed_model import CatalogSeedModel
-from domains.gateway.domain.catalog.model_capability import tags_to_capability_snapshot
+from domains.gateway.domain.catalog.model_capability import (
+    ModelCapabilitySnapshot,
+    tags_to_capability_snapshot,
+)
 from domains.gateway.domain.catalog.registry_model_types import infer_model_types_from_tags
 from domains.gateway.domain.credential.credential_persist import normalize_credential_write_fields
 from domains.gateway.domain.credential.credential_sync_policy import (
@@ -31,6 +34,7 @@ from domains.gateway.domain.provider.provider_env_catalog import (
     resolve_provider_credentials,
     volcengine_extra_from_snapshot,
 )
+from domains.gateway.domain.route.route_capability import route_capability_snapshot
 from domains.gateway.domain.types import (
     CONFIG_MANAGED_BY,
     CONFIG_MANAGED_CREDENTIAL_NAME,
@@ -276,6 +280,13 @@ def _selector_capabilities_payload(
         real_model=real_model,
         credential_profile_id=credential_profile_id,
     )
+    return _selector_capabilities_payload_from_snapshot(snap)
+
+
+def _selector_capabilities_payload_from_snapshot(
+    snap: ModelCapabilitySnapshot,
+) -> dict[str, Any]:
+    """从已构建的能力快照输出扁平能力字典。"""
     return {
         "supports_vision": snap.supports_vision,
         "supports_tools": snap.supports_tools,
@@ -284,6 +295,7 @@ def _selector_capabilities_payload(
         "temperature_policy": snap.temperature_policy,
         "temperature_default": snap.temperature_default,
         "supports_json_mode": snap.supports_json_mode,
+        "supports_streaming": snap.supports_streaming,
         "supports_image_gen": snap.supports_image_gen,
         "supports_txt2img": snap.supports_txt2img,
         "supports_img2img": snap.supports_img2img,
@@ -292,6 +304,49 @@ def _selector_capabilities_payload(
         "max_reference_images": snap.max_reference_images,
         "context_window": snap.context_window,
     }
+
+
+def selector_capabilities_for_route(
+    records: list[Any],
+    *,
+    credential_profiles: dict[Any, str] | None = None,
+) -> dict[str, Any]:
+    """路由项能力聚合：多 primary 能力取交集，保证前端选择器看到路由保证的最低能力。
+
+    单 primary 时退化为 ``selector_capabilities_from_tags``；空列表返回空字典。
+    """
+    if not records:
+        return {}
+    if len(records) == 1:
+        base = records[0]
+        tags = base.tags if isinstance(base.tags, dict) else {}
+        profile_id = (
+            credential_profiles.get(base.credential_id) if credential_profiles is not None else None
+        )
+        return selector_capabilities_from_tags(
+            tags,
+            provider=base.provider,
+            real_model=base.real_model,
+            credential_profile_id=profile_id,
+        )
+    snapshots: list[ModelCapabilitySnapshot] = []
+    for rec in records:
+        tags = rec.tags if isinstance(rec.tags, dict) else {}
+        profile_id = (
+            credential_profiles.get(rec.credential_id) if credential_profiles is not None else None
+        )
+        snapshots.append(
+            tags_to_capability_snapshot(
+                tags,
+                provider=rec.provider,
+                real_model=rec.real_model,
+                credential_profile_id=profile_id,
+            )
+        )
+    aggregated = route_capability_snapshot(snapshots)
+    if aggregated is None:
+        return {}
+    return _selector_capabilities_payload_from_snapshot(aggregated)
 
 
 async def sync_gateway_catalog_from_seed(
@@ -501,6 +556,7 @@ __all__ = [
     "MANAGED_CONFIG",
     "gateway_model_to_selector_item",
     "model_types_for_gateway_registration",
+    "selector_capabilities_for_route",
     "selector_capabilities_from_tags",
     "sync_app_config_gateway_catalog",
     "sync_gateway_catalog_from_seed",
