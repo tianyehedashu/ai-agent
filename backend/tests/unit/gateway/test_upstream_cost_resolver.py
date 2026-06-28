@@ -3,7 +3,7 @@
 from decimal import Decimal
 from unittest.mock import MagicMock, patch
 
-from domains.gateway.application.pricing.upstream_cost_resolver import (
+from domains.gateway.application.upstream.upstream_cost_resolver import (
     SOURCE_LITELLM_HIDDEN,
     SOURCE_NON_TOKEN_EXTRA,
     SOURCE_PER_REQUEST,
@@ -27,7 +27,7 @@ def test_prefers_upstream_metadata_over_hidden_downstream() -> None:
         },
     }
     with patch(
-        "domains.gateway.application.pricing.upstream_cost_resolver._completion_cost_upstream",
+        "domains.gateway.application.upstream.upstream_cost_resolver._completion_cost_upstream",
         return_value=Decimal("0.003"),
     ):
         cost, source = resolve_upstream_cost_usd(
@@ -50,7 +50,7 @@ def test_skips_hidden_when_downstream_pricing_applied() -> None:
         "gateway_upstream_model": "openai/gpt-4o",
     }
     with patch(
-        "domains.gateway.application.pricing.upstream_cost_resolver._completion_cost_upstream",
+        "domains.gateway.application.upstream.upstream_cost_resolver._completion_cost_upstream",
         return_value=Decimal("0.001"),
     ) as mock_cc:
         cost, source = resolve_upstream_cost_usd(
@@ -81,7 +81,7 @@ def test_zero_when_nothing_matches() -> None:
     response._hidden_params = {}
     response.usage = None
     with patch(
-        "domains.gateway.application.pricing.upstream_cost_resolver._completion_cost_upstream",
+        "domains.gateway.application.upstream.upstream_cost_resolver._completion_cost_upstream",
         return_value=None,
     ):
         cost, source = resolve_upstream_cost_usd(
@@ -132,7 +132,7 @@ def test_skips_litellm_completion_for_per_request_capability_without_token_rates
         "gateway_pricing_upstream": {"per_request_usd": 0.015},
     }
     with patch(
-        "domains.gateway.application.pricing.upstream_cost_resolver._completion_cost_upstream",
+        "domains.gateway.application.upstream.upstream_cost_resolver._completion_cost_upstream",
         return_value=Decimal("0.99"),
     ) as mock_cc:
         cost, source = resolve_upstream_cost_usd(

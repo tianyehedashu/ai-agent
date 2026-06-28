@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import uuid
 
-from domains.gateway.domain.policies.model_selection import merge_named_rows_team_granted_system
-from domains.gateway.domain.policies.resource_grant_visibility import (
+from domains.gateway.domain.catalog.model_selection import merge_named_rows_team_granted_system
+from domains.gateway.domain.visibility.resource_grant_visibility import (
     GrantedModelSnapshot,
     visible_granted_model_ids,
 )
-from domains.gateway.domain.visibility import is_subject_granted
+from domains.gateway.domain.visibility.visibility import is_subject_granted
 
 
 class _Row:

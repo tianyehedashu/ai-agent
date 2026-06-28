@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from domains.gateway.domain.policies.moonshot_message_sanitize import (
+from domains.gateway.domain.provider.moonshot_message_sanitize import (
     is_moonshot_provider,
     sanitize_messages_for_moonshot,
 )

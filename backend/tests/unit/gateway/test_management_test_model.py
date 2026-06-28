@@ -129,7 +129,7 @@ async def test_dashscope_embedding_probe_uses_compatible_client(db_session, test
 
     with (
         patch(
-            "domains.gateway.application.management.write_modules.probe.perform_dashscope_embedding",
+            "domains.gateway.application.catalog.management.probe.perform_dashscope_embedding",
             new=AsyncMock(return_value=fake_response),
         ) as perform_mock,
         patch("litellm.aembedding", new=AsyncMock()) as litellm_embed,
@@ -386,7 +386,7 @@ async def test_volcengine_image_probe_uses_image_endpoint_from_extra(db_session,
         return {"data": [{"url": "https://cdn.example.com/img.png"}]}
 
     with patch(
-        "domains.gateway.application.management.write_modules.probe.perform_volcengine_image_generation",
+        "domains.gateway.application.catalog.management.probe.perform_volcengine_image_generation",
         new=fake_perform,
     ):
         result = await writes.test_gateway_model(
@@ -429,7 +429,7 @@ async def test_agnes_image_probe_uses_direct_extra_body_client(db_session, test_
         return {"data": [{"url": "https://cdn.example.com/img.png"}]}
 
     with patch(
-        "domains.gateway.application.management.write_modules.probe.perform_agnes_image_generation",
+        "domains.gateway.application.catalog.management.probe.perform_agnes_image_generation",
         new=fake_perform,
     ):
         result = await writes.test_gateway_model(
@@ -489,7 +489,7 @@ async def test_volcengine_video_probe_uses_direct_task_api(db_session, test_user
 
     with (
         patch(
-            "domains.gateway.application.management.write_modules.probe.perform_volcengine_video_create",
+            "domains.gateway.application.catalog.management.probe.perform_volcengine_video_create",
             new=fake_perform,
         ),
         patch("litellm.avideo_generation", new=AsyncMock()) as mock_video,
@@ -510,7 +510,7 @@ async def test_system_model_from_merged_list_can_be_probed_by_platform_admin(
     db_session, test_user
 ) -> None:
     """``list_for_tenant`` 合并的系统模型 id 仅允许 platform_admin 走 test_gateway_model。"""
-    from domains.gateway.application.config_catalog_sync import sync_app_config_gateway_catalog
+    from domains.gateway.application.catalog.config_catalog_sync import sync_app_config_gateway_catalog
 
     await sync_app_config_gateway_catalog(db_session)
     await db_session.flush()
@@ -545,7 +545,7 @@ async def test_system_model_from_merged_list_can_be_probed_by_platform_admin(
 @pytest.mark.asyncio
 async def test_system_model_probe_rejects_non_platform_admin(db_session, test_user) -> None:
     """非 platform_admin 测试 system 模型应抛出 PermissionDeniedError。"""
-    from domains.gateway.application.config_catalog_sync import sync_app_config_gateway_catalog
+    from domains.gateway.application.catalog.config_catalog_sync import sync_app_config_gateway_catalog
 
     await sync_app_config_gateway_catalog(db_session)
     await db_session.flush()
@@ -578,7 +578,7 @@ async def test_chat_probe_resolves_temperature_before_session_release(
     writes = GatewayManagementWriteService(db_session)
     order: list[str] = []
 
-    from domains.gateway.application.management.write_modules import probe as probe_module
+    from domains.gateway.application.catalog.management import probe as probe_module
     from libs.db import session_lifecycle
 
     orig_resolve = probe_module.resolve_probe_chat_temperature

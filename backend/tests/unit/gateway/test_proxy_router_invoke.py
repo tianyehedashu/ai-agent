@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock
 import litellm
 import pytest
 
-from domains.gateway.application.proxy_router_invoke import invoke_router_with_direct_fallback
+from domains.gateway.application.proxy.proxy_router_invoke import invoke_router_with_direct_fallback
 
 
 @pytest.mark.asyncio

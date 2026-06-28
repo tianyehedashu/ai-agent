@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import uuid
 
-from domains.gateway.application.management.quota_rule_cache import build_actor_role_hash
+from domains.gateway.application.quota.management.quota_rule_cache import build_actor_role_hash
 
 
 class TestQuotaRuleCacheKey:

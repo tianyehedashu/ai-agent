@@ -10,7 +10,7 @@ from domains.agent.application.listing_studio_local_image_for_gateway import (
     AgentListingStudioLocalImagePort,
 )
 from domains.agent.application.ports.image_store_port import StorageConfigSnapshot
-from domains.gateway.application.proxy_vision_image_urls import (
+from domains.gateway.application.proxy.proxy_vision_image_urls import (
     inline_vision_image_urls_in_kwargs,
     inline_vision_image_urls_in_messages,
 )
@@ -120,11 +120,11 @@ class TestInlineVisionImageUrlsInKwargs:
 
         with (
             patch(
-                "domains.gateway.application.proxy_vision_image_urls.get_session_context",
+                "domains.gateway.application.proxy.proxy_vision_image_urls.get_session_context",
                 return_value=_SessionCtx(),
             ),
             patch(
-                "domains.gateway.application.proxy_vision_image_urls.get_listing_studio_local_image_port",
+                "domains.gateway.application.proxy.proxy_vision_image_urls.get_listing_studio_local_image_port",
                 return_value=port,
             ) as get_port,
         ):
@@ -143,10 +143,10 @@ class TestInlineVisionImageUrlsInKwargs:
         }
         with (
             patch(
-                "domains.gateway.application.proxy_vision_image_urls.get_session_context",
+                "domains.gateway.application.proxy.proxy_vision_image_urls.get_session_context",
             ) as get_session,
             patch(
-                "domains.gateway.application.proxy_vision_image_urls.get_listing_studio_local_image_port",
+                "domains.gateway.application.proxy.proxy_vision_image_urls.get_listing_studio_local_image_port",
             ) as get_port,
         ):
             result = await inline_vision_image_urls_in_kwargs(kwargs)

@@ -5,7 +5,7 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import Any
 
-from domains.gateway.domain.pricing_calculator import (
+from domains.gateway.domain.pricing.pricing_calculator import (
     PricingRate,
     TokenUsage,
     calculate_cost_from_rate,

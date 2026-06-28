@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Literal
 from bootstrap.config import settings
 from domains.agent.domain.services.title_rules import is_default_title
 from domains.agent.infrastructure.llm.agent_llm_facade import AgentLlmFacade
-from domains.gateway.application.scenario_defaults import require_scenario_default
+from domains.gateway.application.catalog.scenario_defaults import require_scenario_default
 from domains.session.application.session_use_case import SessionUseCase
 from domains.session.domain.entities.session import SessionDomainService, SessionOwner
 from utils.logging import get_logger
@@ -58,7 +58,7 @@ class TitleUseCase:
         self.domain_service = SessionDomainService()
 
     async def _resolve_fast_model(self) -> str:
-        from domains.gateway.application.sql_model_catalog import get_model_catalog_adapter
+        from domains.gateway.application.catalog.sql_model_catalog import get_model_catalog_adapter
 
         catalog = self._model_catalog or get_model_catalog_adapter(self.db)
         return await require_scenario_default(

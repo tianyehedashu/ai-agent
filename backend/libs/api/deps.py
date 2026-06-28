@@ -32,7 +32,7 @@ from domains.agent.application.video_task_use_case import VideoTaskUseCase
 from domains.agent.infrastructure.repositories.agent_repository import AgentRepository
 from domains.agent.infrastructure.repositories.message_repository import MessageRepository
 from domains.agent.infrastructure.sandbox.lifecycle_adapter import SandboxLifecycleAdapter
-from domains.gateway.application.sql_model_catalog import get_model_catalog_adapter
+from domains.gateway.application.catalog.sql_model_catalog import get_model_catalog_adapter
 from domains.identity.application import UserUseCase
 from domains.session.application import SessionUseCase, TitleUseCase
 from libs.db.database import get_db

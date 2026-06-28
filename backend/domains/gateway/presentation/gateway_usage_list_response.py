@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from domains.gateway.domain.usage_read_model import UsageStatisticsGroupBy
+from domains.gateway.domain.usage.usage_read_model import UsageStatisticsGroupBy
 from domains.gateway.presentation.schemas.common import (
     GatewayModelRouteUsageItem,
     GatewayModelUsageSummaryResponse,

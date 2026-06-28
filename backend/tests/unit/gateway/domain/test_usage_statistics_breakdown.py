@@ -6,11 +6,11 @@ import uuid
 
 import pytest
 
-from domains.gateway.domain.usage_read_model import (
+from domains.gateway.domain.usage.usage_read_model import (
     UsageStatisticsBreakdownBy,
     UsageStatisticsGroupBy,
 )
-from domains.gateway.domain.usage_statistics_breakdown import (
+from domains.gateway.domain.usage.usage_statistics_breakdown import (
     breakdown_by_to_group_by,
     normalize_usage_statistics_parent_group_key,
     validate_breakdown_batch_parent_keys,

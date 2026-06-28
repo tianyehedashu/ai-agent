@@ -1,4 +1,4 @@
-"""domains.gateway.domain.proxy_policy 纯函数单测。"""
+"""domains.gateway.domain.proxy.proxy_policy 纯函数单测。"""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import uuid
 
 import pytest
 
-from domains.gateway.domain.proxy_policy import (
+from domains.gateway.domain.proxy.proxy_policy import (
     allows_unregistered_gateway_model,
     build_budget_check_plan,
     is_reportable_upstream_proxy_exception,

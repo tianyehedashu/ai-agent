@@ -28,6 +28,12 @@ class GatewayQuotaPlanUsageBucket(Base):
     cost_usd: Mapped[Decimal] = mapped_column(
         Numeric(14, 6), nullable=False, server_default="0", default=Decimal("0")
     )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        server_default=func.now(),
+    )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

@@ -8,8 +8,8 @@ import uuid
 
 import pytest
 
-from domains.gateway.application import provider_quota_callback_settlement as mod
-from domains.gateway.domain.quota_plan import PlanQuotaSpec, QuotaPlanReservation
+from domains.gateway.application.quota import provider_quota_callback_settlement as mod
+from domains.gateway.domain.quota.quota_plan import PlanQuotaSpec, QuotaPlanReservation
 
 
 @pytest.mark.asyncio
@@ -35,7 +35,12 @@ async def test_commit_provider_quota_on_success(monkeypatch) -> None:
         metadata={
             "gateway_provider_plan_id": str(rule_id),
             "gateway_provider_quota_reservations": [
-                {"rule_id": str(rule_id), "quota_id": str(rule_id), "minute_unix": 1, "reserved_requests": 1},
+                {
+                    "rule_id": str(rule_id),
+                    "quota_id": str(rule_id),
+                    "minute_unix": 1,
+                    "reserved_requests": 1,
+                },
             ],
         },
         status="success",
@@ -49,6 +54,7 @@ async def test_commit_provider_quota_on_success(monkeypatch) -> None:
         spec,
         delta_tokens=12_345,
         delta_usd=Decimal("0"),
+        delta_images=0,
     )
     guard.release_rule.assert_not_awaited()
     schedule.assert_called_once()
@@ -81,7 +87,12 @@ async def test_release_provider_quota_on_failure(monkeypatch) -> None:
         metadata={
             "gateway_provider_plan_id": str(rule_id),
             "gateway_provider_quota_reservations": [
-                {"rule_id": str(rule_id), "quota_id": str(rule_id), "minute_unix": 1, "reserved_requests": 1},
+                {
+                    "rule_id": str(rule_id),
+                    "quota_id": str(rule_id),
+                    "minute_unix": 1,
+                    "reserved_requests": 1,
+                },
             ],
         },
         status="failed",

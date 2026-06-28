@@ -7,7 +7,7 @@ import uuid
 
 import pytest
 
-from domains.gateway.application.management.write_modules import GatewayManagementWriteService
+from domains.gateway.application.management import GatewayManagementWriteService
 from libs.exceptions import NotFoundError, PermissionDeniedError, ValidationError
 
 

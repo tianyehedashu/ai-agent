@@ -13,20 +13,20 @@ import uuid
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from domains.gateway.application.model_or_route_resolution import ResolvedModelName
-from domains.gateway.application.proxy_response_adapter import (
+from domains.gateway.application.catalog.model_or_route_resolution import ResolvedModelName
+from domains.gateway.application.proxy.proxy_response_adapter import (
     adapt_anthropic_response,
     adapt_anthropic_stream,
     enrich_anthropic_response_cost,
 )
-from domains.gateway.application.proxy_use_case import ProxyContext, ProxyUseCase
-from domains.gateway.domain.thinking_param import (
+from domains.gateway.application.proxy.proxy_use_case import ProxyContext, ProxyUseCase
+from domains.gateway.domain.proxy.thinking_param import (
     THINKING_PARAM_ANTHROPIC,
     THINKING_PARAM_DEEPSEEK_V4,
     THINKING_PARAM_NONE,
 )
 from domains.gateway.domain.types import GatewayCapability, VirtualKeyPrincipal
-from domains.gateway.infrastructure.router_singleton import (
+from domains.gateway.infrastructure.litellm.router_singleton import (
     filter_litellm_params_for_direct_anthropic,
 )
 
@@ -52,7 +52,7 @@ class _NoopBudget:
         return None
 
     async def check_budget(self, **_kwargs: object) -> Any:
-        from domains.gateway.application.budget_service import BudgetCheckResult
+        from domains.gateway.application.budget.budget_service import BudgetCheckResult
 
         return BudgetCheckResult(allowed=True)
 
@@ -311,7 +311,7 @@ async def test_anthropic_messages_stream_yields_sse_bytes(
 
     monkeypatch.setattr(use_case.guard, "check_entitlement", noop_entitlement)
     monkeypatch.setattr(
-        "domains.gateway.application.proxy_response_adapter.commit_cached_platform_budgets",
+        "domains.gateway.application.proxy.proxy_response_adapter.commit_cached_platform_budgets",
         AsyncMock(),
     )
 
@@ -408,7 +408,7 @@ async def test_anthropic_messages_strips_anthropic_only_fields_for_non_anthropic
         "top_p": 0.8,
     }
 
-    with caplog.at_level(logging.WARNING, logger="domains.gateway.application.proxy_chat_entries"):
+    with caplog.at_level(logging.WARNING, logger="domains.gateway.application.proxy.proxy_chat_entries"):
         result = await use_case.anthropic_messages(ctx, body)
 
     assert isinstance(result, dict)
@@ -512,11 +512,11 @@ async def test_adapt_anthropic_response_sets_cache_hit(
 ) -> None:
     """Anthropic 非流式响应：usage 含 cache_read_input_tokens 时 metadata 应标记 gateway_cache_hit。"""
     monkeypatch.setattr(
-        "domains.gateway.application.proxy_response_adapter.schedule_settle_usage",
+        "domains.gateway.application.proxy.proxy_response_adapter.schedule_settle_usage",
         AsyncMock(),
     )
     monkeypatch.setattr(
-        "domains.gateway.application.proxy_response_adapter._calc_upstream_cost",
+        "domains.gateway.application.proxy.proxy_response_adapter._calc_upstream_cost",
         lambda *_a, **_k: Decimal("0"),
     )
     monkeypatch.setattr(
@@ -564,11 +564,11 @@ async def test_adapt_anthropic_response_no_cache_hit(
 ) -> None:
     """Anthropic 非流式响应：usage 不含缓存时 gateway_cache_hit 不应为 True。"""
     monkeypatch.setattr(
-        "domains.gateway.application.proxy_response_adapter.schedule_settle_usage",
+        "domains.gateway.application.proxy.proxy_response_adapter.schedule_settle_usage",
         AsyncMock(),
     )
     monkeypatch.setattr(
-        "domains.gateway.application.proxy_response_adapter._calc_upstream_cost",
+        "domains.gateway.application.proxy.proxy_response_adapter._calc_upstream_cost",
         lambda *_a, **_k: Decimal("0"),
     )
     monkeypatch.setattr(
@@ -615,15 +615,15 @@ async def test_adapt_anthropic_stream_sets_cache_hit(
 ) -> None:
     """Anthropic 流式响应：message_delta 含 usage 时 metadata 应标记 gateway_cache_hit。"""
     monkeypatch.setattr(
-        "domains.gateway.application.proxy_response_adapter.commit_cached_platform_budgets",
+        "domains.gateway.application.proxy.proxy_response_adapter.commit_cached_platform_budgets",
         AsyncMock(),
     )
     monkeypatch.setattr(
-        "domains.gateway.application.proxy_response_adapter.schedule_settle_usage",
+        "domains.gateway.application.proxy.proxy_response_adapter.schedule_settle_usage",
         lambda *_a, **_k: None,
     )
     monkeypatch.setattr(
-        "domains.gateway.application.proxy_response_adapter._calc_upstream_cost",
+        "domains.gateway.application.proxy.proxy_response_adapter._calc_upstream_cost",
         lambda *_a, **_k: Decimal("0"),
     )
     monkeypatch.setattr(
@@ -675,7 +675,7 @@ async def test_adapt_anthropic_stream_accumulates_usage_across_events(
     last_usage 必须累积两个事件的字段，否则缓存命中和 input_tokens 会丢失。
     """
     monkeypatch.setattr(
-        "domains.gateway.application.proxy_response_adapter.schedule_settle_usage",
+        "domains.gateway.application.proxy.proxy_response_adapter.schedule_settle_usage",
         lambda *_a, **_k: None,
     )
     captured_usage: dict[str, Any] = {}
@@ -693,7 +693,7 @@ async def test_adapt_anthropic_stream_accumulates_usage_across_events(
         captured_usage["usage"] = usage
 
     monkeypatch.setattr(
-        "domains.gateway.application.proxy_response_adapter.finalize_deferred_stream_settlement",
+        "domains.gateway.application.proxy.proxy_response_adapter.finalize_deferred_stream_settlement",
         fake_finalize,
     )
 

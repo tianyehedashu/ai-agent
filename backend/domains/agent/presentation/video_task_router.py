@@ -16,7 +16,7 @@ from domains.agent.application.video_prompt_optimize_use_case import (
     VideoPromptOptimizeUseCase,
 )
 from domains.agent.application.video_task_use_case import VideoTaskUseCase
-from domains.gateway.application.sql_model_catalog import get_model_catalog_adapter
+from domains.gateway.application.catalog.sql_model_catalog import get_model_catalog_adapter
 from domains.identity.presentation.deps import AuthUser, OptionalUser
 from libs.api.deps import get_video_task_service
 from libs.api.params import parse_optional_uuid

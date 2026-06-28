@@ -48,7 +48,7 @@ _REGISTRY_BACKFILL_STATEMENTS: tuple[str, ...] = (
 
 
 def _infer_provider_from_hints(*values: object) -> str | None:
-    from domains.gateway.domain.request_log_provider import infer_provider_from_model_hints
+    from domains.gateway.domain.usage.request_log_provider import infer_provider_from_model_hints
 
     return infer_provider_from_model_hints(*values)
 

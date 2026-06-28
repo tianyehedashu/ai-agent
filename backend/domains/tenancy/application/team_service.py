@@ -69,7 +69,7 @@ class TeamService:
     def _grant_lifecycle(self) -> VirtualKeyGrantLifecyclePort:
         if self._vkey_grant_lifecycle is not None:
             return self._vkey_grant_lifecycle
-        from domains.gateway.application.virtual_key_grant_lifecycle_adapter import (
+        from domains.gateway.application.vkey.virtual_key_grant_lifecycle_adapter import (
             VirtualKeyGrantLifecycleAdapter,
         )
 
@@ -78,7 +78,7 @@ class TeamService:
     def _route_grant_lifecycle_port(self) -> RouteGrantLifecyclePort:
         if self._route_grant_lifecycle is not None:
             return self._route_grant_lifecycle
-        from domains.gateway.application.route_grant_lifecycle_adapter import (
+        from domains.gateway.application.route.route_grant_lifecycle_adapter import (
             RouteGrantLifecycleAdapter,
         )
 
@@ -328,9 +328,7 @@ class TeamService:
                 if team.kind == "personal" and team.owner_user_id != viewer_user_id
             ]
             if foreign_owner_ids:
-                summaries = await self._users.list_summary_views_by_ids(
-                    foreign_owner_ids
-                )
+                summaries = await self._users.list_summary_views_by_ids(foreign_owner_ids)
                 for owner_id, summary in summaries.items():
                     owner_hints[owner_id] = user_display_label(summary)
         return {

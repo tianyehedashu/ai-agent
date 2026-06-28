@@ -11,12 +11,12 @@ import uuid
 from httpx import AsyncClient
 import pytest
 
-from domains.gateway.application.proxy_deferred_tasks import shutdown_proxy_deferred_tasks
-from domains.gateway.application.proxy_timing import (
+from domains.gateway.application.proxy.proxy_deferred_tasks import shutdown_proxy_deferred_tasks
+from domains.gateway.application.proxy.proxy_timing import (
     HEADER_GATEWAY_PREFLIGHT_MS,
     HEADER_GATEWAY_UPSTREAM_MS,
 )
-from domains.gateway.infrastructure.router_singleton import reload_router
+from domains.gateway.infrastructure.litellm.router_singleton import reload_router
 from domains.identity.domain.api_key_types import ApiKeyScope
 from domains.identity.infrastructure.models.user import User
 from domains.tenancy.application.team_service import TeamService

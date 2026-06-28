@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, cast
 
-from domains.gateway.application.proxy_context import ProxyContext
-from domains.gateway.application.proxy_rate_limit_headers import build_proxy_rate_limit_headers
-from domains.gateway.domain.client_type import infer_client_type, truncate_client_ua
+from domains.gateway.application.proxy.proxy_context import ProxyContext
+from domains.gateway.application.proxy.proxy_rate_limit_headers import build_proxy_rate_limit_headers
+from domains.gateway.domain.catalog.client_type import infer_client_type, truncate_client_ua
 from domains.gateway.domain.types import GatewayCapability
 from domains.gateway.presentation.deps import VkeyOrApikeyPrincipal
 from domains.gateway.presentation.gateway_proxy_context import proxy_context_from_gateway_principal

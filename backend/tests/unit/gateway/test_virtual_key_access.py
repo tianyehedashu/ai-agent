@@ -12,7 +12,7 @@ from domains.gateway.domain.errors import (
     SystemVirtualKeyForbiddenError,
     VirtualKeyNotFoundError,
 )
-from domains.gateway.domain.virtual_key_access import (
+from domains.gateway.domain.vkey.virtual_key_access import (
     assert_virtual_key_accessible_by_actor,
     assert_vkey_team_header_compatible,
     filter_virtual_keys_visible_to_actor,

@@ -10,8 +10,8 @@ import uuid
 
 import pytest
 
-from domains.gateway.application.proxy_response_adapter import adapt_stream
-from domains.gateway.application.proxy_use_case import ProxyContext
+from domains.gateway.application.proxy.proxy_response_adapter import adapt_stream
+from domains.gateway.application.proxy.proxy_use_case import ProxyContext
 from domains.gateway.domain.types import GatewayCapability, VirtualKeyPrincipal
 
 
@@ -36,7 +36,7 @@ class _NoopBudget:
         return None
 
     async def check_budget(self, **_kwargs: object) -> Any:
-        from domains.gateway.application.budget_service import BudgetCheckResult
+        from domains.gateway.application.budget.budget_service import BudgetCheckResult
 
         return BudgetCheckResult(allowed=True)
 
@@ -59,15 +59,15 @@ async def test_adapt_stream_sets_cache_hit_on_last_usage(
 ) -> None:
     """OpenAI 兼容流式：最后一个 chunk 含 usage 时 metadata 应标记 gateway_cache_hit。"""
     monkeypatch.setattr(
-        "domains.gateway.application.proxy_response_adapter.commit_cached_platform_budgets",
+        "domains.gateway.application.proxy.proxy_response_adapter.commit_cached_platform_budgets",
         AsyncMock(),
     )
     monkeypatch.setattr(
-        "domains.gateway.application.proxy_response_adapter.schedule_settle_usage",
+        "domains.gateway.application.proxy.proxy_response_adapter.schedule_settle_usage",
         lambda *args, **kwargs: None,
     )
     monkeypatch.setattr(
-        "domains.gateway.application.proxy_response_adapter._calc_upstream_cost",
+        "domains.gateway.application.proxy.proxy_response_adapter._calc_upstream_cost",
         lambda *args, **kwargs: Decimal("0"),
     )
     monkeypatch.setattr(
@@ -115,15 +115,15 @@ async def test_adapt_stream_no_cache_hit_when_usage_empty(
 ) -> None:
     """OpenAI 兼容流式：chunk 不含缓存 usage 时 gateway_cache_hit 不应为 True。"""
     monkeypatch.setattr(
-        "domains.gateway.application.proxy_response_adapter.commit_cached_platform_budgets",
+        "domains.gateway.application.proxy.proxy_response_adapter.commit_cached_platform_budgets",
         AsyncMock(),
     )
     monkeypatch.setattr(
-        "domains.gateway.application.proxy_response_adapter.schedule_settle_usage",
+        "domains.gateway.application.proxy.proxy_response_adapter.schedule_settle_usage",
         lambda *args, **kwargs: None,
     )
     monkeypatch.setattr(
-        "domains.gateway.application.proxy_response_adapter._calc_upstream_cost",
+        "domains.gateway.application.proxy.proxy_response_adapter._calc_upstream_cost",
         lambda *args, **kwargs: Decimal("0"),
     )
     monkeypatch.setattr(

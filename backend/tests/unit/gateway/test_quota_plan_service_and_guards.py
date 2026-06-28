@@ -12,26 +12,26 @@ import uuid
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from domains.gateway.application import entitlement_guard as entitlement_guard_module
-from domains.gateway.application import provider_quota_guard as provider_quota_guard_module
-from domains.gateway.application import quota_plan_service as quota_plan_service_module
-from domains.gateway.application.entitlement_config_cache import (
+from domains.gateway.application.quota import entitlement_guard as entitlement_guard_module
+from domains.gateway.application.quota import provider_quota_guard as provider_quota_guard_module
+from domains.gateway.application.quota import quota_plan_service as quota_plan_service_module
+from domains.gateway.application.quota.entitlement_config_cache import (
     clear_entitlement_config_cache_for_tests,
 )
-from domains.gateway.application.entitlement_guard import (
+from domains.gateway.application.quota.entitlement_guard import (
     EntitlementContext,
     EntitlementGuard,
 )
-from domains.gateway.application.provider_quota_config_cache import (
+from domains.gateway.application.quota.provider_quota_config_cache import (
     clear_provider_quota_config_cache_for_tests,
 )
-from domains.gateway.application.provider_quota_guard import ProviderQuotaGuard
-from domains.gateway.application.quota_plan_service import QuotaPlanService
+from domains.gateway.application.quota.provider_quota_guard import ProviderQuotaGuard
+from domains.gateway.application.quota.quota_plan_service import QuotaPlanService
 from domains.gateway.domain.errors import (
     EntitlementPlanExhaustedError,
     ProviderPlanExhaustedError,
 )
-from domains.gateway.domain.quota_plan import (
+from domains.gateway.domain.quota.quota_plan import (
     PROVIDER_NS,
     PlanQuotaSnapshot,
     PlanQuotaSpec,
@@ -800,11 +800,11 @@ async def test_provider_quota_guard_skips_db_on_config_cache_hit(
         lambda: _CountingSessionCM(),
     )
     monkeypatch.setattr(
-        "domains.gateway.application.provider_quota_config_cache._get_version",
+        "domains.gateway.application.quota.provider_quota_config_cache._get_version",
         AsyncMock(return_value="11"),
     )
     monkeypatch.setattr(
-        "domains.gateway.application.provider_quota_config_cache._get_redis_client",
+        "domains.gateway.application.quota.provider_quota_config_cache._get_redis_client",
         AsyncMock(return_value=None),
     )
 
@@ -828,7 +828,7 @@ async def test_provider_quota_guard_skips_db_on_config_cache_hit(
 @pytest.mark.unit
 def test_quota_plan_service_has_no_internal_lru_cache() -> None:
     """简化缓存层级：确认 QuotaPlanService 不再持有进程内 LRU 缓存。"""
-    from domains.gateway.application.quota_plan_service import QuotaPlanService
+    from domains.gateway.application.quota.quota_plan_service import QuotaPlanService
 
     assert not hasattr(QuotaPlanService, "_snapshot_cache")
     # 同时确认旧缓存相关方法已移除

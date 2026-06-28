@@ -8,9 +8,9 @@ import uuid
 
 import pytest
 
-from domains.gateway.application.model_or_route_resolution import ResolvedModelName
-from domains.gateway.application.proxy_inbound_preflight import run_proxy_inbound_preflight
-from domains.gateway.application.proxy_use_case import ProxyContext, ProxyUseCase
+from domains.gateway.application.catalog.model_or_route_resolution import ResolvedModelName
+from domains.gateway.application.proxy.proxy_inbound_preflight import run_proxy_inbound_preflight
+from domains.gateway.application.proxy.proxy_use_case import ProxyContext, ProxyUseCase
 from domains.gateway.domain.errors import (
     BudgetExceededError,
     CapabilityNotAllowedError,
@@ -39,7 +39,7 @@ async def test_embedding_preflight_rejects_chat_registered_model(db_session: Any
     uc = ProxyUseCase(db_session)
     with (
         patch(
-            "domains.gateway.application.proxy_guard.resolve_model_or_route",
+            "domains.gateway.application.proxy.proxy_guard.resolve_model_or_route",
             AsyncMock(return_value=_resolved("chat")),
         ),
         pytest.raises(CapabilityNotAllowedError),
@@ -57,7 +57,7 @@ async def test_embedding_preflight_rejects_chat_registered_model(db_session: Any
 async def test_optional_model_skips_model_whitelist(
     db_session: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from domains.gateway.application import proxy_guard as proxy_guard_module
+    from domains.gateway.application.proxy import proxy_guard as proxy_guard_module
 
     class _NoBudgetRepo:
         def __init__(self, _session: object) -> None:
@@ -152,7 +152,7 @@ async def test_preflight_failure_schedules_request_log() -> None:
     ctx = _chat_ctx()
     with (
         patch(
-            "domains.gateway.application.proxy_inbound_preflight.schedule_preflight_failure_log",
+            "domains.gateway.application.proxy.proxy_inbound_preflight.schedule_preflight_failure_log",
         ) as schedule_log,
         pytest.raises(BudgetExceededError),
     ):
@@ -178,7 +178,7 @@ async def test_preflight_rejects_unregistered_model(db_session: Any) -> None:
     uc = ProxyUseCase(db_session)
     with (
         patch(
-            "domains.gateway.application.proxy_guard.resolve_model_or_route",
+            "domains.gateway.application.proxy.proxy_guard.resolve_model_or_route",
             AsyncMock(return_value=None),
         ),
         pytest.raises(GatewayModelNotFoundError, match="deepseek-v4-flash"),

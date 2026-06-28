@@ -18,10 +18,10 @@ def patch_bridge_identity(
     tid = team_id
     targets = [
         "domains.agent.infrastructure.llm.agent_llm_facade.resolve_internal_gateway_user_id",
-        "domains.gateway.application.bridge_attribution.resolve_internal_gateway_user_id",
+        "domains.gateway.application.bridge.bridge_attribution.resolve_internal_gateway_user_id",
     ]
     team_targets = [
-        "domains.gateway.application.bridge_attribution.resolve_internal_gateway_team_id",
+        "domains.gateway.application.bridge.bridge_attribution.resolve_internal_gateway_team_id",
     ]
     with (
         patch(targets[0], return_value=uid),

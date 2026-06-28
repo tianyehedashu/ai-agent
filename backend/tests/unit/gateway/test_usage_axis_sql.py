@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 
-from domains.gateway.domain.usage_axis import UsageAxis
+from domains.gateway.domain.usage.usage_axis import UsageAxis
 from domains.gateway.infrastructure.repositories.usage_axis_sql import (
     usage_axis_base_clauses,
     usage_axis_count_disjuncts,

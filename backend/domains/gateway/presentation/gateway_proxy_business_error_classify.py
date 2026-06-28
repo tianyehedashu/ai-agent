@@ -18,7 +18,7 @@ from domains.gateway.domain.errors import (
     ModelNotAllowedError,
     RateLimitExceededError,
 )
-from domains.gateway.domain.proxy_policy import (
+from domains.gateway.domain.proxy.proxy_policy import (
     is_router_deployment_cooldown,
     is_router_model_miss,
     is_router_unavailable_wrapper,

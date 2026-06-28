@@ -9,14 +9,14 @@ import uuid
 
 import pytest
 
-from domains.gateway.application.management.quota_plan_usage_reads import QuotaUsageTotals
-from domains.gateway.application.management.quota_rule_read_model import (
+from domains.gateway.application.quota.management.quota_plan_usage_reads import QuotaUsageTotals
+from domains.gateway.application.quota.management.quota_rule_read_model import (
     QuotaRuleKey,
     QuotaRuleLimits,
     QuotaRuleReadModel,
     QuotaRuleSourceRef,
 )
-import domains.gateway.application.management.quota_usage_snapshot as mod
+import domains.gateway.application.quota.management.quota_usage_snapshot as mod
 
 
 def _upstream_rule(rule_id: uuid.UUID) -> QuotaRuleReadModel:
@@ -62,7 +62,7 @@ async def test_enrich_upstream_flat_rule_with_quota_id_only(monkeypatch) -> None
         async def batch_usage_for_quota_windows(self, lookups, *, now=None):
             captured["lookups"] = list(lookups)
             when = now or datetime.now(UTC)
-            from domains.gateway.application.management.quota_plan_usage_reads import (
+            from domains.gateway.application.quota.management.quota_plan_usage_reads import (
                 resolve_quota_window_key,
             )
 

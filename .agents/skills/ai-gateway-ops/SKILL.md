@@ -36,8 +36,13 @@ python .agents/skills/ai-gateway-ops/scripts/gateway_client.py proxy chat --team
 | `GATEWAY_API_KEY` | 平台 API Key（`sk_`，需 `gateway:admin`+`gateway:read`） | 无 |
 | `GATEWAY_TOKEN` | 兼容 JWT/Key 回退 | 无 |
 | `GATEWAY_BASE_URL` | API 基地址 | `https://gateway.giimallai.com/ai-agent/api/v1` |
+| `GATEWAY_PROXY_VKEY` | 代理面 vkey（`sk-gw-`，批量测试脚本优先使用，免每次 ensure） | 无 |
+| `GATEWAY_BATCH_TEAM_ID` | 批量测试默认团队 ID（`batch_call_pools.py` 的 `--team-id` 缺省） | 无 |
+| `GATEWAY_DB_DSN` | `query_route_models.py` 只读查库 DSN | 生产 ai_agent 库 |
 
 API Key：设置页 → API Key → 创建 → 勾选 `gateway_full` 或 `gateway:admin`+`gateway:read`。
+
+**Windows 持久化**（用户级，重启/新终端生效）：`setx GATEWAY_API_KEY "sk_..."`；读取：`[Environment]::GetEnvironmentVariable("GATEWAY_API_KEY","User")`。
 
 ## CLI 命令速查
 
@@ -160,6 +165,34 @@ python gateway_client.py stats summary --team-id <consumer_tid> --group-by user 
 
 期望：`team_id`=消费团队、`user_id`=调用人、`route_snapshot.delegated=true`、`owner_user_id`=路由 owner。
 
+### H：路由 Pool 批量调用测试 + 配置审计
+
+**背景**：火山 `volcano-text-pool` / `volcano-vision-pool` 是多 deployment 路由别名，需验证池内模型可用性与配置正确性。阿里云 ALB 有 60s 空闲超时，长请求须用流式（`--stream`）规避 504。
+
+```bash
+# 0. 环境变量齐全时（GATEWAY_PROXY_VKEY / GATEWAY_BATCH_TEAM_ID 已 setx），直接跑：
+python .agents/skills/ai-gateway-ops/scripts/batch_call_pools.py --stream
+
+# 1. 用本地图片测视觉池（规避外网拉图超时）
+python .agents/skills/ai-gateway-ops/scripts/batch_call_pools.py --stream --image-file scripts/面向接口.jpg
+
+# 2. 逐模型测试（绕过路由别名，直接打每个底层模型，验证全部 deployment）
+python .agents/skills/ai-gateway-ops/scripts/batch_call_pools.py --stream \
+  --models doubao-1-5-pro-32k-250115,doubao-seed-1-6-vision-250815
+
+# 3. 路由配置审计（数据库 SSOT，关联 gateway_models 显示 enabled 状态）
+python .agents/skills/ai-gateway-ops/scripts/query_route_models.py
+
+# 4. 重复配置检测（CI 友好，发现重复返回非零退出码）
+python .agents/skills/ai-gateway-ops/scripts/query_route_models.py --check-dups
+```
+
+**关键经验**：
+- **不要用日志反推路由配置**：日志只能证明"被调用过"，不能证明"配置了但没被调用"。数据库 `gateway_routes.primary_models` 才是 SSOT。
+- **重复配置后果**：`primary_models` 中同一 `team-xxx/model` 出现多次，会注册成多个 deployment，导致权重翻倍。`--check-dups` 可在 CI 中守门。
+- **改库后必须热重载**：路由单例是进程级内存缓存，直接改库不重载 = 配置与内存不一致。正道是管理 API（`PATCH /routes/{id}` 自动 `reload_router` + Redis pub/sub 通知所有 worker）；无 admin token 时用 `kubectl rollout restart` 兜底。
+- **brotli 解码 bug**：httpx 流式 + brotli 压缩会报 `decoder process called with data when 'can_accept_more_data()' is False`，脚本已用 `Accept-Encoding: gzip` 规避。
+
 ## 错误处理
 
 - 管理面：`{"error": {"code", "message", "details"}}`
@@ -169,4 +202,6 @@ python gateway_client.py stats summary --team-id <consumer_tid> --group-by user 
 ## Resources
 
 - `scripts/gateway_client.py` — **唯一推荐执行入口**（teams/credentials/models/routes/quotas/vkeys/proxy/logs/stats/auth）
+- `scripts/batch_call_pools.py` — 路由 Pool 批量调用测试（流式规避 ALB 504，支持本地图片/逐模型/路由别名模式）
+- `scripts/query_route_models.py` — 路由配置审计（查 `gateway_routes` + 关联 `gateway_models` 状态，含 `--check-dups` 重复检测）
 - `references/*` — 字段与端点详情；执行前按需加载

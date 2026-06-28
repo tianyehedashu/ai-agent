@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from domains.gateway.domain.upstream_endpoint import (
+from domains.gateway.domain.upstream.upstream_endpoint import (
     credential_api_base,
     effective_api_bases_for_credential,
     infer_profile_id_from_env_api_base,
@@ -10,8 +10,8 @@ from domains.gateway.domain.upstream_endpoint import (
     resolve_openai_compat_api_base_for_storage,
     resolve_upstream_endpoint,
 )
-from domains.gateway.domain.upstream_profile import UpstreamProtocol
-from domains.gateway.domain.upstream_profile_registry import get_upstream_profile
+from domains.gateway.domain.upstream.upstream_profile import UpstreamProtocol
+from domains.gateway.domain.upstream.upstream_profile_registry import get_upstream_profile
 
 
 def test_volcengine_coding_plan_appends_v3_when_user_omits_suffix() -> None:
@@ -152,7 +152,7 @@ def test_infer_profile_id_from_env_api_base() -> None:
 
 
 def test_list_profiles_for_provider_includes_multi_plan_vendors() -> None:
-    from domains.gateway.domain.upstream_profile_registry import list_profiles_for_provider
+    from domains.gateway.domain.upstream.upstream_profile_registry import list_profiles_for_provider
 
     volc = {p.id for p in list_profiles_for_provider("volcengine")}
     assert "volcengine.standard" in volc

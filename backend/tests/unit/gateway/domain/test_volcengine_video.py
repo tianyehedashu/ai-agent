@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from domains.gateway.domain.policies.volcengine_video import (
+from domains.gateway.domain.provider.volcengine_video import (
     DEFAULT_VOLCENGINE_API_BASE,
     build_volcengine_video_create_request,
     map_volcengine_video_task_to_openai,
@@ -78,7 +78,7 @@ def test_map_volcengine_video_task_includes_video_url_when_succeeded() -> None:
 
 
 def test_is_volcengine_video_terminal_status() -> None:
-    from domains.gateway.domain.policies.volcengine_video import (
+    from domains.gateway.domain.provider.volcengine_video import (
         is_volcengine_video_in_progress_status,
         is_volcengine_video_terminal_status,
     )

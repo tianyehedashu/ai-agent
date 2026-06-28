@@ -7,7 +7,7 @@ import uuid
 
 import pytest
 
-from domains.gateway.application.management.usage_metrics import (
+from domains.gateway.application.usage.management.usage_metrics import (
     merge_statistics_items,
     merge_summary_slices,
 )

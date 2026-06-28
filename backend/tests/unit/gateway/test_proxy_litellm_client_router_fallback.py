@@ -11,7 +11,7 @@ import uuid
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from domains.gateway.application.proxy_litellm_client import ProxyLiteLLMClient
+from domains.gateway.application.proxy.proxy_litellm_client import ProxyLiteLLMClient
 
 
 def _make_router_without_method() -> MagicMock:
@@ -21,7 +21,7 @@ def _make_router_without_method() -> MagicMock:
 
 
 # 顶部导入的函数 patch 路径统一用 proxy_litellm_client 模块
-_MOD = "domains.gateway.application.proxy_litellm_client"
+_MOD = "domains.gateway.application.proxy.proxy_litellm_client"
 
 
 @pytest.mark.asyncio
@@ -62,7 +62,7 @@ async def test_fallback_merges_deployment_params_when_router_lacks_method(
         ),
         patch(f"{_MOD}.filter_litellm_params_for_direct_anthropic", side_effect=lambda d: dict(d)),
         patch(f"{_MOD}.ensure_litellm_router_team_metadata"),
-        patch("domains.gateway.infrastructure.router_singleton.ensure_gateway_callbacks"),
+        patch("domains.gateway.infrastructure.litellm.router_singleton.ensure_gateway_callbacks"),
         patch(
             "litellm.anthropic_messages",
             new_callable=AsyncMock,
@@ -115,7 +115,7 @@ async def test_no_fallback_merge_when_router_has_method(
         patch(f"{_MOD}.ensure_router_deployment", new_callable=AsyncMock, return_value=router),
         patch(f"{_MOD}.resolve_deployment_litellm_params", new_callable=AsyncMock) as mock_resolve,
         patch(f"{_MOD}.ensure_litellm_router_team_metadata"),
-        patch("domains.gateway.infrastructure.router_singleton.ensure_gateway_callbacks"),
+        patch("domains.gateway.infrastructure.litellm.router_singleton.ensure_gateway_callbacks"),
     ):
         await client._invoke_router_or_direct(
             router_method="acompletion",
@@ -153,7 +153,7 @@ async def test_fallback_no_merge_when_decode_fails(
         patch(f"{_MOD}.ensure_router_deployment", new_callable=AsyncMock, return_value=router),
         patch(f"{_MOD}.resolve_deployment_litellm_params", new_callable=AsyncMock) as mock_resolve,
         patch(f"{_MOD}.ensure_litellm_router_team_metadata"),
-        patch("domains.gateway.infrastructure.router_singleton.ensure_gateway_callbacks"),
+        patch("domains.gateway.infrastructure.litellm.router_singleton.ensure_gateway_callbacks"),
     ):
         await client._invoke_router_or_direct(
             router_method="aanthropic_messages",
@@ -197,7 +197,7 @@ async def test_fallback_no_merge_when_deployment_not_found(
             f"{_MOD}.resolve_deployment_litellm_params", new_callable=AsyncMock, return_value=None
         ),
         patch(f"{_MOD}.ensure_litellm_router_team_metadata"),
-        patch("domains.gateway.infrastructure.router_singleton.ensure_gateway_callbacks"),
+        patch("domains.gateway.infrastructure.litellm.router_singleton.ensure_gateway_callbacks"),
     ):
         await client._invoke_router_or_direct(
             router_method="aanthropic_messages",

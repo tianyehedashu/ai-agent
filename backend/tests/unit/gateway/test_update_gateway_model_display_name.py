@@ -6,7 +6,7 @@ import uuid
 
 import pytest
 
-from domains.gateway.application.management.write_modules.model_writes import (
+from domains.gateway.application.catalog.management.model_writes import (
     merge_display_name_into_tags,
 )
 from domains.gateway.application.management.writes import GatewayManagementWriteService

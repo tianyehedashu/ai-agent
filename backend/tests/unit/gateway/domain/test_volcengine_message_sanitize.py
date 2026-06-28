@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from domains.gateway.domain.policies.volcengine_message_sanitize import (
+from domains.gateway.domain.provider.volcengine_message_sanitize import (
     is_volcengine_provider,
     sanitize_messages_for_volcengine,
 )

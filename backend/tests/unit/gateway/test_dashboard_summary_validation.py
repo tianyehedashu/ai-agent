@@ -9,12 +9,12 @@ import uuid
 
 import pytest
 
-from domains.gateway.application.management.usage_reads import (
+from domains.gateway.application.usage.management.usage_reads import (
     UsageStatisticsBreakdownSummary,
     UsageStatisticsMetric,
     UsageStatisticsSummary,
 )
-from domains.gateway.domain.usage_read_model import (
+from domains.gateway.domain.usage.usage_read_model import (
     UsageAggregation,
     UsageStatisticsBreakdownBy,
     UsageStatisticsGroupBy,

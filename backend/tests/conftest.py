@@ -391,10 +391,10 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
 
         _apply_db_overrides(app, db_session)
 
-        from domains.gateway.application.config_catalog_sync import (
+        from domains.gateway.application.catalog.config_catalog_sync import (
             sync_gateway_catalog_from_seed,
         )
-        from domains.gateway.infrastructure.router_singleton import reload_router
+        from domains.gateway.infrastructure.litellm.router_singleton import reload_router
 
         await sync_gateway_catalog_from_seed(db_session)
         await db_session.flush()
@@ -414,7 +414,7 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
             yield ac
 
         # LiteLLM / Gateway 异步 success 回调可能仍占用 db_session；先收口代理 fire-and-forget 任务。
-        from domains.gateway.application.proxy_deferred_tasks import (
+        from domains.gateway.application.proxy.proxy_deferred_tasks import (
             shutdown_proxy_deferred_tasks,
         )
 
@@ -455,10 +455,10 @@ async def dev_client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, No
 
         _apply_db_overrides(app, db_session)
 
-        from domains.gateway.application.config_catalog_sync import (
+        from domains.gateway.application.catalog.config_catalog_sync import (
             sync_gateway_catalog_from_seed,
         )
-        from domains.gateway.infrastructure.router_singleton import reload_router
+        from domains.gateway.infrastructure.litellm.router_singleton import reload_router
 
         await sync_gateway_catalog_from_seed(db_session)
         await db_session.flush()
@@ -476,7 +476,7 @@ async def dev_client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, No
         ) as ac:
             yield ac
 
-        from domains.gateway.application.proxy_deferred_tasks import (
+        from domains.gateway.application.proxy.proxy_deferred_tasks import (
             shutdown_proxy_deferred_tasks,
         )
 
@@ -523,10 +523,10 @@ async def sso_client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, No
 
         _apply_db_overrides(app, db_session)
 
-        from domains.gateway.application.config_catalog_sync import (
+        from domains.gateway.application.catalog.config_catalog_sync import (
             sync_gateway_catalog_from_seed,
         )
-        from domains.gateway.infrastructure.router_singleton import reload_router
+        from domains.gateway.infrastructure.litellm.router_singleton import reload_router
 
         await sync_gateway_catalog_from_seed(db_session)
         await db_session.flush()
@@ -544,7 +544,7 @@ async def sso_client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, No
         ) as ac:
             yield ac
 
-        from domains.gateway.application.proxy_deferred_tasks import (
+        from domains.gateway.application.proxy.proxy_deferred_tasks import (
             shutdown_proxy_deferred_tasks,
         )
 
@@ -660,7 +660,7 @@ def register_gateway_listing_studio_image_port() -> None:
     from domains.agent.application.listing_studio_local_image_for_gateway import (  # pylint: disable=import-outside-toplevel
         listing_studio_local_image_port_for_session,
     )
-    from domains.gateway.application.listing_studio_image_port_registry import (  # pylint: disable=import-outside-toplevel
+    from domains.gateway.application.bridge.listing_studio_image_port_registry import (  # pylint: disable=import-outside-toplevel
         register_listing_studio_local_image_port_factory,
     )
 

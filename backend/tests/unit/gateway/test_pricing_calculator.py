@@ -4,7 +4,7 @@ from decimal import Decimal
 
 import pytest
 
-from domains.gateway.domain.pricing_calculator import (
+from domains.gateway.domain.pricing.pricing_calculator import (
     PricingRate,
     TokenUsage,
     calculate_cost_from_rate,

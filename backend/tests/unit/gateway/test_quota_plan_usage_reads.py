@@ -9,15 +9,15 @@ import uuid
 
 import pytest
 
-import domains.gateway.application.management.quota_plan_usage_reads as reads_mod
-from domains.gateway.application.management.quota_plan_usage_reads import (
+import domains.gateway.application.quota.management.quota_plan_usage_reads as reads_mod
+from domains.gateway.application.quota.management.quota_plan_usage_reads import (
     QuotaPlanUsageReadService,
     QuotaUsageTotals,
     QuotaWindowLookup,
     resolve_quota_window_key,
 )
-from domains.gateway.domain.period_reset_anchor import PeriodResetAnchor
-from domains.gateway.domain.quota_plan import PROVIDER_NS
+from domains.gateway.domain.quota.period_reset_anchor import PeriodResetAnchor
+from domains.gateway.domain.quota.quota_plan import PROVIDER_NS
 from domains.gateway.infrastructure.models.quota_plan_usage_bucket import (
     GatewayQuotaPlanUsageBucket,
 )
@@ -61,7 +61,7 @@ async def test_batch_usage_reads_bucket_row() -> None:
 @pytest.mark.asyncio
 async def test_aggregate_logs_counts_only_success(monkeypatch) -> None:
     """logs fallback 仅统计 success，与 Redis 结算语义一致。"""
-    from domains.gateway.application.management import quota_plan_usage_reads as reads_mod
+    from domains.gateway.application.quota.management import quota_plan_usage_reads as reads_mod
 
     captured: list[object] = []
 

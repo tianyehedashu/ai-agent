@@ -1,6 +1,6 @@
 """scenario_defaults_policy 纯函数单测。"""
 
-from domains.gateway.domain.scenario_defaults_policy import (
+from domains.gateway.domain.catalog.scenario_defaults_policy import (
     catalog_model_type_for_scenario,
     pick_scenario_from_visible,
 )

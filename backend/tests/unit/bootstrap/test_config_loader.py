@@ -2,7 +2,7 @@
 
 import pytest
 
-from domains.gateway.domain.catalog_seed_model import CatalogSeedModel
+from domains.gateway.domain.catalog.catalog_seed_model import CatalogSeedModel
 
 
 @pytest.mark.unit

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from domains.gateway.domain.provider_inference import infer_provider_name
+from domains.gateway.domain.provider.provider_inference import infer_provider_name
 
 
 @pytest.mark.parametrize(

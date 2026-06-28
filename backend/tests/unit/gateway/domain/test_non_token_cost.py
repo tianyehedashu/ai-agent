@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 from decimal import Decimal
 
-from domains.gateway.domain.policies.non_token_cost import (
+from domains.gateway.domain.pricing.non_token_cost import (
     capability_default_billing_mode,
     estimate_non_token_cost_from_extra,
     merge_non_token_extra_from_litellm,

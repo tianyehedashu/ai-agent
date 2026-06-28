@@ -7,7 +7,7 @@ import uuid
 from httpx import AsyncClient
 import pytest
 
-from domains.gateway.infrastructure.router_singleton import reload_router
+from domains.gateway.infrastructure.litellm.router_singleton import reload_router
 from libs.api.paths import openai_compat_base
 from tests.integration.gateway.vkey_grant_helpers import (
     create_vkey_with_plain,

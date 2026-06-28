@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import uuid
 
-from domains.gateway.application.budget_platform_settlement import (
+from domains.gateway.application.budget.budget_platform_settlement import (
     deserialize_budget_anchor_pins,
     resolve_budget_commit_anchor,
     serialize_budget_anchor_pins,
 )
-from domains.gateway.domain.period_reset_anchor import (
+from domains.gateway.domain.quota.period_reset_anchor import (
     DEFAULT_PERIOD_RESET_ANCHOR,
     PeriodResetAnchor,
 )

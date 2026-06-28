@@ -2,7 +2,7 @@
 
 import pytest
 
-from domains.gateway.domain.upstream_model_name_normalize import (
+from domains.gateway.domain.upstream.upstream_model_name_normalize import (
     normalize_upstream_model_id,
 )
 

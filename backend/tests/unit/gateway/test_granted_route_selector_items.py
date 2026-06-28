@@ -7,9 +7,9 @@ import uuid
 
 import pytest
 
-from domains.gateway.application import granted_route_selector_items as mod
-from domains.gateway.application.granted_route_listing import GrantedRouteRow
-from domains.gateway.application.granted_route_selector_items import (
+from domains.gateway.application.route import granted_route_selector_items as mod
+from domains.gateway.application.route.granted_route_listing import GrantedRouteRow
+from domains.gateway.application.route.granted_route_selector_items import (
     _representative_model,
     list_granted_route_selector_items,
 )

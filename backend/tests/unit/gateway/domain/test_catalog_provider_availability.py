@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import Any
 import uuid
 
-from domains.gateway.domain.policies.catalog_provider_availability import (
+from domains.gateway.domain.catalog.catalog_provider_availability import (
     build_catalog_provider_retirement_plan,
 )
 

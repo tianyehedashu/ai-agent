@@ -5,16 +5,17 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
-from domains.gateway.application.catalog.litellm_capability_hint import (
-    merge_litellm_capability_hints,
-)
 from domains.gateway.application.ports import LitellmCapabilityHintPort
-from domains.gateway.domain.litellm_capability_mapping import HintMergeMode
-from domains.gateway.domain.temperature_policy import UPSTREAM_PROFILE_ID_TAG
-from domains.gateway.domain.thinking_param import (
+from domains.gateway.domain.litellm.litellm_capability_mapping import HintMergeMode
+from domains.gateway.domain.proxy.temperature_policy import UPSTREAM_PROFILE_ID_TAG
+from domains.gateway.domain.proxy.thinking_param import (
     THINKING_PARAM_NONE,
     effective_supports_reasoning,
     enrich_gateway_model_tags,
+)
+
+from domains.gateway.application.upstream.litellm_capability_hint import (
+    merge_litellm_capability_hints,
 )
 
 

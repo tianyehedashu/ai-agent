@@ -7,8 +7,8 @@ import uuid
 import pytest
 
 from domains.gateway.application.management.writes import GatewayManagementWriteService
-from domains.gateway.application.model_reference_prune import prune_gateway_model_name_references
-from domains.gateway.domain.virtual_key_service import generate_vkey
+from domains.gateway.application.catalog.model_reference_prune import prune_gateway_model_name_references
+from domains.gateway.domain.vkey.virtual_key_service import generate_vkey
 from domains.gateway.infrastructure.repositories.model_repository import (
     GatewayModelRepository,
     GatewayRouteRepository,

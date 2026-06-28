@@ -12,8 +12,8 @@ import uuid
 
 from fastapi import APIRouter, Depends, Query
 
-from domains.gateway.application.management.log_presentation import request_log_to_dict
-from domains.gateway.domain.usage_read_model import (
+from domains.gateway.application.usage.management.log_presentation import request_log_to_dict
+from domains.gateway.domain.usage.usage_read_model import (
     USAGE_AGGREGATION_QUERY_DESCRIPTION,
     UsageAggregation,
 )

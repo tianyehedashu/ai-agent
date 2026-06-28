@@ -7,10 +7,10 @@ import uuid
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from domains.gateway.application.management.route_grant_reads import (
+from domains.gateway.application.route.management.route_grant_reads import (
     list_shared_routes_for_team,
 )
-from domains.gateway.application.management.route_read_mappers import route_row_to_api_dict
+from domains.gateway.application.route.management.route_read_mappers import route_row_to_api_dict
 from domains.gateway.presentation.deps import (
     CurrentTeam,
     RequiredTeamAdmin,

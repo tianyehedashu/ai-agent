@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
-from domains.gateway.domain.http_header_merge import merge_comma_separated_header_values
+from domains.gateway.domain.proxy.http_header_merge import merge_comma_separated_header_values
 
 # 不透传到上游（鉴权 / 网关控制面）
 _BLOCKED_HEADER_NAMES: frozenset[str] = frozenset(

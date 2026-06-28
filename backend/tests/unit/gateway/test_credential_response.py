@@ -7,7 +7,7 @@ import uuid
 import pytest
 
 from bootstrap.config import settings
-from domains.gateway.application.management.credential_read_mappers import (
+from domains.gateway.application.credential.management.credential_read_mappers import (
     credential_from_orm,
     ensure_credential_read_model,
 )
@@ -87,7 +87,7 @@ async def test_build_credential_response_uses_prefilled_masked_without_decrypt(
     from datetime import UTC, datetime
     from unittest.mock import patch
 
-    from domains.gateway.application.management.credential_read_model import CredentialReadModel
+    from domains.gateway.application.credential.management.credential_read_model import CredentialReadModel
 
     encryption_key = derive_encryption_key(settings.secret_key.get_secret_value())
     cred_id = uuid.uuid4()

@@ -4,7 +4,7 @@ from uuid import uuid4
 
 import pytest
 
-from domains.gateway.domain.policies.team_model_access import (
+from domains.gateway.domain.catalog.team_model_access import (
     actor_created_model,
     assert_can_create_model_on_team_credential,
     assert_can_delete_team_model_on_credential,

@@ -7,7 +7,7 @@ import uuid
 
 import pytest
 
-from domains.gateway.application.system_grants_cache import (
+from domains.gateway.application.grant.system_grants_cache import (
     clear_grants_cache_for_tests,
     get_cached_grant_keys,
     invalidate_grants_for_team,

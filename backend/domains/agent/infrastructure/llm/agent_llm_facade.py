@@ -15,12 +15,12 @@ import tiktoken
 
 from domains.agent.domain.types import Message, ToolCall
 from domains.agent.infrastructure.llm.message_formatter import format_domain_messages
-from domains.gateway.application.bridge_attribution import resolve_gateway_bridge_attribution
-from domains.gateway.application.gateway_internal_log_context import (
+from domains.gateway.application.bridge.bridge_attribution import resolve_gateway_bridge_attribution
+from domains.gateway.application.bridge.gateway_internal_log_context import (
     get_internal_store_full_override,
 )
-from domains.gateway.application.gateway_proxy_factory import get_gateway_proxy
-from domains.gateway.application.internal_bridge_actor import resolve_internal_gateway_user_id
+from domains.gateway.application.bridge.gateway_proxy_factory import get_gateway_proxy
+from domains.gateway.application.bridge.internal_bridge_actor import resolve_internal_gateway_user_id
 from domains.gateway.application.ports import (
     GatewayCallContext,
     GatewayResponse,

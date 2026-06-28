@@ -7,20 +7,20 @@ import uuid
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from domains.gateway.application.management.virtual_key_team_grant_reads import (
+from domains.gateway.application.vkey.management.virtual_key_team_grant_reads import (
     list_active_grants_for_vkey,
     list_grantable_team_responses,
     map_grants_to_responses,
 )
-from domains.gateway.application.management.virtual_key_team_grant_writes import (
+from domains.gateway.application.vkey.management.virtual_key_team_grant_writes import (
     grant_vkey_to_teams,
     revoke_vkey_team_grant,
 )
-from domains.gateway.application.management.vkey_team_grant_policy import (
+from domains.gateway.application.vkey.management.vkey_team_grant_policy import (
     assert_actor_member_of_vkey_grant_targets,
 )
 from domains.gateway.domain.errors import VirtualKeyNotFoundError
-from domains.gateway.domain.virtual_key_access import assert_virtual_key_accessible_by_actor
+from domains.gateway.domain.vkey.virtual_key_access import assert_virtual_key_accessible_by_actor
 from domains.gateway.infrastructure.repositories.virtual_key_repository import (
     VirtualKeyRepository,
 )

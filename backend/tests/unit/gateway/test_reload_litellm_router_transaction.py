@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from domains.gateway.application.management.write_modules._base import (
+from domains.gateway.application.management.write_base import (
     GatewayManagementWriteBaseMixin,
 )
 
@@ -37,7 +37,7 @@ async def test_reload_litellm_router_commits_writes_before_reload(db_session: As
             side_effect=_commit,
         ),
         patch(
-            "domains.gateway.infrastructure.router_singleton.reload_router",
+            "domains.gateway.infrastructure.litellm.router_singleton.reload_router",
             side_effect=_reload,
         ),
     ):

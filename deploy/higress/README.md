@@ -34,20 +34,33 @@ gateway.giimallai.com
 
 **API（Gateway / OpenAI 兼容面）** — [`ai-agent-api-ingress.example.yaml`](ai-agent-api-ingress.example.yaml)
 
-- 路由名 **`ai-agent-api`**，`path: /ai-agent/api/(.*)` → `ai-agent-backend.dns:8000`
+- 路由名 **`ai-agent-api`**，`path: /ai-agent/api/` + `pathType: Prefix` → `ai-agent-backend.dns:8000`
 - **必须** `higress.io/timeout: "3600"`（缺省约 **60s**，非流式 chat 高并发会 **504**）
-- 线上补丁（已验证）：
+- **必须** 用标准 Prefix，**禁止** `use-regex: "true"` + `/ai-agent/api/(.*)`（见下方「504 根因」）
+- **禁止** `rewrite-target`：backend `ROOT_PATH=/ai-agent` 需接收带前缀路径，去前缀会 404
+
+> **504 根因（2026-06-27 排查）**：`use-regex: "true"` 的正则路径不参与 K8s 最长前缀优先排序，导致所有 `/ai-agent/api/*` 错误打到 `ai-agent-spa`（frontend Nginx 二次反代），SPA Ingress 默认 timeout 60s → LLM 长请求 504。修复：改标准 Prefix `/ai-agent/api/`（比 `/ai-agent` 更长，自动优先），并删 `use-regex`/`rewrite-target`/`enable-rewrite` 三个 annotation。
+
+线上补丁（已验证）：
 
 ```bash
-scp deploy/higress/patch-ai-agent-api-timeout.json wuhan-ali:/tmp/
-ssh wuhan-ali "kubectl -n test patch ingress ai-agent-api --type=merge --patch-file /tmp/patch-ai-agent-api-timeout.json"
-ssh wuhan-ali "kubectl -n test get ingress ai-agent-api -o jsonpath='{.metadata.annotations.higress\.io/timeout}' && echo"
-# 期望输出: 3600
+# 修复路由优先级（治本）：apply 标准 Prefix 配置 + 删废弃 annotation
+scp deploy/higress/ai-agent-api-ingress.example.yaml wuhan-ali:/tmp/
+ssh wuhan-ali "kubectl -n test apply -f /tmp/ai-agent-api-ingress.example.yaml"
+ssh wuhan-ali "kubectl -n test annotate ingress ai-agent-api higress.io/use-regex- higress.io/rewrite-target- higress.io/enable-rewrite-"
+
+# SPA 兜底加 timeout（防 LLM 经 Nginx 反代超时）
+ssh wuhan-ali "kubectl -n test patch ingress ai-agent-spa --type=merge --patch '{\"metadata\":{\"annotations\":{\"higress.io/timeout\":\"3600\"}}}'"
+
+# 验证：API 请求应打到 ai-agent-api（backend 直连），非 ai-agent-spa
+ssh wuhan-ali "kubectl -n test logs deployment/higress-gateway --since=1m | grep 'system/health' | grep -oE 'route_name...[a-z-]+' | sort | uniq -c"
+# 期望: route_name":"ai-agent-api
 ```
 
 **SPA** — [`ai-agent-ingress.example.yaml`](ai-agent-ingress.example.yaml)（历史整站示例；线上为 `ai-agent-spa`）
 
 - `path: /ai-agent`，`pathType: Prefix` → `frontend:80`
+- **必须** `higress.io/timeout: "3600"`（与 API 一致，兜底防 Nginx 反代超时）
 - **禁止** rewrite `/ai-agent` → `/`
 
 ### 2. giikin-auth-bridge WasmPlugin

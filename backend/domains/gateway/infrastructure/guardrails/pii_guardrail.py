@@ -1,7 +1,7 @@
 """
 GatewayPiiGuardrail - LiteLLM CustomGuardrail 适配
 
-脱敏规则见 ``domains.gateway.domain.pii_redaction_policy``。
+脱敏规则见 ``domains.gateway.domain.proxy.pii_redaction_policy``。
 """
 
 from __future__ import annotations
@@ -9,7 +9,7 @@ from __future__ import annotations
 from contextlib import suppress
 from typing import Any
 
-from domains.gateway.domain.pii_redaction_policy import (
+from domains.gateway.domain.proxy.pii_redaction_policy import (
     PiiPatterns,
     hash_messages_streaming,
     hash_original,

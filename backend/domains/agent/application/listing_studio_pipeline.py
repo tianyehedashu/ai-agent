@@ -15,7 +15,7 @@ from domains.agent.domain.listing_studio.types import ListingStudioJobStepStatus
 from domains.agent.infrastructure.repositories.listing_studio_job_step_repository import (
     ListingStudioJobStepRepository,
 )
-from domains.gateway.application.sql_model_catalog import get_model_catalog_adapter
+from domains.gateway.application.catalog.sql_model_catalog import get_model_catalog_adapter
 from domains.identity.application.permission_context_composer import PermissionContextComposer
 from libs.db.database import get_session_context
 from libs.iam.permission_context import clear_permission_context

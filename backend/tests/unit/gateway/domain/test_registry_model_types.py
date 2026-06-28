@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from domains.gateway.domain.policies.model_list_policy import parse_registry_ability_filter
-from domains.gateway.domain.registry_model_types import (
+from domains.gateway.domain.catalog.model_list_policy import parse_registry_ability_filter
+from domains.gateway.domain.catalog.registry_model_types import (
     ability_filters_via_sql_capability_column,
     infer_model_types_from_tags,
     matches_registry_ability_filter,

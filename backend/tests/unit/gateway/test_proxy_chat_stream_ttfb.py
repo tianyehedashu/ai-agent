@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 
-from domains.gateway.application.proxy_chat_entries import _collect_ttfb_stream
+from domains.gateway.application.proxy.proxy_chat_entries import _collect_ttfb_stream
 
 
 class _FakeAsyncGenerator:

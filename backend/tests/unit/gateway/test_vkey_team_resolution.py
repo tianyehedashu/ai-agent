@@ -7,7 +7,7 @@ import uuid
 import pytest
 
 from bootstrap.config import settings
-from domains.gateway.application.vkey_team_resolution import (
+from domains.gateway.application.vkey.vkey_team_resolution import (
     assert_vkey_model_not_ambiguous,
     dispatch_vkey_model,
 )
@@ -132,14 +132,15 @@ async def test_dispatch_homonym_slug_prefix_falls_to_bound(db_session, test_user
 
 @pytest.mark.asyncio
 async def test_assert_ambiguous_non_strict_records_metric_only(
-    db_session, test_user,
+    db_session,
+    test_user,
 ) -> None:
     """非 strict：记指标但不拒绝。"""
-    from domains.gateway.application import vkey_team_resolution as mod
-    from domains.gateway.application.gateway_vkey_metrics import (
+    from domains.gateway.application.usage.gateway_vkey_metrics import (
         export_vkey_metrics,
         reset_vkey_metrics_for_tests,
     )
+    from domains.gateway.application.vkey import vkey_team_resolution as mod
 
     reset_vkey_metrics_for_tests()
     teams = TeamService(db_session)
@@ -167,7 +168,7 @@ async def test_assert_ambiguous_non_strict_records_metric_only(
 
 @pytest.mark.asyncio
 async def test_assert_ambiguous_strict_raises(db_session, test_user) -> None:
-    from domains.gateway.application import vkey_team_resolution as mod
+    from domains.gateway.application.vkey import vkey_team_resolution as mod
 
     teams = TeamService(db_session)
     primary = await teams.ensure_personal_team(test_user.id)

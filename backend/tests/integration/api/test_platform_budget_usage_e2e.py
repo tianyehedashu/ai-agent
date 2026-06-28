@@ -14,13 +14,13 @@ import pytest
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from domains.gateway.application.proxy_deferred_tasks import shutdown_proxy_deferred_tasks
-from domains.gateway.domain.quota_plan import PLATFORM_NS
+from domains.gateway.application.proxy.proxy_deferred_tasks import shutdown_proxy_deferred_tasks
+from domains.gateway.domain.quota.quota_plan import PLATFORM_NS
 from domains.gateway.infrastructure.models.quota_plan_usage_bucket import (
     GatewayQuotaPlanUsageBucket,
 )
 from domains.gateway.infrastructure.models.request_log import GatewayRequestLog
-from domains.gateway.infrastructure.router_singleton import reload_router
+from domains.gateway.infrastructure.litellm.router_singleton import reload_router
 from domains.identity.infrastructure.models.user import User
 from domains.tenancy.application.team_service import TeamService
 from libs.api.paths import openai_compat_base
@@ -44,7 +44,7 @@ def _bind_platform_settlement_to_test_db(
 ) -> None:
     # 用量落库已收敛到合并刷写器（usage_bucket_flusher._flush_buckets），故 DB 写入点在此绑定；
     # 同步刷写由 shutdown_proxy_deferred_tasks 触发（排空有界执行器 → 取消 flusher → finally 落库）。
-    from domains.gateway.application import usage_bucket_flusher as bucket_mod
+    from domains.gateway.application.quota import usage_bucket_flusher as bucket_mod
     import libs.db.database as db_mod
 
     @asynccontextmanager
@@ -99,7 +99,7 @@ async def _setup_platform_budget_chat(
     test_user: User,
 ) -> tuple[uuid.UUID, str, str, uuid.UUID]:
     """返回 (team_id, model_name, plain_key, budget_id)。"""
-    from domains.gateway.application.gateway_cache_invalidation import (
+    from domains.gateway.application.observability.gateway_cache_invalidation import (
         clear_all_gateway_read_caches_for_tests,
     )
 
@@ -247,7 +247,7 @@ async def test_platform_display_merges_partial_bucket_with_logs(
     auth_headers: dict[str, str],
 ) -> None:
     """部分 bucket 行存在时，展示读应取 bucket 与日志窗口的较大值。"""
-    from domains.gateway.application.gateway_cache_invalidation import (
+    from domains.gateway.application.observability.gateway_cache_invalidation import (
         clear_all_gateway_read_caches_for_tests,
     )
 

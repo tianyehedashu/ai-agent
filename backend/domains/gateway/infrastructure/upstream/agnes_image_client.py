@@ -16,7 +16,7 @@ from domains.gateway.infrastructure.upstream.httpx_client_singleton import (
 )
 
 if TYPE_CHECKING:
-    from domains.gateway.domain.policies.agnes_image import AgnesImageRequest
+    from domains.gateway.domain.provider.agnes_image import AgnesImageRequest
 
 
 _PROVIDER = "agnes"

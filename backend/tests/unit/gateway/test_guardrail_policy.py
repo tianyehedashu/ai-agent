@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from domains.gateway.domain.guardrail_policy import (
+from domains.gateway.domain.proxy.guardrail_policy import (
     assert_vkey_guardrail_create_allowed,
     effective_guardrail_enabled,
 )

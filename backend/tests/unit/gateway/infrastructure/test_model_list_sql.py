@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 
-from domains.gateway.domain.policies.model_list_policy import (
+from domains.gateway.domain.catalog.model_list_policy import (
     ModelListConnectivityFilter,
     ModelListSortField,
     ModelListSortOrder,

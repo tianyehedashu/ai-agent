@@ -7,25 +7,25 @@ from typing import TYPE_CHECKING, Any
 import uuid
 
 from bootstrap.config import settings
-from domains.gateway.application.chat_model_selector_reads import count_active_credentials_for_team
-from domains.gateway.application.entitlement_model_status import is_connectivity_requestable
-from domains.gateway.application.internal_bridge_actor import resolve_internal_gateway_team_id
-from domains.gateway.application.model_selector_reads import (
+from domains.gateway.application.catalog.chat_model_selector_reads import count_active_credentials_for_team
+from domains.gateway.application.quota.entitlement_model_status import is_connectivity_requestable
+from domains.gateway.application.bridge.internal_bridge_actor import resolve_internal_gateway_team_id
+from domains.gateway.application.catalog.model_selector_reads import (
     get_default_for_model_type,
     list_personal_models_for_selector,
 )
-from domains.gateway.application.model_selector_reads import (
+from domains.gateway.application.catalog.model_selector_reads import (
     list_available_models as list_available_models_for_selector,
 )
-from domains.gateway.application.model_selector_reads import (
+from domains.gateway.application.catalog.model_selector_reads import (
     list_available_system_models as list_system_models_for_selector,
 )
-from domains.gateway.domain.policies.chat_model_readiness import (
+from domains.gateway.domain.catalog.chat_model_readiness import (
     chat_readiness_error_code,
     chat_readiness_message,
     classify_chat_readiness,
 )
-from domains.gateway.domain.policies.volcengine_image import (
+from domains.gateway.domain.provider.volcengine_image import (
     parse_volcengine_image_endpoint_id,
 )
 from domains.gateway.domain.types import PERSONAL_MODEL_TYPES
@@ -292,7 +292,7 @@ class ChatModelResolutionUseCase:
     def _resolve_default_vision_model(
         self, allowed_image_system_ids: frozenset[str]
     ) -> ResolvedModel:
-        from domains.gateway.domain.scenario_defaults_policy import pick_scenario_from_visible
+        from domains.gateway.domain.catalog.scenario_defaults_policy import pick_scenario_from_visible
 
         picked = pick_scenario_from_visible(
             env_override=settings.vision_model,

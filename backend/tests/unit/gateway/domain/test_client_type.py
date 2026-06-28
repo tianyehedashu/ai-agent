@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from domains.gateway.domain.client_type import infer_client_type
+from domains.gateway.domain.catalog.client_type import infer_client_type
 
 
 def test_infer_claude_code() -> None:

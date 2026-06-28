@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import case, func, literal, or_, select
 
-from domains.gateway.domain.usage_read_model import (
+from domains.gateway.domain.usage.usage_read_model import (
     UsageStatisticsFilters,
     UsageStatisticsGroupBy,
     UsageStatisticsParentScope,
@@ -30,7 +30,7 @@ if TYPE_CHECKING:
 
     from sqlalchemy.ext.asyncio import AsyncSession
 
-    from domains.gateway.domain.usage_axis import UsageAxis
+    from domains.gateway.domain.usage.usage_axis import UsageAxis
 
 
 class MetricsHourlyReadRepository:

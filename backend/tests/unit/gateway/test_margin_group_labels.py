@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from domains.gateway.domain.margin_read_model import (
+from domains.gateway.domain.usage.margin_read_model import (
     margin_group_column_label,
     resolve_margin_group_label,
 )

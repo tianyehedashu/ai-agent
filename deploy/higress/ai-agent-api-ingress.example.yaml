@@ -4,6 +4,16 @@
 # WasmPlugin giikin-auth-bridge 匹配本路由名 ai-agent-api
 #
 # 必配：higress.io/timeout（缺省约 60s，非流式 chat 高并发会 504）
+#
+# 路由优先级（重要）：
+#   必须用标准 Prefix `/ai-agent/api/`，勿用 `use-regex: "true"` + `/ai-agent/api/(.*)`。
+#   原因：与 `ai-agent-spa`（path: /ai-agent, Prefix）共存时，正则路径不参与
+#   K8s 最长前缀优先排序，会导致所有 /ai-agent/api/* 错误打到 SPA → frontend Nginx
+#   二次反代 → LLM 长请求超 60s 触发 504（SPA Ingress 默认 timeout 60s）。
+#   标准 Prefix 下 `/ai-agent/api/` 比 `/ai-agent` 更长，自动优先匹配。
+#
+# 勿配 rewrite：backend ROOT_PATH=/ai-agent，需接收带前缀的完整路径
+#   `/ai-agent/api/v1/...`。若 rewrite-target: /$1 去前缀，backend 404。
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -12,16 +22,13 @@ metadata:
   namespace: test
   annotations:
     higress.io/destination: ai-agent-backend.dns:8000
-    higress.io/enable-rewrite: "true"
-    higress.io/rewrite-target: /$1
-    higress.io/use-regex: "true"
     higress.io/timeout: "3600"
 spec:
   ingressClassName: higress
   rules:
     - http:
         paths:
-          - path: /ai-agent/api/(.*)
+          - path: /ai-agent/api/
             pathType: Prefix
             backend:
               resource:

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from domains.gateway.domain.policies.agnes_image import (
+from domains.gateway.domain.provider.agnes_image import (
     AGNES_DEFAULT_RESPONSE_FORMAT,
     build_agnes_image_request,
     extract_agnes_image_inputs,

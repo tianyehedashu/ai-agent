@@ -14,7 +14,7 @@ from domains.agent.application.chat_model_resolution_use_case import (
     VALID_MODEL_TYPES,
     ChatModelResolutionUseCase,
 )
-from domains.gateway.domain.litellm_model_id import build_litellm_model_id
+from domains.gateway.domain.litellm.litellm_model_id import build_litellm_model_id
 from domains.identity.infrastructure.models.user import User
 from libs.exceptions import ValidationError
 from libs.iam.permission_context import (
@@ -178,8 +178,8 @@ class TestGetAvailableModels:
 
         ctx = await permission_context_for_user(db_session, user_id=user.id)
         set_permission_context(ctx)
-        from domains.gateway.application.config_catalog_sync import sync_app_config_gateway_catalog
-        from domains.gateway.application.sql_model_catalog import get_model_catalog_adapter
+        from domains.gateway.application.catalog.config_catalog_sync import sync_app_config_gateway_catalog
+        from domains.gateway.application.catalog.sql_model_catalog import get_model_catalog_adapter
 
         await sync_app_config_gateway_catalog(db_session)
         await db_session.flush()

@@ -4,14 +4,14 @@ from __future__ import annotations
 
 import pytest
 
-from domains.gateway.domain.policies.model_registry_scope import (
+from domains.gateway.domain.catalog.model_registry_scope import (
     RegistryScope,
     exclude_user_scope_credentials_for_registry,
     filter_system_registry_rows,
     is_requestable_registry_scope,
     uses_merged_registry_list,
 )
-from domains.gateway.domain.policies.model_selection import registry_kind_for_merged_row
+from domains.gateway.domain.catalog.model_selection import registry_kind_for_merged_row
 
 
 class _TeamRow:

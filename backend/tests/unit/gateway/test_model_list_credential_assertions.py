@@ -7,7 +7,7 @@ import uuid
 
 import pytest
 
-from domains.gateway.application.model_list_credential_assertions import (
+from domains.gateway.application.catalog.model_list_credential_assertions import (
     assert_managed_team_model_list_credential_filter,
     assert_team_model_list_credential_filter,
 )
@@ -31,7 +31,7 @@ async def test_managed_team_filter_delegates_to_access_and_filterable() -> None:
         "domains.gateway.application.management.reads.GatewayManagementReadService",
         return_value=reads,
     ), patch(
-        "domains.gateway.application.model_list_credential_assertions.assert_team_credential_filterable_for_model_list",
+        "domains.gateway.application.catalog.model_list_credential_assertions.assert_team_credential_filterable_for_model_list",
         filterable,
     ):
         await assert_managed_team_model_list_credential_filter(
@@ -112,7 +112,7 @@ async def test_team_filter_delegates_to_access_and_filterable() -> None:
     filterable = AsyncMock()
 
     with patch(
-        "domains.gateway.application.model_list_credential_assertions.assert_team_credential_filterable_for_model_list",
+        "domains.gateway.application.catalog.model_list_credential_assertions.assert_team_credential_filterable_for_model_list",
         filterable,
     ):
         await assert_team_model_list_credential_filter(

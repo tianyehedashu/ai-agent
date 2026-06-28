@@ -9,18 +9,18 @@ import uuid
 
 import pytest
 
-from domains.gateway.application.management.budget_usage_reads import (
+from domains.gateway.application.usage.management.budget_usage_reads import (
     BudgetWindowLookup,
     resolve_budget_window_key,
 )
-from domains.gateway.application.management.quota_plan_usage_reads import QuotaUsageTotals
-from domains.gateway.application.management.quota_rule_read_model import (
+from domains.gateway.application.quota.management.quota_plan_usage_reads import QuotaUsageTotals
+from domains.gateway.application.quota.management.quota_rule_read_model import (
     QuotaRuleKey,
     QuotaRuleLimits,
     QuotaRuleReadModel,
     QuotaRuleSourceRef,
 )
-import domains.gateway.application.management.quota_usage_snapshot as mod
+import domains.gateway.application.quota.management.quota_usage_snapshot as mod
 
 
 def _member_total_rule(team_id: uuid.UUID, user_id: uuid.UUID) -> QuotaRuleReadModel:

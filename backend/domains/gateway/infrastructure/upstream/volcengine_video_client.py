@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any
 
 import httpx
 
-from domains.gateway.domain.policies.volcengine_video import (
+from domains.gateway.domain.provider.volcengine_video import (
     VOLCENGINE_VIDEO_POLL_INTERVAL_SECONDS,
     VOLCENGINE_VIDEO_POLL_MAX_ATTEMPTS,
     is_volcengine_video_in_progress_status,
@@ -20,7 +20,7 @@ from domains.gateway.infrastructure.upstream.httpx_client_singleton import (
 )
 
 if TYPE_CHECKING:
-    from domains.gateway.domain.policies.volcengine_video import (
+    from domains.gateway.domain.provider.volcengine_video import (
         VolcengineVideoCreateRequest,
         VolcengineVideoGetRequest,
     )

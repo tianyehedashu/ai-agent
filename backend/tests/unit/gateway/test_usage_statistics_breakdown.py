@@ -12,7 +12,7 @@ import pytest
 
 from bootstrap.config import settings
 from domains.gateway.application.management.reads import GatewayManagementReadService
-from domains.gateway.domain.usage_read_model import (
+from domains.gateway.domain.usage.usage_read_model import (
     UsageAggregation,
     UsageStatisticsBreakdownBy,
     UsageStatisticsFilters,

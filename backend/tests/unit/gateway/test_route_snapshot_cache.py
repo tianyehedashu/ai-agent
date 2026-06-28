@@ -7,8 +7,8 @@ import uuid
 
 import pytest
 
-import domains.gateway.application.route_snapshot_cache as route_snapshot_cache_mod
-from domains.gateway.application.route_snapshot_cache import (
+import domains.gateway.application.route.route_snapshot_cache as route_snapshot_cache_mod
+from domains.gateway.application.route.route_snapshot_cache import (
     clear_route_snapshot_cache_for_tests,
     get_route_snapshot_metadata,
 )

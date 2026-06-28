@@ -6,7 +6,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from domains.gateway.domain.policies.quota_window_enforcement import (
+from domains.gateway.domain.quota.quota_window_enforcement import (
     is_quota_row_enforceable,
 )
 

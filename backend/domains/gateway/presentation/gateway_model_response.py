@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from domains.gateway.application.config_catalog_sync import selector_capabilities_from_tags
-from domains.gateway.domain.policies.model_selection import (
+from domains.gateway.application.catalog.config_catalog_sync import selector_capabilities_from_tags
+from domains.gateway.domain.catalog.model_selection import (
     RegistryKind,
     registry_kind_for_merged_row,
 )
-from domains.gateway.domain.visibility import credential_visibility_for_api
+from domains.gateway.domain.visibility.visibility import credential_visibility_for_api
 from domains.gateway.presentation.schemas.common import (
     GatewayModelResponse,
     SystemCredentialSummary,

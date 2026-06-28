@@ -8,9 +8,9 @@ import uuid
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from domains.gateway.application.route_owner_slug_maps import RouteOwnerSlugContext
-from domains.gateway.domain.router_model_name import encode_router_model_name
-from domains.gateway.infrastructure.router_singleton import (
+from domains.gateway.application.route.route_owner_slug_maps import RouteOwnerSlugContext
+from domains.gateway.domain.route.router_model_name import encode_router_model_name
+from domains.gateway.infrastructure.litellm.router_singleton import (
     _build_deployments_for_encoded_model,
 )
 
@@ -67,19 +67,19 @@ async def test_lazy_build_resolves_slug_prefixed_primary(db_session: AsyncSessio
             "domains.gateway.infrastructure.repositories.model_repository.GatewayModelRepository",
         ) as model_repo_cls,
         patch(
-            "domains.gateway.infrastructure.router_singleton._load_upstream_pricing_lookup",
+            "domains.gateway.infrastructure.litellm.router_singleton._load_upstream_pricing_lookup",
             new=AsyncMock(return_value={}),
         ),
         patch(
-            "domains.gateway.infrastructure.router_singleton.build_route_owner_slug_contexts",
+            "domains.gateway.infrastructure.litellm.router_singleton.build_route_owner_slug_contexts",
             new=AsyncMock(return_value={personal_team: slug_context}),
         ),
         patch(
-            "domains.gateway.infrastructure.router_singleton._resolve_router_credential",
+            "domains.gateway.infrastructure.litellm.router_singleton._resolve_router_credential",
             new=AsyncMock(return_value=cred),
         ),
         patch(
-            "domains.gateway.infrastructure.router_singleton._build_litellm_params",
+            "domains.gateway.infrastructure.litellm.router_singleton._build_litellm_params",
             return_value={"model": "doubao-1-5-lite-32k-250115", "custom_llm_provider": "volcengine"},
         ),
     ):

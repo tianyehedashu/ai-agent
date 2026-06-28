@@ -6,8 +6,8 @@ from unittest.mock import patch
 
 import pytest
 
-from domains.gateway.application.proxy_litellm_client import apply_upstream_timeout
-from domains.gateway.domain.stream_utils import safe_aclose_stream
+from domains.gateway.application.proxy.proxy_litellm_client import apply_upstream_timeout
+from domains.gateway.domain.proxy.stream_utils import safe_aclose_stream
 
 
 class MockStream:
@@ -60,11 +60,11 @@ class TestApplyUpstreamTimeout:
     ) -> None:
         with (
             patch(
-                "domains.gateway.application.proxy_litellm_client.settings.gateway_upstream_timeout_seconds",
+                "domains.gateway.application.proxy.proxy_litellm_client.settings.gateway_upstream_timeout_seconds",
                 timeout_val,
             ),
             patch(
-                "domains.gateway.application.proxy_litellm_client.settings.gateway_upstream_stream_timeout_seconds",
+                "domains.gateway.application.proxy.proxy_litellm_client.settings.gateway_upstream_stream_timeout_seconds",
                 stream_timeout_val,
             ),
         ):
@@ -83,11 +83,11 @@ class TestApplyUpstreamTimeout:
         """kwargs 中已有的 timeout/stream_timeout 不被覆盖。"""
         with (
             patch(
-                "domains.gateway.application.proxy_litellm_client.settings.gateway_upstream_timeout_seconds",
+                "domains.gateway.application.proxy.proxy_litellm_client.settings.gateway_upstream_timeout_seconds",
                 300,
             ),
             patch(
-                "domains.gateway.application.proxy_litellm_client.settings.gateway_upstream_stream_timeout_seconds",
+                "domains.gateway.application.proxy.proxy_litellm_client.settings.gateway_upstream_stream_timeout_seconds",
                 60,
             ),
         ):

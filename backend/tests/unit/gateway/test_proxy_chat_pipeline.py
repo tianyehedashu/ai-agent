@@ -7,9 +7,9 @@ import uuid
 
 import pytest
 
-from domains.gateway.application.model_or_route_resolution import ResolvedModelName
-from domains.gateway.application.proxy_chat_pipeline import prepare_chat_proxy_request
-from domains.gateway.application.proxy_use_case import ProxyContext, ProxyUseCase
+from domains.gateway.application.catalog.model_or_route_resolution import ResolvedModelName
+from domains.gateway.application.proxy.proxy_chat_pipeline import prepare_chat_proxy_request
+from domains.gateway.application.proxy.proxy_use_case import ProxyContext, ProxyUseCase
 from domains.gateway.domain.types import GatewayCapability
 
 
@@ -49,7 +49,7 @@ async def test_prepare_chat_passes_kwargs_only_to_vision_inline(db_session: obje
 
     with (
         patch(
-            "domains.gateway.application.proxy_chat_pipeline.run_proxy_inbound_preflight",
+            "domains.gateway.application.proxy.proxy_chat_pipeline.run_proxy_inbound_preflight",
             AsyncMock(return_value=_preflight_result()),
         ),
         patch.object(
@@ -58,7 +58,7 @@ async def test_prepare_chat_passes_kwargs_only_to_vision_inline(db_session: obje
             AsyncMock(return_value=(prepared_litellm, dict(litellm_kwargs))),
         ),
         patch(
-            "domains.gateway.application.proxy_chat_pipeline.inline_vision_image_urls_in_kwargs",
+            "domains.gateway.application.proxy.proxy_chat_pipeline.inline_vision_image_urls_in_kwargs",
             AsyncMock(side_effect=lambda kw: kw),
         ) as inline_mock,
     ):

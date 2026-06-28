@@ -7,10 +7,10 @@ from typing import Annotated
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from domains.gateway.application.management.managed_team_route_reads import (
+from domains.gateway.application.route.management.managed_team_route_reads import (
     list_managed_team_routes_for_actor,
 )
-from domains.gateway.application.management.route_read_mappers import route_row_to_api_dict
+from domains.gateway.application.route.management.route_read_mappers import route_row_to_api_dict
 from domains.gateway.presentation.schemas.common import ManagedTeamRouteListResponse, RouteResponse
 from domains.identity.domain.rbac import Role
 from domains.identity.presentation.deps import RequiredAuthUser, get_user_uuid

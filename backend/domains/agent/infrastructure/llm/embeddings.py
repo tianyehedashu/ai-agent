@@ -15,9 +15,9 @@ from abc import ABC, abstractmethod
 import asyncio
 from typing import TYPE_CHECKING, Literal
 
-from domains.gateway.application.bridge_attribution import resolve_gateway_bridge_attribution
-from domains.gateway.application.gateway_proxy_factory import get_gateway_proxy
-from domains.gateway.application.internal_bridge_actor import resolve_internal_gateway_user_id
+from domains.gateway.application.bridge.bridge_attribution import resolve_gateway_bridge_attribution
+from domains.gateway.application.bridge.gateway_proxy_factory import get_gateway_proxy
+from domains.gateway.application.bridge.internal_bridge_actor import resolve_internal_gateway_user_id
 from domains.gateway.application.ports import GatewayCallContext
 from utils.logging import get_logger
 

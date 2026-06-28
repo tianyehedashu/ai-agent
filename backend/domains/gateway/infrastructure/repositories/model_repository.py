@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import func, select
 
-from domains.gateway.domain.policies.model_selection import merge_named_rows_tenant_overrides_system
+from domains.gateway.domain.catalog.model_selection import merge_named_rows_tenant_overrides_system
 from domains.gateway.domain.types import (
     CONFIG_MANAGED_BY,
     GATEWAY_MODEL_MANAGED_BY_TAG,

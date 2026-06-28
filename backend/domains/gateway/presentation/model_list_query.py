@@ -7,8 +7,8 @@ import uuid
 
 from fastapi import Depends, Query
 
-from domains.gateway.application.model_list_pipeline import ModelListQuery
-from domains.gateway.domain.policies.model_list_policy import (
+from domains.gateway.application.catalog.model_list_pipeline import ModelListQuery
+from domains.gateway.domain.catalog.model_list_policy import (
     ModelListConnectivityFilter,
     ModelListSortField,
     ModelListSortOrder,
@@ -28,8 +28,8 @@ def parse_model_list_query(
     sort: Annotated[
         Literal["name", "created_at", "provider", "last_tested_at"],
         Query(description="排序字段（可用性 tier 始终优先）"),
-    ] = "name",
-    order: Annotated[Literal["asc", "desc"], Query()] = "asc",
+    ] = "created_at",
+    order: Annotated[Literal["asc", "desc"], Query()] = "desc",
     provider: Annotated[str | None, Query(min_length=1, max_length=50)] = None,
     credential_id: uuid.UUID | None = None,
     type: Annotated[

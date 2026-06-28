@@ -1,15 +1,15 @@
 """LiteLLM capability hint 单测。"""
 
 from domains.gateway.application.catalog.gateway_model_tags_pipeline import build_gateway_model_tags
-from domains.gateway.application.catalog.litellm_capability_hint import (
+from domains.gateway.application.upstream.litellm_capability_hint import (
     merge_litellm_capability_hints,
     merge_litellm_reasoning_hint,
 )
-from domains.gateway.application.upstream_model_types_for_catalog import (
+from domains.gateway.application.upstream.upstream_model_types_for_catalog import (
     infer_upstream_model_types_for_catalog,
 )
-from domains.gateway.domain.litellm_capability_mapping import LitellmModelInfoHints
-from domains.gateway.domain.thinking_param import THINKING_PARAM_ANTHROPIC
+from domains.gateway.domain.litellm.litellm_capability_mapping import LitellmModelInfoHints
+from domains.gateway.domain.proxy.thinking_param import THINKING_PARAM_ANTHROPIC
 
 
 class _FakeHint:

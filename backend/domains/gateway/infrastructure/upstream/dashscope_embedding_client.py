@@ -12,7 +12,7 @@ from domains.gateway.infrastructure.upstream.httpx_client_singleton import (
 )
 
 if TYPE_CHECKING:
-    from domains.gateway.domain.policies.dashscope_embedding import DashscopeEmbeddingRequest
+    from domains.gateway.domain.provider.dashscope_embedding import DashscopeEmbeddingRequest
 
 
 _PROVIDER = "dashscope"

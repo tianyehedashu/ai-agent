@@ -4,16 +4,16 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-from domains.gateway.infrastructure.router_singleton import _build_litellm_params
+from domains.gateway.infrastructure.litellm.router_singleton import _build_litellm_params
 
 
 def test_build_litellm_params_volcengine_coding_normalizes_api_base(monkeypatch) -> None:
     monkeypatch.setattr(
-        "domains.gateway.infrastructure.router_singleton.decrypt_value",
+        "domains.gateway.infrastructure.litellm.router_singleton.decrypt_value",
         lambda _enc, _key: "sk-test",
     )
     monkeypatch.setattr(
-        "domains.gateway.infrastructure.router_singleton._get_encryption_key",
+        "domains.gateway.infrastructure.litellm.router_singleton._get_encryption_key",
         lambda: "key",
     )
     cred = MagicMock()
@@ -41,11 +41,11 @@ def test_build_litellm_params_anthropic_native_uses_anthropic_root_and_prefix(
 ) -> None:
     """upstream_call_shape=anthropic_native → ``model=anthropic/...`` + Anthropic-native 根。"""
     monkeypatch.setattr(
-        "domains.gateway.infrastructure.router_singleton.decrypt_value",
+        "domains.gateway.infrastructure.litellm.router_singleton.decrypt_value",
         lambda _enc, _key: "sk-test",
     )
     monkeypatch.setattr(
-        "domains.gateway.infrastructure.router_singleton._get_encryption_key",
+        "domains.gateway.infrastructure.litellm.router_singleton._get_encryption_key",
         lambda: "key",
     )
     cred = MagicMock()
@@ -75,11 +75,11 @@ def test_build_litellm_params_moonshot_default_profile_with_coding_api_base_inje
 ) -> None:
     """凭据 profile 为 default 但 api_base 命中 Kimi Code endpoint，仍应注入 Coding Agent UA。"""
     monkeypatch.setattr(
-        "domains.gateway.infrastructure.router_singleton.decrypt_value",
+        "domains.gateway.infrastructure.litellm.router_singleton.decrypt_value",
         lambda _enc, _key: "sk-test",
     )
     monkeypatch.setattr(
-        "domains.gateway.infrastructure.router_singleton._get_encryption_key",
+        "domains.gateway.infrastructure.litellm.router_singleton._get_encryption_key",
         lambda: "key",
     )
     cred = MagicMock()
@@ -103,11 +103,11 @@ def test_build_litellm_params_moonshot_default_profile_with_coding_api_base_inje
 
 def _openai_compat_custom_cred(monkeypatch) -> MagicMock:
     monkeypatch.setattr(
-        "domains.gateway.infrastructure.router_singleton.decrypt_value",
+        "domains.gateway.infrastructure.litellm.router_singleton.decrypt_value",
         lambda _enc, _key: "sk-test",
     )
     monkeypatch.setattr(
-        "domains.gateway.infrastructure.router_singleton._get_encryption_key",
+        "domains.gateway.infrastructure.litellm.router_singleton._get_encryption_key",
         lambda: "key",
     )
     cred = MagicMock()
@@ -161,11 +161,11 @@ def test_build_litellm_params_moonshot_default_profile_and_api_base_no_ua(
 ) -> None:
     """默认 profile + 默认 api_base + 非 Coding 模型，不应注入 UA。"""
     monkeypatch.setattr(
-        "domains.gateway.infrastructure.router_singleton.decrypt_value",
+        "domains.gateway.infrastructure.litellm.router_singleton.decrypt_value",
         lambda _enc, _key: "sk-test",
     )
     monkeypatch.setattr(
-        "domains.gateway.infrastructure.router_singleton._get_encryption_key",
+        "domains.gateway.infrastructure.litellm.router_singleton._get_encryption_key",
         lambda: "key",
     )
     cred = MagicMock()

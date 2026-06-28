@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from domains.gateway.domain.policies.message_sanitize_base import (
+from domains.gateway.domain.provider.message_sanitize_base import (
     is_empty_content,
     is_provider,
     sanitize_messages,

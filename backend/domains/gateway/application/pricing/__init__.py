@@ -6,7 +6,8 @@ from domains.gateway.application.pricing.pricing_service import (
     ResolvedPricing,
     downstream_rate_to_custom_cost,
 )
-from domains.gateway.application.pricing.upstream_sync_service import (
+from domains.gateway.application.upstream import upstream_cost_resolver
+from domains.gateway.application.upstream.upstream_sync_service import (
     SyncReport,
     UpstreamSyncService,
 )
@@ -20,4 +21,5 @@ __all__ = [
     "SyncReport",
     "UpstreamSyncService",
     "downstream_rate_to_custom_cost",
+    "upstream_cost_resolver",
 ]

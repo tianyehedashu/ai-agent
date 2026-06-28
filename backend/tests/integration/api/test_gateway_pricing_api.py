@@ -9,7 +9,7 @@ import uuid
 from httpx import AsyncClient
 import pytest
 
-from domains.gateway.application.management.write_modules import GatewayManagementWriteService
+from domains.gateway.application.management import GatewayManagementWriteService
 from domains.identity.infrastructure.models.user import User
 from domains.tenancy.application.team_service import TeamService
 

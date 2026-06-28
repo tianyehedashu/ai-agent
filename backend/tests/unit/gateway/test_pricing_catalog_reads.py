@@ -10,7 +10,7 @@ from domains.gateway.application.pricing.pricing_catalog_reads import (
     resolved_to_admin_view_dict,
 )
 from domains.gateway.application.pricing.pricing_service import ResolvedPricing
-from domains.gateway.domain.pricing_calculator import PricingRate
+from domains.gateway.domain.pricing.pricing_calculator import PricingRate
 from domains.tenancy.domain.management_context import ManagementTeamContext
 
 

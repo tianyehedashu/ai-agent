@@ -8,8 +8,8 @@ import uuid
 import pytest
 
 from domains.gateway.application.management.writes import GatewayManagementWriteService
-from domains.gateway.domain.litellm_capability_mapping import LitellmModelInfoHints
-from domains.gateway.infrastructure.litellm_capability_hint_adapter import (
+from domains.gateway.domain.litellm.litellm_capability_mapping import LitellmModelInfoHints
+from domains.gateway.infrastructure.litellm.litellm_capability_hint_adapter import (
     LitellmCapabilityHintAdapter,
 )
 from domains.gateway.infrastructure.repositories.model_repository import GatewayModelRepository
@@ -180,7 +180,7 @@ async def test_update_personal_model_renames_name(
 
     rename_spy = AsyncMock(return_value=(0, 0))
     monkeypatch.setattr(
-        "domains.gateway.application.management.write_modules.model_writes.rename_gateway_model_name_references",
+        "domains.gateway.application.catalog.management.model_writes.rename_gateway_model_name_references",
         rename_spy,
     )
     original_name = existing.name
@@ -215,7 +215,7 @@ async def test_update_personal_model_same_name_skips_rename_and_reload(
     monkeypatch.setattr(writes, "reload_litellm_router", reload_spy)
     rename_spy = AsyncMock(return_value=(0, 0))
     monkeypatch.setattr(
-        "domains.gateway.application.management.write_modules.model_writes.rename_gateway_model_name_references",
+        "domains.gateway.application.catalog.management.model_writes.rename_gateway_model_name_references",
         rename_spy,
     )
 

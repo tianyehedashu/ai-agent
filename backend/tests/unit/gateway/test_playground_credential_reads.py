@@ -9,8 +9,8 @@ import uuid
 
 import pytest
 
-from domains.gateway.application.management.credential_read_model import CredentialReadModel
-from domains.gateway.application.management.playground_credential_reads import (
+from domains.gateway.application.credential.management.credential_read_model import CredentialReadModel
+from domains.gateway.application.credential.management.playground_credential_reads import (
     list_playground_credential_summaries_for_actor,
 )
 from domains.tenancy.application.ports import GatewayTeamMembershipSnapshot

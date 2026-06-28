@@ -6,12 +6,12 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from domains.gateway.application.gateway_catalog_maintenance import (
+from domains.gateway.application.catalog.gateway_catalog_maintenance import (
     GatewayCatalogMaintenanceReport,
     run_gateway_catalog_maintenance,
 )
-from domains.gateway.application.pricing.upstream_pricing_audit import UpstreamPricingAuditReport
-from domains.gateway.application.route_audit import RouteAuditReport
+from domains.gateway.application.upstream.upstream_pricing_audit import UpstreamPricingAuditReport
+from domains.gateway.application.route.route_audit import RouteAuditReport
 
 
 @pytest.mark.asyncio
@@ -27,25 +27,25 @@ async def test_run_gateway_catalog_maintenance_orchestrates_steps() -> None:
 
     with (
         patch(
-            "domains.gateway.application.gateway_catalog_maintenance.sync_gateway_catalog_from_seed",
+            "domains.gateway.application.catalog.gateway_catalog_maintenance.sync_gateway_catalog_from_seed",
             new_callable=AsyncMock,
             return_value=catalog_stats,
         ) as sync_seed,
         patch(
-            "domains.gateway.application.gateway_catalog_maintenance.build_pricing_service",
+            "domains.gateway.application.catalog.gateway_catalog_maintenance.build_pricing_service",
         ) as build_pricing,
         patch(
-            "domains.gateway.application.gateway_catalog_maintenance.audit_upstream_pricing_keys",
+            "domains.gateway.application.catalog.gateway_catalog_maintenance.audit_upstream_pricing_keys",
             new_callable=AsyncMock,
             return_value=upstream,
         ),
         patch(
-            "domains.gateway.application.gateway_catalog_maintenance.audit_gateway_routes",
+            "domains.gateway.application.catalog.gateway_catalog_maintenance.audit_gateway_routes",
             new_callable=AsyncMock,
             return_value=routes,
         ),
         patch(
-            "domains.gateway.application.gateway_catalog_maintenance.log_config_managed_api_base_drift",
+            "domains.gateway.application.catalog.gateway_catalog_maintenance.log_config_managed_api_base_drift",
             new_callable=AsyncMock,
         ) as drift,
     ):

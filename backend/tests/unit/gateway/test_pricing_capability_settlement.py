@@ -4,7 +4,7 @@ from decimal import Decimal
 from unittest.mock import MagicMock, patch
 
 from domains.gateway.application.pricing.pricing_settlement import settle_request_log_amounts
-from domains.gateway.application.pricing.upstream_cost_resolver import (
+from domains.gateway.application.upstream.upstream_cost_resolver import (
     resolve_upstream_cost_usd,
 )
 
@@ -42,7 +42,7 @@ def test_image_upstream_metadata_cost() -> None:
         "gateway_upstream_model": "openai/dall-e-3",
     }
     with patch(
-        "domains.gateway.application.pricing.upstream_cost_resolver._completion_cost_upstream",
+        "domains.gateway.application.upstream.upstream_cost_resolver._completion_cost_upstream",
         return_value=Decimal("0.04"),
     ):
         amount, source = resolve_upstream_cost_usd(

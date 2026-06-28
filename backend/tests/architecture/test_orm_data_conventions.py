@@ -213,7 +213,7 @@ def test_system_gateway_models_credential_id_column_exists() -> None:
 def test_config_catalog_sync_no_scope_system_write() -> None:
     import inspect
 
-    from domains.gateway.application import config_catalog_sync
+    from domains.gateway.application.catalog import config_catalog_sync
 
     source = inspect.getsource(config_catalog_sync._ensure_system_credential)
     assert 'scope="system"' not in source

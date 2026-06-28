@@ -8,9 +8,12 @@ import uuid
 
 import pytest
 
-from domains.gateway.application import proxy_response_adapter as mod
-from domains.gateway.application.proxy_context import EntitlementReservationState, ProxyContext
-from domains.gateway.domain.quota_plan import ENTITLEMENT_NS, PlanQuotaSpec
+from domains.gateway.application.proxy import proxy_response_adapter as mod
+from domains.gateway.application.proxy.proxy_context import (
+    EntitlementReservationState,
+    ProxyContext,
+)
+from domains.gateway.domain.quota.quota_plan import ENTITLEMENT_NS, PlanQuotaSpec
 from domains.gateway.domain.types import GatewayCapability
 
 
@@ -40,7 +43,9 @@ class _NoopBudget:
 async def test_settle_usage_schedules_entitlement_bucket_upsert(monkeypatch) -> None:
     plan_id = uuid.uuid4()
     quota_id = uuid.uuid4()
-    spec = PlanQuotaSpec(quota_id=quota_id, label="monthly", window_seconds=86400, limit_tokens=1000)
+    spec = PlanQuotaSpec(
+        quota_id=quota_id, label="monthly", window_seconds=86400, limit_tokens=1000
+    )
     request_id = "req-proxy-ent"
     ctx = ProxyContext(
         team_id=uuid.uuid4(),
@@ -65,7 +70,7 @@ async def test_settle_usage_schedules_entitlement_bucket_upsert(monkeypatch) -> 
     monkeypatch.setattr(mod, "BudgetRepository", _FakeEmptyRepo)
     record_proxy = AsyncMock()
     monkeypatch.setattr(
-        "domains.gateway.application.entitlement_plan_callback_settlement.record_proxy_entitlement_commit",
+        "domains.gateway.application.quota.entitlement_plan_callback_settlement.record_proxy_entitlement_commit",
         record_proxy,
     )
 

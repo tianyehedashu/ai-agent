@@ -1,6 +1,6 @@
 """Unit tests for gateway proxy timing headers."""
 
-from domains.gateway.application.proxy_timing import (
+from domains.gateway.application.proxy.proxy_timing import (
     HEADER_GATEWAY_PREFLIGHT_MS,
     HEADER_GATEWAY_TIMING,
     HEADER_GATEWAY_UPSTREAM_MS,

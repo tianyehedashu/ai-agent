@@ -8,7 +8,7 @@ import uuid
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from domains.gateway.domain.policies.credential_copy_policy import CredentialCopyScope
+from domains.gateway.domain.credential.credential_copy_policy import CredentialCopyScope
 from domains.gateway.presentation.credential_import_response import (
     build_import_credentials_with_models_response,
 )

@@ -10,13 +10,13 @@ import uuid
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from domains.gateway.application import proxy_guard, proxy_response_adapter
-from domains.gateway.application.budget_service import BudgetCheckResult, BudgetService
-from domains.gateway.application.proxy_context import PlatformBudgetPreflightState
-from domains.gateway.application.proxy_metadata_builder import PreparedLitellmKwargs
-from domains.gateway.application.proxy_response_adapter import settle_usage
-from domains.gateway.application.proxy_use_case import ProxyContext, ProxyUseCase
-from domains.gateway.domain.proxy_policy import BudgetReservation
+from domains.gateway.application.budget.budget_service import BudgetCheckResult, BudgetService
+from domains.gateway.application.proxy import proxy_guard, proxy_response_adapter
+from domains.gateway.application.proxy.proxy_context import PlatformBudgetPreflightState
+from domains.gateway.application.proxy.proxy_metadata_builder import PreparedLitellmKwargs
+from domains.gateway.application.proxy.proxy_response_adapter import settle_usage
+from domains.gateway.application.proxy.proxy_use_case import ProxyContext, ProxyUseCase
+from domains.gateway.domain.proxy.proxy_policy import BudgetReservation
 from domains.gateway.domain.types import GatewayCapability
 
 

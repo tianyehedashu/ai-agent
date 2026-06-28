@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING, Any, Protocol
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from domains.gateway.domain.litellm_capability_mapping import LitellmModelInfoHints
+from domains.gateway.domain.litellm.litellm_capability_mapping import LitellmModelInfoHints
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from domains.gateway.domain.policies.credential_scope import (
+from domains.gateway.domain.credential.credential_scope import (
     is_system_credential_scope,
     registry_target_for_credential_scope,
     team_model_credential_scope_allowed,

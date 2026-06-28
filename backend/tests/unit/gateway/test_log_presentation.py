@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 import uuid
 
-from domains.gateway.application.management.log_presentation import request_log_to_dict
+from domains.gateway.application.usage.management.log_presentation import request_log_to_dict
 from domains.gateway.infrastructure.models.request_log import GatewayRequestLog
 from domains.tenancy.domain.management_context import ManagementTeamContext
 

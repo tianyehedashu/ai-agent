@@ -24,11 +24,11 @@ from domains.gateway.application.management import (
     GatewayManagementReadService,
     GatewayManagementWriteService,
 )
-from domains.gateway.application.management.credential_upstream_catalog import (
+from domains.gateway.application.credential.management.credential_upstream_catalog import (
     CredentialUpstreamCatalogService,
 )
-from domains.gateway.application.management.virtual_key_read_model import VirtualKeyReadModel
-from domains.gateway.domain.credential_probe import CredentialProbeResult
+from domains.gateway.application.vkey.management.virtual_key_read_model import VirtualKeyReadModel
+from domains.gateway.domain.credential.credential_probe import CredentialProbeResult
 from domains.gateway.domain.errors import VirtualKeyDecryptError
 from domains.gateway.domain.types import (
     MANAGED_GATEWAY_CREDENTIAL_PROVIDERS,

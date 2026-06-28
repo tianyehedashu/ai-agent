@@ -8,7 +8,7 @@ import uuid
 
 import pytest
 
-from domains.gateway.application.management.managed_team_virtual_key_reads import (
+from domains.gateway.application.vkey.management.managed_team_virtual_key_reads import (
     list_managed_team_virtual_keys_for_actor,
 )
 from libs.api.pagination import PageParams
@@ -85,11 +85,11 @@ async def test_list_managed_team_keys_filters_by_actor_and_paginates() -> None:
 
     with (
         patch(
-            "domains.gateway.application.management.managed_team_virtual_key_reads.VirtualKeyRepository",
+            "domains.gateway.application.vkey.management.managed_team_virtual_key_reads.VirtualKeyRepository",
             return_value=vkey_repo,
         ),
         patch(
-            "domains.gateway.application.management.managed_team_virtual_key_reads.virtual_keys_from_orm_with_grants",
+            "domains.gateway.application.vkey.management.managed_team_virtual_key_reads.virtual_keys_from_orm_with_grants",
             side_effect=_fake_map_with_grants,
         ),
     ):

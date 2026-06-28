@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from domains.gateway.application.pricing.litellm_upstream_price_sync import (
+from domains.gateway.application.upstream.litellm_upstream_price_sync import (
     LitellmUpstreamPriceSyncService,
 )
 

@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 from sqlalchemy import Select, and_, or_, select
 
-from domains.gateway.domain.usage_axis import UsageAxis
+from domains.gateway.domain.usage.usage_axis import UsageAxis
 from domains.gateway.infrastructure.models.request_log import GatewayRequestLog
 from domains.gateway.infrastructure.models.virtual_key import GatewayVirtualKey
 
@@ -95,7 +95,7 @@ def usage_axis_base_clauses(axis: UsageAxis) -> list[ColumnElement[bool]]:
     """生成基础 WHERE 子句（不含时间窗等其它维度）。
 
     workspace 轴 ``member_user_id`` 子约束（自有非系统 vkey / 本人 platform 入站）
-    须与 ``domains.gateway.domain.policies.usage_log_visibility.member_can_view_request_log_record``
+    须与 ``domains.gateway.domain.visibility.usage_log_visibility.member_can_view_request_log_record``
     保持同步。
 
     user 轴：跨团队按登录用户；含 ``user_id`` 列或本人非系统 vkey 归因（与 workspace member 语义对齐）。

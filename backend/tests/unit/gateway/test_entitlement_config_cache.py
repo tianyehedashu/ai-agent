@@ -10,7 +10,7 @@ import uuid
 
 import pytest
 
-from domains.gateway.application.entitlement_config_cache import (
+from domains.gateway.application.quota.entitlement_config_cache import (
     EntitlementPlanConfigRow,
     EntitlementQuotaConfigRow,
     _decode_rows,
@@ -155,11 +155,11 @@ async def test_get_cached_entitlement_plans_hits_local(monkeypatch) -> None:
         return (_plan(),)
 
     monkeypatch.setattr(
-        "domains.gateway.application.entitlement_config_cache._get_version",
+        "domains.gateway.application.quota.entitlement_config_cache._get_version",
         AsyncMock(return_value="3"),
     )
     monkeypatch.setattr(
-        "domains.gateway.application.entitlement_config_cache._get_redis_client",
+        "domains.gateway.application.quota.entitlement_config_cache._get_redis_client",
         AsyncMock(return_value=None),
     )
 
@@ -181,11 +181,11 @@ async def test_empty_scope_is_negatively_cached(monkeypatch) -> None:
         return ()
 
     monkeypatch.setattr(
-        "domains.gateway.application.entitlement_config_cache._get_version",
+        "domains.gateway.application.quota.entitlement_config_cache._get_version",
         AsyncMock(return_value="4"),
     )
     monkeypatch.setattr(
-        "domains.gateway.application.entitlement_config_cache._get_redis_client",
+        "domains.gateway.application.quota.entitlement_config_cache._get_redis_client",
         AsyncMock(return_value=None),
     )
 
@@ -211,11 +211,11 @@ async def test_invalidate_bumps_version_and_reloads(monkeypatch) -> None:
 
     redis_client = AsyncMock()
     monkeypatch.setattr(
-        "domains.gateway.application.entitlement_config_cache._get_version",
+        "domains.gateway.application.quota.entitlement_config_cache._get_version",
         fake_version,
     )
     monkeypatch.setattr(
-        "domains.gateway.application.entitlement_config_cache._get_redis_client",
+        "domains.gateway.application.quota.entitlement_config_cache._get_redis_client",
         AsyncMock(return_value=redis_client),
     )
 

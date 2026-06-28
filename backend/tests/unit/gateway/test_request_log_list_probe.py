@@ -9,7 +9,7 @@ import uuid
 
 import pytest
 
-from domains.gateway.domain.usage_axis import UsageAxis
+from domains.gateway.domain.usage.usage_axis import UsageAxis
 from domains.gateway.infrastructure.repositories.request_log_repository import (
     RequestLogRepository,
 )
@@ -69,7 +69,7 @@ async def test_list_by_axis_probe_detects_has_next() -> None:
 
 @pytest.mark.asyncio
 async def test_count_usage_requests_by_axis_user_axis_still_uses_split_count() -> None:
-    from domains.gateway.domain.usage_read_model import UsageStatisticsFilters
+    from domains.gateway.domain.usage.usage_read_model import UsageStatisticsFilters
 
     session = AsyncMock()
     count_a = MagicMock()

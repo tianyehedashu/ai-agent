@@ -29,7 +29,7 @@ from domains.agent.infrastructure.sandbox import SandboxCreationResult, SandboxM
 from domains.agent.infrastructure.sandbox.docker_availability import docker_cli_available
 from domains.agent.infrastructure.tools.mcp import MCPToolService
 from domains.agent.infrastructure.tools.registry import ConfiguredToolRegistry
-from domains.gateway.application.model_or_route_resolution import resolve_model_or_route
+from domains.gateway.application.catalog.model_or_route_resolution import resolve_model_or_route
 from domains.gateway.application.ports import InvocationOverrides
 from libs.db.database import get_session_context
 from utils.logging import get_logger

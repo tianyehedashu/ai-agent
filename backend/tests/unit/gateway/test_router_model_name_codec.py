@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 
-from domains.gateway.domain.router_model_name import (
+from domains.gateway.domain.route.router_model_name import (
     decode_router_model_name,
     deployment_scope_team_id,
     encode_router_model_name,

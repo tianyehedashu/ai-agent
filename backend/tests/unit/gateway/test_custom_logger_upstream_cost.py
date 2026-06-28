@@ -19,7 +19,7 @@ def test_calc_cost_prefers_upstream_metadata_over_hidden_downstream() -> None:
         },
     }
     with patch(
-        "domains.gateway.application.pricing.upstream_cost_resolver._completion_cost_upstream",
+        "domains.gateway.application.upstream.upstream_cost_resolver._completion_cost_upstream",
         return_value=Decimal("0.003"),
     ) as mock_completion_cost:
         cost, source = _calc_cost(kwargs, response)

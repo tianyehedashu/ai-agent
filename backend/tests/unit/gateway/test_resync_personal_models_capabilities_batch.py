@@ -9,8 +9,8 @@ import pytest
 
 from bootstrap.config import settings
 from domains.gateway.application.management.writes import GatewayManagementWriteService
-from domains.gateway.domain.litellm_capability_mapping import LitellmModelInfoHints
-from domains.gateway.infrastructure.litellm_capability_hint_adapter import (
+from domains.gateway.domain.litellm.litellm_capability_mapping import LitellmModelInfoHints
+from domains.gateway.infrastructure.litellm.litellm_capability_hint_adapter import (
     LitellmCapabilityHintAdapter,
 )
 from domains.gateway.infrastructure.repositories.credential_repository import (

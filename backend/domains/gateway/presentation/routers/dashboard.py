@@ -12,18 +12,18 @@ import uuid
 
 from fastapi import APIRouter, Depends, Query
 
-from domains.gateway.application.management.usage_reads import (
+from domains.gateway.application.usage.management.usage_reads import (
     UsageStatisticsBreakdownBatchSummary,
     UsageStatisticsBreakdownSummary,
     UsageStatisticsItem,
     UsageStatisticsMetric,
 )
-from domains.gateway.domain.margin_read_model import MarginGroupBy
-from domains.gateway.domain.policies.pricing_visibility import (
+from domains.gateway.domain.usage.margin_read_model import MarginGroupBy
+from domains.gateway.domain.pricing.pricing_visibility import (
     can_view_margin_dashboard,
     can_view_pricing_cost_fields,
 )
-from domains.gateway.domain.usage_read_model import (
+from domains.gateway.domain.usage.usage_read_model import (
     USAGE_AGGREGATION_QUERY_DESCRIPTION,
     UsageAggregation,
     UsageStatisticsBreakdownBy,

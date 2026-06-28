@@ -12,7 +12,7 @@ from domains.agent.domain.listing_studio.constants import (
     CAPABILITY_ORDER,
     DEFAULT_PROMPTS,
 )
-from domains.gateway.application.sql_model_catalog import get_model_catalog_adapter
+from domains.gateway.application.catalog.sql_model_catalog import get_model_catalog_adapter
 from domains.identity.infrastructure.models.user import User
 from libs.exceptions import NotFoundError, ValidationError
 from libs.iam.permission_context import (

@@ -7,7 +7,7 @@ import uuid
 import pytest
 
 from bootstrap.config import settings
-from domains.gateway.application.management.credential_copy_types import (
+from domains.gateway.application.credential.management.credential_copy_types import (
     ImportCredentialsWithModelsResult,
 )
 from domains.gateway.application.management.writes import GatewayManagementWriteService
@@ -352,7 +352,7 @@ async def test_copy_team_credential_to_personal_with_models(
     )
     await db_session.commit()
 
-    from domains.gateway.domain.policies.credential_copy_policy import CredentialCopyScope
+    from domains.gateway.domain.credential.credential_copy_policy import CredentialCopyScope
 
     writes = GatewayManagementWriteService(db_session)
     result = await writes.copy_credentials_with_models(
@@ -399,7 +399,7 @@ async def test_copy_team_credential_to_other_team(db_session, test_user: User) -
     )
     await db_session.commit()
 
-    from domains.gateway.domain.policies.credential_copy_policy import CredentialCopyScope
+    from domains.gateway.domain.credential.credential_copy_policy import CredentialCopyScope
 
     writes = GatewayManagementWriteService(db_session)
     result = await writes.copy_credentials_with_models(
@@ -448,7 +448,7 @@ async def test_copy_other_member_team_credential_denied(
     )
     await db_session.commit()
 
-    from domains.gateway.domain.policies.credential_copy_policy import CredentialCopyScope
+    from domains.gateway.domain.credential.credential_copy_policy import CredentialCopyScope
 
     writes = GatewayManagementWriteService(db_session)
     result = await writes.copy_credentials_with_models(
@@ -468,7 +468,7 @@ async def test_copy_other_member_team_credential_denied(
 @pytest.mark.asyncio
 async def test_platform_admin_can_copy_other_user_byok(db_session, test_user: User) -> None:
     """平台 admin 可复制他人 personal 凭据到团队。"""
-    from domains.gateway.domain.policies.credential_copy_policy import CredentialCopyScope
+    from domains.gateway.domain.credential.credential_copy_policy import CredentialCopyScope
 
     admin_user = User(
         email=f"platform_admin_{uuid.uuid4()}@example.com",
@@ -509,7 +509,7 @@ async def test_platform_admin_cannot_copy_other_user_team_credential(
     db_session, test_user: User
 ) -> None:
     """平台 admin 不能复制他人私有 team 凭据（无旁路）。"""
-    from domains.gateway.domain.policies.credential_copy_policy import CredentialCopyScope
+    from domains.gateway.domain.credential.credential_copy_policy import CredentialCopyScope
 
     admin_user = User(
         email=f"platform_admin2_{uuid.uuid4()}@example.com",

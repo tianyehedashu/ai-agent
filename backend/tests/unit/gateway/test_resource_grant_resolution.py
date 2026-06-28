@@ -8,17 +8,17 @@ import uuid
 import pytest
 
 from bootstrap.config import settings
-from domains.gateway.application.gateway_model_listing import (
+from domains.gateway.application.catalog.gateway_model_listing import (
     list_merged_models_for_tenant,
     resolve_by_name_visible,
 )
-from domains.gateway.application.model_or_route_resolution import resolve_model_or_route
-from domains.gateway.application.router_model_name import router_model_name_for_client
-from domains.gateway.application.management.resource_grant_writes import (
+from domains.gateway.application.catalog.model_or_route_resolution import resolve_model_or_route
+from domains.gateway.application.route.router_model_name import router_model_name_for_client
+from domains.gateway.application.grant.management.resource_grant_writes import (
     ResourceGrantWriteService,
 )
 from domains.gateway.domain.errors import VkeyAmbiguousModelError
-from domains.gateway.application.resource_grant_resolution import (
+from domains.gateway.application.grant.resource_grant_resolution import (
     resolve_granted_model_by_name,
 )
 from domains.gateway.infrastructure.repositories.credential_repository import (

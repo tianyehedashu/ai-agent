@@ -8,7 +8,7 @@ import uuid
 
 import pytest
 
-from domains.gateway.domain.quota_plan import (
+from domains.gateway.domain.quota.quota_plan import (
     PlanQuotaSnapshot,
     PlanQuotaSpec,
     compute_minute_index,
@@ -86,7 +86,7 @@ class TestQuotaPlanResetStrategy:
         ) == datetime(2027, 1, 1, tzinfo=UTC)
 
     def test_calendar_daily_with_custom_anchor(self) -> None:
-        from domains.gateway.domain.period_reset_anchor import PeriodResetAnchor
+        from domains.gateway.domain.quota.period_reset_anchor import PeriodResetAnchor
 
         anchor = PeriodResetAnchor(timezone="Asia/Shanghai", time_minutes=9 * 60, day_of_month=1)
         now = datetime(2026, 6, 15, 8, 30, tzinfo=UTC)  # 16:30 CST

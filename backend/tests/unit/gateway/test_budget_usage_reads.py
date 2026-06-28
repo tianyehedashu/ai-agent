@@ -10,19 +10,19 @@ import uuid
 
 import pytest
 
-from domains.gateway.application.management.budget_usage_reads import (
+from domains.gateway.application.usage.management.budget_usage_reads import (
     BudgetWindowLookup,
     PlatformBudgetUsageReadService,
     _log_dimension_clauses,
     merge_platform_display_totals,
     resolve_budget_window_key,
 )
-from domains.gateway.application.management.quota_plan_usage_reads import QuotaUsageTotals
-from domains.gateway.domain.platform_budget_display import (
+from domains.gateway.application.quota.management.quota_plan_usage_reads import QuotaUsageTotals
+from domains.gateway.domain.budget.platform_budget_display import (
     PlatformBudgetLogScope,
     platform_log_fallback_supported,
 )
-from domains.gateway.domain.quota_plan import PLATFORM_NS
+from domains.gateway.domain.quota.quota_plan import PLATFORM_NS
 
 _WHEN = datetime(2026, 6, 20, 12, 0, tzinfo=UTC)
 

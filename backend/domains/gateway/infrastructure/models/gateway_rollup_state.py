@@ -28,4 +28,4 @@ class GatewayRollupState(Base):
     )
 
 
-__all__ = ["GatewayRollupState", "_ROLLUP_STATE_SINGLETON_ID"]
+__all__ = ["_ROLLUP_STATE_SINGLETON_ID", "GatewayRollupState"]

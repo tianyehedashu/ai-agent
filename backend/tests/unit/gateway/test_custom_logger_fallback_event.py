@@ -6,7 +6,7 @@ import uuid
 
 import pytest
 
-from domains.gateway.domain.router_model_name import encode_router_model_name
+from domains.gateway.domain.route.router_model_name import encode_router_model_name
 from domains.gateway.infrastructure.callbacks.custom_logger import get_logger_singleton
 
 _TEAM = uuid.uuid4()

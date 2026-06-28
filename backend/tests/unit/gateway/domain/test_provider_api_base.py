@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from domains.gateway.domain.provider_api_base import (
+from domains.gateway.domain.provider.provider_api_base import (
     get_default_api_base,
     resolve_effective_api_base,
 )

@@ -6,7 +6,7 @@ from uuid import UUID, uuid4
 
 import pytest
 
-from domains.gateway.domain.route_model_ref import (
+from domains.gateway.domain.route.route_model_ref import (
     encode_route_model_ref,
     parse_route_model_ref,
     resolve_parsed_ref_in_registry,

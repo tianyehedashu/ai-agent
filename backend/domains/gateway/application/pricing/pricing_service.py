@@ -10,8 +10,9 @@ import logging
 from typing import Any
 import uuid
 
-from domains.gateway.domain.money import MoneyUSD
-from domains.gateway.domain.pricing_calculator import (
+from domains.gateway.domain.litellm.litellm_model_id import strip_litellm_provider_prefix
+from domains.gateway.domain.pricing.money import MoneyUSD
+from domains.gateway.domain.pricing.pricing_calculator import (
     CostBreakdown,
     PricingRate,
     TokenUsage,
@@ -109,9 +110,12 @@ class PricingService:
         capability: str,
         at: datetime | None = None,
     ) -> PricingRate | None:
+        # 落库 real_model 可能带 provider 前缀（如 openai/gpt-4o-mini），
+        # 上游定价表 upstream_model 存裸 ID（如 gpt-4o-mini），需剥前缀匹配。
+        bare_model = strip_litellm_provider_prefix(provider, upstream_model)
         row = await self._upstream.get_active(
             provider=provider,
-            upstream_model=upstream_model,
+            upstream_model=bare_model,
             capability=capability,
             at=at,
         )
@@ -192,11 +196,12 @@ class PricingService:
         # （见 ``build_pricing_service``）。SQLAlchemy AsyncSession **不支持并发使用**
         # （会触发 greenlet_spawn / await_only 错误），所有查询必须顺序 await。
         # 顺序短路（命中即停）通常比原来的全量并发更快。
+        # 落库 real_model 可能带 provider 前缀（如 openai/gpt-4o-mini），
+        # 上游定价表 upstream_model 存裸 ID（如 gpt-4o-mini），需剥前缀匹配。
+        upstream_model = strip_litellm_provider_prefix(provider, upstream_model)
         plan: list[tuple[str, uuid.UUID | None, uuid.UUID | None]] = []
 
-        def _plan(
-            scope: str, scope_id: uuid.UUID | None, model_id: uuid.UUID | None
-        ) -> None:
+        def _plan(scope: str, scope_id: uuid.UUID | None, model_id: uuid.UUID | None) -> None:
             plan.append((scope, scope_id, model_id))
 
         if entitlement_plan_id is not None:
@@ -315,7 +320,9 @@ class PricingService:
             else:
                 to_fetch.append((model_id, provider, upstream_model, capability))
 
-        async def _fetch(model_id: uuid.UUID, provider: str, upstream_model: str, capability: str) -> tuple[uuid.UUID, ResolvedPricing | None]:
+        async def _fetch(
+            model_id: uuid.UUID, provider: str, upstream_model: str, capability: str
+        ) -> tuple[uuid.UUID, ResolvedPricing | None]:
             try:
                 resolved = await self._resolve_downstream_rate_uncached(
                     tenant_id=tenant_id,
@@ -465,7 +472,7 @@ def downstream_rate_to_custom_cost(
     if rate.per_request_usd is not None:
         out["per_request_usd"] = float(rate.per_request_usd)
     if extra:
-        from domains.gateway.domain.policies.non_token_cost import NON_TOKEN_LITELLM_EXTRA_KEYS
+        from domains.gateway.domain.pricing.non_token_cost import NON_TOKEN_LITELLM_EXTRA_KEYS
 
         for key in NON_TOKEN_LITELLM_EXTRA_KEYS:
             raw = extra.get(key)

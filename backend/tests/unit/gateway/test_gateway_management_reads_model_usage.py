@@ -12,8 +12,8 @@ import pytest
 
 from bootstrap.config import settings
 from domains.gateway.application.management.reads import GatewayManagementReadService
-from domains.gateway.domain.usage_axis import UsageAxis
-from domains.gateway.domain.usage_read_model import (
+from domains.gateway.domain.usage.usage_axis import UsageAxis
+from domains.gateway.domain.usage.usage_read_model import (
     UsageAggregation,
     UsageStatisticsFilters,
     UsageStatisticsGroupBy,
@@ -136,7 +136,7 @@ async def test_aggregate_gateway_model_route_usage_merges_workspace_and_user() -
     svc._logs.aggregate_by_deployment_ids_by_axis = AsyncMock(side_effect=_dep_axis)
 
     with patch(
-        "domains.gateway.application.management.usage_log_reads.list_merged_models_for_tenant",
+        "domains.gateway.application.usage.management.usage_log_reads.list_merged_models_for_tenant",
         new=AsyncMock(return_value=[m1, m2]),
     ):
         items, total, start, end = await svc.aggregate_gateway_model_route_usage(
@@ -176,7 +176,7 @@ async def test_aggregate_gateway_model_route_usage_member_workspace_axis_filtere
 
     m1 = SimpleNamespace(id=uuid.uuid4(), name="alpha-model")
     with patch(
-        "domains.gateway.application.management.usage_log_reads.list_merged_models_for_tenant",
+        "domains.gateway.application.usage.management.usage_log_reads.list_merged_models_for_tenant",
         new=AsyncMock(return_value=[m1]),
     ):
         await svc.aggregate_gateway_model_route_usage(ctx, days=7, provider=None)
@@ -201,7 +201,7 @@ async def test_aggregate_gateway_model_route_usage_no_models_returns_empty_items
     svc._logs.aggregate_by_deployment_ids_by_axis = AsyncMock()
 
     with patch(
-        "domains.gateway.application.management.usage_log_reads.list_merged_models_for_tenant",
+        "domains.gateway.application.usage.management.usage_log_reads.list_merged_models_for_tenant",
         new=AsyncMock(return_value=[]),
     ):
         items, total, _start, _end = await svc.aggregate_gateway_model_route_usage(

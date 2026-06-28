@@ -7,7 +7,7 @@ import uuid
 import pytest
 
 from bootstrap.config import settings
-from domains.gateway.application.router_deployment_params import (
+from domains.gateway.application.route.router_deployment_params import (
     require_volcengine_image_endpoint_id,
     resolve_deployment_litellm_params,
     resolve_volcengine_image_deployment,

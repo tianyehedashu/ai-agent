@@ -10,7 +10,7 @@ from httpx import AsyncClient
 import pytest
 
 from bootstrap.main import app
-from domains.gateway.application.proxy_use_case import ProxyContext, ProxyUseCase
+from domains.gateway.application.proxy.proxy_use_case import ProxyContext, ProxyUseCase
 from domains.gateway.domain.errors import BudgetExceededError, RateLimitExceededError
 from domains.gateway.domain.types import VirtualKeyPrincipal
 from domains.gateway.presentation.deps import (

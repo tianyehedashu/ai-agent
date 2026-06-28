@@ -9,21 +9,21 @@ from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bootstrap.config import settings
-from domains.gateway.application.config_catalog_sync import (
+from domains.gateway.application.catalog.config_catalog_sync import (
     MANAGED_BY_KEY,
     MANAGED_CONFIG,
     model_types_for_gateway_registration,
     selector_capabilities_from_tags,
 )
-from domains.gateway.application.gateway_catalog_maintenance import (
+from domains.gateway.application.catalog.gateway_catalog_maintenance import (
     log_gateway_catalog_maintenance_report,
     run_gateway_catalog_maintenance,
 )
-from domains.gateway.application.management.write_modules.model_writes import (
+from domains.gateway.application.catalog.management.model_writes import (
     merge_display_name_into_tags,
 )
-from domains.gateway.domain.policies.model_registry_scope import RegistryScope
-from domains.gateway.domain.policies.model_selection import registry_kind_for_merged_row
+from domains.gateway.domain.catalog.model_registry_scope import RegistryScope
+from domains.gateway.domain.catalog.model_selection import registry_kind_for_merged_row
 from domains.gateway.presentation.deps import (
     CurrentTeam,
 )

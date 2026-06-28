@@ -8,16 +8,16 @@ import uuid
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from domains.gateway.application.management.personal_route_callable_reads import (
+from domains.gateway.application.route.management.personal_route_callable_reads import (
     list_personal_route_callable_models_for_actor,
     route_callable_model_to_response_dict,
 )
-from domains.gateway.application.management.route_grant_reads import (
+from domains.gateway.application.route.management.route_grant_reads import (
     assert_actor_owns_route_by_id,
     list_grantable_teams_for_route_id,
     list_route_grants_for_route,
 )
-from domains.gateway.application.management.route_read_mappers import route_row_to_api_dict
+from domains.gateway.application.route.management.route_read_mappers import route_row_to_api_dict
 from domains.gateway.presentation.model_list_query import ModelListQueryDep
 from domains.gateway.presentation.schemas.common import (
     RouteCallableModelItem,

@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 
-from domains.gateway.infrastructure.litellm_capability_hint_adapter import (
+from domains.gateway.infrastructure.litellm.litellm_capability_hint_adapter import (
     LitellmCapabilityHintAdapter,
 )
 

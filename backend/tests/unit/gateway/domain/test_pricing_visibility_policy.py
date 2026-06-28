@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 
-from domains.gateway.domain.policies.pricing_visibility import (
+from domains.gateway.domain.pricing.pricing_visibility import (
     can_view_margin_dashboard,
     can_view_pricing_cost_fields,
 )

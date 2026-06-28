@@ -7,11 +7,11 @@ import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from domains.gateway.application.model_or_route_resolution import (
+from domains.gateway.application.catalog.model_or_route_resolution import (
     ResolvedModelName,
     resolve_model_or_route,
 )
-from domains.gateway.application.pricing.pricing_management import build_pricing_service
+from domains.gateway.application.pricing.management.pricing_management import build_pricing_service
 from domains.gateway.application.pricing.pricing_service import (
     RateUnavailableError,
     downstream_rate_to_custom_cost,
@@ -44,7 +44,7 @@ def _custom_cost_from_metadata_field(
         val = raw.get(key)
         if val is not None:
             out[key] = float(val)
-    from domains.gateway.domain.policies.non_token_cost import NON_TOKEN_LITELLM_EXTRA_KEYS
+    from domains.gateway.domain.pricing.non_token_cost import NON_TOKEN_LITELLM_EXTRA_KEYS
 
     for key in NON_TOKEN_LITELLM_EXTRA_KEYS:
         val = raw.get(key)

@@ -14,11 +14,11 @@ from __future__ import annotations
 from fastapi import FastAPI
 
 from bootstrap.config import settings
-from domains.gateway.application.gateway_catalog_maintenance import (
+from domains.gateway.application.catalog.gateway_catalog_maintenance import (
     log_gateway_catalog_maintenance_report,
     run_gateway_catalog_maintenance,
 )
-from domains.gateway.infrastructure.router_singleton import get_router, reload_router
+from domains.gateway.infrastructure.litellm.router_singleton import get_router, reload_router
 from libs.db.database import get_session_factory
 from utils.logging import get_logger
 
@@ -50,7 +50,7 @@ async def run_gateway_startup(app: FastAPI) -> None:
         # 启动跨进程 Router 重载订阅：多 worker 部署下，写路径在某个 worker
         # 完成本地重载后会 publish 事件，本 worker 收到后同步重载，避免持有旧配置。
         try:
-            from domains.gateway.infrastructure.router_reload_notifier import (
+            from domains.gateway.infrastructure.litellm.router_reload_notifier import (
                 start_router_reload_subscriber,
             )
 
@@ -69,9 +69,8 @@ async def run_gateway_startup(app: FastAPI) -> None:
 
 async def run_gateway_shutdown(_app: FastAPI) -> None:
     """Gateway deferred tasks and related teardown."""
-    from domains.gateway.application.proxy_deferred_tasks import shutdown_proxy_deferred_tasks
-
-    from domains.gateway.infrastructure.router_reload_notifier import (
+    from domains.gateway.application.proxy.proxy_deferred_tasks import shutdown_proxy_deferred_tasks
+    from domains.gateway.infrastructure.litellm.router_reload_notifier import (
         stop_router_reload_subscriber,
     )
 

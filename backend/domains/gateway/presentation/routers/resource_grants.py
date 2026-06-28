@@ -8,11 +8,11 @@ import uuid
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from domains.gateway.application.management.resource_grant_reads import (
+from domains.gateway.application.grant.management.resource_grant_reads import (
     list_owner_grants,
     list_team_granted_models as fetch_team_granted_models,
 )
-from domains.gateway.application.management.resource_grant_writes import (
+from domains.gateway.application.grant.management.resource_grant_writes import (
     ResourceGrantWriteService,
 )
 from domains.gateway.presentation.schemas.resource_grants import (
@@ -102,7 +102,7 @@ async def list_team_granted_models_endpoint(
     user: RequiredAuthUser,
     db: AsyncSession = Depends(get_db),
 ) -> list[GrantedModelResponse]:
-    from domains.gateway.application.management.resource_grant_policy import (
+    from domains.gateway.application.grant.management.resource_grant_policy import (
         assert_actor_member_of_team,
     )
 

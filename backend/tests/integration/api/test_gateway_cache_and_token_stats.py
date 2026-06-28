@@ -22,8 +22,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bootstrap.main import app
-from domains.gateway.application.proxy_deferred_tasks import shutdown_proxy_deferred_tasks
-from domains.gateway.application.proxy_use_case import ProxyContext, ProxyUseCase
+from domains.gateway.application.proxy.proxy_deferred_tasks import shutdown_proxy_deferred_tasks
+from domains.gateway.application.proxy.proxy_use_case import ProxyContext, ProxyUseCase
 from domains.gateway.domain.types import VirtualKeyPrincipal
 from domains.gateway.infrastructure.models.request_log import GatewayRequestLog
 from domains.gateway.presentation.deps import (
@@ -406,7 +406,7 @@ async def test_anthropic_path_cache_tokens_in_response_and_total(
 ) -> None:
     """Anthropic /v1/messages 路径：验证响应体含 cache_read_input_tokens 且
     anthropic_usage_total_tokens 包含所有 token。"""
-    from domains.gateway.application.anthropic_native_adapt import (
+    from domains.gateway.application.proxy.anthropic_native_adapt import (
         anthropic_usage_total_tokens,
     )
 
@@ -474,7 +474,7 @@ async def test_anthropic_path_cache_hit_metadata(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Anthropic 路径：cache_read_input_tokens > 0 时 gateway_cache_hit 应为 True。"""
-    from domains.gateway.application.prompt_cache_middleware import (
+    from domains.gateway.application.proxy.prompt_cache_middleware import (
         parse_cache_hit_from_usage,
     )
 
@@ -501,7 +501,7 @@ async def test_anthropic_path_no_cache_tokens(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Anthropic 路径无缓存时：total_tokens 应仅为 input + output。"""
-    from domains.gateway.application.anthropic_native_adapt import (
+    from domains.gateway.application.proxy.anthropic_native_adapt import (
         anthropic_usage_total_tokens,
     )
 

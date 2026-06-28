@@ -9,13 +9,15 @@ import uuid
 import pytest
 
 from bootstrap.config import settings
-from domains.gateway.application.model_or_route_resolution import (
+from domains.gateway.application.catalog.model_or_route_resolution import (
     ResolvedModelName,
     resolve_model_or_route,
 )
-from domains.gateway.application.resolve_model_cache import clear_resolve_model_cache_for_tests
-from domains.gateway.application.router_model_name import router_model_name_for_client
-from domains.gateway.domain.router_model_name import encode_router_model_name
+from domains.gateway.application.grant.resolve_model_cache import (
+    clear_resolve_model_cache_for_tests,
+)
+from domains.gateway.application.route.router_model_name import router_model_name_for_client
+from domains.gateway.domain.route.router_model_name import encode_router_model_name
 from domains.gateway.infrastructure.repositories.gateway_route_grant_repository import (
     GatewayRouteTeamGrantRepository,
 )
@@ -26,14 +28,11 @@ from domains.gateway.infrastructure.repositories.model_repository import (
 from domains.tenancy.application.team_service import TeamService
 from tests.unit.gateway.credential_test_helpers import create_tenant_test_credential
 
-
 # ───────────────────────── 委派解析（DB） ─────────────────────────
 
 
 @pytest.mark.asyncio
-async def test_delegated_route_resolves_under_owner(
-    db_session, test_user, monkeypatch
-) -> None:
+async def test_delegated_route_resolves_under_owner(db_session, test_user, monkeypatch) -> None:
     monkeypatch.setattr(settings, "gateway_resolve_model_cache_enabled", False)
     monkeypatch.setattr(settings, "gateway_route_sharing_enabled", True)
     clear_resolve_model_cache_for_tests()
@@ -226,7 +225,7 @@ class _FakeGrant:
 
 
 def test_grants_to_virtual_deployments_encodes_consumer_namespace(monkeypatch) -> None:
-    from domains.gateway.infrastructure import router_singleton as rs
+    from domains.gateway.infrastructure.litellm import router_singleton as rs
 
     captured: list[str] = []
 
@@ -240,9 +239,7 @@ def test_grants_to_virtual_deployments_encodes_consumer_namespace(monkeypatch) -
     consumer = uuid.uuid4()
     cid = uuid.uuid4()
     model = _FakeModel(name="m1", tenant_id=owner, credential_id=cid)
-    route = _FakeRoute(
-        id=uuid.uuid4(), tenant_id=owner, virtual_model="vm", primary_models=["m1"]
-    )
+    route = _FakeRoute(id=uuid.uuid4(), tenant_id=owner, virtual_model="vm", primary_models=["m1"])
     grant = _FakeGrant(route_id=route.id, tenant_id=consumer, exposed_alias="alias-x")
 
     deployments = rs._grants_to_virtual_deployments(
@@ -258,23 +255,20 @@ def test_grants_to_virtual_deployments_encodes_consumer_namespace(monkeypatch) -
 
 
 def test_grants_skip_disabled_or_missing_route(monkeypatch) -> None:
-    from domains.gateway.infrastructure import router_singleton as rs
+    from domains.gateway.infrastructure.litellm import router_singleton as rs
 
-    monkeypatch.setattr(
-        rs, "_build_deployment", lambda **_kw: {"model_name": "x"}
-    )
+    monkeypatch.setattr(rs, "_build_deployment", lambda **_kw: {"model_name": "x"})
     consumer = uuid.uuid4()
     owner = uuid.uuid4()
     disabled = _FakeRoute(
-        id=uuid.uuid4(), tenant_id=owner, virtual_model="vm", primary_models=["m1"],
+        id=uuid.uuid4(),
+        tenant_id=owner,
+        virtual_model="vm",
+        primary_models=["m1"],
         enabled=False,
     )
-    grant_disabled = _FakeGrant(
-        route_id=disabled.id, tenant_id=consumer, exposed_alias="a1"
-    )
-    grant_missing = _FakeGrant(
-        route_id=uuid.uuid4(), tenant_id=consumer, exposed_alias="a2"
-    )
+    grant_disabled = _FakeGrant(route_id=disabled.id, tenant_id=consumer, exposed_alias="a1")
+    grant_missing = _FakeGrant(route_id=uuid.uuid4(), tenant_id=consumer, exposed_alias="a2")
     deployments = rs._grants_to_virtual_deployments(
         [grant_disabled, grant_missing],
         {disabled.id: disabled},
@@ -289,9 +283,11 @@ def test_grants_skip_disabled_or_missing_route(monkeypatch) -> None:
 def test_build_route_list_item_resolves_slug_prefixed_primary() -> None:
     from datetime import UTC, datetime
 
-    from domains.gateway.application.granted_route_listing import GrantedRouteRow
-    from domains.gateway.application.proxy_model_list_reads import _build_route_model_list_item
-    from domains.gateway.application.route_owner_slug_maps import RouteOwnerSlugContext
+    from domains.gateway.application.proxy.proxy_model_list_reads import (
+        _build_route_model_list_item,
+    )
+    from domains.gateway.application.route.granted_route_listing import GrantedRouteRow
+    from domains.gateway.application.route.route_owner_slug_maps import RouteOwnerSlugContext
 
     owner = uuid.uuid4()
     shared = uuid.uuid4()

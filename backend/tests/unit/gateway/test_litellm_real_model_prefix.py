@@ -1,8 +1,8 @@
-"""``domains.gateway.application.litellm_real_model_prefix`` 单元测试。"""
+"""``domains.gateway.application.upstream.litellm_real_model_prefix`` 单元测试。"""
 
 from __future__ import annotations
 
-from domains.gateway.application.litellm_real_model_prefix import litellm_prefix_violation_message
+from domains.gateway.application.upstream.litellm_real_model_prefix import litellm_prefix_violation_message
 
 
 def test_litellm_prefix_violation_none_when_no_slash() -> None:

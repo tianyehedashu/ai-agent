@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from domains.gateway.domain.upstream_catalog_policy import derive_client_facing_model_alias
+from domains.gateway.domain.upstream.upstream_catalog_policy import derive_client_facing_model_alias
 
 
 def test_strip_anthropic_compact_date_suffix() -> None:

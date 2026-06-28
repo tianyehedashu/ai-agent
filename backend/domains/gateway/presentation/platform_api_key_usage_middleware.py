@@ -70,7 +70,7 @@ class PlatformApiKeyUsageASGIMiddleware:
 
             factory = get_session_factory()
             async with factory() as session:
-                from domains.gateway.application.gateway_access_factory import (
+                from domains.gateway.application.access.gateway_access_factory import (
                     build_gateway_access_use_case,
                 )
 

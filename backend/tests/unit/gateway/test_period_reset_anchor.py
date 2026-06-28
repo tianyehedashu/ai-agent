@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from domains.gateway.domain.period_reset_anchor import (
+from domains.gateway.domain.quota.period_reset_anchor import (
     DEFAULT_PERIOD_RESET_ANCHOR,
     PeriodResetAnchor,
     compute_period_reset_at,

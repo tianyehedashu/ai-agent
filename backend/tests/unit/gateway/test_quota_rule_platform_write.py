@@ -8,10 +8,8 @@ import uuid
 
 import pytest
 
-from domains.gateway.application.management.write_modules import (
-    GatewayManagementWriteService,
-)
-from domains.gateway.application.management.write_modules.quota_rule_writes import (
+from domains.gateway.application.management import GatewayManagementWriteService
+from domains.gateway.application.quota.management.quota_rule_writes import (
     QuotaRuleUpsertCommand,
 )
 from libs.exceptions import ValidationError

@@ -8,8 +8,8 @@ from typing import TYPE_CHECKING
 from sqlalchemy import select
 
 from domains.gateway.infrastructure.models.gateway_rollup_state import (
-    GatewayRollupState,
     _ROLLUP_STATE_SINGLETON_ID,
+    GatewayRollupState,
 )
 
 if TYPE_CHECKING:

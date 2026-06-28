@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from domains.gateway.domain.upstream_profile import UpstreamProtocol
-from domains.gateway.domain.upstream_profile_registry import list_all_upstream_profiles
+from domains.gateway.domain.upstream.upstream_profile import UpstreamProtocol
+from domains.gateway.domain.upstream.upstream_profile_registry import list_all_upstream_profiles
 from domains.gateway.presentation.schemas.provider_profiles import (
     ProviderProfileApiBaseResponse,
     ProviderProfileResponse,

@@ -9,7 +9,7 @@ import uuid
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from domains.gateway.application.proxy_use_case import ProxyContext, ProxyUseCase
+from domains.gateway.application.proxy.proxy_use_case import ProxyContext, ProxyUseCase
 from domains.gateway.domain.types import GatewayCapability, VirtualKeyPrincipal
 from domains.gateway.infrastructure.repositories.model_repository import GatewayModelRepository
 from tests.unit.gateway.test_management_test_model import _seed_team_credential_and_model
@@ -36,7 +36,7 @@ class _NoopBudget:
         return None
 
     async def check_budget(self, **_kwargs: object) -> Any:
-        from domains.gateway.application.budget_service import BudgetCheckResult
+        from domains.gateway.application.budget.budget_service import BudgetCheckResult
 
         return BudgetCheckResult(allowed=True)
 
@@ -92,11 +92,11 @@ async def test_embedding_dashscope_uses_compatible_api(
     )
     use_case = ProxyUseCase(db_session, budget_service=_NoopBudget())
     monkeypatch.setattr(
-        "domains.gateway.application.proxy_litellm_client.perform_dashscope_embedding",
+        "domains.gateway.application.proxy.proxy_litellm_client.perform_dashscope_embedding",
         perform_mock,
     )
     with patch(
-        "domains.gateway.infrastructure.router_singleton.get_router",
+        "domains.gateway.infrastructure.litellm.router_singleton.get_router",
         new=AsyncMock(side_effect=router_should_not_run),
     ):
         result = await use_case.embedding(

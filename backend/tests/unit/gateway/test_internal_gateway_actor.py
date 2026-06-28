@@ -2,7 +2,7 @@
 
 import uuid
 
-from domains.gateway.application.internal_bridge_actor import (
+from domains.gateway.application.bridge.internal_bridge_actor import (
     resolve_internal_gateway_team_id,
     resolve_internal_gateway_user_id,
 )

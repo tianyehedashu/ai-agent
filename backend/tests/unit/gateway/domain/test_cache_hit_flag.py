@@ -1,6 +1,6 @@
 """Prompt cache hit flag parsing rules."""
 
-from domains.gateway.domain.cache_hit_flag import coerce_cache_hit_flag
+from domains.gateway.domain.proxy.cache_hit_flag import coerce_cache_hit_flag
 
 
 def test_coerce_cache_hit_flag_accepts_explicit_true_values() -> None:

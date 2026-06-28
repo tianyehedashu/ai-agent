@@ -15,7 +15,7 @@ from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
 from bootstrap.config import settings
-from domains.gateway.application.gateway_alert_job import gateway_alert_loop
+from domains.gateway.application.observability.gateway_alert_job import gateway_alert_loop
 from domains.gateway.infrastructure.jobs.sql_jobs_repository import GatewaySqlJobsRepository
 from domains.gateway.infrastructure.repositories.gateway_rollup_state_repository import (
     GatewayRollupStateRepository,

@@ -1,8 +1,8 @@
 """temperature_policy 推断单测。"""
 
-from domains.gateway.domain.model_capability import tags_to_capability_snapshot
-from domains.gateway.domain.policies.invocation_policy import apply_invocation_kwargs
-from domains.gateway.domain.temperature_policy import (
+from domains.gateway.domain.catalog.model_capability import tags_to_capability_snapshot
+from domains.gateway.domain.proxy.invocation_policy import apply_invocation_kwargs
+from domains.gateway.domain.proxy.temperature_policy import (
     TEMPERATURE_POLICY_CLIENT,
     TEMPERATURE_POLICY_FIXED_1,
     UPSTREAM_PROFILE_ID_TAG,
@@ -11,7 +11,7 @@ from domains.gateway.domain.temperature_policy import (
     resolve_probe_chat_temperature,
     temperature_policy_from_upstream_profile,
 )
-from domains.gateway.domain.thinking_param import THINKING_PARAM_BUILTIN, THINKING_PARAM_NONE
+from domains.gateway.domain.proxy.thinking_param import THINKING_PARAM_BUILTIN, THINKING_PARAM_NONE
 
 
 def test_infer_fixed_1_for_reasoning() -> None:

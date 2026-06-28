@@ -8,8 +8,8 @@ from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import func, select
 
-from domains.gateway.domain.alert_metric_aggregates import AlertMetricAggregates
-from domains.gateway.domain.alert_rule_snapshot import AlertRuleSnapshot
+from domains.gateway.domain.alert.alert_metric_aggregates import AlertMetricAggregates
+from domains.gateway.domain.alert.alert_rule_snapshot import AlertRuleSnapshot
 from domains.gateway.infrastructure.models.alert import GatewayAlertEvent, GatewayAlertRule
 from domains.gateway.infrastructure.models.request_log import GatewayRequestLog
 from domains.gateway.infrastructure.models.system_gateway import SystemGatewayAlertRule

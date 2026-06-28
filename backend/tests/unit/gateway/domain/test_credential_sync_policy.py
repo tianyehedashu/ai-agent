@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from domains.gateway.domain.credential_sync_policy import resolve_bootstrap_api_base
+from domains.gateway.domain.credential.credential_sync_policy import resolve_bootstrap_api_base
 
 CODING_BASE = "https://open.bigmodel.cn/api/coding/paas/v4"
 DEFAULT_ZHIPU = "https://open.bigmodel.cn/api/paas/v4"

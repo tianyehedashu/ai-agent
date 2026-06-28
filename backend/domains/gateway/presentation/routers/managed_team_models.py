@@ -7,17 +7,17 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from domains.gateway.application.management.managed_team_model_credential_filter_reads import (
+from domains.gateway.application.credential.management.managed_team_model_credential_filter_reads import (
     list_managed_team_model_credential_filters_for_actor,
 )
-from domains.gateway.application.management.managed_team_model_reads import (
+from domains.gateway.application.catalog.management.managed_team_model_reads import (
     list_managed_team_models_for_actor,
 )
-from domains.gateway.application.management.managed_team_model_usage_reads import (
+from domains.gateway.application.catalog.management.managed_team_model_usage_reads import (
     aggregate_managed_team_models_route_usage,
 )
 from domains.gateway.application.management.reads import GatewayManagementReadService
-from domains.gateway.domain.policies.model_selection import registry_kind_for_merged_row
+from domains.gateway.domain.catalog.model_selection import registry_kind_for_merged_row
 from domains.gateway.presentation.gateway_model_list_response import (
     build_gateway_model_list_response,
 )

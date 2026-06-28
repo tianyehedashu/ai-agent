@@ -5,8 +5,8 @@ from __future__ import annotations
 import litellm
 import pytest
 
-import domains.gateway.infrastructure.router_singleton as router_singleton
-from domains.gateway.infrastructure.router_singleton import ensure_gateway_callbacks
+import domains.gateway.infrastructure.litellm.router_singleton as router_singleton
+from domains.gateway.infrastructure.litellm.router_singleton import ensure_gateway_callbacks
 
 
 @pytest.fixture(autouse=True)

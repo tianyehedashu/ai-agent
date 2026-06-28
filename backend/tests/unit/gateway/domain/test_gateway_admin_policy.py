@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from domains.gateway.domain.errors import SystemCredentialAdminRequiredError
-from domains.gateway.domain.policies.gateway_admin import assert_platform_admin
+from domains.gateway.domain.visibility.gateway_admin import assert_platform_admin
 
 
 def test_assert_platform_admin_allows() -> None:

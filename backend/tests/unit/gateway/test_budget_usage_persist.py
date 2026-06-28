@@ -9,8 +9,8 @@ import uuid
 
 import pytest
 
-from domains.gateway.application import budget_usage_persist as mod
-from domains.gateway.domain.quota_plan import PLATFORM_NS
+from domains.gateway.application.budget import budget_usage_persist as mod
+from domains.gateway.domain.quota.quota_plan import PLATFORM_NS
 
 
 @pytest.mark.asyncio

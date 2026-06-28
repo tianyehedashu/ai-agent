@@ -6,7 +6,7 @@ import uuid
 
 from fastapi import APIRouter, Query, status
 
-from domains.gateway.domain.policies.budget_scope_policy import (
+from domains.gateway.domain.budget.budget_scope_policy import (
     filter_budget_rows,
     normalize_budget_list_filters,
 )

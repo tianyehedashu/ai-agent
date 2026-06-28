@@ -5,10 +5,10 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 import uuid
 
-from domains.gateway.application.management.virtual_key_team_grant_writes import (
+from domains.gateway.application.vkey.management.virtual_key_team_grant_writes import (
     ensure_self_grant_for_vkey,
 )
-from domains.gateway.infrastructure.router_singleton import reload_router
+from domains.gateway.infrastructure.litellm.router_singleton import reload_router
 from domains.tenancy.application.team_service import TeamService
 
 if TYPE_CHECKING:

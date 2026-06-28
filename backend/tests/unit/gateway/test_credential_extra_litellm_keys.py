@@ -7,12 +7,12 @@ import uuid
 
 import pytest
 
-from domains.gateway.domain.litellm_credential_extra_keys import (
+from domains.gateway.domain.litellm.litellm_credential_extra_keys import (
     API_KEY_RENAME,
     credential_extra_keys_for_litellm,
     litellm_api_key_param_name,
 )
-from domains.gateway.infrastructure.router_singleton import _build_litellm_params
+from domains.gateway.infrastructure.litellm.router_singleton import _build_litellm_params
 
 
 @pytest.mark.parametrize(
@@ -89,7 +89,7 @@ def test_build_litellm_params_filters_extra_to_provider_whitelist() -> None:
     )
 
     with patch(
-        "domains.gateway.infrastructure.router_singleton.decrypt_value",
+        "domains.gateway.infrastructure.litellm.router_singleton.decrypt_value",
         return_value="sk-decrypted",
     ):
         params = _build_litellm_params(
@@ -119,7 +119,7 @@ def test_build_litellm_params_renames_api_key_for_bedrock() -> None:
     )
 
     with patch(
-        "domains.gateway.infrastructure.router_singleton.decrypt_value",
+        "domains.gateway.infrastructure.litellm.router_singleton.decrypt_value",
         return_value="AKIA-DECRYPTED",
     ):
         params = _build_litellm_params(
@@ -144,7 +144,7 @@ def test_build_litellm_params_passes_azure_api_version() -> None:
         extra={"api_version": "2024-08-01-preview"},
     )
     with patch(
-        "domains.gateway.infrastructure.router_singleton.decrypt_value",
+        "domains.gateway.infrastructure.litellm.router_singleton.decrypt_value",
         return_value="azure-key",
     ):
         params = _build_litellm_params(
@@ -165,7 +165,7 @@ def test_build_litellm_params_skips_empty_extra_values() -> None:
         extra={"region": "", "endpoint_id": None, "organization": "ok"},
     )
     with patch(
-        "domains.gateway.infrastructure.router_singleton.decrypt_value",
+        "domains.gateway.infrastructure.litellm.router_singleton.decrypt_value",
         return_value="key",
     ):
         params = _build_litellm_params(

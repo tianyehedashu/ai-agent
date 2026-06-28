@@ -15,7 +15,7 @@ if TYPE_CHECKING:
 
     from sqlalchemy.ext.asyncio import AsyncSession
 
-    from domains.gateway.domain.proxy_policy import BudgetCheckQuery
+    from domains.gateway.domain.proxy.proxy_policy import BudgetCheckQuery
 
 
 def _apply_period_reset_fields(row: GatewayBudget, item: dict[str, object]) -> None:

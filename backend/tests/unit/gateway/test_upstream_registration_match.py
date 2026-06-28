@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from domains.gateway.domain.upstream_registration_match import (
+from domains.gateway.domain.upstream.upstream_registration_match import (
     format_already_registered_reason,
     match_registered_names,
 )

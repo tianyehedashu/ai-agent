@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from domains.gateway.application.management.plan_read_models import EntitlementPlanReadModel
+from domains.gateway.application.quota.management.plan_read_model import EntitlementPlanReadModel
 from domains.gateway.presentation.schemas.common import (
     EntitlementPlanQuotaResponse,
     EntitlementPlanResponse,

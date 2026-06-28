@@ -9,8 +9,8 @@ import uuid
 
 import pytest
 
-from domains.gateway.application import quota_plan_usage_persist as mod
-from domains.gateway.domain.quota_plan import PROVIDER_NS, PlanQuotaSpec
+from domains.gateway.application.quota import quota_plan_usage_persist as mod
+from domains.gateway.domain.quota.quota_plan import PROVIDER_NS, PlanQuotaSpec
 
 
 def _daily_spec() -> PlanQuotaSpec:

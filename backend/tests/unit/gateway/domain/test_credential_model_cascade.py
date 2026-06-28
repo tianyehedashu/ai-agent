@@ -1,6 +1,6 @@
 """credential_model_cascade 纯函数测试。"""
 
-from domains.gateway.domain.policies.credential_model_cascade import (
+from domains.gateway.domain.credential.credential_model_cascade import (
     apply_credential_cascade_disable_tags,
     clear_credential_cascade_disable_tags,
     was_credential_cascade_disabled,

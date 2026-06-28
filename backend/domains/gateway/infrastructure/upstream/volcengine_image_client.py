@@ -12,7 +12,7 @@ from domains.gateway.infrastructure.upstream.httpx_client_singleton import (
 )
 
 if TYPE_CHECKING:
-    from domains.gateway.domain.policies.volcengine_image import VolcengineImageRequest
+    from domains.gateway.domain.provider.volcengine_image import VolcengineImageRequest
 
 
 _PROVIDER = "volcengine"

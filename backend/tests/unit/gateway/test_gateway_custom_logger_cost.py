@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 import litellm
 
-from domains.gateway.application.pricing.upstream_cost_resolver import (
+from domains.gateway.application.upstream.upstream_cost_resolver import (
     SOURCE_LITELLM_HIDDEN,
     SOURCE_LITELLM_SLO,
 )

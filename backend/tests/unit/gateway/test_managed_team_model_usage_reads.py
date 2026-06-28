@@ -8,7 +8,7 @@ import uuid
 
 import pytest
 
-from domains.gateway.application.management.managed_team_model_usage_reads import (
+from domains.gateway.application.catalog.management.managed_team_model_usage_reads import (
     aggregate_managed_team_models_route_usage,
 )
 
@@ -42,10 +42,10 @@ async def test_aggregate_managed_team_models_route_usage_adds_team_id() -> None:
 
     with (
         patch(
-            "domains.gateway.application.management.managed_team_model_usage_reads.TeamService"
+            "domains.gateway.application.catalog.management.managed_team_model_usage_reads.TeamService"
         ) as team_svc_cls,
         patch(
-            "domains.gateway.application.management.managed_team_model_usage_reads.GatewayManagementReadService"
+            "domains.gateway.application.catalog.management.managed_team_model_usage_reads.GatewayManagementReadService"
         ) as reads_cls,
     ):
         team_svc_cls.return_value.list_gateway_team_memberships = AsyncMock(
@@ -84,10 +84,10 @@ async def test_aggregate_managed_team_models_route_usage_route_names_filter() ->
 
     with (
         patch(
-            "domains.gateway.application.management.managed_team_model_usage_reads.TeamService"
+            "domains.gateway.application.catalog.management.managed_team_model_usage_reads.TeamService"
         ) as team_svc_cls,
         patch(
-            "domains.gateway.application.management.managed_team_model_usage_reads.GatewayManagementReadService"
+            "domains.gateway.application.catalog.management.managed_team_model_usage_reads.GatewayManagementReadService"
         ) as reads_cls,
     ):
         team_svc_cls.return_value.list_gateway_team_memberships = AsyncMock(
@@ -128,10 +128,10 @@ async def test_aggregate_managed_team_models_route_usage_excludes_unreadable_tea
 
     with (
         patch(
-            "domains.gateway.application.management.managed_team_model_usage_reads.TeamService"
+            "domains.gateway.application.catalog.management.managed_team_model_usage_reads.TeamService"
         ) as team_svc_cls,
         patch(
-            "domains.gateway.application.management.managed_team_model_usage_reads.GatewayManagementReadService"
+            "domains.gateway.application.catalog.management.managed_team_model_usage_reads.GatewayManagementReadService"
         ) as reads_cls,
     ):
         team_svc_cls.return_value.list_gateway_team_memberships = AsyncMock(
@@ -157,7 +157,7 @@ async def test_aggregate_managed_team_models_route_usage_no_shared_teams() -> No
     personal = SimpleNamespace(team_id=uuid.uuid4(), role="owner", kind="personal")
 
     with patch(
-        "domains.gateway.application.management.managed_team_model_usage_reads.TeamService"
+        "domains.gateway.application.catalog.management.managed_team_model_usage_reads.TeamService"
     ) as team_svc_cls:
         team_svc_cls.return_value.list_gateway_team_memberships = AsyncMock(return_value=[personal])
 

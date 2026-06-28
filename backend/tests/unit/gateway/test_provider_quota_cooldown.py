@@ -8,12 +8,12 @@ import uuid
 
 import pytest
 
-from domains.gateway.application.provider_quota_config_cache import ProviderQuotaConfigRow
-import domains.gateway.application.provider_quota_guard as ppg
-from domains.gateway.application.provider_quota_guard import ProviderQuotaGuard
-from domains.gateway.domain.deployment_cooldown_port import DeploymentCooldownPort
+from domains.gateway.application.quota.provider_quota_config_cache import ProviderQuotaConfigRow
+import domains.gateway.application.quota.provider_quota_guard as ppg
+from domains.gateway.application.quota.provider_quota_guard import ProviderQuotaGuard
+from domains.gateway.domain.proxy.deployment_cooldown_port import DeploymentCooldownPort
 from domains.gateway.domain.errors import ProviderPlanExhaustedError
-from domains.gateway.domain.quota_plan import PlanQuotaSpec, QuotaPlanReservation
+from domains.gateway.domain.quota.quota_plan import PlanQuotaSpec, QuotaPlanReservation
 
 
 class _RecordingCooldown(DeploymentCooldownPort):
@@ -105,7 +105,7 @@ def _patch_provider_quota_cache(monkeypatch) -> None:
         return (row,)
 
     monkeypatch.setattr(
-        "domains.gateway.application.provider_quota_guard.get_cached_provider_quotas",
+        "domains.gateway.application.quota.provider_quota_guard.get_cached_provider_quotas",
         _fake_get_cached,
     )
 
@@ -186,7 +186,7 @@ async def test_pre_call_hook_extracts_deployment_id(monkeypatch) -> None:
         captured.update(kwargs)
         return []
 
-    import domains.gateway.application.budget_deployment_check as budget_mod
+    import domains.gateway.application.budget.budget_deployment_check as budget_mod
 
     monkeypatch.setattr(
         budget_mod,

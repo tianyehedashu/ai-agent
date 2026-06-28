@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 
-from domains.gateway.application.provider_quota_guard import upstream_rule_ids_from_call_data
+from domains.gateway.application.quota.provider_quota_guard import upstream_rule_ids_from_call_data
 
 
 def test_collects_all_reservation_rule_ids() -> None:

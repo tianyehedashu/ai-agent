@@ -7,14 +7,14 @@ import uuid
 
 from fastapi import APIRouter, Depends, Query, status
 
-from domains.gateway.application.management.quota_rule_read_model import (
+from domains.gateway.application.quota.management.quota_rule_read_model import (
     QuotaRuleLayer,
     QuotaRuleListFilters,
 )
-from domains.gateway.application.management.quota_usage_adjustment import (
+from domains.gateway.application.quota.management.quota_usage_adjustment import (
     QuotaUsageAdjustmentCommand,
 )
-from domains.gateway.application.management.write_modules.quota_rule_writes import (
+from domains.gateway.application.quota.management.quota_rule_writes import (
     QuotaRuleUpsertCommand,
 )
 from domains.gateway.presentation.deps import CurrentTeam, RequiredTeamAdmin

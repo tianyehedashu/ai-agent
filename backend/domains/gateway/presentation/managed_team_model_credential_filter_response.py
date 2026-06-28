@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from domains.gateway.application.management.managed_team_model_credential_filter_reads import (
+from domains.gateway.application.credential.management.managed_team_model_credential_filter_reads import (
     ManagedTeamModelCredentialFilterList,
 )
-from domains.gateway.domain.team_registry_credential_display import (
+from domains.gateway.domain.credential.team_registry_credential_display import (
     TeamRegistryCredentialDisplay,
 )
 from domains.gateway.presentation.schemas.common import (

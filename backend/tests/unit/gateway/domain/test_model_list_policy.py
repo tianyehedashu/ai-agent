@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from domains.gateway.domain.policies.model_list_policy import (
+from domains.gateway.domain.catalog.model_list_policy import (
     ModelListConnectivityFilter,
     ModelListSortField,
     ModelListSortOrder,
@@ -110,7 +110,7 @@ def test_summarize_connectivity() -> None:
 
 
 def test_sort_selector_items_puts_unavailable_last() -> None:
-    from domains.gateway.domain.policies.model_list_policy import sort_selector_items
+    from domains.gateway.domain.catalog.model_list_policy import sort_selector_items
 
     items = [
         {"id": "failed", "display_name": "Failed", "last_test_status": "failed", "enabled": True},
@@ -122,7 +122,7 @@ def test_sort_selector_items_puts_unavailable_last() -> None:
 
 
 def test_summarize_selector_items() -> None:
-    from domains.gateway.domain.policies.model_list_policy import summarize_selector_items
+    from domains.gateway.domain.catalog.model_list_policy import summarize_selector_items
 
     items = [
         {"last_test_status": "success", "enabled": True},
@@ -137,7 +137,7 @@ def test_summarize_selector_items() -> None:
 
 
 def test_sort_selector_items_by_created_at_desc() -> None:
-    from domains.gateway.domain.policies.model_list_policy import sort_selector_items
+    from domains.gateway.domain.catalog.model_list_policy import sort_selector_items
 
     items = [
         {
@@ -164,7 +164,7 @@ def test_sort_selector_items_by_created_at_desc() -> None:
 
 
 def test_parse_entitlement_list_status_invalid() -> None:
-    from domains.gateway.domain.policies.model_list_policy import parse_entitlement_list_status
+    from domains.gateway.domain.catalog.model_list_policy import parse_entitlement_list_status
 
     assert parse_entitlement_list_status("exhausted") == "exhausted"
     assert parse_entitlement_list_status("bogus") == "none"

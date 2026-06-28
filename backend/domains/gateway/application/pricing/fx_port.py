@@ -6,7 +6,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Protocol
 
-from domains.gateway.domain.money import DisplayCurrency
+from domains.gateway.domain.pricing.money import DisplayCurrency
 
 
 class FxRatePort(Protocol):

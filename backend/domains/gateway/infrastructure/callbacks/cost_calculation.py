@@ -56,7 +56,7 @@ def extract_gateway_metadata(kwargs: dict[str, Any]) -> dict[str, Any]:
 
 
 def calc_upstream_cost(kwargs: dict[str, Any], response_obj: Any) -> tuple[Decimal, str]:
-    from domains.gateway.application.pricing.upstream_cost_resolver import (
+    from domains.gateway.application.upstream.upstream_cost_resolver import (
         resolve_upstream_cost_usd,
     )
 
@@ -76,7 +76,7 @@ def extract_usage_tokens(response_obj: Any) -> tuple[int, int, int]:
 
     .. deprecated:: 内部委托 :func:`extract_normalized_usage`，保留签名向后兼容。
     """
-    from domains.gateway.domain.normalized_usage import extract_normalized_usage
+    from domains.gateway.domain.usage.normalized_usage import extract_normalized_usage
 
     return extract_normalized_usage(response_obj).to_db_tuple()
 

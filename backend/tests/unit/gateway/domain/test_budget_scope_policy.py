@@ -7,7 +7,7 @@ import uuid
 
 import pytest
 
-from domains.gateway.domain.policies.budget_scope_policy import (
+from domains.gateway.domain.budget.budget_scope_policy import (
     BudgetListFilters,
     BudgetTeamContext,
     budget_target_allowed,

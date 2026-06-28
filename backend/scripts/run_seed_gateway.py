@@ -12,7 +12,7 @@ if str(_BACKEND) not in sys.path:
 
 
 async def main() -> int:
-    from domains.gateway.application.gateway_catalog_seed import default_seed_path
+    from domains.gateway.application.catalog.gateway_catalog_seed import default_seed_path
     from libs.db.database import init_db
     from scripts.seed_gateway_models import _run
 

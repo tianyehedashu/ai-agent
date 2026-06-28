@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from domains.gateway.domain.upstream_type_inference import (
+from domains.gateway.domain.upstream.upstream_type_inference import (
     filter_valid_personal_model_types,
     infer_upstream_model_types,
 )

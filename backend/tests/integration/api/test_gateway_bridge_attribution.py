@@ -40,7 +40,7 @@ from domains.agent.infrastructure.models import (  # noqa: F401  # isort:skip
     message as _message_model,
 )
 from domains.agent.infrastructure.llm.agent_llm_facade import AgentLlmFacade
-from domains.gateway.application.proxy_deferred_tasks import shutdown_proxy_deferred_tasks
+from domains.gateway.application.proxy.proxy_deferred_tasks import shutdown_proxy_deferred_tasks
 from domains.gateway.infrastructure.models.request_log import GatewayRequestLog
 from domains.gateway.infrastructure.models.virtual_key import GatewayVirtualKey
 from domains.tenancy.application.team_service import TeamService
@@ -151,7 +151,7 @@ def _disable_gateway_resolve_model_cache(monkeypatch: pytest.MonkeyPatch) -> Non
 @pytest.fixture(autouse=True)
 def _clear_resolve_model_cache() -> None:
     """避免进程内负缓存让同 worker 后续用例误判模型未注册。"""
-    from domains.gateway.application.resolve_model_cache import (
+    from domains.gateway.application.grant.resolve_model_cache import (
         clear_resolve_model_cache_for_tests,
     )
 
@@ -393,7 +393,7 @@ async def test_verbose_internal_override_persists_prompt_and_long_response_previ
     _registered_user_context: None,
 ) -> None:
     """ContextVar 打开详细日志时：``prompt_redacted.messages_preview`` 与更长 ``preview`` 落库。"""
-    from domains.gateway.application.gateway_internal_log_context import (
+    from domains.gateway.application.bridge.gateway_internal_log_context import (
         reset_internal_store_full_override,
         set_internal_store_full_override,
     )

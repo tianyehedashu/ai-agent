@@ -10,9 +10,9 @@ import uuid
 import pytest
 
 from bootstrap.config import settings
-from domains.gateway.application.management.usage_metrics_router import UsageMetricsRouter
-from domains.gateway.domain.usage_axis import UsageAxis
-from domains.gateway.domain.usage_read_model import (
+from domains.gateway.application.usage.management.usage_metrics_router import UsageMetricsRouter
+from domains.gateway.domain.usage.usage_axis import UsageAxis
+from domains.gateway.domain.usage.usage_read_model import (
     UsageStatisticsFilters,
     UsageStatisticsGroupBy,
 )
@@ -41,7 +41,7 @@ async def test_aggregate_usage_statistics_all_hot_delegates_logs_only() -> None:
     with (
         patch.object(settings, "gateway_metrics_hybrid_read_enabled", True),
         patch(
-            "domains.gateway.application.management.usage_metrics_router.compute_hot_cutoff",
+            "domains.gateway.application.usage.management.usage_metrics_router.compute_hot_cutoff",
             return_value=datetime(2026, 6, 10, 12, 0, tzinfo=UTC),
         ),
     ):
@@ -90,7 +90,7 @@ async def test_aggregate_usage_statistics_all_cold_delegates_hourly_only() -> No
     with (
         patch.object(settings, "gateway_metrics_hybrid_read_enabled", True),
         patch(
-            "domains.gateway.application.management.usage_metrics_router.compute_hot_cutoff",
+            "domains.gateway.application.usage.management.usage_metrics_router.compute_hot_cutoff",
             return_value=hot_cutoff,
         ),
     ):
@@ -173,7 +173,7 @@ async def test_aggregate_usage_statistics_hybrid_merges_cold_and_hot() -> None:
         patch.object(settings, "gateway_metrics_hybrid_read_enabled", True),
         patch.object(settings, "gateway_metrics_hybrid_merge_max_groups", 2000),
         patch(
-            "domains.gateway.application.management.usage_metrics_router.compute_hot_cutoff",
+            "domains.gateway.application.usage.management.usage_metrics_router.compute_hot_cutoff",
             return_value=hot_cutoff,
         ),
     ):
@@ -250,7 +250,7 @@ async def test_aggregate_statistics_cross_boundary_falls_back_when_too_many_grou
         patch.object(settings, "gateway_metrics_hybrid_read_enabled", True),
         patch.object(settings, "gateway_metrics_hybrid_merge_max_groups", 2000),
         patch(
-            "domains.gateway.application.management.usage_metrics_router.compute_hot_cutoff",
+            "domains.gateway.application.usage.management.usage_metrics_router.compute_hot_cutoff",
             return_value=hot_cutoff,
         ),
     ):
@@ -302,7 +302,7 @@ async def test_aggregate_summary_all_cold_loads_client_type_from_logs() -> None:
     with (
         patch.object(settings, "gateway_metrics_hybrid_read_enabled", True),
         patch(
-            "domains.gateway.application.management.usage_metrics_router.compute_hot_cutoff",
+            "domains.gateway.application.usage.management.usage_metrics_router.compute_hot_cutoff",
             return_value=hot_cutoff,
         ),
     ):
@@ -395,7 +395,7 @@ async def test_aggregate_breakdown_pairs_cross_boundary_falls_back_when_too_many
         patch.object(settings, "gateway_metrics_hybrid_read_enabled", True),
         patch.object(settings, "gateway_metrics_hybrid_merge_max_groups", 100),
         patch(
-            "domains.gateway.application.management.usage_metrics_router.compute_hot_cutoff",
+            "domains.gateway.application.usage.management.usage_metrics_router.compute_hot_cutoff",
             return_value=hot_cutoff,
         ),
     ):

@@ -6,13 +6,13 @@ import uuid
 
 import pytest
 
-from domains.gateway.application.management.virtual_key_team_grant_writes import (
+from domains.gateway.application.vkey.management.virtual_key_team_grant_writes import (
     ensure_self_grant_for_vkey,
     grant_vkey_to_teams,
     revoke_vkey_team_grant,
 )
 from domains.gateway.domain.errors import SystemVirtualKeyForbiddenError, VirtualKeyNotFoundError
-from domains.gateway.domain.virtual_key_access import assert_virtual_key_accessible_by_actor
+from domains.gateway.domain.vkey.virtual_key_access import assert_virtual_key_accessible_by_actor
 from domains.gateway.infrastructure.repositories.virtual_key_repository import VirtualKeyRepository
 from domains.tenancy.application.team_service import TeamService
 from libs.crypto import derive_encryption_key, encrypt_value

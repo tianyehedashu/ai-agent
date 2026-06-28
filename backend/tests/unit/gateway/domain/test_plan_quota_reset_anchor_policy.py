@@ -6,8 +6,8 @@ from dataclasses import replace
 
 import pytest
 
-from domains.gateway.domain.period_reset_anchor import DEFAULT_PERIOD_RESET_ANCHOR
-from domains.gateway.domain.policies.plan_quota_reset_anchor_policy import (
+from domains.gateway.domain.quota.period_reset_anchor import DEFAULT_PERIOD_RESET_ANCHOR
+from domains.gateway.domain.quota.plan_quota_reset_anchor_policy import (
     resolve_plan_quota_reset_anchor,
     validate_plan_quota_reset_anchor,
 )

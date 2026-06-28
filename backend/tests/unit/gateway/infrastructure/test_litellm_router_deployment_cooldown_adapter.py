@@ -7,7 +7,7 @@ import uuid
 
 import pytest
 
-from domains.gateway.infrastructure.litellm_router_deployment_cooldown_adapter import (
+from domains.gateway.infrastructure.litellm.litellm_router_deployment_cooldown_adapter import (
     LiteLLMRouterDeploymentCooldownAdapter,
 )
 
@@ -41,11 +41,11 @@ async def test_cooldown_delegates_to_router_cooldown_cache(
     router.cooldown_cache = cooldown_cache
 
     monkeypatch.setattr(
-        "domains.gateway.infrastructure.litellm_router_deployment_cooldown_adapter.get_router_sync",
+        "domains.gateway.infrastructure.litellm.litellm_router_deployment_cooldown_adapter.get_router_sync",
         lambda: router,
     )
     monkeypatch.setattr(
-        "domains.gateway.infrastructure.litellm_router_deployment_cooldown_adapter.settings",
+        "domains.gateway.infrastructure.litellm.litellm_router_deployment_cooldown_adapter.settings",
         _make_settings(default_seconds=90),
     )
 
@@ -68,11 +68,11 @@ async def test_cooldown_disabled_is_noop(
 ) -> None:
     get_router_spy = MagicMock()
     monkeypatch.setattr(
-        "domains.gateway.infrastructure.litellm_router_deployment_cooldown_adapter.settings",
+        "domains.gateway.infrastructure.litellm.litellm_router_deployment_cooldown_adapter.settings",
         _make_settings(enabled=False),
     )
     monkeypatch.setattr(
-        "domains.gateway.infrastructure.litellm_router_deployment_cooldown_adapter.get_router_sync",
+        "domains.gateway.infrastructure.litellm.litellm_router_deployment_cooldown_adapter.get_router_sync",
         get_router_spy,
     )
 
@@ -90,11 +90,11 @@ async def test_cooldown_without_router_is_noop(
     adapter: LiteLLMRouterDeploymentCooldownAdapter,
 ) -> None:
     monkeypatch.setattr(
-        "domains.gateway.infrastructure.litellm_router_deployment_cooldown_adapter.get_router_sync",
+        "domains.gateway.infrastructure.litellm.litellm_router_deployment_cooldown_adapter.get_router_sync",
         lambda: None,
     )
     monkeypatch.setattr(
-        "domains.gateway.infrastructure.litellm_router_deployment_cooldown_adapter.settings",
+        "domains.gateway.infrastructure.litellm.litellm_router_deployment_cooldown_adapter.settings",
         _make_settings(),
     )
 
@@ -111,11 +111,11 @@ async def test_cooldown_without_deployment_id_is_noop(
 ) -> None:
     router = MagicMock()
     monkeypatch.setattr(
-        "domains.gateway.infrastructure.litellm_router_deployment_cooldown_adapter.get_router_sync",
+        "domains.gateway.infrastructure.litellm.litellm_router_deployment_cooldown_adapter.get_router_sync",
         lambda: router,
     )
     monkeypatch.setattr(
-        "domains.gateway.infrastructure.litellm_router_deployment_cooldown_adapter.settings",
+        "domains.gateway.infrastructure.litellm.litellm_router_deployment_cooldown_adapter.settings",
         _make_settings(),
     )
 
@@ -138,11 +138,11 @@ async def test_cooldown_seconds_clamped_to_max(
     router.cooldown_cache = cooldown_cache
 
     monkeypatch.setattr(
-        "domains.gateway.infrastructure.litellm_router_deployment_cooldown_adapter.get_router_sync",
+        "domains.gateway.infrastructure.litellm.litellm_router_deployment_cooldown_adapter.get_router_sync",
         lambda: router,
     )
     monkeypatch.setattr(
-        "domains.gateway.infrastructure.litellm_router_deployment_cooldown_adapter.settings",
+        "domains.gateway.infrastructure.litellm.litellm_router_deployment_cooldown_adapter.settings",
         _make_settings(default_seconds=60, max_seconds=30),
     )
 
@@ -161,11 +161,11 @@ async def test_cooldown_default_seconds_zero_is_noop(
 ) -> None:
     router = MagicMock()
     monkeypatch.setattr(
-        "domains.gateway.infrastructure.litellm_router_deployment_cooldown_adapter.get_router_sync",
+        "domains.gateway.infrastructure.litellm.litellm_router_deployment_cooldown_adapter.get_router_sync",
         lambda: router,
     )
     monkeypatch.setattr(
-        "domains.gateway.infrastructure.litellm_router_deployment_cooldown_adapter.settings",
+        "domains.gateway.infrastructure.litellm.litellm_router_deployment_cooldown_adapter.settings",
         _make_settings(default_seconds=0),
     )
 
@@ -189,11 +189,11 @@ async def test_cooldown_failure_is_swallowed(
     router.cooldown_cache = cooldown_cache
 
     monkeypatch.setattr(
-        "domains.gateway.infrastructure.litellm_router_deployment_cooldown_adapter.get_router_sync",
+        "domains.gateway.infrastructure.litellm.litellm_router_deployment_cooldown_adapter.get_router_sync",
         lambda: router,
     )
     monkeypatch.setattr(
-        "domains.gateway.infrastructure.litellm_router_deployment_cooldown_adapter.settings",
+        "domains.gateway.infrastructure.litellm.litellm_router_deployment_cooldown_adapter.settings",
         _make_settings(),
     )
 

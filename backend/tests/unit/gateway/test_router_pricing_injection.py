@@ -5,8 +5,8 @@ from __future__ import annotations
 from unittest.mock import MagicMock
 import uuid
 
-from domains.gateway.domain.router_model_name import encode_router_model_name
-from domains.gateway.infrastructure.router_singleton import (
+from domains.gateway.domain.route.router_model_name import encode_router_model_name
+from domains.gateway.infrastructure.litellm.router_singleton import (
     _build_deployment,
     _build_litellm_params,
     _models_to_deployments,
@@ -59,7 +59,7 @@ def _mk_cred(*, id_, name="cred", tenant_id=None):
 
 def test_pricing_injected_into_litellm_params(monkeypatch) -> None:
     monkeypatch.setattr(
-        "domains.gateway.infrastructure.router_singleton._build_litellm_params",
+        "domains.gateway.infrastructure.litellm.router_singleton._build_litellm_params",
         _stub_build_litellm_params,
     )
     cred_id = uuid.uuid4()
@@ -79,7 +79,7 @@ def test_pricing_injected_into_litellm_params(monkeypatch) -> None:
 
 def test_pricing_lookup_misses_keep_params_minimal(monkeypatch) -> None:
     monkeypatch.setattr(
-        "domains.gateway.infrastructure.router_singleton._build_litellm_params",
+        "domains.gateway.infrastructure.litellm.router_singleton._build_litellm_params",
         _stub_build_litellm_params,
     )
     cred_id = uuid.uuid4()
@@ -108,7 +108,7 @@ def test_pricing_keys_filtered_for_direct_anthropic_call() -> None:
 
 def test_build_deployment_pricing_injected_via_capability_key(monkeypatch) -> None:
     monkeypatch.setattr(
-        "domains.gateway.infrastructure.router_singleton._build_litellm_params",
+        "domains.gateway.infrastructure.litellm.router_singleton._build_litellm_params",
         _stub_build_litellm_params,
     )
     cred_id = uuid.uuid4()

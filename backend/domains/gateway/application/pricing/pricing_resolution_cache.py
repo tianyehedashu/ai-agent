@@ -12,7 +12,7 @@ from typing import Any
 import uuid
 
 from domains.gateway.application.pricing.pricing_service import ResolvedPricing
-from domains.gateway.domain.pricing_calculator import PricingRate
+from domains.gateway.domain.pricing.pricing_calculator import PricingRate
 
 logger = logging.getLogger(__name__)
 

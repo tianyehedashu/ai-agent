@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from domains.gateway.application.management.credential_copy_types import (
+from domains.gateway.application.credential.management.credential_copy_types import (
     ImportCredentialsWithModelsResult,
 )
 from domains.gateway.presentation.credential_response import build_credential_response

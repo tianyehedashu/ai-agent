@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 
-from domains.gateway.domain.litellm_deployment_attribution import (
+from domains.gateway.domain.litellm.litellm_deployment_attribution import (
     gateway_deployment_credential_id,
     gateway_deployment_id,
     gateway_deployment_real_model,

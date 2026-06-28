@@ -1,6 +1,6 @@
 """thinking_param 推断单元测试。"""
 
-from domains.gateway.domain.thinking_param import (
+from domains.gateway.domain.proxy.thinking_param import (
     THINKING_PARAM_ANTHROPIC,
     THINKING_PARAM_BUILTIN,
     THINKING_PARAM_DASHSCOPE,
@@ -94,7 +94,7 @@ def test_resolve_stale_none_overridden_by_v4_real_model() -> None:
 
 
 def test_resolve_locked_none_respected_for_v4() -> None:
-    from domains.gateway.domain.thinking_param import THINKING_PARAM_LOCKED_TAG
+    from domains.gateway.domain.proxy.thinking_param import THINKING_PARAM_LOCKED_TAG
 
     assert (
         resolve_thinking_param_from_tags(
@@ -110,7 +110,7 @@ def test_resolve_locked_none_respected_for_v4() -> None:
 
 
 def test_enrich_locked_none_persists_for_v4() -> None:
-    from domains.gateway.domain.thinking_param import THINKING_PARAM_LOCKED_TAG
+    from domains.gateway.domain.proxy.thinking_param import THINKING_PARAM_LOCKED_TAG
 
     out = enrich_gateway_model_tags(
         {"thinking_param": "none", THINKING_PARAM_LOCKED_TAG: True},

@@ -6,7 +6,7 @@ import uuid
 
 from litellm.router_utils.common_utils import filter_team_based_models
 
-from domains.gateway.application.proxy_router_team_metadata import (
+from domains.gateway.application.proxy.proxy_router_team_metadata import (
     ensure_litellm_router_team_metadata,
 )
 

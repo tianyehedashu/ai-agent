@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from domains.gateway.application.management.quota_rule_read_model import QuotaRuleReadModel
+from domains.gateway.application.quota.management.quota_rule_read_model import QuotaRuleReadModel
 from domains.gateway.presentation.schemas.common import (
     QuotaRuleKeyResponse,
     QuotaRuleLimitsResponse,

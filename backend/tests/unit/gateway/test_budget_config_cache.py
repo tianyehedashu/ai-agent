@@ -9,14 +9,14 @@ import uuid
 
 import pytest
 
-from domains.gateway.application.budget_config_cache import (
+from domains.gateway.application.budget.budget_config_cache import (
     BudgetConfigRow,
     budget_config_coord_key,
     clear_budget_config_cache_for_tests,
     get_cached_budget_by_plan,
     invalidate_budget_config_cache,
 )
-from domains.gateway.domain.proxy_policy import BudgetCheckQuery
+from domains.gateway.domain.proxy.proxy_policy import BudgetCheckQuery
 
 
 def test_budget_config_coord_key() -> None:
@@ -63,11 +63,11 @@ async def test_get_cached_budget_by_plan_hits_local_cache(monkeypatch) -> None:
         return {("tenant", tid, "daily", None, None, None): orm_row}
 
     monkeypatch.setattr(
-        "domains.gateway.application.budget_config_cache._get_version",
+        "domains.gateway.application.budget.budget_config_cache._get_version",
         AsyncMock(return_value="7"),
     )
     monkeypatch.setattr(
-        "domains.gateway.application.budget_config_cache._get_redis_client",
+        "domains.gateway.application.budget.budget_config_cache._get_redis_client",
         AsyncMock(return_value=None),
     )
 
@@ -93,11 +93,11 @@ async def test_no_budget_coord_is_negatively_cached(monkeypatch) -> None:
         return {}
 
     monkeypatch.setattr(
-        "domains.gateway.application.budget_config_cache._get_version",
+        "domains.gateway.application.budget.budget_config_cache._get_version",
         AsyncMock(return_value="9"),
     )
     monkeypatch.setattr(
-        "domains.gateway.application.budget_config_cache._get_redis_client",
+        "domains.gateway.application.budget.budget_config_cache._get_redis_client",
         AsyncMock(return_value=None),
     )
 
@@ -138,16 +138,16 @@ async def test_invalidate_budget_config_cache_clears_local(monkeypatch) -> None:
         return version["v"]
 
     monkeypatch.setattr(
-        "domains.gateway.application.budget_config_cache._get_version",
+        "domains.gateway.application.budget.budget_config_cache._get_version",
         fake_version,
     )
     monkeypatch.setattr(
-        "domains.gateway.application.budget_config_cache._get_redis_client",
+        "domains.gateway.application.budget.budget_config_cache._get_redis_client",
         AsyncMock(return_value=None),
     )
     redis_client = AsyncMock()
     monkeypatch.setattr(
-        "domains.gateway.application.budget_config_cache._get_redis_client",
+        "domains.gateway.application.budget.budget_config_cache._get_redis_client",
         AsyncMock(return_value=redis_client),
     )
 

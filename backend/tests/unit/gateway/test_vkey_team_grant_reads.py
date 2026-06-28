@@ -6,12 +6,12 @@ import uuid
 
 import pytest
 
-from domains.gateway.application.management.virtual_key_team_grant_reads import (
+from domains.gateway.application.vkey.management.virtual_key_team_grant_reads import (
     list_active_grant_tenant_ids,
     list_active_grants_for_vkey,
     list_grantable_teams_for_actor,
 )
-from domains.gateway.application.management.virtual_key_team_grant_writes import (
+from domains.gateway.application.vkey.management.virtual_key_team_grant_writes import (
     ensure_self_grant_for_vkey,
     grant_vkey_to_teams,
 )

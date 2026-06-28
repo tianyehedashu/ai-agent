@@ -11,11 +11,11 @@ from datetime import UTC, datetime
 from decimal import Decimal
 import uuid
 
-from domains.gateway.application.management.quota_rule_cache import (
+from domains.gateway.application.quota.management.quota_rule_cache import (
     _dict_to_quota_rule,
     _quota_rule_to_dict,
 )
-from domains.gateway.application.management.quota_rule_read_model import (
+from domains.gateway.application.quota.management.quota_rule_read_model import (
     QuotaRuleKey,
     QuotaRuleLimits,
     QuotaRuleReadModel,

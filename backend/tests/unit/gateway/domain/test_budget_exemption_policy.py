@@ -5,7 +5,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 import uuid
 
-from domains.gateway.domain.policies.budget_exemption_policy import (
+from domains.gateway.domain.budget.budget_exemption_policy import (
     is_personal_team_gateway_model,
     should_skip_platform_budget_preflight,
 )

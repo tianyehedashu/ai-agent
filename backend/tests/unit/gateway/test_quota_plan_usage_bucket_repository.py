@@ -9,7 +9,7 @@ import uuid
 
 import pytest
 
-from domains.gateway.domain.quota_plan import PROVIDER_NS
+from domains.gateway.domain.quota.quota_plan import PROVIDER_NS
 from domains.gateway.infrastructure.repositories.quota_plan_usage_bucket_repository import (
     QuotaPlanUsageBucketRepository,
 )

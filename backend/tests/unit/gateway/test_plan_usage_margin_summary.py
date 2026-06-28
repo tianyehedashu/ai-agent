@@ -9,7 +9,7 @@ import uuid
 
 import pytest
 
-from domains.gateway.application.management.usage_reads import GatewayPlanUsageReadService
+from domains.gateway.application.usage.management.usage_reads import GatewayPlanUsageReadService
 from domains.gateway.infrastructure.repositories.credential_repository import (
     ProviderCredentialRepository,
 )
@@ -91,7 +91,7 @@ async def test_get_team_margin_summary_team_names_via_team_service(
         return mock_svc
 
     monkeypatch.setattr(
-        "domains.gateway.application.management.usage_reads.TeamService",
+        "domains.gateway.application.usage.management.usage_reads.TeamService",
         fake_team_service,
     )
 

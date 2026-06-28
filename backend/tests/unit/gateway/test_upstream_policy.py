@@ -1,10 +1,10 @@
 """upstream_policy 领域策略单测。"""
 
-from domains.gateway.domain.model_capability import ModelCapabilitySnapshot
-from domains.gateway.domain.policies.invocation_policy import apply_invocation_kwargs
-from domains.gateway.domain.temperature_policy import TEMPERATURE_POLICY_FIXED_1
-from domains.gateway.domain.thinking_param import is_moonshot_model
-from domains.gateway.domain.upstream_policy import (
+from domains.gateway.domain.catalog.model_capability import ModelCapabilitySnapshot
+from domains.gateway.domain.proxy.invocation_policy import apply_invocation_kwargs
+from domains.gateway.domain.proxy.temperature_policy import TEMPERATURE_POLICY_FIXED_1
+from domains.gateway.domain.proxy.thinking_param import is_moonshot_model
+from domains.gateway.domain.upstream.upstream_policy import (
     clamp_max_tokens,
     is_deepseek_reasoner,
     is_deepseek_thinking_model,

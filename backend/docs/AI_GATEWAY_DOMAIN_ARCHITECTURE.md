@@ -149,6 +149,140 @@ domains/agent/infrastructure/llm/agent_llm_facade.py   # AgentLlmFacade
 
 ---
 
+## 2.1 Application 子包组织（目标态与迁移计划）
+
+> **背景**：`application/` 根目录历史平铺 100+ 文件，混合了 proxy / bridge / budget / quota / catalog / grant / router / access / usage 等多个业务能力。本节给出**按业务能力子包**的目标态与增量迁移路径。已有 `catalog/`、`management/`（含 `write_modules/`）、`pricing/` 三个子包是成功先例，本节是把同一范式推平到剩余平铺区。
+
+### 2.1.1 目标目录树
+
+```
+domains/gateway/application/
+├── __init__.py                 # 跨子包装配点，保留根级
+├── ports.py                    # 跨域端口（GatewayProxyProtocol 等），保留根级
+├── startup.py                  # 启动钩子，保留根级
+├── jobs.py                     # 后台任务调度，保留根级
+├── model_catalog_port.py       # 跨域端口（被 agent 域引用），保留根级
+├── proxy/                      # 对外 LLM 代理热路径（/v1/* 门面 + 流水线）
+├── bridge/                     # 跨域内部桥接（GatewayBridge + 归因）
+├── budget/                     # 预算与限流
+├── quota/                      # 配额计划 + provider quota + entitlement
+├── catalog/                    # 模型目录（扩展已有 catalog/）
+├── credential/                 # 凭据子域（非管理面读写）
+├── grant/                      # 资源/路由/vkey 授权与缓存
+├── router/                     # LiteLLM Router 装配与部署参数
+├── access/                     # 鉴权与团队解析（GatewayAccessUseCase）
+├── usage/                      # 用量日志读模型与指标
+├── observability/              # 告警、缓存失效、延迟任务收口
+├── management/                 # 管理面 CQRS（已有，保持不变）
+│   └── write_modules/          # 写侧 mixin 分包（已有，保持不变）
+└── pricing/                    # 定价子域（已有，保持不变）
+```
+
+**根级保留原则**：`__init__.py` / `ports.py` / `startup.py` / `jobs.py` / `model_catalog_port.py` 是跨子包装配点或跨域端口，下沉任一子包都会制造循环依赖或扩大跨域 import 影响面。
+
+### 2.1.2 各子包文件清单（迁移映射）
+
+| 目标子包 | 迁入文件 |
+|---------|---------|
+| `proxy/` | `proxy_use_case`、`proxy_chat_entries`、`proxy_chat_pipeline`、`proxy_context`、`proxy_deferred_tasks`、`proxy_guard`、`proxy_inbound_preflight`、`proxy_litellm_client`、`proxy_litellm_kwargs`、`proxy_metadata_builder`、`proxy_model_list_reads`、`proxy_non_chat_pipeline`、`proxy_rate_limit_headers`、`proxy_response_adapter`、`proxy_router_invoke`、`proxy_router_team_metadata`、`proxy_stream_settlement`、`proxy_timing`、`proxy_vision_image_urls`、`proxy_allowed_models`、`anthropic_native_adapt`、`prompt_cache_middleware`、`preflight_failure_logger`、`invocation_overrides`、`platform_api_key_proxy_dto` |
+| `bridge/` | `internal_bridge`、`internal_bridge_actor`、`bridge_attribution`、`bridge_catalog`、`litellm_bridge_payload`、`litellm_real_model_prefix`、`gateway_proxy_factory`、`gateway_internal_log_context`、`listing_studio_image_port_registry`、`billing_context` |
+| `budget/` | `budget_service`、`budget_config_cache`、`budget_callback_settlement`、`budget_platform_settlement`、`budget_deployment_check`、`budget_usage_persist`、`user_credential_budget_index` |
+| `quota/` | `quota_plan_service`、`quota_plan_usage_persist`、`quota_plan_callback_settlement_shared`、`provider_quota_guard`、`provider_quota_config_cache`、`provider_quota_callback_settlement`、`entitlement_guard`、`entitlement_config_cache`、`entitlement_model_status`、`entitlement_plan_callback_settlement`、`usage_bucket_flusher` |
+| `catalog/` | 现有 `catalog/` + `gateway_catalog_maintenance`、`gateway_catalog_seed`、`gateway_model_listing`、`config_catalog_sync`、`sql_model_catalog`、`catalog_capability`、`model_list_pipeline`、`model_list_credential_assertions`、`model_list_readable_credentials`、`model_selector_reads`、`model_selector_list_reads`、`chat_model_selector_reads`、`model_credential_enrichment`、`model_reference_prune`、`model_or_route_resolution`、`personal_models`、`scenario_defaults`、`granted_route_listing`、`granted_route_selector_items`、`upstream_catalog_capability_prep`、`upstream_model_types_for_catalog`、`user_models_migration` |
+| `credential/` | `credential_env_audit`、`credential_model_cascade` |
+| `grant/` | `resource_grant_cleanup`、`resource_grant_filter`、`resource_grant_resolution`、`resource_grants_cache`、`system_grants_cache`、`system_visibility_filter`、`route_audit`、`route_grant_lifecycle_adapter`、`route_snapshot_cache`、`routing_strategy_validation`、`resolve_model_cache`、`virtual_key_grant_lifecycle_adapter`、`virtual_key_touch`、`vkey_proxy_model_list`、`vkey_team_resolution` |
+| `router/` | `upstream_adapter`、`router_deployment_params`、`router_model_name`、`route_owner_slug_maps` |
+| `access/` | `gateway_access_use_case`、`gateway_access_factory` |
+| `usage/` | `gateway_vkey_metrics`、`request_log_failure_classification` |
+| `observability/` | `gateway_alert_job`、`gateway_cache_invalidation`、`deferred_task_runner` |
+
+### 2.1.3 跨域 import 影响表
+
+`from domains.gateway.application.<root_module>` 当前共 **293 处**，分布在 100 个文件。其中**跨域**（非 gateway 自身）引用的根级模块如下，迁移时须保留 re-export shim 或更新调用方：
+
+| 根级模块 | 跨域引用方 | 目标子包 |
+|---------|-----------|---------|
+| `ports` | agent（llm/agent_llm_facade、embeddings、chat_agent_run、video_task_use_case）、tests/mocks | **保留根级** |
+| `model_catalog_port` | agent（video_prompt_optimize_use_case、ports/model_catalog_port） | **保留根级** |
+| `startup` | bootstrap/main | **保留根级** |
+| `listing_studio_image_port_registry` | bootstrap/main | `bridge/` |
+| `gateway_proxy_factory` | agent（llm/embeddings、agent_llm_facade、video_task_use_case） | `bridge/` |
+| `internal_bridge_actor` | agent（llm、chat_model_resolution_use_case） | `bridge/` |
+| `bridge_attribution` | agent（llm/embeddings、agent_llm_facade） | `bridge/` |
+| `gateway_internal_log_context` | agent（llm/agent_llm_facade、chat_use_case） | `bridge/` |
+| `billing_context` | agent（video_task_use_case、chat_use_case） | `bridge/` |
+| `prompt_cache_middleware` | agent（llm/__init__、llm/prompt_cache） | `proxy/` |
+| `scenario_defaults` | session（title_use_case）、agent（video_prompt_optimize） | `catalog/` |
+| `sql_model_catalog` | libs/api/deps、agent（video_task_router、listing_studio_pipeline） | `catalog/` |
+| `chat_model_selector_reads` | agent（chat_model_resolution_use_case） | `catalog/` |
+| `entitlement_model_status` | agent（chat_model_resolution_use_case） | `quota/` |
+| `model_selector_reads` | agent（chat_model_resolution_use_case） | `catalog/` |
+| `model_or_route_resolution` | agent（chat_agent_run） | `catalog/` |
+| `proxy_deferred_tasks` | tests/integration（多处） | `proxy/` |
+| `gateway_vkey_metrics` | tests/integration | `usage/` |
+| `gateway_model_listing` | tests/integration | `catalog/` |
+| `proxy_timing` | tests/integration | `proxy/` |
+| `proxy_use_case` | tests/integration | `proxy/` |
+
+### 2.1.4 write_modules 模式（管理面写侧分包范例）
+
+`management/write_modules/` 是项目已验证的「按业务能力 mixin 分包」范式，可作为其他子包内部进一步拆分的参考：
+
+- [writes.py](../domains/gateway/application/management/writes.py) 是 **5 行门面**，仅 re-export `GatewayManagementWriteService`，对外 API 不变。
+- [_base.py](../domains/gateway/application/management/write_modules/_base.py) 定义 `GatewayManagementWriteBaseMixin`，持有所有仓储句柄（`_vkeys` / `_creds` / `_models` / `_routes` / `_budgets` ...），是组合基类。
+- 10 个业务能力 mixin（`CredentialWritesMixin` / `ModelWritesMixin` / `RouteWritesMixin` / `PricingWritesMixin` / `ProbeWritesMixin` / `EntitlementWritesMixin` / `QuotaRuleWritesMixin` / `QuotaPlanQuotaDeleteWritesMixin` / `QuotaUsageAdjustmentWritesMixin` / `RouteGrantWritesMixin`）各负责一个资源的 create/update/delete。
+- `GatewayManagementWriteService` 通过**多继承**把这 10 个 mixin + base 组合成完整写服务，见 [write_modules/__init__.py](../domains/gateway/application/management/write_modules/__init__.py)。
+- `probe_*` 5 个文件是 probe 能力的**二级拆分**（`probe` / `probe_image_preview` / `probe_litellm_attribution` / `probe_recording` / `probe_target` / `probe_video_preview`），单文件过大时按子能力再切。
+
+**收益**：单文件不膨胀；新增能力只加 mixin 不动 base；对外 API 零变更。`proxy/` 子包内部的 `ProxyUseCase` 已采用同样模式（`ProxyChatMixin` + `ProxyNonChatMixin`），可继续扩展。
+
+### 2.1.5 增量迁移策略（3 段式，每段独立可合并可回滚）
+
+**核心约束**：跨域直接 import 根级模块的有 30+ 处（见 §2.1.3），盲目 `git mv` 会触发大规模 import 修改与回归。采用「兼容再导出 → 逐子包迁移 → 清理 shim」三段式。
+
+**第 1 段：兼容再导出层（低风险，不改任何外部 import）**
+
+- 新建目标子包目录与 `__init__.py`。
+- 子包 `__init__.py` 内 `from .xxx import *` 或显式 re-export 目标符号。
+- **暂不动旧路径**；新增代码强制走新路径，旧路径保留。
+- 此段不改任何调用方 import，可独立合并。
+
+**第 2 段：按子包逐个迁移（中风险，一次一个子包）**
+
+- 一次只迁一个子包。每个子包的迁移步骤：
+  1. `git mv <root>.py <subpackage>/`，更新文件内相对 import。
+  2. 在根级旧位置建 shim：`from domains.gateway.application.<subpackage>.<module> import *  # noqa: F401`（或显式 re-export）。
+  3. 跨域调用方（见 §2.1.3）按优先级更新为新路径；同域调用方批量替换。
+  4. 跑 [tests/architecture/](../tests/architecture) 与 [tests/integration/gateway/](../tests/integration/gateway) 回归。
+- **推荐顺序**（按收益/风险比）：
+  1. `pricing/`（已完成，跳过）
+  2. `budget/`（7 文件，内聚强，跨域引用少）
+  3. `grant/`（16 文件，跨域引用少）
+  4. `quota/`（11 文件，内聚强）
+  5. `catalog/`（扩展，22 文件，跨域引用中等）
+  6. `access/` / `usage/` / `observability/` / `router/` / `credential/`（小包，收尾）
+  7. `proxy/`（26 文件，最大但内聚最强）
+  8. `bridge/`（9 文件，**跨域 import 最密**，放最后统一处理）
+
+**第 3 段：清理 shim（低风险）**
+
+- 所有子包迁完且稳定 1-2 周后，删除根级 shim 文件。
+- 更新本文档 §2 目录树与 [CODE_STANDARDS.md](CODE_STANDARDS.md) 的 import 示例。
+- 跑全量回归 + architecture 测试。
+
+**禁止**：跨子包迁移中途删除 shim；未跑回归即合并；同时迁移多个子包。
+
+> **可执行附录**：每个子包的精确 `git mv` / shim / import 替换 / 验证 / 回滚步骤见 [docs/gateway/APPLICATION_SUBPACKAGE_MIGRATION.md](gateway/APPLICATION_SUBPACKAGE_MIGRATION.md)。
+
+### 2.1.6 不迁移的部分
+
+- `management/` 与 `management/write_modules/` 二级分包模式已成熟，**保持不变**。
+- `pricing/` 已完成迁移，**不再调整**。
+- `__init__.py` / `ports.py` / `startup.py` / `jobs.py` / `model_catalog_port.py` 保留根级。
+- `domain/` 层的 `policies/` 子目录已存在；其余 32 个平铺文件可按 `types/`（litellm_*、model_*、client_*）、`money/`、`alert/`、`usage/` 聚类，但**优先级低于 application/**，可作为第二阶段任务。
+
+---
+
 ## 3. 运行时拓扑（简化）
 
 ```mermaid

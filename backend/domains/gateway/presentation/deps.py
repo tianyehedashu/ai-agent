@@ -30,8 +30,8 @@ from domains.gateway.domain.types import (
     VirtualKeyPrincipal,
     allowed_capabilities_from_storage,
 )
-from domains.gateway.domain.virtual_key_access import assert_vkey_team_header_compatible
-from domains.gateway.domain.virtual_key_service import is_vkey_format
+from domains.gateway.domain.vkey.virtual_key_access import assert_vkey_team_header_compatible
+from domains.gateway.domain.vkey.virtual_key_service import is_vkey_format
 from domains.gateway.presentation.platform_api_key_usage_middleware import (
     PLATFORM_API_KEY_USAGE_STATE,
     PlatformApiKeyUsageContext,
@@ -104,7 +104,7 @@ async def _gateway_principal_from_vkey_plain(
     if not is_vkey_format(plain):
         raise AuthenticationError("Invalid virtual key format")
 
-    from domains.gateway.application.gateway_access_factory import (
+    from domains.gateway.application.access.gateway_access_factory import (
         build_gateway_access_use_case,
     )
 
@@ -248,7 +248,7 @@ async def bearer_vkey_or_apikey_auth(
             user_display_snapshot=user_display_snapshot,
         )
 
-    from domains.gateway.application.gateway_access_factory import (
+    from domains.gateway.application.access.gateway_access_factory import (
         build_gateway_access_use_case,
     )
 

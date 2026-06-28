@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from domains.gateway.domain.normalized_usage import (
+from domains.gateway.domain.usage.normalized_usage import (
     NormalizedUsage,
     extract_normalized_usage,
     normalized_usage_from_raw,

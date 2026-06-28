@@ -10,7 +10,7 @@ if TYPE_CHECKING:
     from datetime import datetime
 
     from domains.gateway.application.pricing.fx_port import FxRatePort
-    from domains.gateway.domain.money import DisplayCurrency
+    from domains.gateway.domain.pricing.money import DisplayCurrency
 
 logger = logging.getLogger(__name__)
 

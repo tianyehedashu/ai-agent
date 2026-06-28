@@ -30,15 +30,15 @@ from urllib.parse import urlparse
 
 from sqlalchemy import select
 
-from domains.gateway.domain.litellm_model_id import is_openai_official_endpoint
-from domains.gateway.domain.model_types_tags import (
+from domains.gateway.domain.litellm.litellm_model_id import is_openai_official_endpoint
+from domains.gateway.domain.catalog.model_types_tags import (
     primary_capability_from_model_types,
     tags_from_model_types,
 )
-from domains.gateway.domain.policies.agnes_image import AGNES_PROVIDER
-from domains.gateway.domain.upstream_endpoint import credential_api_base
-from domains.gateway.domain.upstream_profile import default_profile_id
-from domains.gateway.domain.upstream_type_inference import (
+from domains.gateway.domain.provider.agnes_image import AGNES_PROVIDER
+from domains.gateway.domain.upstream.upstream_endpoint import credential_api_base
+from domains.gateway.domain.upstream.upstream_profile import default_profile_id
+from domains.gateway.domain.upstream.upstream_type_inference import (
     filter_valid_personal_model_types,
     infer_upstream_model_types,
 )

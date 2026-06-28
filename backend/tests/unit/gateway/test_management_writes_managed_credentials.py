@@ -13,8 +13,8 @@ from domains.gateway.domain.errors import (
     CredentialNotFoundError,
     SystemCredentialAdminRequiredError,
 )
-from domains.gateway.domain.policies.credential_model_cascade import was_credential_cascade_disabled
-from domains.gateway.domain.provider_api_base import get_default_api_base
+from domains.gateway.domain.credential.credential_model_cascade import was_credential_cascade_disabled
+from domains.gateway.domain.provider.provider_api_base import get_default_api_base
 from domains.gateway.domain.types import CREDENTIAL_CASCADE_DISABLED_TAG
 from domains.gateway.infrastructure.repositories.credential_repository import (
     ProviderCredentialRepository,

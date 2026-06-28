@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 
     from sqlalchemy.ext.asyncio import AsyncSession
 
-    from domains.gateway.domain.quota_plan import UsageBucketNamespace
+    from domains.gateway.domain.quota.quota_plan import UsageBucketNamespace
 
 
 class QuotaPlanUsageBucketRepository:

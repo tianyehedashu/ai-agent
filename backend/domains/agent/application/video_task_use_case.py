@@ -24,8 +24,8 @@ from domains.agent.infrastructure.models.video_gen_task import VideoGenTask, Vid
 from domains.agent.infrastructure.repositories.video_gen_task_repository import (
     VideoGenTaskRepository,
 )
-from domains.gateway.application.billing_context import resolve_billing_context
-from domains.gateway.application.gateway_proxy_factory import get_gateway_proxy
+from domains.gateway.application.bridge.billing_context import resolve_billing_context
+from domains.gateway.application.bridge.gateway_proxy_factory import get_gateway_proxy
 from domains.gateway.application.ports import GatewayCallContext
 from libs.db.database import get_session_context
 from libs.exceptions import NotFoundError, ValidationError

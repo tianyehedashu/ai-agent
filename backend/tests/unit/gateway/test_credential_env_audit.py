@@ -9,8 +9,8 @@ from pydantic import SecretStr
 import pytest
 
 from bootstrap.config import Settings
-from domains.gateway.application.credential_env_audit import log_config_managed_api_base_drift
-from domains.gateway.domain.credential_sync_policy import FORCE_ENV_SYNC_EXTRA_KEY
+from domains.gateway.application.credential.credential_env_audit import log_config_managed_api_base_drift
+from domains.gateway.domain.credential.credential_sync_policy import FORCE_ENV_SYNC_EXTRA_KEY
 from domains.gateway.domain.types import CONFIG_MANAGED_BY
 
 CODING_ZHIPU_BASE = "https://open.bigmodel.cn/api/coding/paas/v4"
@@ -22,7 +22,7 @@ async def test_audit_no_warning_when_db_empty_and_env_uses_pydantic_default(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "domains.gateway.application.credential_env_audit._BOOTSTRAP_PROVIDERS",
+        "domains.gateway.application.credential.credential_env_audit._BOOTSTRAP_PROVIDERS",
         ("zhipuai",),
     )
     session = MagicMock()
@@ -36,7 +36,7 @@ async def test_audit_no_warning_when_db_empty_and_env_uses_pydantic_default(
     )
     repo = SimpleNamespace(find_config_managed=AsyncMock(return_value=row))
     monkeypatch.setattr(
-        "domains.gateway.application.credential_env_audit.SystemProviderCredentialRepository",
+        "domains.gateway.application.credential.credential_env_audit.SystemProviderCredentialRepository",
         lambda _session: repo,
     )
 
@@ -46,7 +46,7 @@ async def test_audit_no_warning_when_db_empty_and_env_uses_pydantic_default(
     logger.warning.side_effect = lambda msg, *args: warnings.append(msg % args if args else msg)
     logger.info.side_effect = lambda msg, *args: info_logs.append(msg % args if args else msg)
     monkeypatch.setattr(
-        "domains.gateway.application.credential_env_audit.logger",
+        "domains.gateway.application.credential.credential_env_audit.logger",
         logger,
     )
 
@@ -60,7 +60,7 @@ async def test_audit_warns_when_db_empty_and_env_has_non_default_base(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "domains.gateway.application.credential_env_audit._BOOTSTRAP_PROVIDERS",
+        "domains.gateway.application.credential.credential_env_audit._BOOTSTRAP_PROVIDERS",
         ("zhipuai",),
     )
     session = MagicMock()
@@ -74,7 +74,7 @@ async def test_audit_warns_when_db_empty_and_env_has_non_default_base(
     )
     repo = SimpleNamespace(find_config_managed=AsyncMock(return_value=row))
     monkeypatch.setattr(
-        "domains.gateway.application.credential_env_audit.SystemProviderCredentialRepository",
+        "domains.gateway.application.credential.credential_env_audit.SystemProviderCredentialRepository",
         lambda _session: repo,
     )
 
@@ -82,7 +82,7 @@ async def test_audit_warns_when_db_empty_and_env_has_non_default_base(
     logger = MagicMock()
     logger.warning.side_effect = lambda msg, *args: warnings.append(msg % args if args else msg)
     monkeypatch.setattr(
-        "domains.gateway.application.credential_env_audit.logger",
+        "domains.gateway.application.credential.credential_env_audit.logger",
         logger,
     )
 
@@ -97,7 +97,7 @@ async def test_audit_info_on_drift_when_config_managed(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "domains.gateway.application.credential_env_audit._BOOTSTRAP_PROVIDERS",
+        "domains.gateway.application.credential.credential_env_audit._BOOTSTRAP_PROVIDERS",
         ("zhipuai",),
     )
     session = MagicMock()
@@ -111,7 +111,7 @@ async def test_audit_info_on_drift_when_config_managed(
     )
     repo = SimpleNamespace(find_config_managed=AsyncMock(return_value=row))
     monkeypatch.setattr(
-        "domains.gateway.application.credential_env_audit.SystemProviderCredentialRepository",
+        "domains.gateway.application.credential.credential_env_audit.SystemProviderCredentialRepository",
         lambda _session: repo,
     )
 
@@ -119,7 +119,7 @@ async def test_audit_info_on_drift_when_config_managed(
     logger = MagicMock()
     logger.info.side_effect = lambda msg, *args: info_logs.append(msg % args if args else msg)
     monkeypatch.setattr(
-        "domains.gateway.application.credential_env_audit.logger",
+        "domains.gateway.application.credential.credential_env_audit.logger",
         logger,
     )
 

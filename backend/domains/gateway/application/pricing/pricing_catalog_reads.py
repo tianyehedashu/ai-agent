@@ -8,17 +8,17 @@ import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from domains.gateway.application.gateway_model_listing import list_merged_models_for_tenant
-from domains.gateway.application.model_credential_enrichment import (
+from domains.gateway.application.catalog.gateway_model_listing import list_merged_models_for_tenant
+from domains.gateway.application.catalog.model_credential_enrichment import (
     build_credential_name_map_for_models,
 )
 from domains.gateway.application.pricing.fx_port import FxRatePort
-from domains.gateway.application.pricing.money_projector import MoneyProjector
-from domains.gateway.application.pricing.pricing_management import (
+from domains.gateway.application.pricing.management.pricing_management import (
     build_money_projector,
     build_pricing_service,
     upstream_row_to_response,
 )
+from domains.gateway.application.pricing.money_projector import MoneyProjector
 from domains.gateway.application.pricing.pricing_model_enrichment import (
     PricingModelRef,
     build_pricing_model_ref_map,
@@ -33,8 +33,8 @@ from domains.gateway.application.pricing.pricing_service import (
     ResolvedPricing,
     resolved_inheritance_strategy,
 )
-from domains.gateway.domain.money import DisplayCurrency, MoneyDisplay
-from domains.gateway.domain.policies.pricing_visibility import can_view_pricing_cost_fields
+from domains.gateway.domain.pricing.money import DisplayCurrency, MoneyDisplay
+from domains.gateway.domain.pricing.pricing_visibility import can_view_pricing_cost_fields
 from domains.gateway.infrastructure.fx.fx_static import build_static_fx_adapter
 from domains.gateway.infrastructure.models.pricing_downstream import DownstreamModelPricing
 from domains.gateway.infrastructure.repositories.credential_repository import (
@@ -89,7 +89,7 @@ def resolved_to_admin_view_dict(
             model_ref=model_ref,
         )
     else:
-        from domains.gateway.application.pricing.pricing_management import _MILLION
+        from domains.gateway.application.pricing.management.pricing_management import _MILLION
 
         inp_d = projector.project(resolved.downstream.input_cost_per_token, target=currency)
         out_d = projector.project(resolved.downstream.output_cost_per_token, target=currency)
@@ -237,10 +237,7 @@ class PricingCatalogReadService:
         )
         cred_names = await build_credential_name_map_for_models(self.session, models)
 
-        items = [
-            (model.id, model.provider, model.real_model, model.capability)
-            for model in models
-        ]
+        items = [(model.id, model.provider, model.real_model, model.capability) for model in models]
         resolved_map = await svc.resolve_downstream_rate_batch(
             tenant_id=team_id,
             entitlement_plan_id=None,

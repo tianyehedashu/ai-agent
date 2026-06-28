@@ -6,7 +6,7 @@ import uuid
 
 import pytest
 
-from domains.gateway.application.management.personal_route_callable_reads import (
+from domains.gateway.application.route.management.personal_route_callable_reads import (
     build_personal_route_allowed_refs,
     collect_personal_route_callable_candidates,
 )

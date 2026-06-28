@@ -15,9 +15,9 @@ if str(_BACKEND) not in sys.path:
 
 
 async def _run(*, seed_path: Path | None, reload_router: bool) -> int:
-    from domains.gateway.application.config_catalog_sync import sync_gateway_catalog_from_seed
-    from domains.gateway.application.gateway_catalog_seed import default_seed_path
-    from domains.gateway.infrastructure.router_singleton import reload_router
+    from domains.gateway.application.catalog.config_catalog_sync import sync_gateway_catalog_from_seed
+    from domains.gateway.application.catalog.gateway_catalog_seed import default_seed_path
+    from domains.gateway.infrastructure.litellm.router_singleton import reload_router
     from libs.db.database import get_session_context
 
     path = seed_path or default_seed_path()

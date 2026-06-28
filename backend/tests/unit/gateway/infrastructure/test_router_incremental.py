@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from domains.gateway.infrastructure.router_singleton import (
+from domains.gateway.infrastructure.litellm.router_singleton import (
     _try_incremental_router_deployment,
     router_deployment_model_names,
 )
@@ -24,11 +24,11 @@ async def test_try_incremental_adds_deployment(db_session: AsyncSession) -> None
 
     with (
         patch(
-            "domains.gateway.infrastructure.router_singleton._build_deployments_for_encoded_model",
+            "domains.gateway.infrastructure.litellm.router_singleton._build_deployments_for_encoded_model",
             new=AsyncMock(return_value=[dep]),
         ),
         patch(
-            "domains.gateway.infrastructure.router_singleton.get_router_sync",
+            "domains.gateway.infrastructure.litellm.router_singleton.get_router_sync",
             return_value=router,
         ),
     ):

@@ -11,9 +11,9 @@ import uuid
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from domains.gateway.application.model_or_route_resolution import ResolvedModelName
-from domains.gateway.application.proxy_response_adapter import adapt_binary_response
-from domains.gateway.application.proxy_use_case import ProxyContext, ProxyUseCase
+from domains.gateway.application.catalog.model_or_route_resolution import ResolvedModelName
+from domains.gateway.application.proxy.proxy_response_adapter import adapt_binary_response
+from domains.gateway.application.proxy.proxy_use_case import ProxyContext, ProxyUseCase
 from domains.gateway.domain.types import GatewayCapability, VirtualKeyPrincipal
 
 
@@ -38,7 +38,7 @@ class _NoopBudget:
         return None
 
     async def check_budget(self, **_kwargs: object) -> Any:
-        from domains.gateway.application.budget_service import BudgetCheckResult
+        from domains.gateway.application.budget.budget_service import BudgetCheckResult
 
         return BudgetCheckResult(allowed=True)
 
@@ -101,7 +101,7 @@ async def test_audio_speech_settles_per_request_cost(
         settled["cost"] = cost
 
     monkeypatch.setattr(
-        "domains.gateway.application.proxy_response_adapter.schedule_settle_usage",
+        "domains.gateway.application.proxy.proxy_response_adapter.schedule_settle_usage",
         capture_settle,
     )
 
@@ -165,7 +165,7 @@ async def test_audio_speech_proxy_uses_adapt_binary(
 
     adapt_mock = AsyncMock(side_effect=lambda data, *_a, **_k: data)
     monkeypatch.setattr(
-        "domains.gateway.application.proxy_non_chat_pipeline.adapt_binary_response",
+        "domains.gateway.application.proxy.proxy_non_chat_pipeline.adapt_binary_response",
         adapt_mock,
     )
 

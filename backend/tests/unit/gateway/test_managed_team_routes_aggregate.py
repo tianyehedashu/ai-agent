@@ -8,7 +8,7 @@ import uuid
 
 import pytest
 
-from domains.gateway.application.management.managed_team_route_reads import (
+from domains.gateway.application.route.management.managed_team_route_reads import (
     list_managed_team_routes_for_actor,
 )
 from domains.gateway.infrastructure.models.gateway_route import GatewayRoute
@@ -52,7 +52,7 @@ async def test_list_managed_team_routes_includes_personal_and_paginates() -> Non
     route_repo.list_merged_routes_for_tenants = AsyncMock(return_value=[personal_route])
 
     with patch(
-        "domains.gateway.application.management.managed_team_route_reads.GatewayRouteRepository",
+        "domains.gateway.application.route.management.managed_team_route_reads.GatewayRouteRepository",
         return_value=route_repo,
     ):
         result = await list_managed_team_routes_for_actor(

@@ -2124,8 +2124,8 @@ class TestGatewayManagementApi:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """POST /my-models/batch-resync-capabilities：可 resync 行成功，未知 id 进 failed[]。"""
-        from domains.gateway.domain.litellm_capability_mapping import LitellmModelInfoHints
-        from domains.gateway.infrastructure.litellm_capability_hint_adapter import (
+        from domains.gateway.domain.litellm.litellm_capability_mapping import LitellmModelInfoHints
+        from domains.gateway.infrastructure.litellm.litellm_capability_hint_adapter import (
             LitellmCapabilityHintAdapter,
         )
 
@@ -3382,8 +3382,8 @@ class TestGatewayManagementApi:
         test_user: User,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        from domains.gateway.domain.litellm_capability_mapping import LitellmModelInfoHints
-        from domains.gateway.infrastructure.litellm_capability_hint_adapter import (
+        from domains.gateway.domain.litellm.litellm_capability_mapping import LitellmModelInfoHints
+        from domains.gateway.infrastructure.litellm.litellm_capability_hint_adapter import (
             LitellmCapabilityHintAdapter,
         )
 
@@ -3448,8 +3448,8 @@ class TestGatewayManagementApi:
         test_user: User,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        from domains.gateway.domain.litellm_capability_mapping import LitellmModelInfoHints
-        from domains.gateway.infrastructure.litellm_capability_hint_adapter import (
+        from domains.gateway.domain.litellm.litellm_capability_mapping import LitellmModelInfoHints
+        from domains.gateway.infrastructure.litellm.litellm_capability_hint_adapter import (
             LitellmCapabilityHintAdapter,
         )
 
@@ -3562,8 +3562,8 @@ class TestGatewayManagementApi:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """POST /models/batch-resync-capabilities：可 resync 行成功，config-managed 进 failed[]。"""
-        from domains.gateway.domain.litellm_capability_mapping import LitellmModelInfoHints
-        from domains.gateway.infrastructure.litellm_capability_hint_adapter import (
+        from domains.gateway.domain.litellm.litellm_capability_mapping import LitellmModelInfoHints
+        from domains.gateway.infrastructure.litellm.litellm_capability_hint_adapter import (
             LitellmCapabilityHintAdapter,
         )
 

@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from domains.gateway.application.upstream_catalog_capability_prep import (
+from domains.gateway.application.upstream.upstream_catalog_capability_prep import (
     prepare_gateway_write_from_upstream_catalog,
     should_apply_catalog_prep_to_base_tags,
 )
-from domains.gateway.domain.litellm_capability_mapping import LitellmModelInfoHints
+from domains.gateway.domain.litellm.litellm_capability_mapping import LitellmModelInfoHints
 
 
 class _FakeHint:
@@ -75,7 +75,7 @@ def test_should_not_apply_when_capability_tags_present() -> None:
 
 
 def test_prepare_unions_litellm_vision_with_regex() -> None:
-    from domains.gateway.application.upstream_model_types_for_catalog import (
+    from domains.gateway.application.upstream.upstream_model_types_for_catalog import (
         infer_upstream_model_types_for_catalog,
     )
 
@@ -89,7 +89,7 @@ def test_prepare_unions_litellm_vision_with_regex() -> None:
 
 
 def test_prepare_gateway_model_write_infers_image_capability_for_dalle() -> None:
-    from domains.gateway.application.management.write_modules.model_writes import (
+    from domains.gateway.application.catalog.management.model_writes import (
         _prepare_gateway_model_write_fields,
     )
 
@@ -117,7 +117,7 @@ def test_prepare_embedding_capability_from_model_id() -> None:
 
 
 def test_infer_non_personal_gateway_capability() -> None:
-    from domains.gateway.domain.upstream_type_inference import (
+    from domains.gateway.domain.upstream.upstream_type_inference import (
         infer_non_personal_gateway_capability,
     )
 

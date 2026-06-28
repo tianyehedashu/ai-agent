@@ -9,7 +9,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from bootstrap.config import settings
-from domains.gateway.domain.guardrail_policy import assert_vkey_guardrail_create_allowed
+from domains.gateway.domain.proxy.guardrail_policy import assert_vkey_guardrail_create_allowed
 from domains.identity.domain.api_key_types import (
     ApiKeyCreateRequest,
     ApiKeyEntity,

@@ -27,7 +27,7 @@ from domains.agent.infrastructure.llm.providers import (
     get_configured_models,
     get_provider,
 )
-from domains.gateway.application.prompt_cache_middleware import (
+from domains.gateway.application.proxy.prompt_cache_middleware import (
     PromptCacheMiddleware,
     get_prompt_cache_middleware,
 )
@@ -99,7 +99,7 @@ def create_embedding_service_from_settings() -> EmbeddingService:
             "EMBEDDING_MODEL 未配置；请设置环境变量或在有 DB 时使用 create_embedding_service_from_catalog"
         )
 
-    from domains.gateway.application.gateway_proxy_factory import (  # pylint: disable=import-outside-toplevel
+    from domains.gateway.application.bridge.gateway_proxy_factory import (  # pylint: disable=import-outside-toplevel
         get_gateway_proxy,
     )
 
@@ -116,10 +116,10 @@ async def create_embedding_service_from_catalog(
 ) -> EmbeddingService:
     """从 Gateway 目录 + 环境变量解析 Embedding 模型。"""
     from bootstrap.config import settings  # pylint: disable=import-outside-toplevel
-    from domains.gateway.application.gateway_proxy_factory import (  # pylint: disable=import-outside-toplevel
+    from domains.gateway.application.bridge.gateway_proxy_factory import (  # pylint: disable=import-outside-toplevel
         get_gateway_proxy,
     )
-    from domains.gateway.application.scenario_defaults import require_scenario_default
+    from domains.gateway.application.catalog.scenario_defaults import require_scenario_default
 
     model = await require_scenario_default(
         model_catalog,

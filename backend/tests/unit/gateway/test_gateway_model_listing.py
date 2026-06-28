@@ -6,13 +6,13 @@ import uuid
 
 import pytest
 
-from domains.gateway.application.gateway_model_listing import (
+from domains.gateway.application.catalog.gateway_model_listing import (
     list_callable_system_model_names,
     list_merged_models_for_tenant,
     resolve_by_name_visible,
 )
 from domains.gateway.application.management import GatewayManagementReadService
-from domains.gateway.domain.policies.model_selection import registry_kind_for_merged_row
+from domains.gateway.domain.catalog.model_selection import registry_kind_for_merged_row
 from domains.gateway.infrastructure.models.gateway_model import GatewayModel
 from domains.gateway.infrastructure.models.system_gateway import (
     SystemGatewayGrant,

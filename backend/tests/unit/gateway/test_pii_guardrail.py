@@ -4,7 +4,7 @@ PII Guardrail 单元测试：脱敏正则覆盖手机/邮箱/身份证/银行卡
 
 from __future__ import annotations
 
-from domains.gateway.domain.pii_redaction_policy import (
+from domains.gateway.domain.proxy.pii_redaction_policy import (
     hash_messages_streaming,
     hash_original,
     redact_messages,

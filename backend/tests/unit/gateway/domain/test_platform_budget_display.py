@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 
-from domains.gateway.domain.platform_budget_display import (
+from domains.gateway.domain.budget.platform_budget_display import (
     PlatformBudgetLogScope,
     platform_log_fallback_supported,
 )

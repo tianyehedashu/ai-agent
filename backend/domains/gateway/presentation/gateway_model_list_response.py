@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from domains.gateway.application.model_list_pipeline import ModelListPageResult
+from domains.gateway.application.catalog.model_list_pipeline import ModelListPageResult
 from domains.gateway.presentation.gateway_model_response import build_gateway_model_response
 from domains.gateway.presentation.schemas.common import (
     GatewayModelListResponse,

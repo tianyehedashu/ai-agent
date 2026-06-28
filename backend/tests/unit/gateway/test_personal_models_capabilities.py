@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 import uuid
 
-from domains.gateway.application.personal_models import gateway_model_to_personal_list_item
+from domains.gateway.application.catalog.personal_models import gateway_model_to_personal_list_item
 from domains.gateway.infrastructure.models.gateway_model import GatewayModel
 
 

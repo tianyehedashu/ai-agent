@@ -8,8 +8,8 @@ import uuid
 
 import pytest
 
-from domains.gateway.application.proxy_metadata_builder import ProxyMetadataBuilder
-from domains.gateway.application.proxy_use_case import ProxyContext, ProxyUseCase
+from domains.gateway.application.proxy.proxy_metadata_builder import ProxyMetadataBuilder
+from domains.gateway.application.proxy.proxy_use_case import ProxyContext, ProxyUseCase
 from domains.gateway.domain.errors import CapabilityNotAllowedError, ModelNotAllowedError
 from domains.gateway.domain.types import GatewayCapability, VirtualKeyPrincipal
 
@@ -20,11 +20,11 @@ async def test_build_metadata_guardrail_false_when_global_disabled(
     db_session: Any,
 ) -> None:
     monkeypatch.setattr(
-        "domains.gateway.application.proxy_metadata_builder.settings.gateway_default_guardrail_enabled",
+        "domains.gateway.application.proxy.proxy_metadata_builder.settings.gateway_default_guardrail_enabled",
         False,
     )
     monkeypatch.setattr(
-        "domains.gateway.application.proxy_metadata_builder.TeamService.get_team",
+        "domains.gateway.application.proxy.proxy_metadata_builder.TeamService.get_team",
         AsyncMock(return_value=MagicMock(name="t", kind="personal")),
     )
 
@@ -48,11 +48,11 @@ async def test_build_metadata_guardrail_true_when_global_and_vkey_enabled(
     db_session: Any,
 ) -> None:
     monkeypatch.setattr(
-        "domains.gateway.application.proxy_metadata_builder.settings.gateway_default_guardrail_enabled",
+        "domains.gateway.application.proxy.proxy_metadata_builder.settings.gateway_default_guardrail_enabled",
         True,
     )
     monkeypatch.setattr(
-        "domains.gateway.application.proxy_metadata_builder.TeamService.get_team",
+        "domains.gateway.application.proxy.proxy_metadata_builder.TeamService.get_team",
         AsyncMock(return_value=MagicMock(name="t", kind="personal")),
     )
 
@@ -76,7 +76,7 @@ async def test_build_metadata_ignores_user_gateway_prefix_keys(
     db_session: Any,
 ) -> None:
     monkeypatch.setattr(
-        "domains.gateway.application.proxy_metadata_builder.TeamService.get_team",
+        "domains.gateway.application.proxy.proxy_metadata_builder.TeamService.get_team",
         AsyncMock(return_value=MagicMock(name="t", kind="personal")),
     )
 
@@ -139,7 +139,7 @@ async def test_build_metadata_verbose_sets_response_max_chars(
     from bootstrap.config import settings
 
     monkeypatch.setattr(
-        "domains.gateway.application.proxy_metadata_builder.TeamService.get_team",
+        "domains.gateway.application.proxy.proxy_metadata_builder.TeamService.get_team",
         AsyncMock(return_value=MagicMock(name="t", kind="personal")),
     )
 
@@ -184,7 +184,7 @@ async def test_build_metadata_apikey_inbound_sets_platform_key_id(
     db_session: Any,
 ) -> None:
     monkeypatch.setattr(
-        "domains.gateway.application.proxy_metadata_builder.TeamService.get_team",
+        "domains.gateway.application.proxy.proxy_metadata_builder.TeamService.get_team",
         AsyncMock(return_value=MagicMock(name="t", kind="personal")),
     )
 
@@ -215,7 +215,7 @@ async def test_build_metadata_injects_gateway_route_snapshot_when_cache_hit(
     db_session: Any,
 ) -> None:
     monkeypatch.setattr(
-        "domains.gateway.application.proxy_metadata_builder.TeamService.get_team",
+        "domains.gateway.application.proxy.proxy_metadata_builder.TeamService.get_team",
         AsyncMock(return_value=MagicMock(name="t", kind="personal")),
     )
     snap = {
@@ -224,7 +224,7 @@ async def test_build_metadata_injects_gateway_route_snapshot_when_cache_hit(
         "strategy": "fallback",
     }
     monkeypatch.setattr(
-        "domains.gateway.application.proxy_metadata_builder.get_route_snapshot_metadata",
+        "domains.gateway.application.proxy.proxy_metadata_builder.get_route_snapshot_metadata",
         AsyncMock(return_value=snap),
     )
     monkeypatch.setattr(
@@ -270,11 +270,11 @@ async def test_build_metadata_omits_gateway_route_snapshot_when_cache_miss(
     db_session: Any,
 ) -> None:
     monkeypatch.setattr(
-        "domains.gateway.application.proxy_metadata_builder.TeamService.get_team",
+        "domains.gateway.application.proxy.proxy_metadata_builder.TeamService.get_team",
         AsyncMock(return_value=MagicMock(name="t", kind="personal")),
     )
     monkeypatch.setattr(
-        "domains.gateway.application.proxy_metadata_builder.get_route_snapshot_metadata",
+        "domains.gateway.application.proxy.proxy_metadata_builder.get_route_snapshot_metadata",
         AsyncMock(return_value=None),
     )
     monkeypatch.setattr(
@@ -319,7 +319,7 @@ async def test_build_metadata_uses_ctx_user_display_snapshot(
     db_session: Any,
 ) -> None:
     monkeypatch.setattr(
-        "domains.gateway.application.proxy_metadata_builder.TeamService.get_team",
+        "domains.gateway.application.proxy.proxy_metadata_builder.TeamService.get_team",
         AsyncMock(return_value=MagicMock(name="t", kind="personal")),
     )
     ctx = ProxyContext(

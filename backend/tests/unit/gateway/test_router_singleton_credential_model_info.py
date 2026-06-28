@@ -3,8 +3,8 @@
 from unittest.mock import MagicMock
 import uuid
 
-from domains.gateway.domain.router_model_name import encode_router_model_name
-from domains.gateway.infrastructure.router_singleton import _models_to_deployments
+from domains.gateway.domain.route.router_model_name import encode_router_model_name
+from domains.gateway.infrastructure.litellm.router_singleton import _models_to_deployments
 
 
 def test_models_to_deployments_includes_credential_model_info() -> None:

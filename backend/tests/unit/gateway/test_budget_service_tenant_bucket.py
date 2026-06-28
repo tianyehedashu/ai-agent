@@ -7,7 +7,7 @@ import uuid
 
 import pytest
 
-from domains.gateway.application.budget_service import (
+from domains.gateway.application.budget.budget_service import (
     BudgetService,
     BudgetUsageCoord,
     _bucket_key,
@@ -40,7 +40,7 @@ def test_non_user_bucket_key_unchanged_without_tenant_segment() -> None:
 def test_custom_anchor_uses_ws_suffix_in_bucket_key() -> None:
     from datetime import UTC, datetime
 
-    from domains.gateway.domain.period_reset_anchor import PeriodResetAnchor
+    from domains.gateway.domain.quota.period_reset_anchor import PeriodResetAnchor
 
     anchor = PeriodResetAnchor(timezone="Asia/Shanghai", time_minutes=9 * 60, day_of_month=1)
     now = datetime(2026, 6, 15, 8, 30, tzinfo=UTC)
@@ -77,7 +77,7 @@ async def test_tenant_usage_batch_sums_primary_and_legacy_team_keys(monkeypatch)
     async def _redis_client() -> _Redis:
         return redis
 
-    import domains.gateway.application.budget_service as mod
+    import domains.gateway.application.budget.budget_service as mod
 
     monkeypatch.setattr(mod, "get_redis_client", _redis_client)
 

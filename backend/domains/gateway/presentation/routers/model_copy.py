@@ -8,7 +8,7 @@ import uuid
 from fastapi import APIRouter, Depends, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from domains.gateway.application.management.model_copy_types import (
+from domains.gateway.application.catalog.management.model_copy_types import (
     ModelCopyCredentialPlan,
 )
 from domains.gateway.presentation.routers._common import MgmtWrites

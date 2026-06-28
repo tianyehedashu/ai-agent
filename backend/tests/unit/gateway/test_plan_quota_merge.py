@@ -2,7 +2,7 @@
 
 from decimal import Decimal
 
-from domains.gateway.application.management.plan_quota_merge import merge_plan_quotas_by_label
+from domains.gateway.application.quota.management.plan_quota_merge import merge_plan_quotas_by_label
 
 
 class _QuotaRow:

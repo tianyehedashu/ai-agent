@@ -7,9 +7,9 @@ import uuid
 import pytest
 
 from bootstrap.config import settings
-from domains.gateway.application.config_catalog_sync import sync_app_config_gateway_catalog
+from domains.gateway.application.catalog.config_catalog_sync import sync_app_config_gateway_catalog
 from domains.gateway.application.management import GatewayManagementReadService
-from domains.gateway.domain.policies.model_selection import registry_kind_for_merged_row
+from domains.gateway.domain.catalog.model_selection import registry_kind_for_merged_row
 from domains.gateway.infrastructure.repositories.credential_repository import (
     ProviderCredentialRepository,
 )

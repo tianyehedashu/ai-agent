@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from domains.gateway.domain.policies.model_selection import (
+from domains.gateway.domain.catalog.model_selection import (
     merge_named_rows_tenant_overrides_system,
     registry_kind_for_merged_row,
 )
@@ -60,7 +60,7 @@ class _RouteRow:
 
 
 def test_merge_virtual_model_tenant_overrides_system() -> None:
-    from domains.gateway.domain.policies.model_selection import (
+    from domains.gateway.domain.catalog.model_selection import (
         merge_virtual_model_rows_tenant_overrides_system,
     )
 

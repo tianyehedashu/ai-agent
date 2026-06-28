@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from domains.gateway.application.budget_service import (
+from domains.gateway.application.budget.budget_service import (
     _RATE_LIMIT_RPM_LUA_SCRIPT,
     _RATE_LIMIT_TPM_LUA_SCRIPT,
     BudgetService,
@@ -20,7 +20,10 @@ async def test_check_rate_limit_calls_rpm_lua_script(monkeypatch) -> None:
     service = BudgetService()
     fake_client = AsyncMock()
     fake_client.eval.return_value = [1, 0]
-    monkeypatch.setattr("domains.gateway.application.budget_service.get_redis_client", AsyncMock(return_value=fake_client))
+    monkeypatch.setattr(
+        "domains.gateway.application.budget.budget_service.get_redis_client",
+        AsyncMock(return_value=fake_client),
+    )
 
     await service.check_rate_limit(
         target_kind="team",
@@ -43,7 +46,10 @@ async def test_check_rate_limit_calls_tpm_lua_script(monkeypatch) -> None:
     service = BudgetService()
     fake_client = AsyncMock()
     fake_client.eval.return_value = [1, 0]
-    monkeypatch.setattr("domains.gateway.application.budget_service.get_redis_client", AsyncMock(return_value=fake_client))
+    monkeypatch.setattr(
+        "domains.gateway.application.budget.budget_service.get_redis_client",
+        AsyncMock(return_value=fake_client),
+    )
 
     await service.check_rate_limit(
         target_kind="team",
@@ -66,7 +72,10 @@ async def test_check_rate_limit_rpm_exceeded_raises(monkeypatch) -> None:
     service = BudgetService()
     fake_client = AsyncMock()
     fake_client.eval.return_value = [-1, 10]
-    monkeypatch.setattr("domains.gateway.application.budget_service.get_redis_client", AsyncMock(return_value=fake_client))
+    monkeypatch.setattr(
+        "domains.gateway.application.budget.budget_service.get_redis_client",
+        AsyncMock(return_value=fake_client),
+    )
 
     with pytest.raises(RateLimitExceededError) as exc_info:
         await service.check_rate_limit(
@@ -85,7 +94,10 @@ async def test_check_rate_limit_tpm_exceeded_raises(monkeypatch) -> None:
     service = BudgetService()
     fake_client = AsyncMock()
     fake_client.eval.return_value = [0, 900]
-    monkeypatch.setattr("domains.gateway.application.budget_service.get_redis_client", AsyncMock(return_value=fake_client))
+    monkeypatch.setattr(
+        "domains.gateway.application.budget.budget_service.get_redis_client",
+        AsyncMock(return_value=fake_client),
+    )
 
     with pytest.raises(RateLimitExceededError) as exc_info:
         await service.check_rate_limit(
@@ -103,7 +115,10 @@ async def test_check_rate_limit_no_limits_short_circuits(monkeypatch) -> None:
     """无 rpm/tpm 限制时不调用 Redis。"""
     service = BudgetService()
     fake_client = AsyncMock()
-    monkeypatch.setattr("domains.gateway.application.budget_service.get_redis_client", AsyncMock(return_value=fake_client))
+    monkeypatch.setattr(
+        "domains.gateway.application.budget.budget_service.get_redis_client",
+        AsyncMock(return_value=fake_client),
+    )
 
     await service.check_rate_limit(
         target_kind="team",

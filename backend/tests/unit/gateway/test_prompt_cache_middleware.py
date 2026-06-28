@@ -1,6 +1,6 @@
 """PromptCacheMiddleware 单元测试。"""
 
-from domains.gateway.application.prompt_cache_middleware import (
+from domains.gateway.application.proxy.prompt_cache_middleware import (
     PromptCacheMiddleware,
     apply_gateway_cache_hit_to_metadata,
     parse_cache_hit_from_usage,

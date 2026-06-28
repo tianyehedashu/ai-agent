@@ -13,8 +13,8 @@ import uuid
 
 import pytest
 
-from domains.gateway.application import budget_service as budget_service_module
-from domains.gateway.application.budget_service import BudgetService, BudgetUsageCoord
+from domains.gateway.application.budget import budget_service as budget_service_module
+from domains.gateway.application.budget.budget_service import BudgetService, BudgetUsageCoord
 from domains.gateway.domain.errors import BudgetExceededError
 
 

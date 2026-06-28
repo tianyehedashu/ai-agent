@@ -8,7 +8,7 @@ import uuid
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from domains.gateway.domain.proxy_policy import BudgetCheckQuery
+from domains.gateway.domain.proxy.proxy_policy import BudgetCheckQuery
 from domains.gateway.infrastructure.models.budget import GatewayBudget
 from domains.gateway.infrastructure.repositories.budget_repository import BudgetRepository
 

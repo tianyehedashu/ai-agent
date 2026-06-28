@@ -12,7 +12,7 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bootstrap.config import settings
-from domains.gateway.application.management.usage_metrics_window import (
+from domains.gateway.application.usage.management.usage_metrics_window import (
     compute_hot_cutoff,
     floor_hour,
 )

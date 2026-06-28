@@ -9,7 +9,7 @@ import uuid
 from sqlalchemy import ColumnElement, and_, case, func, or_, select
 from sqlalchemy.orm import InstrumentedAttribute
 
-from domains.gateway.domain.policies.model_list_policy import (
+from domains.gateway.domain.catalog.model_list_policy import (
     ModelListConnectivityFilter,
     ModelListSortField,
     ModelListSortOrder,

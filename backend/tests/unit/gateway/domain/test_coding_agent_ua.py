@@ -1,6 +1,6 @@
 """Coding Agent User-Agent 注入策略。"""
 
-from domains.gateway.domain.coding_agent_ua import (
+from domains.gateway.domain.proxy.coding_agent_ua import (
     apply_coding_agent_ua_litellm_params,
     resolve_coding_agent_ua,
 )

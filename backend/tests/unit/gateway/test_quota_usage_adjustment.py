@@ -8,7 +8,7 @@ import uuid
 
 import pytest
 
-from domains.gateway.application.management.quota_usage_adjustment import (
+from domains.gateway.application.quota.management.quota_usage_adjustment import (
     QuotaUsageAdjustmentCommand,
     _resolved_usage_values,
 )
@@ -34,7 +34,7 @@ def test_resolved_usage_values_set_requires_field() -> None:
 
 @pytest.mark.asyncio
 async def test_apply_platform_usage_adjustment(db_session, test_user) -> None:
-    from domains.gateway.application.management.quota_usage_adjustment import (
+    from domains.gateway.application.quota.management.quota_usage_adjustment import (
         apply_quota_usage_adjustment,
     )
     from domains.gateway.infrastructure.models.budget import GatewayBudget
@@ -70,11 +70,11 @@ async def test_apply_platform_usage_adjustment(db_session, test_user) -> None:
     assert row.current_tokens == 1000
     assert row.current_requests == 5
 
-    from domains.gateway.application.management.budget_usage_reads import (
+    from domains.gateway.application.usage.management.budget_usage_reads import (
         BudgetWindowLookup,
         resolve_budget_window_key,
     )
-    from domains.gateway.domain.quota_plan import PLATFORM_NS
+    from domains.gateway.domain.quota.quota_plan import PLATFORM_NS
 
     lookup = BudgetWindowLookup(
         budget_id=budget.id,
@@ -110,7 +110,7 @@ async def test_apply_platform_usage_adjustment(db_session, test_user) -> None:
 async def test_apply_upstream_rolling_adjustment_rejected(db_session) -> None:
     """滚动窗口配额展示读走日志、忽略桶，手工校正应被拒绝并给出引导。"""
 
-    from domains.gateway.application.management.quota_usage_adjustment import (
+    from domains.gateway.application.quota.management.quota_usage_adjustment import (
         apply_quota_usage_adjustment,
     )
     from domains.gateway.infrastructure.repositories.provider_quota_repository import (
@@ -147,7 +147,7 @@ async def test_apply_upstream_rolling_adjustment_rejected(db_session) -> None:
 async def test_apply_upstream_total_rolling_adjustment_allowed(db_session) -> None:
     """累计（window=0）即便策略名是 rolling 也可校正：不应被滚动守卫误拒。"""
 
-    from domains.gateway.application.management.quota_usage_adjustment import (
+    from domains.gateway.application.quota.management.quota_usage_adjustment import (
         apply_quota_usage_adjustment,
     )
     from domains.gateway.infrastructure.repositories.provider_quota_repository import (

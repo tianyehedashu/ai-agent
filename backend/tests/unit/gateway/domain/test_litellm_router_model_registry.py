@@ -7,7 +7,7 @@ from typing import ClassVar
 
 import pytest
 
-from domains.gateway.domain.litellm_router_model_registry import (
+from domains.gateway.domain.litellm.litellm_router_model_registry import (
     collect_registry_payload_from_deployments,
     litellm_model_info_lookup_key,
     registry_entry_from_deployment,
@@ -85,7 +85,7 @@ def test_collect_registry_payload_skips_existing_keys() -> None:
 
 
 def test_register_router_deployments_in_litellm_registry(monkeypatch: pytest.MonkeyPatch) -> None:
-    from domains.gateway.infrastructure.litellm_router_model_registry import (
+    from domains.gateway.infrastructure.litellm.litellm_router_model_registry import (
         register_router_deployments_in_litellm_registry,
     )
 

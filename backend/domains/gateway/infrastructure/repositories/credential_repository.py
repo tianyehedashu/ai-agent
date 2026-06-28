@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import func, or_, select
 
-from domains.gateway.domain.team_registry_credential_display import (
+from domains.gateway.domain.credential.team_registry_credential_display import (
     TeamRegistryCredentialDisplay,
 )
 from domains.gateway.infrastructure.models.gateway_model import GatewayModel
@@ -53,7 +53,7 @@ class ProviderCredentialRepository:
             if row.tenant_id == tenant_id:
                 return row
             if row.scope == "user" and row.scope_id is not None:
-                from domains.gateway.application.resource_grant_filter import (
+                from domains.gateway.application.grant.resource_grant_filter import (
                     is_credential_granted_to_team,
                 )
 

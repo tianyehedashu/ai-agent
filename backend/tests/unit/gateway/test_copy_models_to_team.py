@@ -97,7 +97,7 @@ async def test_copy_personal_models_subset_to_team_existing_cred(
     )
     await db_session.commit()
 
-    from domains.gateway.application.management.model_copy_types import ModelCopyCredentialPlan
+    from domains.gateway.application.catalog.management.model_copy_types import ModelCopyCredentialPlan
 
     writes = GatewayManagementWriteService(db_session)
     result = await writes.copy_models_to_team(
@@ -150,7 +150,7 @@ async def test_copy_team_models_copy_credential_mode(db_session, test_user: User
     )
     await db_session.commit()
 
-    from domains.gateway.application.management.model_copy_types import ModelCopyCredentialPlan
+    from domains.gateway.application.catalog.management.model_copy_types import ModelCopyCredentialPlan
 
     writes = GatewayManagementWriteService(db_session)
     result = await writes.copy_models_to_team(
@@ -211,7 +211,7 @@ async def test_copy_denied_for_other_user_team_credential(
     )
     await db_session.commit()
 
-    from domains.gateway.application.management.model_copy_types import ModelCopyCredentialPlan
+    from domains.gateway.application.catalog.management.model_copy_types import ModelCopyCredentialPlan
 
     writes = GatewayManagementWriteService(db_session)
     result = await writes.copy_models_to_team(
@@ -258,7 +258,7 @@ async def test_copy_credential_rolls_back_dest_cred_when_all_models_fail(
     )
     await db_session.commit()
 
-    from domains.gateway.application.management.model_copy_types import ModelCopyCredentialPlan
+    from domains.gateway.application.catalog.management.model_copy_types import ModelCopyCredentialPlan
 
     writes = GatewayManagementWriteService(db_session)
 

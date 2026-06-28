@@ -10,9 +10,7 @@ import uuid
 import pytest
 
 from domains.gateway.application.management.reads import GatewayManagementReadService
-from domains.gateway.application.management.write_modules import (
-    GatewayManagementWriteService,
-)
+from domains.gateway.application.management import GatewayManagementWriteService
 from domains.gateway.domain.errors import ManagementEntityNotFoundError
 
 

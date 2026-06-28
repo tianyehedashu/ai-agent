@@ -8,8 +8,8 @@ import uuid
 
 import pytest
 
-from domains.gateway.application.proxy_context import ProxyContext
-from domains.gateway.application.proxy_metadata_builder import ProxyMetadataBuilder
+from domains.gateway.application.proxy.proxy_context import ProxyContext
+from domains.gateway.application.proxy.proxy_metadata_builder import ProxyMetadataBuilder
 from domains.gateway.domain.types import GatewayCapability, VirtualKeyPrincipal
 
 
@@ -19,7 +19,7 @@ async def test_build_metadata_client_raw_model_in_route_name(
     db_session: Any,
 ) -> None:
     monkeypatch.setattr(
-        "domains.gateway.application.proxy_metadata_builder.TeamService.get_team",
+        "domains.gateway.application.proxy.proxy_metadata_builder.TeamService.get_team",
         AsyncMock(return_value=MagicMock(name="t", kind="personal")),
     )
     monkeypatch.setattr(
@@ -28,11 +28,11 @@ async def test_build_metadata_client_raw_model_in_route_name(
         AsyncMock(return_value={}),
     )
     monkeypatch.setattr(
-        "domains.gateway.application.proxy_metadata_builder.get_route_snapshot_metadata",
+        "domains.gateway.application.proxy.proxy_metadata_builder.get_route_snapshot_metadata",
         AsyncMock(return_value=None),
     )
     monkeypatch.setattr(
-        "domains.gateway.application.proxy_metadata_builder.attach_downstream_pricing_metadata",
+        "domains.gateway.application.proxy.proxy_metadata_builder.attach_downstream_pricing_metadata",
         AsyncMock(),
     )
 

@@ -1,6 +1,6 @@
 """向后兼容：Prompt Cache 已下沉至 Gateway ``prompt_cache_middleware``。"""
 
-from domains.gateway.application.prompt_cache_middleware import (
+from domains.gateway.application.proxy.prompt_cache_middleware import (
     PromptCacheMiddleware,
     get_prompt_cache_middleware,
     parse_cache_hit_from_usage,

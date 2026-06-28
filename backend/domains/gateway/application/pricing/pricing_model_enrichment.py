@@ -9,7 +9,7 @@ import uuid
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from domains.gateway.domain.policies.model_selection import registry_kind_for_merged_row
+from domains.gateway.domain.catalog.model_selection import registry_kind_for_merged_row
 from domains.gateway.infrastructure.models.gateway_model import GatewayModel
 from domains.gateway.infrastructure.models.system_gateway import SystemGatewayModel
 from domains.gateway.infrastructure.repositories.credential_repository import (

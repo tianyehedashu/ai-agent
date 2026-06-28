@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from domains.gateway.domain.platform_budget_window import (
+from domains.gateway.domain.budget.platform_budget_window import (
     PLATFORM_TOTAL_WINDOW_START,
     compute_platform_budget_window_start,
 )
@@ -37,7 +37,7 @@ def test_naive_datetime_treated_as_utc() -> None:
 
 
 def test_custom_anchor_shanghai_daily_cutover() -> None:
-    from domains.gateway.domain.period_reset_anchor import PeriodResetAnchor
+    from domains.gateway.domain.quota.period_reset_anchor import PeriodResetAnchor
 
     anchor = PeriodResetAnchor(timezone="Asia/Shanghai", time_minutes=9 * 60, day_of_month=1)
     # 2026-06-15 08:30 UTC = 16:30 CST → window started 2026-06-15 01:00 UTC (09:00 CST same day)

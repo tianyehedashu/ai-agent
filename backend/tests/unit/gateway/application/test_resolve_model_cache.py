@@ -7,8 +7,9 @@ import uuid
 
 import pytest
 
-from domains.gateway.application.model_or_route_resolution import ResolvedModelName
-from domains.gateway.application.resolve_model_cache import (
+from domains.gateway.application.catalog.model_or_route_resolution import ResolvedModelName
+from domains.gateway.application.grant import resolve_model_cache as rmc
+from domains.gateway.application.grant.resolve_model_cache import (
     CACHE_MISS,
     clear_resolve_model_cache_for_tests,
     invalidate_for_tenant,
@@ -18,8 +19,14 @@ from domains.gateway.application.resolve_model_cache import (
 
 
 @pytest.fixture(autouse=True)
-def _clear_cache() -> None:
+def _clear_cache(monkeypatch: pytest.MonkeyPatch) -> None:
     clear_resolve_model_cache_for_tests()
+
+    # 测试环境无 Redis：版本号恒为空串，与 put 默认 version="" 匹配，避免误失效
+    async def _no_redis_version(_team_id: uuid.UUID) -> str:
+        return ""
+
+    monkeypatch.setattr(rmc, "_fetch_tenant_version", _no_redis_version)
 
 
 async def test_negative_cache_round_trip() -> None:

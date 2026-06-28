@@ -10,7 +10,7 @@ from domains.gateway.application.pricing.pricing_service import (
     ResolvedPricing,
     resolved_inheritance_strategy,
 )
-from domains.gateway.domain.pricing_calculator import PricingRate
+from domains.gateway.domain.pricing.pricing_calculator import PricingRate
 
 
 def test_resolved_inheritance_strategy_from_downstream_strategy_field() -> None:

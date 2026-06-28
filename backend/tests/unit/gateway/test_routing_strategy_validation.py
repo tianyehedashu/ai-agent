@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from domains.gateway.application.routing_strategy_validation import validate_routing_strategy
+from domains.gateway.application.route.routing_strategy_validation import validate_routing_strategy
 from domains.gateway.domain.types import RoutingStrategy
 from libs.exceptions import ValidationError
 

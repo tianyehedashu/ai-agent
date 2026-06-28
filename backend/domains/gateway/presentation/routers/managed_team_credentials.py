@@ -7,7 +7,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from domains.gateway.application.management.managed_team_credential_reads import (
+from domains.gateway.application.credential.management.managed_team_credential_reads import (
     list_managed_team_credentials_for_actor,
 )
 from domains.gateway.application.management.reads import GatewayManagementReadService

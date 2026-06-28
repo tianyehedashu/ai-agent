@@ -6,8 +6,8 @@ import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from domains.gateway.application.pricing.pricing_management import build_pricing_service
-from domains.gateway.domain.pricing_calculator import TokenUsage
+from domains.gateway.application.pricing.management.pricing_management import build_pricing_service
+from domains.gateway.domain.pricing.pricing_calculator import TokenUsage
 from domains.gateway.infrastructure.repositories.model_repository import GatewayModelRepository
 
 

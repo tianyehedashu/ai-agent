@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Protocol
 
-from domains.gateway.domain.model_capability import ModelCapabilitySnapshot
+from domains.gateway.domain.catalog.model_capability import ModelCapabilitySnapshot
 
 if TYPE_CHECKING:
     import uuid

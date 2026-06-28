@@ -5,7 +5,7 @@ from uuid import uuid4
 import pytest
 
 from domains.gateway.domain.errors import CredentialNotFoundError
-from domains.gateway.domain.team_credential_access import (
+from domains.gateway.domain.credential.team_credential_access import (
     actor_owns_team_credential,
     assert_team_credential_readable_by_actor,
     assert_team_credential_writable_by_actor,

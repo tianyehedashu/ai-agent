@@ -14,7 +14,7 @@ from domains.agent.infrastructure.models import (  # noqa: F401  # isort:skip
     memory as _memory_model,
     message as _message_model,
 )
-from domains.gateway.domain.virtual_key_service import generate_vkey
+from domains.gateway.domain.vkey.virtual_key_service import generate_vkey
 from domains.gateway.infrastructure.repositories.virtual_key_repository import (
     VirtualKeyRepository,
 )

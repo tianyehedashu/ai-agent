@@ -17,11 +17,11 @@ MODEL_NAME = "kimi-for-coding-chat"
 
 
 async def main() -> None:
-    from domains.gateway.domain.router_model_name import encode_router_model_name
+    from domains.gateway.domain.route.router_model_name import encode_router_model_name
     from domains.gateway.infrastructure.models.gateway_model import GatewayModel
     from domains.gateway.infrastructure.models.gateway_route import GatewayRoute
     from domains.gateway.infrastructure.models.provider_credential import ProviderCredential
-    from domains.gateway.infrastructure.router_singleton import (
+    from domains.gateway.infrastructure.litellm.router_singleton import (
         _build_deployments_for_encoded_model,
         _build_router_kwargs,
         get_router_sync,
@@ -208,8 +208,8 @@ async def main() -> None:
 
 
 async def simulate_router_call() -> None:
-    from domains.gateway.domain.router_model_name import encode_router_model_name
-    from domains.gateway.infrastructure.router_singleton import (
+    from domains.gateway.domain.route.router_model_name import encode_router_model_name
+    from domains.gateway.infrastructure.litellm.router_singleton import (
         get_router,
         reload_router,
         router_deployment_model_names,

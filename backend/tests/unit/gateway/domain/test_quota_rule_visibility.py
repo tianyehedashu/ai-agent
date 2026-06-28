@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 
-from domains.gateway.domain.policies.quota_rule_visibility import (
+from domains.gateway.domain.quota.quota_rule_visibility import (
     QuotaRuleVisibilityContext,
     QuotaRuleVisibilityKey,
     member_user_budget_visible_in_team,

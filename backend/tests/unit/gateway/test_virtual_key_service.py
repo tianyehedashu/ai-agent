@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from domains.gateway.domain.virtual_key_service import (
+from domains.gateway.domain.vkey.virtual_key_service import (
     VKEY_KEY_ID_LENGTH,
     VKEY_PREFIX,
     VKEY_SECRET_LENGTH,

@@ -10,10 +10,10 @@ import uuid
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from domains.gateway.application.model_or_route_resolution import ResolvedModelName
-from domains.gateway.application.proxy_metadata_builder import PreparedLitellmKwargs
-from domains.gateway.application.proxy_use_case import ProxyContext, ProxyUseCase
-from domains.gateway.application.router_deployment_params import (
+from domains.gateway.application.catalog.model_or_route_resolution import ResolvedModelName
+from domains.gateway.application.proxy.proxy_metadata_builder import PreparedLitellmKwargs
+from domains.gateway.application.proxy.proxy_use_case import ProxyContext, ProxyUseCase
+from domains.gateway.application.route.router_deployment_params import (
     VOLCENGINE_IMAGE_ENDPOINT_PROXY_MESSAGE,
 )
 from domains.gateway.domain.types import GatewayCapability, VirtualKeyPrincipal
@@ -41,7 +41,7 @@ class _NoopBudget:
         return None
 
     async def check_budget(self, **_kwargs: object) -> Any:
-        from domains.gateway.application.budget_service import BudgetCheckResult
+        from domains.gateway.application.budget.budget_service import BudgetCheckResult
 
         return BudgetCheckResult(allowed=True)
 
@@ -180,7 +180,7 @@ async def test_non_chat_uses_router_not_direct_litellm(
     monkeypatch.setattr(use_case.litellm, direct_method, block_direct)
 
     with patch(
-        "domains.gateway.application.proxy_litellm_client.ensure_router_deployment",
+        "domains.gateway.application.proxy.proxy_litellm_client.ensure_router_deployment",
         new=AsyncMock(return_value=router),
     ):
         handler = getattr(use_case, method_name)
@@ -223,7 +223,7 @@ async def test_video_generation_non_volcengine_uses_router(
     monkeypatch.setattr(use_case.litellm, "volcengine_direct_video_generation", volcengine_direct)
 
     with patch(
-        "domains.gateway.application.proxy_litellm_client.ensure_router_deployment",
+        "domains.gateway.application.proxy.proxy_litellm_client.ensure_router_deployment",
         new=AsyncMock(return_value=router),
     ):
         result = await use_case.video_generation(ctx, body)
@@ -240,6 +240,8 @@ async def test_volcengine_image_generation_uses_direct_not_router(
 ) -> None:
     body = {"model": "volcengine/seedream", "prompt": "a cat", "size": "1920x1920"}
     record = SimpleNamespace(
+        id=uuid.uuid4(),
+        credential_id=uuid.uuid4(),
         provider="volcengine",
         real_model="seedream",
     )
@@ -260,12 +262,16 @@ async def test_volcengine_image_generation_uses_direct_not_router(
         AsyncMock(return_value=(prepared, invoke_kwargs)),
     )
     monkeypatch.setattr(use_case.guard, "check_entitlement", AsyncMock())
+    monkeypatch.setattr(
+        "domains.gateway.application.quota.provider_quota_guard.reserve_and_stamp_provider_quota",
+        AsyncMock(return_value=[]),
+    )
     volcengine_direct = AsyncMock(return_value={"data": [{"b64_json": "abc"}]})
     monkeypatch.setattr(use_case.litellm, "volcengine_direct_image_generation", volcengine_direct)
     router_image = AsyncMock()
     monkeypatch.setattr(use_case.litellm, "router_image_generation", router_image)
     monkeypatch.setattr(
-        "domains.gateway.application.proxy_response_adapter.schedule_settle_usage",
+        "domains.gateway.application.proxy.proxy_response_adapter.schedule_settle_usage",
         AsyncMock(),
     )
 
@@ -282,7 +288,12 @@ async def test_agnes_image_generation_uses_direct_not_router(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     body = {"model": "agnes-image-2.0-flash", "prompt": "a cat", "image": ["https://in.png"]}
-    record = SimpleNamespace(provider="agnes", real_model="agnes-image-2.0-flash")
+    record = SimpleNamespace(
+        id=uuid.uuid4(),
+        credential_id=uuid.uuid4(),
+        provider="agnes",
+        real_model="agnes-image-2.0-flash",
+    )
     prepared, invoke_kwargs = _prepared_litellm_invoke(body)
     prepared = PreparedLitellmKwargs(
         kwargs=prepared.kwargs,
@@ -300,12 +311,16 @@ async def test_agnes_image_generation_uses_direct_not_router(
         AsyncMock(return_value=(prepared, invoke_kwargs)),
     )
     monkeypatch.setattr(use_case.guard, "check_entitlement", AsyncMock())
+    monkeypatch.setattr(
+        "domains.gateway.application.quota.provider_quota_guard.reserve_and_stamp_provider_quota",
+        AsyncMock(return_value=[]),
+    )
     agnes_direct = AsyncMock(return_value={"data": [{"b64_json": "abc"}]})
     monkeypatch.setattr(use_case.litellm, "agnes_direct_image_generation", agnes_direct)
     router_image = AsyncMock()
     monkeypatch.setattr(use_case.litellm, "router_image_generation", router_image)
     monkeypatch.setattr(
-        "domains.gateway.application.proxy_response_adapter.schedule_settle_usage",
+        "domains.gateway.application.proxy.proxy_response_adapter.schedule_settle_usage",
         AsyncMock(),
     )
 
@@ -323,6 +338,7 @@ async def test_volcengine_image_generation_fails_without_image_endpoint(
 ) -> None:
     body = {"model": "volcengine/seedream", "prompt": "a cat"}
     record = SimpleNamespace(
+        id=uuid.uuid4(),
         provider="volcengine",
         real_model="seedream",
         credential_id=uuid.uuid4(),
@@ -349,7 +365,11 @@ async def test_volcengine_image_generation_fails_without_image_endpoint(
     )
     monkeypatch.setattr(use_case.guard, "check_entitlement", AsyncMock())
     monkeypatch.setattr(
-        "domains.gateway.application.proxy_litellm_client.resolve_volcengine_image_deployment",
+        "domains.gateway.application.quota.provider_quota_guard.reserve_and_stamp_provider_quota",
+        AsyncMock(return_value=[]),
+    )
+    monkeypatch.setattr(
+        "domains.gateway.application.proxy.proxy_litellm_client.resolve_volcengine_image_deployment",
         AsyncMock(
             side_effect=ValidationError(VOLCENGINE_IMAGE_ENDPOINT_PROXY_MESSAGE),
         ),
@@ -366,6 +386,8 @@ async def test_volcengine_video_generation_uses_direct_not_router(
 ) -> None:
     body = {"model": "seedance-video", "prompt": "a cat"}
     record = SimpleNamespace(
+        id=uuid.uuid4(),
+        credential_id=uuid.uuid4(),
         provider="volcengine",
         real_model="doubao-seedance-1-0-lite-t2v-250428",
     )
@@ -386,6 +408,10 @@ async def test_volcengine_video_generation_uses_direct_not_router(
         AsyncMock(return_value=(prepared, invoke_kwargs)),
     )
     monkeypatch.setattr(use_case.guard, "check_entitlement", AsyncMock())
+    monkeypatch.setattr(
+        "domains.gateway.application.quota.provider_quota_guard.reserve_and_stamp_provider_quota",
+        AsyncMock(return_value=[]),
+    )
     monkeypatch.setattr(use_case.guard, "assert_request_capability_matches_model", AsyncMock())
     volcengine_direct = AsyncMock(
         return_value={
@@ -430,12 +456,12 @@ async def test_audio_speech_uses_router_aspeech(
     )
     monkeypatch.setattr(use_case.guard, "check_entitlement", AsyncMock())
     monkeypatch.setattr(
-        "domains.gateway.application.proxy_response_adapter.schedule_settle_usage",
+        "domains.gateway.application.proxy.proxy_response_adapter.schedule_settle_usage",
         AsyncMock(),
     )
 
     with patch(
-        "domains.gateway.application.proxy_litellm_client.ensure_router_deployment",
+        "domains.gateway.application.proxy.proxy_litellm_client.ensure_router_deployment",
         new=AsyncMock(return_value=router),
     ):
         result = await use_case.audio_speech(ctx, {"model": "tts-1", "input": "hi"})
@@ -475,7 +501,7 @@ async def test_non_chat_router_miss_falls_back_to_direct(
     monkeypatch.setattr(use_case.litellm, "direct_rerank", direct_rerank)
 
     with patch(
-        "domains.gateway.application.proxy_litellm_client.ensure_router_deployment",
+        "domains.gateway.application.proxy.proxy_litellm_client.ensure_router_deployment",
         new=AsyncMock(return_value=router),
     ):
         result = await use_case.rerank(

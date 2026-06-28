@@ -8,7 +8,7 @@ import pytest
 
 from domains.agent.infrastructure.models.agent import Agent  # noqa: F401
 from domains.gateway.application.management.writes import GatewayManagementWriteService
-from domains.gateway.domain.virtual_key_service import generate_vkey
+from domains.gateway.domain.vkey.virtual_key_service import generate_vkey
 from domains.gateway.infrastructure.repositories.virtual_key_repository import (
     VirtualKeyRepository,
 )

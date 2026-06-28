@@ -13,7 +13,7 @@ from domains.gateway.application.pricing.pricing_catalog_reads import (
     is_pricing_admin,
 )
 from domains.gateway.application.pricing.pricing_estimate_reads import estimate_usage_cost
-from domains.gateway.application.pricing.pricing_management import (
+from domains.gateway.application.pricing.management.pricing_management import (
     build_money_projector,
     upstream_row_to_response,
 )
@@ -21,11 +21,11 @@ from domains.gateway.application.pricing.pricing_reconciliation_reads import (
     team_month_reconciliation,
 )
 from domains.gateway.application.pricing.pricing_service import RateUnavailableError
-from domains.gateway.application.pricing.upstream_pricing_audit import (
+from domains.gateway.application.upstream.upstream_pricing_audit import (
     audit_upstream_pricing_keys,
 )
-from domains.gateway.application.pricing.upstream_sync_service import UpstreamSyncService
-from domains.gateway.domain.money import DisplayCurrency
+from domains.gateway.application.upstream.upstream_sync_service import UpstreamSyncService
+from domains.gateway.domain.pricing.money import DisplayCurrency
 from domains.gateway.domain.types import normalize_downstream_pricing_scope
 from domains.gateway.infrastructure.fx.fx_static import build_static_fx_adapter
 from domains.gateway.infrastructure.repositories.model_repository import GatewayModelRepository

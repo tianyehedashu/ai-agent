@@ -60,7 +60,7 @@ class BudgetScope(str, Enum):
     与 ``CredentialScope`` 同形（``system|tenant|user``）但 BudgetScope 多 ``key``（单个虚拟 Key）；
     两者各自独立演进，禁止合并字面量。
 
-    与 ``domains.gateway.domain.usage_read_model.UsageAggregation`` **正交**：
+    与 ``domains.gateway.domain.usage.usage_read_model.UsageAggregation`` **正交**：
     BudgetScope 是"预算条目属于谁"（写入字段），UsageAggregation 是
     "查询用量时按哪一列切片"（HTTP 查询参数）。``BudgetScope.tenant`` 与
     ``UsageAggregation.workspace`` 保持不同字面量，避免 URL/JSON 语义模糊。

@@ -22,13 +22,15 @@ from typing import Any
 import uuid
 
 from bootstrap.config import settings
-from domains.gateway.domain.cache_hit_flag import coerce_cache_hit_flag
-from domains.gateway.domain.fallback_chain import (
+from domains.gateway.domain.litellm.litellm_deployment_attribution import (
+    gateway_deployment_real_model,
+)
+from domains.gateway.domain.proxy.cache_hit_flag import coerce_cache_hit_flag
+from domains.gateway.domain.route.fallback_chain import (
     record_fallback_event_chain,
     resolve_fallback_chain,
 )
-from domains.gateway.domain.litellm_deployment_attribution import gateway_deployment_real_model
-from domains.gateway.domain.normalized_usage import extract_normalized_usage
+from domains.gateway.domain.usage.normalized_usage import extract_normalized_usage
 from domains.gateway.infrastructure.callbacks.cost_calculation import (
     _calc_cost,
 )
@@ -122,7 +124,7 @@ def _build_logger_instance() -> Any:
             start_time: Any,
             end_time: Any,
         ) -> None:
-            from domains.gateway.application.request_log_failure_classification import (
+            from domains.gateway.application.usage.request_log_failure_classification import (
                 classify_request_log_failure,
             )
 
@@ -878,7 +880,7 @@ async def _settle_budgets(
     total_tokens = input_tokens + output_tokens
     if status == "success" and (cost_usd > 0 or total_tokens > 0):
         with suppress(Exception):
-            from domains.gateway.application.budget_callback_settlement import (
+            from domains.gateway.application.budget.budget_callback_settlement import (
                 commit_budget_from_callback,
             )
 
@@ -890,7 +892,7 @@ async def _settle_budgets(
                 budget_model=str(route_name) if route_name else None,
             )
         with suppress(Exception):
-            from domains.gateway.application.budget_deployment_check import (
+            from domains.gateway.application.budget.budget_deployment_check import (
                 commit_user_credential_budget,
                 release_user_credential_budget_token_reservations_from_metadata,
             )
@@ -909,14 +911,14 @@ async def _settle_budgets(
             )
     elif status != "success":
         with suppress(Exception):
-            from domains.gateway.application.budget_deployment_check import (
+            from domains.gateway.application.budget.budget_deployment_check import (
                 release_user_credential_budget_from_metadata,
             )
 
             await release_user_credential_budget_from_metadata(metadata)
 
     with suppress(Exception):
-        from domains.gateway.application.provider_quota_callback_settlement import (
+        from domains.gateway.application.quota.provider_quota_callback_settlement import (
             settle_provider_quota_from_callback,
         )
 
@@ -930,7 +932,7 @@ async def _settle_budgets(
         )
 
     with suppress(Exception):
-        from domains.gateway.application.entitlement_plan_callback_settlement import (
+        from domains.gateway.application.quota.entitlement_plan_callback_settlement import (
             settle_entitlement_plan_from_callback,
         )
 
@@ -1116,7 +1118,7 @@ async def _persist_event(
         provider_plan_id,
     ) = _normalize_route_model(metadata, kwargs, response_obj)
     cred_id, cred_name_snap = _credential_snapshots_for_persist(metadata, kwargs)
-    from domains.gateway.domain.litellm_deployment_attribution import (
+    from domains.gateway.domain.litellm.litellm_deployment_attribution import (
         gateway_deployment_owner_user_id,
     )
 
@@ -1148,7 +1150,7 @@ async def _persist_event(
     # 2.5 图片张数（仅 image 能力）
     image_count = 0
     if capability == "image":
-        from domains.gateway.domain.policies.non_token_cost import response_image_count
+        from domains.gateway.domain.pricing.non_token_cost import response_image_count
 
         image_count = response_image_count(response_obj)
 
@@ -1312,7 +1314,7 @@ async def _maybe_mark_provider_quota_upstream_exhausted(
         status_code=status_code,
     ):
         return
-    from domains.gateway.application.provider_quota_guard import (
+    from domains.gateway.application.quota.provider_quota_guard import (
         get_provider_quota_guard,
         upstream_rule_ids_from_call_data,
     )

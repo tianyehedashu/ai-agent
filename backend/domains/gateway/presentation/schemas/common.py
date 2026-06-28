@@ -9,10 +9,10 @@ import uuid
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from domains.gateway.domain.margin_read_model import MarginGroupBy
-from domains.gateway.domain.policies.deployment_weight import MIN_DEPLOYMENT_WEIGHT
+from domains.gateway.domain.usage.margin_read_model import MarginGroupBy
+from domains.gateway.domain.catalog.deployment_weight import MIN_DEPLOYMENT_WEIGHT
 from domains.gateway.domain.types import RoutingStrategy, VirtualKeyBatchRevokeReason
-from domains.gateway.domain.usage_read_model import (
+from domains.gateway.domain.usage.usage_read_model import (
     UsageStatisticsBreakdownBy,
     UsageStatisticsGroupBy,
 )
@@ -511,7 +511,7 @@ class GatewayModelResponse(BaseModel):
 
     @model_validator(mode="after")
     def _derive_model_types_and_capabilities(self) -> Self:
-        from domains.gateway.application.config_catalog_sync import (
+        from domains.gateway.application.catalog.config_catalog_sync import (
             model_types_for_gateway_registration,
             selector_capabilities_from_tags,
         )
@@ -728,7 +728,7 @@ class PersonalModelResponse(BaseModel):
 
     @classmethod
     def from_gateway_model(cls, row: Any) -> Self:
-        from domains.gateway.application.personal_models import gateway_model_to_personal_list_item
+        from domains.gateway.application.catalog.personal_models import gateway_model_to_personal_list_item
 
         raw = gateway_model_to_personal_list_item(row)
 

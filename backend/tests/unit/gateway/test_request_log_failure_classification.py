@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from domains.gateway.application.request_log_failure_classification import (
+from domains.gateway.application.usage.request_log_failure_classification import (
     classify_request_log_failure,
 )
 from domains.gateway.domain.errors import (

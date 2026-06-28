@@ -29,19 +29,19 @@ async def test_list_merged_video_models_includes_personal_models() -> None:
 
     with (
         patch(
-            "domains.gateway.application.sql_model_catalog.get_model_catalog_adapter",
+            "domains.gateway.application.catalog.sql_model_catalog.get_model_catalog_adapter",
             return_value=MagicMock(),
         ),
         patch(
-            "domains.gateway.application.internal_bridge_actor.resolve_internal_gateway_team_id",
+            "domains.gateway.application.bridge.internal_bridge_actor.resolve_internal_gateway_team_id",
             return_value=uuid.uuid4(),
         ),
         patch(
-            "domains.gateway.application.model_selector_reads.list_available_system_models",
+            "domains.gateway.application.catalog.model_selector_reads.list_available_system_models",
             new=AsyncMock(return_value=[system_item]),
         ),
         patch(
-            "domains.gateway.application.model_selector_reads.list_personal_models_for_selector",
+            "domains.gateway.application.catalog.model_selector_reads.list_personal_models_for_selector",
             new=AsyncMock(return_value=[personal_item]),
         ),
     ):

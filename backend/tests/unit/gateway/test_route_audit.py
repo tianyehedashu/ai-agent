@@ -6,7 +6,7 @@ import uuid
 
 import pytest
 
-from domains.gateway.application.route_audit import audit_gateway_routes
+from domains.gateway.application.route.route_audit import audit_gateway_routes
 from domains.gateway.infrastructure.repositories.model_repository import (
     GatewayModelRepository,
     GatewayRouteRepository,

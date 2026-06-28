@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from domains.gateway.domain.policies.volcengine_image import (
+from domains.gateway.domain.provider.volcengine_image import (
     DEFAULT_VOLCENGINE_API_BASE,
     VOLCENGINE_MIN_IMAGE_PIXELS,
     build_volcengine_image_probe_request,

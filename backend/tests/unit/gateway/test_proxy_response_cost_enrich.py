@@ -2,7 +2,7 @@
 
 from types import SimpleNamespace
 
-from domains.gateway.application.proxy_response_adapter import (
+from domains.gateway.application.proxy.proxy_response_adapter import (
     enrich_openai_compat_response_cost,
 )
 

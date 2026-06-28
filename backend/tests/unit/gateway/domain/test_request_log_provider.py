@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from domains.gateway.domain.request_log_provider import (
+from domains.gateway.domain.usage.request_log_provider import (
     infer_provider_from_model_hint,
     infer_provider_from_model_hints,
     resolve_request_log_provider,

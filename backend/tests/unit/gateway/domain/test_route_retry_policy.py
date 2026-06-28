@@ -5,13 +5,13 @@ from __future__ import annotations
 from types import SimpleNamespace
 import uuid
 
-from domains.gateway.domain.route_retry_policy import (
+from domains.gateway.domain.route.route_retry_policy import (
     DEFAULT_ROUTER_NUM_RETRIES,
     deployment_num_retries_from_policy,
     litellm_model_group_retry_policy,
     routes_to_model_group_retry_policy,
 )
-from domains.gateway.domain.router_model_name import encode_router_model_name
+from domains.gateway.domain.route.router_model_name import encode_router_model_name
 
 
 def test_deployment_num_retries_accepts_shorthand() -> None:

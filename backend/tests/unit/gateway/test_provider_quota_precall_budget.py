@@ -11,11 +11,11 @@ import uuid
 
 import pytest
 
-import domains.gateway.application.budget_deployment_check as budget_mod
-import domains.gateway.application.provider_quota_guard as ppg
-from domains.gateway.application.provider_quota_guard import ProviderQuotaReservation
+import domains.gateway.application.budget.budget_deployment_check as budget_mod
+import domains.gateway.application.quota.provider_quota_guard as ppg
+from domains.gateway.application.quota.provider_quota_guard import ProviderQuotaReservation
 from domains.gateway.domain.errors import BudgetExceededError
-from domains.gateway.domain.quota_plan import PlanQuotaSpec, QuotaPlanReservation
+from domains.gateway.domain.quota.quota_plan import PlanQuotaSpec, QuotaPlanReservation
 
 
 @pytest.mark.asyncio

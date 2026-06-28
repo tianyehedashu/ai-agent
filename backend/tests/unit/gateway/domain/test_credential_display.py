@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from domains.gateway.domain.credential_display import (
+from domains.gateway.domain.credential.credential_display import (
     display_api_base_for_credential,
     mask_plain_secret_for_display,
 )

@@ -6,8 +6,8 @@ import uuid
 
 import pytest
 
-from domains.gateway.application.config_catalog_sync import sync_app_config_gateway_catalog
-from domains.gateway.application.sql_model_catalog import SqlModelCatalogAdapter
+from domains.gateway.application.catalog.config_catalog_sync import sync_app_config_gateway_catalog
+from domains.gateway.application.catalog.sql_model_catalog import SqlModelCatalogAdapter
 from domains.gateway.infrastructure.repositories.model_repository import GatewayModelRepository
 from domains.tenancy.application.team_service import TeamService
 from tests.unit.gateway.credential_test_helpers import create_tenant_test_credential

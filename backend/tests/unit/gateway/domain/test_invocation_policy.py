@@ -3,18 +3,18 @@
 import pytest
 
 from domains.gateway.domain.errors import InvocationPolicyViolationError
-from domains.gateway.domain.model_capability import ModelCapabilitySnapshot
-from domains.gateway.domain.policies.invocation_policy import (
+from domains.gateway.domain.catalog.model_capability import ModelCapabilitySnapshot
+from domains.gateway.domain.proxy.invocation_policy import (
     apply_invocation_kwargs,
     client_thinking_request_fields,
     validate_client_thinking_toggle,
     validate_invocation_kwargs,
 )
-from domains.gateway.domain.temperature_policy import (
+from domains.gateway.domain.proxy.temperature_policy import (
     TEMPERATURE_POLICY_CLIENT,
     TEMPERATURE_POLICY_FIXED_1,
 )
-from domains.gateway.domain.thinking_param import (
+from domains.gateway.domain.proxy.thinking_param import (
     THINKING_PARAM_ANTHROPIC,
     THINKING_PARAM_BUILTIN,
     THINKING_PARAM_DASHSCOPE,

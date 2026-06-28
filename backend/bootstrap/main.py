@@ -55,7 +55,7 @@ from domains.agent.presentation.system_router import router as system_router
 from domains.agent.presentation.tools_router import router as tools_router
 from domains.agent.presentation.video_task_router import router as video_task_router
 from domains.evaluation.presentation.router import router as evaluation_router
-from domains.gateway.application.listing_studio_image_port_registry import (
+from domains.gateway.application.bridge.listing_studio_image_port_registry import (
     register_listing_studio_local_image_port_factory,
 )
 from domains.gateway.application.startup import run_gateway_shutdown, run_gateway_startup

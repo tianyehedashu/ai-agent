@@ -19,7 +19,7 @@ from pydantic import AliasChoices, Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from bootstrap.config_loader import app_config
-from domains.gateway.domain.provider_api_base import get_default_api_base
+from domains.gateway.domain.provider.provider_api_base import get_default_api_base
 
 
 def _default_provider_api_base(provider: str) -> str:

@@ -7,10 +7,10 @@ import uuid
 
 from fastapi import APIRouter, status
 
-from domains.gateway.application.management.virtual_key_read_mappers import (
+from domains.gateway.application.vkey.management.virtual_key_read_mappers import (
     virtual_key_from_orm,
 )
-from domains.gateway.domain.virtual_key_service import generate_vkey
+from domains.gateway.domain.vkey.virtual_key_service import generate_vkey
 from domains.gateway.presentation.deps import (
     CurrentTeam,
     RequiredTeamMember,

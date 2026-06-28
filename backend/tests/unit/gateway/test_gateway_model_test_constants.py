@@ -1,6 +1,6 @@
 """``model_test_constants`` 与探活分支约定一致。"""
 
-from domains.gateway.application.management.model_test_constants import (
+from domains.gateway.application.catalog.management.model_test_constants import (
     GATEWAY_MODEL_TEST_SUPPORTED_CAPABILITIES,
 )
 

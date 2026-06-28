@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import Any
 import uuid
 
-from domains.gateway.application.management.write_modules.probe_target import (
+from domains.gateway.application.catalog.management.probe_target import (
     ProbeCredentialSnapshot,
 )
 

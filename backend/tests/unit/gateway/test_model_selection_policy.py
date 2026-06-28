@@ -2,7 +2,7 @@
 
 import pytest
 
-from domains.gateway.domain.model_selection_policy import pick_configured_or_first_visible
+from domains.gateway.domain.catalog.model_selection_policy import pick_configured_or_first_visible
 
 
 @pytest.mark.unit

@@ -9,8 +9,8 @@ import uuid
 
 import pytest
 
-from domains.gateway.application import entitlement_plan_callback_settlement as mod
-from domains.gateway.domain.quota_plan import ENTITLEMENT_NS, PlanQuotaSpec
+from domains.gateway.application.quota import entitlement_plan_callback_settlement as mod
+from domains.gateway.domain.quota.quota_plan import ENTITLEMENT_NS, PlanQuotaSpec
 
 
 @pytest.mark.asyncio
@@ -33,7 +33,7 @@ async def test_commit_entitlement_plan_on_success(monkeypatch) -> None:
     redis_mock = AsyncMock(return_value=mock_client)
     monkeypatch.setattr(mod, "get_redis_client", redis_mock)
     monkeypatch.setattr(
-        "domains.gateway.application.quota_plan_callback_settlement_shared.get_redis_client",
+        "domains.gateway.application.quota.quota_plan_callback_settlement_shared.get_redis_client",
         redis_mock,
     )
 

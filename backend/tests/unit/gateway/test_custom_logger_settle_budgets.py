@@ -25,7 +25,7 @@ async def test_settle_budgets_releases_phase2_on_non_success(status: str) -> Non
     metadata = {"gateway_user_id": "00000000-0000-4000-8000-000000000001"}
     release = AsyncMock()
     with patch(
-        "domains.gateway.application.budget_deployment_check.release_user_credential_budget_from_metadata",
+        "domains.gateway.application.budget.budget_deployment_check.release_user_credential_budget_from_metadata",
         release,
     ):
         await _settle_budgets(
@@ -48,7 +48,7 @@ async def test_settle_budgets_success_does_not_release_phase2() -> None:
     metadata = {"gateway_user_id": "00000000-0000-4000-8000-000000000001"}
     release = AsyncMock()
     with patch(
-        "domains.gateway.application.budget_deployment_check.release_user_credential_budget_from_metadata",
+        "domains.gateway.application.budget.budget_deployment_check.release_user_credential_budget_from_metadata",
         release,
     ):
         await _settle_budgets(

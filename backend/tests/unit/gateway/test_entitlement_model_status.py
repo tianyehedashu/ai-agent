@@ -8,16 +8,16 @@ import uuid
 
 import pytest
 
-from domains.gateway.application.entitlement_guard import _status_from_quota_snapshots
-from domains.gateway.application.entitlement_model_status import (
+from domains.gateway.application.proxy.proxy_model_list_reads import build_proxy_models_list
+from domains.gateway.application.quota.entitlement_guard import _status_from_quota_snapshots
+from domains.gateway.application.quota.entitlement_model_status import (
     compute_model_callable,
     connectivity_status_from_last_test,
     entitlement_status_by_model_names,
     is_connectivity_requestable,
     resolve_entitlement_scope,
 )
-from domains.gateway.application.proxy_model_list_reads import build_proxy_models_list
-from domains.gateway.domain.quota_plan import PlanQuotaSnapshot, PlanQuotaSpec
+from domains.gateway.domain.quota.quota_plan import PlanQuotaSnapshot, PlanQuotaSpec
 from domains.gateway.domain.types import EntitlementListStatus, ModelConnectivityStatus
 from domains.gateway.infrastructure.models.gateway_model import GatewayModel
 from domains.gateway.infrastructure.repositories.entitlement_plan_repository import (
@@ -109,11 +109,11 @@ async def test_build_proxy_models_list_uses_guard(monkeypatch: pytest.MonkeyPatc
     mock_guard.status_for_models = AsyncMock(return_value={"m1": "exhausted"})
     mock_build = MagicMock(return_value=mock_guard)
     monkeypatch.setattr(
-        "domains.gateway.application.entitlement_guard.build_entitlement_guard_for_session",
+        "domains.gateway.application.quota.entitlement_guard.build_entitlement_guard_for_session",
         mock_build,
     )
     monkeypatch.setattr(
-        "domains.gateway.application.model_credential_enrichment.build_credential_profile_map_for_models",
+        "domains.gateway.application.catalog.model_credential_enrichment.build_credential_profile_map_for_models",
         AsyncMock(return_value={}),
     )
     session = MagicMock()
@@ -147,7 +147,7 @@ async def test_status_for_models_with_enforceable_quota_does_not_typeerror() -> 
     from dataclasses import dataclass
     from decimal import Decimal
 
-    from domains.gateway.application.entitlement_guard import EntitlementGuard
+    from domains.gateway.application.quota.entitlement_guard import EntitlementGuard
 
     when = datetime(2026, 6, 18, tzinfo=UTC)
     plan_id = uuid.uuid4()

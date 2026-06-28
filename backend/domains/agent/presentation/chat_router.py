@@ -23,12 +23,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from domains.agent.application import ChatUseCase
 from domains.agent.application.checkpoint_service import CheckpointService
 from domains.identity.application.permission_context_composer import PermissionContextComposer
-from domains.identity.presentation.deps import AuthUser
+from domains.identity.presentation.deps import AuthUser, OptionalUser
 from domains.session.application import SessionUseCase
 from domains.tenancy.presentation.team_dependencies import merge_optional_gateway_team
 from libs.api.deps import get_checkpoint_service, get_session_service
 from libs.api.params import coerce_optional_uuid
 from libs.db.database import get_db, get_session_context
+from libs.db.session_lifecycle import rollback_open_transaction
+from libs.exceptions import AuthenticationError
 from libs.iam.permission_context import PermissionContext, get_permission_context
 from utils.serialization import Serializer
 
@@ -203,15 +205,20 @@ class DiffResponse(BaseModel):
 async def chat(
     request: ChatRequest,
     http_request: Request,
-    current_user: AuthUser,
+    current_user: OptionalUser,
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> StreamingResponse:
     """
     发送消息并获取流式响应
 
     使用 Server-Sent Events (SSE) 返回事件流
+
+    注：``current_user`` 用可选依赖注入，认证校验在 handler 内显式断言，
+    使请求体校验（422）先于认证失败（401）返回，便于客户端区分"输入非法"与"未登录"。
     """
 
+    if current_user is None:
+        raise AuthenticationError("Authentication required")
     if request.gateway_team_id is not None:
         await merge_optional_gateway_team(
             db,
@@ -219,6 +226,7 @@ async def chat(
             platform_user_role=current_user.role,
             team_id=request.gateway_team_id,
         )
+    await rollback_open_transaction(db)
 
     permission_context = get_permission_context()
 
@@ -226,8 +234,8 @@ async def chat(
         try:
             async with AsyncExitStack() as stack:
                 await stack.enter_async_context(_optional_permission_scope(permission_context))
-                db = await stack.enter_async_context(get_session_context())
-                chat_service = await _build_stream_chat_service(db, http_request)
+                stream_db = await stack.enter_async_context(get_session_context())
+                chat_service = await _build_stream_chat_service(stream_db, http_request)
                 mcp_config_dict = (
                     {"enabled_servers": request.mcp_config.enabled_servers}
                     if request.mcp_config
@@ -291,6 +299,7 @@ async def resume_execution(
             platform_user_role=current_user.role,
             team_id=request.gateway_team_id,
         )
+    await rollback_open_transaction(db)
 
     permission_context = get_permission_context()
 
@@ -298,8 +307,8 @@ async def resume_execution(
         try:
             async with AsyncExitStack() as stack:
                 await stack.enter_async_context(_optional_permission_scope(permission_context))
-                db = await stack.enter_async_context(get_session_context())
-                chat_service = await _build_stream_chat_service(db, http_request)
+                stream_db = await stack.enter_async_context(get_session_context())
+                chat_service = await _build_stream_chat_service(stream_db, http_request)
                 async for event in chat_service.resume(
                     session_id=request.session_id,
                     checkpoint_id=request.checkpoint_id,

@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from domains.gateway.application.config_catalog_sync import build_tags_from_seed_model
-from domains.gateway.domain.catalog_seed_model import CatalogSeedModel
-from domains.gateway.domain.thinking_param import (
+from domains.gateway.application.catalog.config_catalog_sync import build_tags_from_seed_model
+from domains.gateway.domain.catalog.catalog_seed_model import CatalogSeedModel
+from domains.gateway.domain.proxy.thinking_param import (
     THINKING_PARAM_ANTHROPIC,
     THINKING_PARAM_BUILTIN,
     THINKING_PARAM_DASHSCOPE,

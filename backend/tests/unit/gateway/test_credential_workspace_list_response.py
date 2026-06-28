@@ -7,7 +7,7 @@ import uuid
 
 import pytest
 
-from domains.gateway.application.management.credential_read_model import CredentialReadModel
+from domains.gateway.application.credential.management.credential_read_model import CredentialReadModel
 from domains.gateway.presentation.credential_response import (
     METADATA_ONLY_API_KEY_MASKED,
     build_credential_response_for_team_workspace_list,

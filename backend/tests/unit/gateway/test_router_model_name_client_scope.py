@@ -5,9 +5,9 @@ from __future__ import annotations
 from types import SimpleNamespace
 import uuid
 
-from domains.gateway.application.model_or_route_resolution import ResolvedModelName
-from domains.gateway.application.router_model_name import router_model_name_for_client
-from domains.gateway.domain.router_model_name import encode_router_model_name
+from domains.gateway.application.catalog.model_or_route_resolution import ResolvedModelName
+from domains.gateway.application.route.router_model_name import router_model_name_for_client
+from domains.gateway.domain.route.router_model_name import encode_router_model_name
 
 
 def test_system_model_encodes_gw_s_not_gw_t() -> None:

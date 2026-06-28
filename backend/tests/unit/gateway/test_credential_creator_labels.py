@@ -5,12 +5,12 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
-from domains.gateway.application.management.credential_creator_labels import (
+from domains.gateway.application.credential.management.credential_creator_labels import (
     collect_creator_user_ids,
     credential_creator_display_label,
     credential_creator_labels_for_read_models,
 )
-from domains.gateway.application.management.credential_read_model import CredentialReadModel
+from domains.gateway.application.credential.management.credential_read_model import CredentialReadModel
 from domains.identity.application.ports import UserSummaryView
 
 

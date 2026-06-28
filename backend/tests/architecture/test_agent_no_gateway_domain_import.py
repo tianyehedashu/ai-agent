@@ -18,9 +18,9 @@ CHECK_PATHS = [
 ]
 FORBIDDEN_MODULES = frozenset(
     {
-        "domains.gateway.domain.thinking_param",
-        "domains.gateway.domain.temperature_policy",
-        "domains.gateway.domain.policies.invocation_policy",
+        "domains.gateway.domain.proxy.thinking_param",
+        "domains.gateway.domain.proxy.temperature_policy",
+        "domains.gateway.domain.proxy.invocation_policy",
     }
 )
 

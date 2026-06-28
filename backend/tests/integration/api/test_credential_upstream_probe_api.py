@@ -143,8 +143,8 @@ class TestCredentialUpstreamProbeApi:
     async def test_probe_inferred_model_types_unions_litellm_vision(
         self, client: AsyncClient, auth_headers: dict, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from domains.gateway.domain.litellm_capability_mapping import LitellmModelInfoHints
-        from domains.gateway.infrastructure.litellm_capability_hint_adapter import (
+        from domains.gateway.domain.litellm.litellm_capability_mapping import LitellmModelInfoHints
+        from domains.gateway.infrastructure.litellm.litellm_capability_hint_adapter import (
             LitellmCapabilityHintAdapter,
         )
 

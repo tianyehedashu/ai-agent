@@ -7,7 +7,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from domains.gateway.application.management.managed_team_virtual_key_reads import (
+from domains.gateway.application.vkey.management.managed_team_virtual_key_reads import (
     list_managed_team_virtual_keys_for_actor,
     list_managed_team_vkey_entitlements_for_actor,
 )

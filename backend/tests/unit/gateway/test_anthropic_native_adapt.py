@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 
-from domains.gateway.application.anthropic_native_adapt import (
+from domains.gateway.application.proxy.anthropic_native_adapt import (
     anthropic_response_to_dict,
     anthropic_stream_chunk_to_bytes,
     anthropic_usage_total_tokens,
@@ -127,7 +127,7 @@ def test_anthropic_response_to_dict_passthrough() -> None:
 
 @pytest.mark.asyncio
 async def test_iter_sse_from_dict_chunks() -> None:
-    from domains.gateway.application.anthropic_native_adapt import iter_anthropic_sse_bytes
+    from domains.gateway.application.proxy.anthropic_native_adapt import iter_anthropic_sse_bytes
 
     async def chunks() -> AsyncIterator[dict[str, Any]]:
         yield {"type": "message_start", "message": {"id": "msg_x", "role": "assistant"}}

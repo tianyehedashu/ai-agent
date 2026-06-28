@@ -6,7 +6,7 @@ from decimal import Decimal
 from typing import Any
 
 from domains.gateway.application.pricing.fx_port import FxRatePort
-from domains.gateway.domain.money import DisplayCurrency, MoneyDisplay, MoneyUSD
+from domains.gateway.domain.pricing.money import DisplayCurrency, MoneyDisplay, MoneyUSD
 
 
 class MoneyProjector:

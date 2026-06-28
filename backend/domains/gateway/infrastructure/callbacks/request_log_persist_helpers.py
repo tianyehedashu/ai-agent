@@ -4,8 +4,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from domains.gateway.domain.litellm_deployment_attribution import litellm_model_info_from_kwargs
-from domains.gateway.domain.request_log_provider import resolve_request_log_provider
+from domains.gateway.domain.litellm.litellm_deployment_attribution import (
+    litellm_model_info_from_kwargs,
+)
+from domains.gateway.domain.usage.request_log_provider import resolve_request_log_provider
 
 
 def model_info_from_kwargs(kwargs: dict[str, Any]) -> dict[str, Any] | None:

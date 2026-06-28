@@ -6,8 +6,8 @@ from datetime import UTC, datetime
 from decimal import Decimal
 import uuid
 
-from domains.gateway.application.management.plan_read_models import ProviderQuotaReadModel
-from domains.gateway.application.management.quota_rule_read_mappers import (
+from domains.gateway.application.quota.management.plan_read_model import ProviderQuotaReadModel
+from domains.gateway.application.quota.management.quota_rule_read_mappers import (
     budget_to_quota_rule,
     provider_quota_to_quota_rule,
 )

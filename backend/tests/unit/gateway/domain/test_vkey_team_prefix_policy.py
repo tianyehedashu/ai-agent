@@ -7,7 +7,7 @@ import uuid
 import pytest
 
 from domains.gateway.domain.errors import VkeyTeamPrefixUnknownError
-from domains.gateway.domain.vkey_team_prefix_policy import resolve_vkey_model_prefix
+from domains.gateway.domain.vkey.vkey_team_prefix_policy import resolve_vkey_model_prefix
 
 
 def test_no_prefix_falls_to_bound_team() -> None:

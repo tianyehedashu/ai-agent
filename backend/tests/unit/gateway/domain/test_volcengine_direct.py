@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from domains.gateway.domain.policies.volcengine_direct import should_use_volcengine_direct_upstream
-from domains.gateway.domain.policies.volcengine_image import should_use_volcengine_direct_image
-from domains.gateway.domain.policies.volcengine_video import should_use_volcengine_direct_video
+from domains.gateway.domain.provider.volcengine_direct import should_use_volcengine_direct_upstream
+from domains.gateway.domain.provider.volcengine_image import should_use_volcengine_direct_image
+from domains.gateway.domain.provider.volcengine_video import should_use_volcengine_direct_video
 
 
 def test_should_use_volcengine_direct_upstream() -> None:

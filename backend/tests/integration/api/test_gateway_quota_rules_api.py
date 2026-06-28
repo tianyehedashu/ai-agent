@@ -531,9 +531,9 @@ class TestGatewayQuotaRulesApi:
         assert body["source_ref"]["quota_id"] == quota_id
         assert body["source_ref"].get("plan_id") is None
 
-        from domains.gateway.application.management.plan_read_mappers import provider_quota_to_spec
-        from domains.gateway.application.quota_plan_service import get_quota_plan_service
-        from domains.gateway.domain.quota_plan import PROVIDER_NS
+        from domains.gateway.application.quota.management.plan_read_mappers import provider_quota_to_spec
+        from domains.gateway.application.quota.quota_plan_service import get_quota_plan_service
+        from domains.gateway.domain.quota.quota_plan import PROVIDER_NS
         from domains.gateway.infrastructure.repositories.provider_quota_repository import (
             ProviderQuotaRepository,
         )

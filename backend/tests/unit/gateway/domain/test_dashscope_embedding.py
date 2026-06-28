@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from domains.gateway.domain.policies.dashscope_embedding import (
+from domains.gateway.domain.provider.dashscope_embedding import (
     DEFAULT_DASHSCOPE_COMPAT_API_BASE,
     build_dashscope_embedding_request,
     normalize_dashscope_embedding_model,

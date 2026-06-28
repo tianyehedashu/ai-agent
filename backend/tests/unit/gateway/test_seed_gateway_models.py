@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from domains.gateway.application.config_catalog_sync import sync_gateway_catalog_from_seed
-from domains.gateway.application.gateway_catalog_seed import (
+from domains.gateway.application.catalog.config_catalog_sync import sync_gateway_catalog_from_seed
+from domains.gateway.application.catalog.gateway_catalog_seed import (
     catalog_seed_model_from_dict,
     load_seed_catalog_models,
     resolve_catalog_seed_models,
@@ -64,7 +64,7 @@ def test_resolve_catalog_seed_models_prefers_json(tmp_path: Path) -> None:
 @pytest.mark.asyncio
 async def test_sync_gateway_catalog_from_seed_idempotent(db_session, monkeypatch) -> None:
     monkeypatch.setattr(
-        "domains.gateway.application.config_catalog_sync._provider_api_key_and_base",
+        "domains.gateway.application.catalog.config_catalog_sync._provider_api_key_and_base",
         lambda p: ("sk-test", None) if p == "openai" else (None, None),
     )
     stats1 = await sync_gateway_catalog_from_seed(db_session)

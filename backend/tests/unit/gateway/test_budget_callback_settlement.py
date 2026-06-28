@@ -6,7 +6,7 @@ import uuid
 
 import pytest
 
-from domains.gateway.application.budget_callback_settlement import (
+from domains.gateway.application.budget.budget_callback_settlement import (
     commit_budget_from_callback,
     record_proxy_cost_commit,
 )
@@ -76,16 +76,19 @@ async def test_commit_defer_applies_full_cost() -> None:
 
     with (
         patch(
-            "domains.gateway.application.budget_callback_settlement.get_redis_client",
+            "domains.gateway.application.budget.budget_callback_settlement.get_redis_client",
             return_value=mock_client,
         ),
         patch(
-            "domains.gateway.application.budget_callback_settlement.BudgetService",
+            "domains.gateway.application.budget.budget_callback_settlement.BudgetService",
             return_value=mock_budget,
         ),
-        patch("domains.gateway.application.budget_callback_settlement.get_session_context", return_value=mock_cm),
         patch(
-            "domains.gateway.application.budget_callback_settlement.BudgetRepository",
+            "domains.gateway.application.budget.budget_callback_settlement.get_session_context",
+            return_value=mock_cm,
+        ),
+        patch(
+            "domains.gateway.application.budget.budget_callback_settlement.BudgetRepository",
         ) as mock_repo_cls,
     ):
         mock_repo_cls.return_value.get_many_by_plan = AsyncMock(side_effect=_get_many_by_plan)
@@ -111,11 +114,11 @@ async def test_commit_non_stream_delta_zero_skips_budget() -> None:
     mock_budget = AsyncMock()
     with (
         patch(
-            "domains.gateway.application.budget_callback_settlement.get_redis_client",
+            "domains.gateway.application.budget.budget_callback_settlement.get_redis_client",
             return_value=mock_client,
         ),
         patch(
-            "domains.gateway.application.budget_callback_settlement.BudgetService",
+            "domains.gateway.application.budget.budget_callback_settlement.BudgetService",
             return_value=mock_budget,
         ),
     ):
@@ -135,7 +138,7 @@ async def test_commit_non_stream_delta_zero_skips_budget() -> None:
 async def test_record_proxy_cost_commit() -> None:
     mock_client = AsyncMock()
     with patch(
-        "domains.gateway.application.budget_callback_settlement.get_redis_client",
+        "domains.gateway.application.budget.budget_callback_settlement.get_redis_client",
         return_value=mock_client,
     ):
         await record_proxy_cost_commit("req-x", Decimal("0.01"))
@@ -153,23 +156,23 @@ def _dedup_session_patches(mock_client: AsyncMock, captured: dict) -> tuple:
 
     return (
         patch(
-            "domains.gateway.application.budget_callback_settlement.get_redis_client",
+            "domains.gateway.application.budget.budget_callback_settlement.get_redis_client",
             return_value=mock_client,
         ),
         patch(
-            "domains.gateway.application.budget_callback_settlement.BudgetService",
+            "domains.gateway.application.budget.budget_callback_settlement.BudgetService",
             return_value=AsyncMock(),
         ),
         patch(
-            "domains.gateway.application.budget_callback_settlement.commit_cached_platform_budgets",
+            "domains.gateway.application.budget.budget_callback_settlement.commit_cached_platform_budgets",
             side_effect=_fake_commit,
         ),
         patch(
-            "domains.gateway.application.budget_callback_settlement.get_session_context",
+            "domains.gateway.application.budget.budget_callback_settlement.get_session_context",
             return_value=mock_cm,
         ),
         patch(
-            "domains.gateway.application.budget_callback_settlement.BudgetRepository",
+            "domains.gateway.application.budget.budget_callback_settlement.BudgetRepository",
         ),
     )
 

@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import uuid
 
-from domains.gateway.application.management.write_modules.probe_litellm_attribution import (
+from domains.gateway.application.catalog.management.probe_litellm_attribution import (
     GATEWAY_PROBE_CLIENT_TYPE,
     build_probe_gateway_metadata,
     merge_probe_litellm_kwargs,
 )
-from domains.gateway.application.management.write_modules.probe_target import ProbeTarget
+from domains.gateway.application.catalog.management.probe_target import ProbeTarget
 from domains.gateway.infrastructure.callbacks.custom_logger import _extract_gateway_metadata
 
 

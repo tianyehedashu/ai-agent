@@ -16,8 +16,8 @@ from fastapi.responses import Response, StreamingResponse
 import orjson
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from domains.gateway.application.proxy_use_case import ProxyUseCase
-from domains.gateway.domain.stream_utils import safe_aclose_stream
+from domains.gateway.application.proxy.proxy_use_case import ProxyUseCase
+from domains.gateway.domain.proxy.stream_utils import safe_aclose_stream
 from domains.gateway.domain.types import GatewayCapability
 from domains.gateway.presentation.deps import (
     VkeyOrApikeyPrincipal,

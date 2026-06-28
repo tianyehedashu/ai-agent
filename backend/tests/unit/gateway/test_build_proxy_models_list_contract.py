@@ -7,7 +7,7 @@ import uuid
 
 import pytest
 
-from domains.gateway.application.proxy_model_list_reads import build_proxy_models_list
+from domains.gateway.application.proxy.proxy_model_list_reads import build_proxy_models_list
 from domains.gateway.infrastructure.models.gateway_model import GatewayModel
 
 

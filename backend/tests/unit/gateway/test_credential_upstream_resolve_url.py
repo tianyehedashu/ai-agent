@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from domains.gateway.domain.upstream_catalog_policy import (
+from domains.gateway.domain.upstream.upstream_catalog_policy import (
     resolve_openai_compatible_models_list_url,
 )
 

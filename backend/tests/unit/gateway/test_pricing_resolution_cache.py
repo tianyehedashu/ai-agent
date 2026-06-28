@@ -11,7 +11,7 @@ from domains.gateway.application.pricing.pricing_resolution_cache import (
     pricing_resolution_cache_key,
 )
 from domains.gateway.application.pricing.pricing_service import ResolvedPricing
-from domains.gateway.domain.pricing_calculator import PricingRate
+from domains.gateway.domain.pricing.pricing_calculator import PricingRate
 
 
 def test_cache_safe_resolved_strips_orm_rows() -> None:

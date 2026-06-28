@@ -8,8 +8,8 @@ import uuid
 
 import pytest
 
-from domains.gateway.application.model_or_route_resolution import ResolvedModelName
-from domains.gateway.application.proxy_use_case import ProxyContext, ProxyUseCase
+from domains.gateway.application.catalog.model_or_route_resolution import ResolvedModelName
+from domains.gateway.application.proxy.proxy_use_case import ProxyContext, ProxyUseCase
 from domains.gateway.domain.errors import CapabilityNotAllowedError
 from domains.gateway.domain.types import GatewayCapability
 
@@ -42,7 +42,7 @@ async def test_chat_rejects_video_generation_model(db_session: Any) -> None:
     uc = ProxyUseCase(db_session)
     with (
         patch(
-            "domains.gateway.application.proxy_guard.resolve_model_or_route",
+            "domains.gateway.application.proxy.proxy_guard.resolve_model_or_route",
             AsyncMock(return_value=_resolved("video_generation")),
         ),
         pytest.raises(CapabilityNotAllowedError) as exc_info,
@@ -66,7 +66,7 @@ async def test_chat_allows_matching_capability(db_session: Any) -> None:
     )
     uc = ProxyUseCase(db_session)
     with patch(
-        "domains.gateway.application.proxy_guard.resolve_model_or_route",
+        "domains.gateway.application.proxy.proxy_guard.resolve_model_or_route",
         AsyncMock(return_value=_resolved("chat")),
     ):
         await uc.guard.assert_request_capability_matches_model(ctx, "my-chat-model")
@@ -86,7 +86,7 @@ async def test_skips_when_model_not_registered(db_session: Any) -> None:
     )
     uc = ProxyUseCase(db_session)
     with patch(
-        "domains.gateway.application.proxy_guard.resolve_model_or_route",
+        "domains.gateway.application.proxy.proxy_guard.resolve_model_or_route",
         AsyncMock(return_value=None),
     ):
         await uc.guard.assert_request_capability_matches_model(ctx, "unknown-alias")
@@ -107,7 +107,7 @@ async def test_virtual_route_capability_mismatch_message_uses_route_label(db_ses
     uc = ProxyUseCase(db_session)
     with (
         patch(
-            "domains.gateway.application.proxy_guard.resolve_model_or_route",
+            "domains.gateway.application.proxy.proxy_guard.resolve_model_or_route",
             AsyncMock(return_value=_resolved("image", route_name="my-route")),
         ),
         pytest.raises(CapabilityNotAllowedError) as exc_info,

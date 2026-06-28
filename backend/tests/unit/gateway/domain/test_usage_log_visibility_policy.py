@@ -6,7 +6,7 @@ import uuid
 
 import pytest
 
-from domains.gateway.domain.policies.usage_log_visibility import (
+from domains.gateway.domain.visibility.usage_log_visibility import (
     UsageLogAccessSnapshot,
     member_can_view_request_log_record,
     member_requires_request_log_detail_filter,
@@ -14,7 +14,7 @@ from domains.gateway.domain.policies.usage_log_visibility import (
     snapshot_is_team_member_only,
     workspace_axis_member_user_id,
 )
-from domains.gateway.domain.virtual_key_access import actor_owns_non_system_vkey
+from domains.gateway.domain.vkey.virtual_key_access import actor_owns_non_system_vkey
 
 
 @pytest.mark.unit

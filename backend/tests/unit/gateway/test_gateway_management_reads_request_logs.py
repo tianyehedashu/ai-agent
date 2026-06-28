@@ -15,8 +15,8 @@ import pytest
 
 from domains.gateway.application.management.reads import GatewayManagementReadService
 from domains.gateway.domain.errors import TeamPermissionDeniedError
-from domains.gateway.domain.usage_axis import UsageAxis
-from domains.gateway.domain.usage_read_model import UsageAggregation
+from domains.gateway.domain.usage.usage_axis import UsageAxis
+from domains.gateway.domain.usage.usage_read_model import UsageAggregation
 from domains.tenancy.domain.management_context import ManagementTeamContext
 
 

@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from domains.gateway.application.scenario_defaults import (
+from domains.gateway.application.catalog.scenario_defaults import (
     ScenarioDefaultsService,
     require_scenario_default,
     resolve_scenario_default,
@@ -38,7 +38,7 @@ class _FakeCatalog:
 
     async def resolve_chat_default_text_model(self, *, billing_team_id, user_id=None):
         from bootstrap.config import settings
-        from domains.gateway.domain.scenario_defaults_policy import pick_scenario_from_visible
+        from domains.gateway.domain.catalog.scenario_defaults_policy import pick_scenario_from_visible
 
         items = await self.list_visible_models(
             billing_team_id=billing_team_id,
@@ -55,7 +55,7 @@ class _FakeCatalog:
 @pytest.mark.asyncio
 async def test_resolve_scenario_default_env_valid(monkeypatch) -> None:
     monkeypatch.setattr(
-        "domains.gateway.application.scenario_defaults.settings.default_model", "m-a"
+        "domains.gateway.application.catalog.scenario_defaults.settings.default_model", "m-a"
     )
     catalog = _FakeCatalog(
         [
@@ -69,7 +69,7 @@ async def test_resolve_scenario_default_env_valid(monkeypatch) -> None:
 @pytest.mark.asyncio
 async def test_resolve_scenario_default_env_invalid_falls_back_first(monkeypatch) -> None:
     monkeypatch.setattr(
-        "domains.gateway.application.scenario_defaults.settings.default_model", "missing"
+        "domains.gateway.application.catalog.scenario_defaults.settings.default_model", "missing"
     )
     catalog = _FakeCatalog(
         [

@@ -7,7 +7,7 @@ import uuid
 import pytest
 
 from domains.gateway.domain.errors import ManagementEntityNotFoundError
-from domains.gateway.domain.policies.route_grant_access import (
+from domains.gateway.domain.route.route_grant_access import (
     actor_owns_route,
     assert_actor_owns_route,
     assert_alias_free_in_team,

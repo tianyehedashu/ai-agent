@@ -12,7 +12,7 @@ from domains.gateway.domain.errors import (
     SystemVirtualKeyForbiddenError,
     VirtualKeyNotFoundError,
 )
-from domains.gateway.domain.virtual_key_service import generate_vkey
+from domains.gateway.domain.vkey.virtual_key_service import generate_vkey
 from domains.gateway.infrastructure.repositories.virtual_key_repository import (
     VirtualKeyRepository,
 )

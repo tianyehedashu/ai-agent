@@ -7,20 +7,20 @@ import uuid
 
 from cryptography.fernet import InvalidToken
 
-from domains.gateway.application.management.credential_read_model import CredentialReadModel
-from domains.gateway.domain.credential_display import (
+from domains.gateway.application.credential.management.credential_read_model import CredentialReadModel
+from domains.gateway.domain.credential.credential_display import (
     display_api_base_for_credential,
     mask_plain_secret_for_display,
 )
 from domains.gateway.domain.errors import CredentialApiKeyDecryptError
-from domains.gateway.domain.team_credential_access import team_credential_management_access
+from domains.gateway.domain.credential.team_credential_access import team_credential_management_access
 from domains.gateway.domain.types import (
     credential_api_scope,
     is_config_managed_system_credential,
 )
-from domains.gateway.domain.upstream_endpoint import effective_api_bases_for_credential
-from domains.gateway.domain.upstream_profile_registry import get_upstream_profile
-from domains.gateway.domain.visibility import credential_visibility_for_api
+from domains.gateway.domain.upstream.upstream_endpoint import effective_api_bases_for_credential
+from domains.gateway.domain.upstream.upstream_profile_registry import get_upstream_profile
+from domains.gateway.domain.visibility.visibility import credential_visibility_for_api
 from domains.gateway.presentation.schemas.common import (
     CredentialApiBasesBody,
     CredentialResponse,

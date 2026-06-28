@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from domains.gateway.domain.policies.anthropic_only_request_fields import (
+from domains.gateway.domain.proxy.anthropic_only_request_fields import (
     ANTHROPIC_MESSAGES_FIELD_POLICY_NATIVE,
     ANTHROPIC_MESSAGES_FIELD_POLICY_TAG,
     ANTHROPIC_ONLY_REQUEST_FIELDS,

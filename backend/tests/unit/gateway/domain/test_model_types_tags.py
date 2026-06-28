@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from domains.gateway.domain.model_types_tags import (
+from domains.gateway.domain.catalog.model_types_tags import (
     capability_for_model_type,
     model_types_for_capability_write,
     normalize_model_types,
@@ -56,7 +56,7 @@ def test_tags_from_model_types_set_only_does_not_clear() -> None:
 
 
 def test_tags_for_model_type_delegates_to_ssot() -> None:
-    from domains.gateway.application.personal_models import tags_for_model_type
+    from domains.gateway.application.catalog.personal_models import tags_for_model_type
 
     assert tags_for_model_type("image") == {"supports_vision": True}
     assert tags_for_model_type("text") == {}

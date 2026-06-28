@@ -1,8 +1,8 @@
-"""``domains.gateway.domain.litellm_model_id`` 单元测试。"""
+"""``domains.gateway.domain.litellm.litellm_model_id`` 单元测试。"""
 
 import pytest
 
-from domains.gateway.domain.litellm_model_id import (
+from domains.gateway.domain.litellm.litellm_model_id import (
     build_litellm_model_id,
     normalize_gateway_stored_real_model,
     normalize_stored_real_model_for_credential,

@@ -5,7 +5,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 import uuid
 
-from domains.gateway.domain.route_snapshot import (
+from domains.gateway.domain.route.route_snapshot import (
     build_delegated_route_snapshot_metadata,
     build_route_snapshot_metadata,
 )

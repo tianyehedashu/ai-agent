@@ -8,12 +8,12 @@ import uuid
 
 import pytest
 
-from domains.gateway.application.proxy_stream_settlement import (
+from domains.gateway.application.proxy.proxy_stream_settlement import (
     finalize_deferred_stream_settlement,
     resolve_stream_budget_cost_usd,
     stream_usage_token_total,
 )
-from domains.gateway.application.proxy_use_case import ProxyContext
+from domains.gateway.application.proxy.proxy_use_case import ProxyContext
 from domains.gateway.domain.types import GatewayCapability
 
 
@@ -71,11 +71,11 @@ async def test_finalize_deferred_stream_calls_callback_when_cost_positive() -> N
     mock_settle = AsyncMock()
     with (
         patch(
-            "domains.gateway.application.budget_callback_settlement.commit_budget_from_callback",
+            "domains.gateway.application.budget.budget_callback_settlement.commit_budget_from_callback",
             mock_commit,
         ),
         patch(
-            "domains.gateway.application.proxy_response_adapter.settle_usage",
+            "domains.gateway.application.proxy.proxy_response_adapter.settle_usage",
             mock_settle,
         ),
     ):

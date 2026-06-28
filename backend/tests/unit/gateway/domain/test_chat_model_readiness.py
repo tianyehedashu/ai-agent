@@ -1,6 +1,6 @@
 """chat_model_readiness 单元测试。"""
 
-from domains.gateway.domain.policies.chat_model_readiness import (
+from domains.gateway.domain.catalog.chat_model_readiness import (
     CHAT_READINESS_NEEDS_CONNECTIVITY,
     CHAT_READINESS_NEEDS_CREDENTIAL,
     CHAT_READINESS_NEEDS_MODEL,

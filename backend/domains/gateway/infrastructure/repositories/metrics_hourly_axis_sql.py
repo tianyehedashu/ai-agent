@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 from sqlalchemy import ColumnElement, and_, true
 
-from domains.gateway.domain.usage_axis import UsageAxis
+from domains.gateway.domain.usage.usage_axis import UsageAxis
 from domains.gateway.infrastructure.models.metrics_hourly import GatewayMetricsHourly
 
 if TYPE_CHECKING:

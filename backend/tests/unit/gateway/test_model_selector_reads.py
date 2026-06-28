@@ -7,7 +7,7 @@ import uuid
 
 import pytest
 
-from domains.gateway.application.model_selector_reads import (
+from domains.gateway.application.catalog.model_selector_reads import (
     get_default_for_model_type,
     list_available_system_models,
 )
@@ -55,7 +55,7 @@ async def test_get_default_for_model_type_falls_back_to_permission_team() -> Non
     catalog.list_personal_models_for_selector = AsyncMock(return_value=[])
 
     with patch(
-        "domains.gateway.application.model_selector_reads.resolve_scenario_default",
+        "domains.gateway.application.catalog.model_selector_reads.resolve_scenario_default",
         new_callable=AsyncMock,
         return_value=None,
     ):

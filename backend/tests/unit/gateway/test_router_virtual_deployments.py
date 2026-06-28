@@ -5,9 +5,9 @@ from __future__ import annotations
 from unittest.mock import MagicMock
 import uuid
 
-from domains.gateway.application.route_owner_slug_maps import RouteOwnerSlugContext
-from domains.gateway.domain.router_model_name import encode_router_model_name
-from domains.gateway.infrastructure.router_singleton import (
+from domains.gateway.application.route.route_owner_slug_maps import RouteOwnerSlugContext
+from domains.gateway.domain.route.router_model_name import encode_router_model_name
+from domains.gateway.infrastructure.litellm.router_singleton import (
     _models_to_deployments,
     _resolve_strategy,
     _routes_to_fallbacks,
@@ -82,7 +82,7 @@ def _mk_route(
 
 def test_virtual_route_creates_one_deployment_per_primary(monkeypatch) -> None:
     monkeypatch.setattr(
-        "domains.gateway.infrastructure.router_singleton._build_litellm_params",
+        "domains.gateway.infrastructure.litellm.router_singleton._build_litellm_params",
         _stub_build_litellm_params,
     )
     team = uuid.uuid4()
@@ -118,7 +118,7 @@ def test_virtual_route_creates_one_deployment_per_primary(monkeypatch) -> None:
 
 def test_virtual_route_deployments_include_litellm_weight(monkeypatch) -> None:
     monkeypatch.setattr(
-        "domains.gateway.infrastructure.router_singleton._build_litellm_params",
+        "domains.gateway.infrastructure.litellm.router_singleton._build_litellm_params",
         _stub_build_litellm_params,
     )
     team = uuid.uuid4()
@@ -152,7 +152,7 @@ def test_virtual_route_deployments_include_litellm_weight(monkeypatch) -> None:
 
 def test_invalid_deployment_weight_defaults_to_one(monkeypatch) -> None:
     monkeypatch.setattr(
-        "domains.gateway.infrastructure.router_singleton._build_litellm_params",
+        "domains.gateway.infrastructure.litellm.router_singleton._build_litellm_params",
         _stub_build_litellm_params,
     )
     cred = uuid.uuid4()
@@ -180,7 +180,7 @@ def test_weighted_pick_strategy_maps_to_litellm_simple_shuffle() -> None:
 
 def test_virtual_route_skipped_when_shadowed_by_model_name(monkeypatch) -> None:
     monkeypatch.setattr(
-        "domains.gateway.infrastructure.router_singleton._build_litellm_params",
+        "domains.gateway.infrastructure.litellm.router_singleton._build_litellm_params",
         _stub_build_litellm_params,
     )
     team = uuid.uuid4()
@@ -201,7 +201,7 @@ def test_virtual_route_skipped_when_shadowed_by_model_name(monkeypatch) -> None:
 
 def test_virtual_route_cross_provider_deployments(monkeypatch) -> None:
     monkeypatch.setattr(
-        "domains.gateway.infrastructure.router_singleton._build_litellm_params",
+        "domains.gateway.infrastructure.litellm.router_singleton._build_litellm_params",
         _stub_build_litellm_params,
     )
     team = uuid.uuid4()
@@ -242,7 +242,7 @@ def test_virtual_route_cross_provider_deployments(monkeypatch) -> None:
 
 def test_virtual_route_skips_missing_primary(monkeypatch) -> None:
     monkeypatch.setattr(
-        "domains.gateway.infrastructure.router_singleton._build_litellm_params",
+        "domains.gateway.infrastructure.litellm.router_singleton._build_litellm_params",
         _stub_build_litellm_params,
     )
     team = uuid.uuid4()
@@ -262,7 +262,7 @@ def test_virtual_route_skips_missing_primary(monkeypatch) -> None:
 def test_system_and_team_same_client_name_both_deployed(monkeypatch) -> None:
     """系统级与团队级同名 ``GatewayModel`` 在 Router 中各占一条编码 deployment。"""
     monkeypatch.setattr(
-        "domains.gateway.infrastructure.router_singleton._build_litellm_params",
+        "domains.gateway.infrastructure.litellm.router_singleton._build_litellm_params",
         _stub_build_litellm_params,
     )
     team = uuid.uuid4()
@@ -288,7 +288,7 @@ def test_system_and_team_same_client_name_both_deployed(monkeypatch) -> None:
 
 def test_virtual_route_falls_back_to_global_gateway_model(monkeypatch) -> None:
     monkeypatch.setattr(
-        "domains.gateway.infrastructure.router_singleton._build_litellm_params",
+        "domains.gateway.infrastructure.litellm.router_singleton._build_litellm_params",
         _stub_build_litellm_params,
     )
     team = uuid.uuid4()
@@ -308,7 +308,7 @@ def test_virtual_route_falls_back_to_global_gateway_model(monkeypatch) -> None:
 def test_virtual_route_resolves_cross_team_slug_prefixed_primary(monkeypatch) -> None:
     """personal 路由 primary 为 {slug}/{name} 时应解析到 grant team 的 GatewayModel。"""
     monkeypatch.setattr(
-        "domains.gateway.infrastructure.router_singleton._build_litellm_params",
+        "domains.gateway.infrastructure.litellm.router_singleton._build_litellm_params",
         _stub_build_litellm_params,
     )
     personal_team = uuid.uuid4()
@@ -349,7 +349,7 @@ def test_virtual_route_resolves_cross_team_slug_prefixed_primary(monkeypatch) ->
 
 def test_virtual_route_deployment_inherits_retry_policy_num_retries(monkeypatch) -> None:
     monkeypatch.setattr(
-        "domains.gateway.infrastructure.router_singleton._build_litellm_params",
+        "domains.gateway.infrastructure.litellm.router_singleton._build_litellm_params",
         _stub_build_litellm_params,
     )
     team = uuid.uuid4()
@@ -379,7 +379,7 @@ def test_virtual_route_deployment_inherits_retry_policy_num_retries(monkeypatch)
 
 def test_routes_to_fallbacks_skips_unresolved_target(monkeypatch) -> None:
     monkeypatch.setattr(
-        "domains.gateway.infrastructure.router_singleton._build_litellm_params",
+        "domains.gateway.infrastructure.litellm.router_singleton._build_litellm_params",
         _stub_build_litellm_params,
     )
     team = uuid.uuid4()

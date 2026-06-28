@@ -8,7 +8,7 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bootstrap.config import settings
-from domains.gateway.application.config_catalog_sync import (
+from domains.gateway.application.catalog.config_catalog_sync import (
     MANAGED_CONFIG,
     SYSTEM_CREDENTIAL_NAME,
     _config_managed_credential_extra,
@@ -16,7 +16,7 @@ from domains.gateway.application.config_catalog_sync import (
     _merge_config_managed_credential_extra,
     sync_app_config_gateway_catalog,
 )
-from domains.gateway.domain.credential_sync_policy import FORCE_ENV_SYNC_EXTRA_KEY
+from domains.gateway.domain.credential.credential_sync_policy import FORCE_ENV_SYNC_EXTRA_KEY
 from domains.gateway.infrastructure.repositories.model_repository import GatewayModelRepository
 from domains.gateway.infrastructure.repositories.system_credential_repository import (
     SystemProviderCredentialRepository,
@@ -62,7 +62,7 @@ async def test_sync_disables_config_models_when_provider_key_revoked(
 ) -> None:
     """provider API key 撤回后再次同步：之前的 system 模型应被 disable，
     且 system 凭据 ``is_active=False``。"""
-    from domains.gateway.application import config_catalog_sync as sync_mod
+    from domains.gateway.application.catalog import config_catalog_sync as sync_mod
 
     _orig_ensure = sync_mod._ensure_system_credential
 
@@ -88,7 +88,7 @@ async def test_sync_disables_config_models_when_provider_key_revoked(
 
     # 第一次：保证 openai key 存在 → catalog 写入 claude/gpt-4o 等系统模型
     monkeypatch.setattr(
-        "domains.gateway.application.config_catalog_sync._provider_api_key_and_base",
+        "domains.gateway.application.catalog.config_catalog_sync._provider_api_key_and_base",
         lambda p: ("sk-test", None) if p == "openai" else (None, None),
     )
     await sync_app_config_gateway_catalog(db_session)
@@ -114,7 +114,7 @@ async def test_sync_disables_config_models_when_provider_key_revoked(
 
     # 第二次：撤回 openai key → 既有 system 模型应被 disable + 凭据失活
     monkeypatch.setattr(
-        "domains.gateway.application.config_catalog_sync._provider_api_key_and_base",
+        "domains.gateway.application.catalog.config_catalog_sync._provider_api_key_and_base",
         lambda _provider: (None, None),
     )
     stats = await sync_app_config_gateway_catalog(db_session)
@@ -173,7 +173,7 @@ async def test_sync_preserves_existing_api_base_over_env(
     cred_repo = SystemProviderCredentialRepository(db_session)
 
     monkeypatch.setattr(
-        "domains.gateway.application.config_catalog_sync._provider_api_key_and_base",
+        "domains.gateway.application.catalog.config_catalog_sync._provider_api_key_and_base",
         lambda _p: ("sk-zhipu", CODING_ZHIPU_BASE),
     )
     created_id = await _ensure_system_credential(
@@ -199,7 +199,7 @@ async def test_sync_backfills_empty_api_base_from_env(
     cred_repo = SystemProviderCredentialRepository(db_session)
 
     monkeypatch.setattr(
-        "domains.gateway.application.config_catalog_sync._provider_api_key_and_base",
+        "domains.gateway.application.catalog.config_catalog_sync._provider_api_key_and_base",
         lambda _p: ("sk-zhipu", CODING_ZHIPU_BASE),
     )
     created_id = await _ensure_system_credential(
@@ -238,7 +238,7 @@ async def test_sync_force_env_sync_overwrites_managed_base(
     cred_repo = SystemProviderCredentialRepository(db_session)
 
     monkeypatch.setattr(
-        "domains.gateway.application.config_catalog_sync._provider_api_key_and_base",
+        "domains.gateway.application.catalog.config_catalog_sync._provider_api_key_and_base",
         lambda _p: ("sk-zhipu", CODING_ZHIPU_BASE),
     )
     created_id = await _ensure_system_credential(

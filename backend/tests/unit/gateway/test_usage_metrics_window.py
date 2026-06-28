@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from domains.gateway.application.management.usage_metrics_window import (
+from domains.gateway.application.usage.management.usage_metrics_window import (
     cold_logs_time_range,
     compute_hot_cutoff,
     split_usage_metrics_window,

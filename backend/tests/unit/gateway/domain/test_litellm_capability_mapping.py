@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from domains.gateway.domain.litellm_capability_mapping import (
+from domains.gateway.domain.litellm.litellm_capability_mapping import (
     apply_litellm_hints_to_tags,
     hints_from_model_info,
     hints_without_reasoning,

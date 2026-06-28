@@ -31,7 +31,7 @@ from domains.agent.domain.listing_studio.constants import (
 from domains.agent.infrastructure.models.listing_studio_job_step import (
     ListingStudioJobStepStatus,
 )
-from domains.gateway.application.sql_model_catalog import get_model_catalog_adapter
+from domains.gateway.application.catalog.sql_model_catalog import get_model_catalog_adapter
 from domains.identity.infrastructure.models.user import User
 from libs.iam.permission_context import (
     clear_permission_context,

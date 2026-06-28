@@ -1,10 +1,10 @@
-"""``domains.gateway.domain.model_capability`` 单元测试。"""
+"""``domains.gateway.domain.catalog.model_capability`` 单元测试。"""
 
-from domains.gateway.domain.model_capability import (
+from domains.gateway.domain.catalog.model_capability import (
     ModelCapabilitySnapshot,
     tags_to_capability_snapshot,
 )
-from domains.gateway.domain.thinking_param import (
+from domains.gateway.domain.proxy.thinking_param import (
     THINKING_PARAM_DASHSCOPE,
     THINKING_PARAM_NONE,
 )

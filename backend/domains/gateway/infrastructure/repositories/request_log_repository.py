@@ -2,7 +2,7 @@
 
 仓储层基于 ``UsageAxis`` 值对象统一访问 ``gateway_request_logs``，5 对镜像方法（``*_for_team`` /
 ``*_for_user``）已被 5 个 axis-based 方法取代，SQL 主体只写一次。轴的语义见
-``domains.gateway.domain.usage_axis``。
+``domains.gateway.domain.usage.usage_axis``。
 """
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING, Any
 from sqlalchemy import and_, case, func, literal, or_, select, true
 from sqlalchemy.orm import defer
 
-from domains.gateway.domain.usage_read_model import (
+from domains.gateway.domain.usage.usage_read_model import (
     UsageStatisticsFilters,
     UsageStatisticsGroupBy,
     UsageStatisticsParentScope,
@@ -59,7 +59,7 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
     from sqlalchemy.sql.elements import ColumnElement
 
-    from domains.gateway.domain.usage_axis import UsageAxis
+    from domains.gateway.domain.usage.usage_axis import UsageAxis
 
 
 @dataclass(frozen=True)
@@ -369,7 +369,7 @@ class RequestLogRepository:
             ),
         ]
         merged: dict[str, Any] | None = None
-        from domains.gateway.application.management.usage_metrics import merge_summary_slices
+        from domains.gateway.application.usage.management.usage_metrics import merge_summary_slices
 
         for variant in self._clause_variants_for_axis(axis, clauses):
             stmt = select(
@@ -1060,7 +1060,7 @@ class RequestLogRepository:
             return items, totals, group_total
 
         merged_items: list[RequestLogUsageAggregateRow] = []
-        from domains.gateway.application.management.usage_metrics import (
+        from domains.gateway.application.usage.management.usage_metrics import (
             merge_statistics_items,
             merge_statistics_totals,
         )

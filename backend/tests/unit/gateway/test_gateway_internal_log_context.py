@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from bootstrap.config import settings
-from domains.gateway.application.gateway_internal_log_context import (
+from domains.gateway.application.bridge.gateway_internal_log_context import (
     SESSION_GATEWAY_VERBOSE_KEY,
     resolve_internal_store_full_messages,
 )

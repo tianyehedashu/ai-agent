@@ -9,9 +9,9 @@ import uuid
 
 import pytest
 
-from domains.gateway.application.budget_config_cache import BudgetConfigRow
-import domains.gateway.application.budget_deployment_check as mod
-from domains.gateway.application.budget_service import BudgetCheckResult
+from domains.gateway.application.budget.budget_config_cache import BudgetConfigRow
+import domains.gateway.application.budget.budget_deployment_check as mod
+from domains.gateway.application.budget.budget_service import BudgetCheckResult
 from domains.gateway.domain.errors import BudgetExceededError
 
 _MODEL = "gpt-4--abc"

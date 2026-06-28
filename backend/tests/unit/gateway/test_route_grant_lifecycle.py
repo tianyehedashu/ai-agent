@@ -55,7 +55,7 @@ async def test_remove_member_revokes_route_grants(db_session, test_user) -> None
 async def test_membership_revoke_invalidates_consumer_tenant_cache(
     db_session, test_user, monkeypatch
 ) -> None:
-    from domains.gateway.application.management.route_team_grant_lifecycle import (
+    from domains.gateway.application.route.management.route_team_grant_lifecycle import (
         revoke_route_grants_for_user_team_membership,
     )
 
@@ -78,7 +78,7 @@ async def test_membership_revoke_invalidates_consumer_tenant_cache(
         invalidated.append(tenant_id)
 
     monkeypatch.setattr(
-        "domains.gateway.application.management.route_team_grant_lifecycle."
+        "domains.gateway.application.route.management.route_team_grant_lifecycle."
         "invalidate_gateway_read_caches_for_tenant",
         _capture,
     )
@@ -147,9 +147,7 @@ async def test_membership_loss_only_revokes_own_grants(db_session, test_user) ->
 
     my_route = await _seed_route(db_session, test_user.id)
     other_route = await _seed_route(db_session, other.id)
-    shared = await teams.create_team(
-        name=f"shared-{uuid.uuid4().hex[:6]}", owner_user_id=other.id
-    )
+    shared = await teams.create_team(name=f"shared-{uuid.uuid4().hex[:6]}", owner_user_id=other.id)
     await teams.add_member(shared.id, test_user.id, "member")
     repo = GatewayRouteTeamGrantRepository(db_session)
     await repo.upsert_active(
@@ -183,18 +181,25 @@ async def test_tenant_reload_invalidates_consumer_resolve_cache(
     失效 owner 租户，遗漏 T。验证连带失效覆盖 T。
     """
     from bootstrap.config import settings
-    from domains.gateway.application.management.write_modules._base import (
-        GatewayManagementWriteBaseMixin,
-    )
-    from domains.gateway.application.resolve_model_cache import (
+    from domains.gateway.application.grant import resolve_model_cache as rmc
+    from domains.gateway.application.grant.resolve_model_cache import (
         CACHE_MISS,
         clear_resolve_model_cache_for_tests,
         peek_resolve_cache_entry,
         put_resolve_cache_entry,
     )
+    from domains.gateway.application.management.write_base import (
+        GatewayManagementWriteBaseMixin,
+    )
 
     monkeypatch.setattr(settings, "gateway_route_sharing_enabled", True)
     clear_resolve_model_cache_for_tests()
+
+    # 测试环境无 Redis：版本号恒为空串，与 put 默认 version="" 匹配，避免误失效
+    async def _no_redis_version(_team_id: uuid.UUID) -> str:
+        return ""
+
+    monkeypatch.setattr(rmc, "_fetch_tenant_version", _no_redis_version)
 
     teams = TeamService(db_session)
     owner_team = await teams.ensure_personal_team(test_user.id)
@@ -213,9 +218,9 @@ async def test_tenant_reload_invalidates_consumer_resolve_cache(
 
     # 消费团队侧委派缓存条目（用负缓存标记即可区分"存在 vs 失效"）
     put_resolve_cache_entry(shared.id, alias, user_id=None, resolved=None)
-    assert peek_resolve_cache_entry(shared.id, alias, user_id=None) is None
+    assert await peek_resolve_cache_entry(shared.id, alias, user_id=None) is None
 
     svc = GatewayManagementWriteBaseMixin(db_session)
     await svc._invalidate_shared_route_consumer_caches(exclude=owner_team.id)
 
-    assert peek_resolve_cache_entry(shared.id, alias, user_id=None) is CACHE_MISS
+    assert await peek_resolve_cache_entry(shared.id, alias, user_id=None) is CACHE_MISS

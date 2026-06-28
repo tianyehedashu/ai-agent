@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from domains.gateway.application.prompt_cache_middleware import PromptCacheMiddleware
-from domains.gateway.domain.http_header_merge import merge_anthropic_beta_values
+from domains.gateway.application.proxy.prompt_cache_middleware import PromptCacheMiddleware
+from domains.gateway.domain.proxy.http_header_merge import merge_anthropic_beta_values
 from domains.gateway.presentation.proxy_header_passthrough import merge_extra_headers_from_request
 
 

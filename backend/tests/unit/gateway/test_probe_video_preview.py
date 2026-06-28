@@ -1,6 +1,6 @@
 """``probe_video_preview`` 纯函数单测。"""
 
-from domains.gateway.application.management.write_modules.probe_video_preview import (
+from domains.gateway.application.catalog.management.probe_video_preview import (
     video_generation_probe_preview,
 )
 

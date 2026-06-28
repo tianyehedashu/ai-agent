@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import uuid
 
-from domains.gateway.domain.policies.managed_team_credentials_policy import (
+from domains.gateway.domain.credential.managed_team_credentials_policy import (
     WritableTeamSnapshot,
     build_managed_team_credential_list_plan,
     is_writable_gateway_team,
 )
-from domains.gateway.domain.policies.managed_team_resource_policy import (
+from domains.gateway.domain.visibility.managed_team_resource_policy import (
     build_managed_team_resource_list_plan,
 )
 from domains.tenancy.domain.policies.team_role import TeamRole
@@ -70,7 +70,7 @@ def test_build_managed_team_credential_list_plan_filters_members() -> None:
 
 
 def test_build_managed_team_readable_resource_list_plan_includes_members() -> None:
-    from domains.gateway.domain.policies.managed_team_resource_policy import (
+    from domains.gateway.domain.visibility.managed_team_resource_policy import (
         build_managed_team_readable_resource_list_plan,
     )
 

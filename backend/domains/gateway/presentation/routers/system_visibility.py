@@ -8,10 +8,10 @@ import uuid
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from domains.gateway.application.management.system_visibility import (
+from domains.gateway.application.catalog.management.system_visibility import (
     GatewaySystemVisibilityService,
 )
-from domains.gateway.domain.policies.gateway_admin import assert_platform_admin
+from domains.gateway.domain.visibility.gateway_admin import assert_platform_admin
 from domains.gateway.presentation.deps import CurrentTeam
 from domains.gateway.presentation.routers._common import MgmtReads
 from domains.gateway.presentation.schemas.common import (

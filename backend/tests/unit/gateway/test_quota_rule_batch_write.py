@@ -8,8 +8,8 @@ import uuid
 
 import pytest
 
-from domains.gateway.application.management.write_modules import GatewayManagementWriteService
-from domains.gateway.application.management.write_modules.quota_rule_writes import (
+from domains.gateway.application.management import GatewayManagementWriteService
+from domains.gateway.application.quota.management.quota_rule_writes import (
     QuotaRuleUpsertCommand,
 )
 from domains.tenancy.application.ports import GatewayTeamMembershipSnapshot
@@ -170,7 +170,7 @@ async def test_upstream_cache_invalidates_all_membership_teams() -> None:
         nonlocal provider_quota_cache_invalidated
         provider_quota_cache_invalidated = True
 
-    import domains.gateway.application.gateway_cache_invalidation as cache_mod
+    import domains.gateway.application.observability.gateway_cache_invalidation as cache_mod
 
     original = cache_mod.invalidate_gateway_quota_rule_cache_for_team
     original_pp = cache_mod.invalidate_gateway_provider_quota_config_cache

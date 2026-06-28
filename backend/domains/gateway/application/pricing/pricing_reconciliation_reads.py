@@ -8,7 +8,7 @@ import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from domains.gateway.domain.usage_axis import UsageAxis
+from domains.gateway.domain.usage.usage_axis import UsageAxis
 from domains.gateway.infrastructure.repositories.request_log_repository import (
     RequestLogRepository,
 )

@@ -68,7 +68,7 @@ async def test_middleware_records_platform_api_key_usage() -> None:
     with (
         patch("libs.db.database.get_session_factory", return_value=mock_factory),
         patch(
-            "domains.gateway.application.gateway_access_factory.build_gateway_access_use_case",
+            "domains.gateway.application.access.gateway_access_factory.build_gateway_access_use_case",
             return_value=FakeAccess(),
         ),
     ):

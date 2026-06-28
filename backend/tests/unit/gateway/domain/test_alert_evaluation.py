@@ -6,9 +6,9 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 import uuid
 
-from domains.gateway.domain.alert_metric_aggregates import AlertMetricAggregates
-from domains.gateway.domain.alert_rule_snapshot import AlertRuleSnapshot
-from domains.gateway.domain.policies.alert_evaluation import (
+from domains.gateway.domain.alert.alert_metric_aggregates import AlertMetricAggregates
+from domains.gateway.domain.alert.alert_rule_snapshot import AlertRuleSnapshot
+from domains.gateway.domain.alert.alert_evaluation import (
     alert_cooldown_elapsed,
     evaluate_alert_rule,
     evaluate_error_rate,

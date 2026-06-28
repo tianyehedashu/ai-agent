@@ -8,14 +8,14 @@ import uuid
 
 import pytest
 
-from domains.gateway.application.budget_config_cache import BudgetConfigRow
-from domains.gateway.application.budget_service import (
+from domains.gateway.application.budget.budget_config_cache import BudgetConfigRow
+from domains.gateway.application.budget.budget_service import (
     BudgetCheckResult,
     BudgetService,
     BudgetUsageCoord,
 )
-from domains.gateway.application.proxy_context import ProxyContext
-from domains.gateway.application.proxy_guard import ProxyGuard
+from domains.gateway.application.proxy.proxy_context import ProxyContext
+from domains.gateway.application.proxy.proxy_guard import ProxyGuard
 from domains.gateway.domain.errors import BudgetExceededError
 from domains.gateway.domain.types import GatewayCapability, VirtualKeyPrincipal
 
@@ -78,7 +78,7 @@ async def test_check_budget_raises_when_tenant_usd_exceeded(monkeypatch) -> None
         return {coord: config_row}
 
     monkeypatch.setattr(
-        "domains.gateway.application.proxy_guard.get_cached_budget_by_plan",
+        "domains.gateway.application.proxy.proxy_guard.get_cached_budget_by_plan",
         fake_cached,
     )
 
@@ -133,7 +133,7 @@ async def test_check_budget_reserves_requests_when_under_limit(monkeypatch) -> N
         return {coord: row}
 
     monkeypatch.setattr(
-        "domains.gateway.application.proxy_guard.get_cached_budget_by_plan",
+        "domains.gateway.application.proxy.proxy_guard.get_cached_budget_by_plan",
         fake_cached,
     )
 

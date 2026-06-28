@@ -2,7 +2,7 @@
 
 import pytest
 
-from domains.gateway.domain.policies.vision_image_url import (
+from domains.gateway.domain.proxy.vision_image_url import (
     parse_listing_studio_image_filename,
     should_inline_vision_image_url,
 )

@@ -5,14 +5,14 @@ from __future__ import annotations
 from types import SimpleNamespace
 import uuid
 
-from domains.gateway.domain.fallback_chain import (
+from domains.gateway.domain.route.fallback_chain import (
     attempted_fallbacks,
     explicit_fallback_chain,
     readable_model_name,
     record_fallback_event_chain,
     resolve_fallback_chain,
 )
-from domains.gateway.domain.router_model_name import encode_router_model_name
+from domains.gateway.domain.route.router_model_name import encode_router_model_name
 
 _TEAM = uuid.uuid4()
 

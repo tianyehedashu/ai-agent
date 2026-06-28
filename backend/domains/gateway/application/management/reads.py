@@ -8,54 +8,16 @@ from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
-from domains.gateway.application.entitlement_model_status import is_connectivity_requestable
-from domains.gateway.application.gateway_model_listing import (
+from domains.gateway.application.catalog.gateway_model_listing import (
     GatewayRegistryModelRow,
     list_callable_system_model_names,
     list_merged_models_for_tenant,
 )
-from domains.gateway.application.management.access_assertions import (
-    GatewayManagementAccessAssertions,
-)
-from domains.gateway.application.management.alert_read_model import (
-    AlertRuleSummary,
-    alert_rule_from_orm,
-)
-from domains.gateway.application.management.credential_read_mappers import (
-    credential_from_orm,
-    system_credential_from_orm,
-)
-from domains.gateway.application.management.credential_read_model import CredentialReadModel
-from domains.gateway.application.management.plan_read_mappers import (
-    entitlement_plan_from_orm,
-    provider_quota_from_orm,
-)
-from domains.gateway.application.management.plan_read_models import (
-    EntitlementPlanReadModel,
-    ProviderQuotaReadModel,
-)
-from domains.gateway.application.management.quota_rule_read_model import (
-    QuotaRuleListFilters,
-    QuotaRuleReadModel,
-)
-from domains.gateway.application.management.usage_log_reads import GatewayUsageLogReadMixin
-from domains.gateway.application.management.usage_metrics_router import UsageMetricsRouter
-from domains.gateway.application.management.usage_reads import (
-    EntitlementUsageReadModel,
-    GatewayPlanUsageReadService,
-    MarginSummaryReadModel,
-    ProviderPlanCostReadModel,
-)
-from domains.gateway.application.management.virtual_key_read_mappers import (
-    virtual_key_from_orm,
-    virtual_keys_from_orm_with_grants,
-)
-from domains.gateway.application.management.virtual_key_read_model import VirtualKeyReadModel
-from domains.gateway.application.model_list_credential_assertions import (
+from domains.gateway.application.catalog.model_list_credential_assertions import (
     assert_personal_model_list_credential_filter,
     assert_team_model_list_credential_filter,
 )
-from domains.gateway.application.model_list_pipeline import (
+from domains.gateway.application.catalog.model_list_pipeline import (
     ModelListIdsResult,
     ModelListPageResult,
     ModelListQuery,
@@ -64,36 +26,78 @@ from domains.gateway.application.model_list_pipeline import (
     list_gateway_models_page,
     list_personal_models_page,
 )
-from domains.gateway.application.system_visibility_filter import (
+from domains.gateway.application.credential.management.credential_read_mappers import (
+    credential_from_orm,
+    system_credential_from_orm,
+)
+from domains.gateway.application.credential.management.credential_read_model import (
+    CredentialReadModel,
+)
+from domains.gateway.application.grant.system_visibility_filter import (
     filter_visible_system_provider_credentials,
     load_system_credentials_by_ids,
 )
-from domains.gateway.domain.errors import (
-    CredentialNotFoundError,
-    VirtualKeyNotFoundError,
+from domains.gateway.application.management.access_assertions import (
+    GatewayManagementAccessAssertions,
 )
-from domains.gateway.domain.margin_read_model import MarginGroupBy
-from domains.gateway.domain.policies.budget_scope_policy import (
+from domains.gateway.application.quota.entitlement_model_status import is_connectivity_requestable
+from domains.gateway.application.quota.management.plan_read_mappers import (
+    entitlement_plan_from_orm,
+    provider_quota_from_orm,
+)
+from domains.gateway.application.quota.management.plan_read_model import (
+    EntitlementPlanReadModel,
+    ProviderQuotaReadModel,
+)
+from domains.gateway.application.quota.management.quota_rule_read_model import (
+    QuotaRuleListFilters,
+    QuotaRuleReadModel,
+)
+from domains.gateway.application.usage.management.alert_read_model import (
+    AlertRuleSummary,
+    alert_rule_from_orm,
+)
+from domains.gateway.application.usage.management.usage_log_reads import GatewayUsageLogReadMixin
+from domains.gateway.application.usage.management.usage_metrics_router import UsageMetricsRouter
+from domains.gateway.application.usage.management.usage_reads import (
+    EntitlementUsageReadModel,
+    GatewayPlanUsageReadService,
+    MarginSummaryReadModel,
+    ProviderPlanCostReadModel,
+)
+from domains.gateway.application.vkey.management.virtual_key_read_mappers import (
+    virtual_key_from_orm,
+    virtual_keys_from_orm_with_grants,
+)
+from domains.gateway.application.vkey.management.virtual_key_read_model import (
+    VirtualKeyReadModel,
+)
+from domains.gateway.domain.budget.budget_scope_policy import (
     filter_budget_rows,
     normalize_budget_list_filters,
     plan_admin_budget_fetch,
 )
-from domains.gateway.domain.policies.model_registry_scope import (
+from domains.gateway.domain.catalog.model_registry_scope import (
     RegistryScope,
     exclude_user_scope_credentials_for_registry,
     filter_system_registry_rows,
     is_requestable_registry_scope,
     uses_merged_registry_list,
 )
-from domains.gateway.domain.policies.quota_rule_visibility import (
-    member_user_budget_visible_in_team,
-)
-from domains.gateway.domain.team_credential_access import (
+from domains.gateway.domain.credential.team_credential_access import (
     assert_team_credential_readable_by_actor,
     filter_team_credentials_visible_to_actor,
 )
+from domains.gateway.domain.errors import (
+    CredentialNotFoundError,
+    VirtualKeyNotFoundError,
+)
+from domains.gateway.domain.quota.quota_rule_visibility import (
+    member_user_budget_visible_in_team,
+)
 from domains.gateway.domain.types import CredentialScope, credential_api_scope
-from domains.gateway.domain.virtual_key_access import (
+from domains.gateway.domain.usage.margin_read_model import MarginGroupBy
+from domains.gateway.domain.vkey.virtual_key_access import (
     assert_virtual_key_accessible_by_actor,
     filter_virtual_keys_visible_to_actor,
 )
@@ -146,7 +150,7 @@ from libs.iam.tenancy import MembershipPort
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
-    from domains.gateway.application.management.playground_credential_reads import (
+    from domains.gateway.application.credential.management.playground_credential_reads import (
         PlaygroundCredentialSummaryItem,
     )
 
@@ -423,7 +427,7 @@ class GatewayManagementReadService(GatewayUsageLogReadMixin):
         is_platform_admin: bool = False,
     ) -> list[PlaygroundCredentialSummaryItem]:
         """Playground / 调用指南：跨 membership 聚合凭据摘要（含 context_team_id）。"""
-        from domains.gateway.application.management.playground_credential_reads import (
+        from domains.gateway.application.credential.management.playground_credential_reads import (
             list_playground_credential_summaries_for_actor,
         )
 
@@ -905,10 +909,10 @@ class GatewayManagementReadService(GatewayUsageLogReadMixin):
         page: int = 1,
         page_size: int = 20,
     ) -> tuple[list[QuotaRuleReadModel], int]:
-        from domains.gateway.application.management.quota_rule_assembler import (
+        from domains.gateway.application.quota.management.quota_rule_assembler import (
             assemble_team_quota_rules,
         )
-        from domains.gateway.application.management.quota_usage_snapshot import (
+        from domains.gateway.application.quota.management.quota_usage_snapshot import (
             enrich_quota_rules_with_usage,
         )
 
@@ -960,7 +964,7 @@ class GatewayManagementReadService(GatewayUsageLogReadMixin):
         creds: Sequence[CredentialReadModel],
     ) -> dict[UUID, str | None]:
         """批量解析凭据「提供者」展示标签（join users 摘要）。"""
-        from domains.gateway.application.management.credential_creator_labels import (
+        from domains.gateway.application.credential.management.credential_creator_labels import (
             collect_creator_user_ids,
             credential_creator_labels_for_read_models,
         )

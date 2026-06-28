@@ -1,7 +1,7 @@
 """UpstreamAdapter 单元测试。"""
 
-from domains.gateway.application.model_or_route_resolution import ResolvedModelName
-from domains.gateway.application.upstream_adapter import UpstreamAdapter
+from domains.gateway.application.catalog.model_or_route_resolution import ResolvedModelName
+from domains.gateway.application.upstream.upstream_adapter import UpstreamAdapter
 
 
 class _FakeRecord:
