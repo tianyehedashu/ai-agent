@@ -12,16 +12,11 @@ from domains.gateway.domain.credential.team_registry_credential_display import (
 )
 from domains.gateway.infrastructure.models.gateway_model import GatewayModel
 from domains.gateway.infrastructure.models.provider_credential import ProviderCredential
-from domains.gateway.infrastructure.repositories.system_credential_repository import (
-    SystemProviderCredentialRepository,
-)
 
 if TYPE_CHECKING:
     import uuid
 
     from sqlalchemy.ext.asyncio import AsyncSession
-
-    from domains.gateway.infrastructure.models.system_gateway import SystemProviderCredential
 
 
 @dataclass(frozen=True)
@@ -41,32 +36,21 @@ class ProviderCredentialRepository:
     async def get(self, credential_id: uuid.UUID) -> ProviderCredential | None:
         return await self._session.get(ProviderCredential, credential_id)
 
-    async def get_bindable_for_team_gateway_model(
+    async def get_for_tenant(
         self,
         credential_id: uuid.UUID,
         *,
         tenant_id: uuid.UUID,
-        is_platform_admin: bool,
-    ) -> ProviderCredential | SystemProviderCredential | None:
-        row = await self.get(credential_id)
-        if row is not None:
-            if row.tenant_id == tenant_id:
-                return row
-            if row.scope == "user" and row.scope_id is not None:
-                from domains.gateway.application.grant.resource_grant_filter import (
-                    is_credential_granted_to_team,
-                )
+    ) -> ProviderCredential | None:
+        """按 tenant_id 匹配的纯数据查询（无权限语义）。
 
-                if await is_credential_granted_to_team(
-                    self._session,
-                    credential_id=credential_id,
-                    target_team_id=tenant_id,
-                ):
-                    return row
+        grant / system fallback 等跨数据源编排由 application 层
+        （``resolve_bindable_credential``）完成，仓储只做单表 tenant 匹配。
+        """
+        row = await self.get(credential_id)
+        if row is None or row.tenant_id != tenant_id:
             return None
-        if is_platform_admin:
-            return await SystemProviderCredentialRepository(self._session).get(credential_id)
-        return None
+        return row
 
     async def list_by_ids(self, credential_ids: list[uuid.UUID]) -> list[ProviderCredential]:
         if not credential_ids:

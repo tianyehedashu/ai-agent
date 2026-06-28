@@ -9,9 +9,9 @@ import uuid
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from domains.gateway.domain.usage.margin_read_model import MarginGroupBy
 from domains.gateway.domain.catalog.deployment_weight import MIN_DEPLOYMENT_WEIGHT
 from domains.gateway.domain.types import RoutingStrategy, VirtualKeyBatchRevokeReason
+from domains.gateway.domain.usage.margin_read_model import MarginGroupBy
 from domains.gateway.domain.usage.usage_read_model import (
     UsageStatisticsBreakdownBy,
     UsageStatisticsGroupBy,
@@ -728,7 +728,9 @@ class PersonalModelResponse(BaseModel):
 
     @classmethod
     def from_gateway_model(cls, row: Any) -> Self:
-        from domains.gateway.application.catalog.personal_models import gateway_model_to_personal_list_item
+        from domains.gateway.application.catalog.personal_models import (
+            gateway_model_to_personal_list_item,
+        )
 
         raw = gateway_model_to_personal_list_item(row)
 

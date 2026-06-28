@@ -3,7 +3,7 @@
  */
 
 import { ApiError } from '@/api/errors'
-import { uploadUserImage } from '@/api/userImageUpload'
+import { uploadUserImage } from '@/api/user-image-upload'
 
 /** Playground 内联上限（低于服务端 10MB，避免 vision POST 体过大触发 413） */
 export const DEFAULT_REFERENCE_IMAGE_INLINE_MAX_BYTES = 256 * 1024

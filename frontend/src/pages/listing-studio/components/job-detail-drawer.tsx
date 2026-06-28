@@ -4,7 +4,7 @@
 
 import { useQuery } from '@tanstack/react-query'
 
-import { listingStudioApi } from '@/api/listingStudio'
+import { listingStudioApi } from '@/api/listing-studio'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { JOB_STATUS_LABEL } from '@/constants/listing-studio'

@@ -14,23 +14,23 @@ from domains.gateway.application.route.granted_route_listing import (
     list_granted_route_rows_for_team,
 )
 from domains.gateway.domain.catalog.model_selection import registry_kind_for_merged_row
-from domains.gateway.domain.vkey.vkey_grant_slug_policy import (
+from domains.gateway.domain.vkey.virtual_key_grant_slug_policy import (
     build_slug_by_tenant_id,
     find_ambiguous_grant_slugs,
     grant_tenant_prefix_dispatchable,
 )
-from domains.gateway.domain.vkey.vkey_proxy_list_policy import (
+from domains.gateway.domain.vkey.virtual_key_proxy_list_policy import (
     ordered_grant_tenant_ids,
     should_include_multi_grant_entry,
     should_skip_grant_system_model_row,
     should_skip_grant_system_route_row,
 )
-from domains.gateway.domain.vkey.vkey_team_prefix_policy import resolve_vkey_proxy_list_id
+from domains.gateway.domain.vkey.virtual_key_team_prefix_policy import resolve_vkey_proxy_list_id
 from domains.gateway.infrastructure.models.gateway_route import GatewayRoute
 from domains.gateway.infrastructure.models.system_gateway import SystemGatewayRoute
 from utils.logging import get_logger
 
-from .vkey_team_resolution import fetch_grant_team_slug_rows
+from .virtual_key_team_resolution import fetch_grant_team_slug_rows
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession

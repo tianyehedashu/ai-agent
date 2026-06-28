@@ -1,6 +1,6 @@
 import type React from 'react'
 
-import type { PlatformUserSummary } from '@/api/adminUsers'
+import type { PlatformUserSummary } from '@/api/admin-users'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'

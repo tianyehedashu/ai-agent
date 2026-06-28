@@ -12,7 +12,7 @@ from domains.gateway.presentation.schemas.common import (
     GatewayModelResponse,
     SystemCredentialSummary,
 )
-from domains.gateway.presentation.tenant_scoped_response import tenant_scoped_orm_dict
+from domains.gateway.presentation.schemas.tenant_scoped_response import tenant_scoped_orm_dict
 
 
 def registry_kind_for_row(record: object) -> RegistryKind:

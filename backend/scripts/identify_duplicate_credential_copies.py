@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+from collections import defaultdict
 import hashlib
 import json
 import sys
-from collections import defaultdict
 
 from sqlalchemy import select
 

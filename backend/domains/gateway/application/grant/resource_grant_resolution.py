@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from domains.gateway.domain.errors import VkeyAmbiguousModelError
-from domains.gateway.domain.vkey.vkey_team_prefix_policy import resolve_vkey_model_prefix
+from domains.gateway.domain.vkey.virtual_key_team_prefix_policy import resolve_vkey_model_prefix
 from domains.gateway.infrastructure.repositories.model_repository import GatewayModelRepository
 
 from .resource_grant_filter import (

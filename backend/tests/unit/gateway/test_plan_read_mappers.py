@@ -9,7 +9,7 @@ import uuid
 import pytest
 
 from domains.gateway.application.quota.management.plan_read_mappers import entitlement_plan_from_orm
-from domains.gateway.presentation.plan_response import entitlement_plan_to_response
+from domains.gateway.presentation.schemas.plan_response import entitlement_plan_to_response
 
 
 def _legacy_entitlement_quota_row(*, reset_strategy: str) -> SimpleNamespace:

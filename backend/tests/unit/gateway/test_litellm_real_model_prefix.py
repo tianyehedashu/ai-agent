@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from domains.gateway.application.upstream.litellm_real_model_prefix import litellm_prefix_violation_message
+from domains.gateway.application.upstream.litellm_real_model_prefix import (
+    litellm_prefix_violation_message,
+)
 
 
 def test_litellm_prefix_violation_none_when_no_slash() -> None:

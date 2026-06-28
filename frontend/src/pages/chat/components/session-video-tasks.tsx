@@ -10,7 +10,7 @@ import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 
-import { videoTaskApi } from '@/api/videoTask'
+import { videoTaskApi } from '@/api/video-task'
 import { cn } from '@/lib/utils'
 import VideoTaskDetailDialog from '@/pages/video-tasks/components/detail-dialog'
 import TaskTimelineCard from '@/pages/video-tasks/components/task-timeline-card'

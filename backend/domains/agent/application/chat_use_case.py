@@ -28,7 +28,10 @@ from domains.agent.infrastructure.llm.agent_llm_facade import AgentLlmFacade
 from domains.agent.infrastructure.memory.langgraph_store import LongTermMemoryStore
 from domains.agent.infrastructure.memory.simplemem_client import SimpleMemAdapter, SimpleMemConfig
 from domains.agent.infrastructure.tools.registry import ToolRegistry
-from domains.gateway.application.bridge.billing_context import BillingContext, resolve_billing_context
+from domains.gateway.application.bridge.billing_context import (
+    BillingContext,
+    resolve_billing_context,
+)
 from domains.gateway.application.bridge.gateway_internal_log_context import (
     reset_internal_store_full_override,
     resolve_internal_store_full_messages,
@@ -370,7 +373,9 @@ class ChatUseCase(ChatImageGenMixin, ChatAgentRunMixin):
             from domains.session.application.title_use_case import TitleUseCase
 
             async with get_session_context() as db:
-                from domains.gateway.application.catalog.sql_model_catalog import get_model_catalog_adapter
+                from domains.gateway.application.catalog.sql_model_catalog import (
+                    get_model_catalog_adapter,
+                )
 
                 title_service = TitleUseCase(
                     db,

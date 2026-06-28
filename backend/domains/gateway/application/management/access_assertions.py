@@ -5,6 +5,9 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 from uuid import UUID
 
+from domains.gateway.application.grant.credential_binding import (
+    assert_bindable_credential,
+)
 from domains.gateway.domain.errors import (
     CredentialNotFoundError,
     ManagementEntityNotFoundError,
@@ -13,6 +16,8 @@ from domains.gateway.domain.errors import (
 from domains.gateway.infrastructure.models.entitlement_plan import EntitlementPlan
 
 if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
+
     from domains.gateway.infrastructure.models.provider_credential import ProviderCredential
     from domains.gateway.infrastructure.repositories.credential_repository import (
         ProviderCredentialRepository,
@@ -32,11 +37,13 @@ class GatewayManagementAccessAssertions:
     def __init__(
         self,
         *,
+        session: AsyncSession,
         creds: ProviderCredentialRepository,
         vkeys: VirtualKeyRepository,
         api_key_grants: ApiKeyGatewayGrantQueryPort,
         entitlement_plans: EntitlementPlanRepository,
     ) -> None:
+        self._session = session
         self._creds = creds
         self._vkeys = vkeys
         self._api_key_grants = api_key_grants
@@ -63,14 +70,12 @@ class GatewayManagementAccessAssertions:
         tenant_id: UUID,
         is_platform_admin: bool,
     ) -> ProviderCredential:
-        row = await self._creds.get_bindable_for_team_gateway_model(
-            credential_id,
+        return await assert_bindable_credential(
+            self._session,
+            credential_id=credential_id,
             tenant_id=tenant_id,
             is_platform_admin=is_platform_admin,
         )
-        if row is None:
-            raise CredentialNotFoundError(str(credential_id))
-        return row
 
     async def assert_vkey_in_team(
         self,

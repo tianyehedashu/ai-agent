@@ -11,14 +11,18 @@ def register_all_orm_models() -> None:
     """Side-effect import：将所有 ORM 模型挂到 Declarative Base registry。"""
     # 每个域显式从自己的 infrastructure.models 模块导入，避免跨域 re-export。
     from domains.agent.infrastructure.models.agent import Agent  # noqa: F401
-    from domains.agent.infrastructure.models.listing_studio_job import ListingStudioJob  # noqa: F401
+    from domains.agent.infrastructure.models.listing_studio_job import (
+        ListingStudioJob,  # noqa: F401
+    )
     from domains.agent.infrastructure.models.listing_studio_job_step import (  # noqa: F401
         ListingStudioJobStep,
     )
     from domains.agent.infrastructure.models.listing_studio_prompt_template import (  # noqa: F401
         ListingStudioPromptTemplate,
     )
-    from domains.agent.infrastructure.models.mcp_dynamic_prompt import MCPDynamicPrompt  # noqa: F401
+    from domains.agent.infrastructure.models.mcp_dynamic_prompt import (
+        MCPDynamicPrompt,  # noqa: F401
+    )
     from domains.agent.infrastructure.models.mcp_dynamic_tool import MCPDynamicTool  # noqa: F401
     from domains.agent.infrastructure.models.mcp_server import MCPServer  # noqa: F401
     from domains.agent.infrastructure.models.memory import Memory  # noqa: F401
@@ -40,15 +44,12 @@ def register_all_orm_models() -> None:
         EntitlementPlanQuota,
     )
     from domains.gateway.infrastructure.models.gateway_model import GatewayModel  # noqa: F401
-    from domains.gateway.infrastructure.models.gateway_route import GatewayRoute  # noqa: F401
     from domains.gateway.infrastructure.models.gateway_rollup_state import (  # noqa: F401
         GatewayRollupState,
     )
+    from domains.gateway.infrastructure.models.gateway_route import GatewayRoute  # noqa: F401
     from domains.gateway.infrastructure.models.metrics_hourly import (  # noqa: F401
         GatewayMetricsHourly,
-    )
-    from domains.gateway.infrastructure.models.quota_plan_usage_bucket import (  # noqa: F401
-        GatewayQuotaPlanUsageBucket,
     )
     from domains.gateway.infrastructure.models.pricing_downstream import (  # noqa: F401
         DownstreamModelPricing,
@@ -60,6 +61,9 @@ def register_all_orm_models() -> None:
         ProviderCredential,
     )
     from domains.gateway.infrastructure.models.provider_quota import ProviderQuota  # noqa: F401
+    from domains.gateway.infrastructure.models.quota_plan_usage_bucket import (  # noqa: F401
+        GatewayQuotaPlanUsageBucket,
+    )
     from domains.gateway.infrastructure.models.request_log import GatewayRequestLog  # noqa: F401
     from domains.gateway.infrastructure.models.system_gateway import (  # noqa: F401
         SystemGatewayAlertRule,

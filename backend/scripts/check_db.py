@@ -1,6 +1,8 @@
 """检查数据库表结构"""
 import asyncio
+
 from sqlalchemy import text
+
 from libs.db.database import async_session_factory
 
 

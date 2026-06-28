@@ -7,11 +7,11 @@ import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bootstrap.config import settings
-from domains.gateway.application.vkey.vkey_team_resolution import (
+from domains.gateway.application.proxy.proxy_context import ProxyContext
+from domains.gateway.application.vkey.virtual_key_team_resolution import (
     assert_vkey_model_not_ambiguous,
     dispatch_vkey_model,
 )
-from domains.gateway.application.proxy.proxy_context import ProxyContext
 from domains.gateway.domain.types import GatewayCapability, GatewayInboundVia
 from domains.gateway.presentation.deps import VkeyOrApikeyPrincipal
 

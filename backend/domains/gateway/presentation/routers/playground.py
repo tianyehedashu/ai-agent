@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from domains.gateway.presentation.credential_response import (
+from domains.gateway.presentation.schemas.common import PlaygroundCredentialSummaryResponse
+from domains.gateway.presentation.schemas.credential_response import (
     build_playground_credential_summary_response,
 )
-from domains.gateway.presentation.schemas.common import PlaygroundCredentialSummaryResponse
 from domains.identity.domain.rbac import Role
 from domains.identity.presentation.deps import RequiredAuthUser, get_user_uuid
 

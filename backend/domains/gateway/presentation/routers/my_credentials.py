@@ -6,15 +6,15 @@ import uuid
 
 from fastapi import APIRouter, status
 
-from domains.gateway.presentation.credential_response import (
-    build_credential_response,
-    credential_api_bases_from_body,
-    decrypt_credential_api_key_for_reveal,
-)
 from domains.gateway.presentation.schemas.common import (
     CredentialResponse,
     CredentialUpdate,
     UserCredentialCreate,
+)
+from domains.gateway.presentation.schemas.credential_response import (
+    build_credential_response,
+    credential_api_bases_from_body,
+    decrypt_credential_api_key_for_reveal,
 )
 from domains.gateway.presentation.schemas.credential_upstream_catalog import (
     BatchImportFailureItem,

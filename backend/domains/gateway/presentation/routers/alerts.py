@@ -17,7 +17,7 @@ from domains.gateway.presentation.schemas.common import (
     AlertRuleResponse,
     AlertRuleUpdate,
 )
-from domains.gateway.presentation.tenant_scoped_response import (
+from domains.gateway.presentation.schemas.tenant_scoped_response import (
     apply_tenant_team_mirror,
     tenant_scoped_orm_dict,
 )

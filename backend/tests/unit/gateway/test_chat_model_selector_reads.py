@@ -6,8 +6,8 @@ import uuid
 
 import pytest
 
-from domains.gateway.application.catalog import chat_model_selector_reads as reads
 from domains.gateway.application.bridge.billing_context import BillingContext
+from domains.gateway.application.catalog import chat_model_selector_reads as reads
 
 
 class _FakeCatalog:

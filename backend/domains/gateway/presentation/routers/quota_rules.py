@@ -11,15 +11,13 @@ from domains.gateway.application.quota.management.quota_rule_read_model import (
     QuotaRuleLayer,
     QuotaRuleListFilters,
 )
-from domains.gateway.application.quota.management.quota_usage_adjustment import (
-    QuotaUsageAdjustmentCommand,
-)
 from domains.gateway.application.quota.management.quota_rule_writes import (
     QuotaRuleUpsertCommand,
 )
+from domains.gateway.application.quota.management.quota_usage_adjustment import (
+    QuotaUsageAdjustmentCommand,
+)
 from domains.gateway.presentation.deps import CurrentTeam, RequiredTeamAdmin
-from domains.gateway.presentation.quota_rule_list_response import build_quota_rule_list_response
-from domains.gateway.presentation.quota_rule_response import quota_rule_to_response
 from domains.gateway.presentation.schemas.common import (
     QuotaRuleBatchFailureItem,
     QuotaRuleBatchUpsertRequest,
@@ -30,6 +28,10 @@ from domains.gateway.presentation.schemas.common import (
     QuotaRuleUpsert,
     QuotaUsageAdjustmentRequest,
 )
+from domains.gateway.presentation.schemas.quota_rule_list_response import (
+    build_quota_rule_list_response,
+)
+from domains.gateway.presentation.schemas.quota_rule_response import quota_rule_to_response
 from domains.tenancy.domain.policies.team_role import is_team_admin_or_platform
 from libs.api.pagination import PageParams, page_query_params
 

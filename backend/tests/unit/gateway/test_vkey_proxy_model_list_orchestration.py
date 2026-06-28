@@ -8,7 +8,7 @@ import uuid
 
 import pytest
 
-from domains.gateway.application.vkey.vkey_proxy_model_list import (
+from domains.gateway.application.vkey.virtual_key_proxy_model_list import (
     list_proxy_models_for_multi_grant_vkey,
 )
 from domains.gateway.domain.types import GatewayCapability, VirtualKeyPrincipal
@@ -77,11 +77,11 @@ async def test_multi_grant_homonym_slug_skips_grant_team_models(db_session: obje
 
     with (
         patch(
-            "domains.gateway.application.vkey.vkey_proxy_model_list.GatewayManagementReadService",
+            "domains.gateway.application.vkey.virtual_key_proxy_model_list.GatewayManagementReadService",
             return_value=reads,
         ),
         patch(
-            "domains.gateway.application.vkey.vkey_proxy_model_list.fetch_grant_team_slug_rows",
+            "domains.gateway.application.vkey.virtual_key_proxy_model_list.fetch_grant_team_slug_rows",
             AsyncMock(
                 return_value=[
                     (bound, "primary-slug"),
@@ -91,7 +91,7 @@ async def test_multi_grant_homonym_slug_skips_grant_team_models(db_session: obje
             ),
         ),
         patch(
-            "domains.gateway.application.vkey.vkey_proxy_model_list.build_proxy_models_list",
+            "domains.gateway.application.vkey.virtual_key_proxy_model_list.build_proxy_models_list",
             side_effect=_capture_build,
         ),
     ):
@@ -139,11 +139,11 @@ async def test_multi_grant_unique_slug_includes_prefixed_grant_model(db_session:
 
     with (
         patch(
-            "domains.gateway.application.vkey.vkey_proxy_model_list.GatewayManagementReadService",
+            "domains.gateway.application.vkey.virtual_key_proxy_model_list.GatewayManagementReadService",
             return_value=reads,
         ),
         patch(
-            "domains.gateway.application.vkey.vkey_proxy_model_list.fetch_grant_team_slug_rows",
+            "domains.gateway.application.vkey.virtual_key_proxy_model_list.fetch_grant_team_slug_rows",
             AsyncMock(
                 return_value=[
                     (bound, "primary-slug"),
@@ -152,7 +152,7 @@ async def test_multi_grant_unique_slug_includes_prefixed_grant_model(db_session:
             ),
         ),
         patch(
-            "domains.gateway.application.vkey.vkey_proxy_model_list.build_proxy_models_list",
+            "domains.gateway.application.vkey.virtual_key_proxy_model_list.build_proxy_models_list",
             side_effect=_capture_build,
         ),
     ):

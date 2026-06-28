@@ -10,6 +10,7 @@ import uuid
 
 import pytest
 
+from domains.gateway.application.quota.management.quota_plan_usage_reads import QuotaUsageTotals
 from domains.gateway.application.usage.management.budget_usage_reads import (
     BudgetWindowLookup,
     PlatformBudgetUsageReadService,
@@ -17,7 +18,6 @@ from domains.gateway.application.usage.management.budget_usage_reads import (
     merge_platform_display_totals,
     resolve_budget_window_key,
 )
-from domains.gateway.application.quota.management.quota_plan_usage_reads import QuotaUsageTotals
 from domains.gateway.domain.budget.platform_budget_display import (
     PlatformBudgetLogScope,
     platform_log_fallback_supported,

@@ -14,7 +14,7 @@ vi.mock('@/hooks/use-toast', () => ({
   useToast: () => ({ toast: vi.fn() }),
 }))
 
-vi.mock('@/api/listingStudio', () => ({
+vi.mock('@/api/listing-studio', () => ({
   listingStudioApi: {},
 }))
 

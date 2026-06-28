@@ -13,7 +13,6 @@ from fastapi.responses import FileResponse
 from domains.agent.application.chat_model_resolution_use_case import ChatModelResolutionUseCase
 from domains.agent.application.listing_studio_image_service import ListingStudioImageService
 from domains.agent.application.listing_studio_pipeline import run_pipeline_async
-from domains.agent.domain.listing_studio.upload_policy import validate_image_upload
 from domains.agent.application.listing_studio_prompt_service import (
     ListingStudioPromptTemplateUseCase,
     get_capabilities_config,
@@ -24,6 +23,7 @@ from domains.agent.application.listing_studio_use_case import ListingStudioUseCa
 from domains.agent.application.product_image_gen_task_use_case import (
     ProductImageGenTaskUseCase,
 )
+from domains.agent.domain.listing_studio.upload_policy import validate_image_upload
 from domains.agent.presentation.schemas.listing_studio import (
     CreateImageGenTaskBody,
     CreateTemplateBody,

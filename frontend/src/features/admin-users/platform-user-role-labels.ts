@@ -1,4 +1,4 @@
-import type { PlatformRole } from '@/api/adminUsers'
+import type { PlatformRole } from '@/api/admin-users'
 
 export const PLATFORM_ROLE_LABELS: Record<PlatformRole, string> = {
   admin: '平台管理员',

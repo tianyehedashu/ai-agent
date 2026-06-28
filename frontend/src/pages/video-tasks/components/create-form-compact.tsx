@@ -10,7 +10,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { ImagePlus, Loader2, Plus, X, AlertCircle, Sparkles, Clock } from 'lucide-react'
 
 import { ApiError } from '@/api/client'
-import { videoTaskApi } from '@/api/videoTask'
+import { videoTaskApi } from '@/api/video-task'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -44,7 +44,7 @@ function getDurationsForModel(
 ): VideoDuration[] {
   const row = catalog?.find((c) => c.value === model)
   if (row !== undefined && row.durations.length > 0) {
-    return row.durations as VideoDuration[]
+    return row.durations
   }
   return getDurationsLegacy(model)
 }

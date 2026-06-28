@@ -13,6 +13,9 @@ from domains.gateway.application.quota.entitlement_model_status import (
     annotate_items_entitlement_status,
     is_connectivity_requestable,
 )
+from domains.gateway.application.route.granted_route_selector_items import (
+    list_granted_route_selector_items,
+)
 from domains.gateway.domain.catalog.model_list_policy import (
     ModelListConnectivityFilter,
     matches_connectivity_filter,
@@ -31,9 +34,6 @@ from .gateway_model_listing import (
     GatewayRegistryModelRow,
     _registry_row_deployable,
     list_merged_models_for_tenant,
-)
-from domains.gateway.application.route.granted_route_selector_items import (
-    list_granted_route_selector_items,
 )
 from .model_list_pipeline import (
     ModelListQuery,

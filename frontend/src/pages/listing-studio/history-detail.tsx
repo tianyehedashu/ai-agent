@@ -5,7 +5,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { Link, useParams } from 'react-router-dom'
 
-import { listingStudioApi } from '@/api/listingStudio'
+import { listingStudioApi } from '@/api/listing-studio'
 import { Button } from '@/components/ui/button'
 import { JOB_STATUS_LABEL } from '@/constants/listing-studio'
 import { ArrowLeft } from '@/lib/lucide-icons'

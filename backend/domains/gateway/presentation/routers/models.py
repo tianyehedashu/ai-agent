@@ -27,14 +27,6 @@ from domains.gateway.domain.catalog.model_selection import registry_kind_for_mer
 from domains.gateway.presentation.deps import (
     CurrentTeam,
 )
-from domains.gateway.presentation.gateway_model_list_response import (
-    build_gateway_model_list_response,
-)
-from domains.gateway.presentation.gateway_model_response import build_gateway_model_response
-from domains.gateway.presentation.gateway_usage_list_response import (
-    build_gateway_model_usage_summary_response,
-    build_platform_credential_stat_list_response,
-)
 from domains.gateway.presentation.model_list_query import ModelListQueryDep
 from domains.gateway.presentation.schemas.common import (
     GatewayModelBatchDeleteFailureItem,
@@ -55,6 +47,14 @@ from domains.gateway.presentation.schemas.common import (
     MultiCredentialGatewayModelResponse,
     PlatformCredentialStatItem,
     PlatformCredentialStatListResponse,
+)
+from domains.gateway.presentation.schemas.gateway_model_list_response import (
+    build_gateway_model_list_response,
+)
+from domains.gateway.presentation.schemas.gateway_model_response import build_gateway_model_response
+from domains.gateway.presentation.schemas.gateway_usage_list_response import (
+    build_gateway_model_usage_summary_response,
+    build_platform_credential_stat_list_response,
 )
 from domains.identity.presentation.deps import AdminUser
 from libs.api.pagination import PageParams, page_query_params

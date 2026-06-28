@@ -63,12 +63,14 @@ from domains.gateway.infrastructure.upstream.httpx_client_singleton import (
     close_upstream_httpx_client,
     init_upstream_httpx_client,
 )
-from domains.gateway.presentation.anthropic_compat_router import router as anthropic_compat_router
-from domains.gateway.presentation.management_router import router as gateway_mgmt_router
-from domains.gateway.presentation.openai_compat_router import router as openai_compat_router
 from domains.gateway.presentation.platform_api_key_usage_middleware import (
     PlatformApiKeyUsageASGIMiddleware,
 )
+from domains.gateway.presentation.routers.anthropic_compat_router import (
+    router as anthropic_compat_router,
+)
+from domains.gateway.presentation.routers.management_router import router as gateway_mgmt_router
+from domains.gateway.presentation.routers.openai_compat_router import router as openai_compat_router
 from domains.identity.infrastructure.auth.jwt import init_jwt_manager
 from domains.identity.presentation.admin_users_router import router as admin_users_router
 from domains.identity.presentation.api_key_router import router as api_key_router

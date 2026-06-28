@@ -10,10 +10,11 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 import uuid
 
-from .config_catalog_sync import gateway_model_to_selector_item
-from .granted_route_listing import list_granted_route_rows_for_team
 from domains.gateway.application.quota.entitlement_model_status import is_connectivity_requestable
 from domains.gateway.domain.catalog.registry_model_types import selector_item_matches_ability_filter
+
+from .config_catalog_sync import gateway_model_to_selector_item
+from .granted_route_listing import list_granted_route_rows_for_team
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession

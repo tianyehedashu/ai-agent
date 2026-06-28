@@ -8,7 +8,7 @@ import type React from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { Users } from 'lucide-react'
 
-import type { PlatformRole, PlatformUserSummary } from '@/api/adminUsers'
+import type { PlatformRole, PlatformUserSummary } from '@/api/admin-users'
 import { PaginationControls } from '@/components/pagination-controls'
 import { PlatformUserEditSheet } from '@/features/admin-users/platform-user-edit-sheet'
 import { PlatformUsersTable } from '@/features/admin-users/platform-users-table'

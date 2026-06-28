@@ -9,7 +9,9 @@ from pydantic import SecretStr
 import pytest
 
 from bootstrap.config import Settings
-from domains.gateway.application.credential.credential_env_audit import log_config_managed_api_base_drift
+from domains.gateway.application.credential.credential_env_audit import (
+    log_config_managed_api_base_drift,
+)
 from domains.gateway.domain.credential.credential_sync_policy import FORCE_ENV_SYNC_EXTRA_KEY
 from domains.gateway.domain.types import CONFIG_MANAGED_BY
 

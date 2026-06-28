@@ -32,6 +32,12 @@ src/
 | `stores/`        | 全局状态                                                                                          |
 | `types/`         | 类型定义                                                                                          |
 
+## 统一开发风格
+
+- **文件名一律 kebab-case**（`api/` / `features/` / `pages/`），禁止 camelCase。
+- **Import 排序自动化** — `eslint import/order` + `import/no-duplicates` 自动维护，提交前 `eslint --fix`，禁止手动维护顺序。
+- **命名即契约** — API adapter 单点封装在 `src/api/<domain>/`，消费方只 import adapter，不重复封装。
+
 ## TypeScript 规范
 
 ```typescript

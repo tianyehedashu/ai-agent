@@ -510,7 +510,9 @@ async def test_system_model_from_merged_list_can_be_probed_by_platform_admin(
     db_session, test_user
 ) -> None:
     """``list_for_tenant`` 合并的系统模型 id 仅允许 platform_admin 走 test_gateway_model。"""
-    from domains.gateway.application.catalog.config_catalog_sync import sync_app_config_gateway_catalog
+    from domains.gateway.application.catalog.config_catalog_sync import (
+        sync_app_config_gateway_catalog,
+    )
 
     await sync_app_config_gateway_catalog(db_session)
     await db_session.flush()
@@ -545,7 +547,9 @@ async def test_system_model_from_merged_list_can_be_probed_by_platform_admin(
 @pytest.mark.asyncio
 async def test_system_model_probe_rejects_non_platform_admin(db_session, test_user) -> None:
     """非 platform_admin 测试 system 模型应抛出 PermissionDeniedError。"""
-    from domains.gateway.application.catalog.config_catalog_sync import sync_app_config_gateway_catalog
+    from domains.gateway.application.catalog.config_catalog_sync import (
+        sync_app_config_gateway_catalog,
+    )
 
     await sync_app_config_gateway_catalog(db_session)
     await db_session.flush()

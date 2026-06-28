@@ -9,9 +9,9 @@ import uuid
 import pytest
 
 from domains.gateway.application.observability import gateway_alert_job as job_module
+from domains.gateway.domain.alert.alert_evaluation import AlertEvaluationResult
 from domains.gateway.domain.alert.alert_metric_aggregates import AlertMetricAggregates
 from domains.gateway.domain.alert.alert_rule_snapshot import AlertRuleSnapshot
-from domains.gateway.domain.alert.alert_evaluation import AlertEvaluationResult
 
 
 @pytest.mark.asyncio

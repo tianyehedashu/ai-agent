@@ -18,11 +18,11 @@ from domains.gateway.application.usage.management.usage_reads import (
     UsageStatisticsItem,
     UsageStatisticsMetric,
 )
-from domains.gateway.domain.usage.margin_read_model import MarginGroupBy
 from domains.gateway.domain.pricing.pricing_visibility import (
     can_view_margin_dashboard,
     can_view_pricing_cost_fields,
 )
+from domains.gateway.domain.usage.margin_read_model import MarginGroupBy
 from domains.gateway.domain.usage.usage_read_model import (
     USAGE_AGGREGATION_QUERY_DESCRIPTION,
     UsageAggregation,
@@ -31,9 +31,6 @@ from domains.gateway.domain.usage.usage_read_model import (
     UsageStatisticsGroupBy,
 )
 from domains.gateway.presentation.deps import CurrentTeam
-from domains.gateway.presentation.gateway_usage_list_response import (
-    build_usage_statistics_response,
-)
 from domains.gateway.presentation.schemas.common import (
     DashboardClientTypeBreakdown,
     DashboardSummaryResponse,
@@ -46,6 +43,9 @@ from domains.gateway.presentation.schemas.common import (
     UsageStatisticsItemResponse,
     UsageStatisticsMetricResponse,
     UsageStatisticsResponse,
+)
+from domains.gateway.presentation.schemas.gateway_usage_list_response import (
+    build_usage_statistics_response,
 )
 from libs.api.pagination import PageParams, page_query_params
 from libs.exceptions import PermissionDeniedError, ValidationError

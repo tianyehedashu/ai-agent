@@ -6,7 +6,7 @@ import uuid
 
 import pytest
 
-from domains.gateway.domain.vkey.vkey_team_prefix_policy import resolve_vkey_proxy_list_id
+from domains.gateway.domain.vkey.virtual_key_team_prefix_policy import resolve_vkey_proxy_list_id
 
 
 def test_bound_team_uses_bare_registry_name() -> None:

@@ -19,10 +19,10 @@ from domains.identity.application import (
     get_principal_optional,
 )
 from domains.identity.application.permission_context_composer import PermissionContextComposer
+from domains.identity.domain.rbac import Role
 from domains.identity.presentation.schemas import CurrentUser
 from libs.db.database import get_db
 from libs.exceptions import AuthenticationError, PermissionDeniedError
-from domains.identity.domain.rbac import Role
 from libs.iam.tenant_access_assertions import (
     assert_tenant_access,
     assert_tenant_access_or_public,

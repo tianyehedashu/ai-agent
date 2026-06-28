@@ -14,7 +14,7 @@ import {
   adminStorageApi,
   type StorageConfigAdmin,
   type UpdateStorageConfigPayload,
-} from '@/api/adminStorage'
+} from '@/api/admin-storage'
 import { apiV1Path } from '@/api/paths'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'

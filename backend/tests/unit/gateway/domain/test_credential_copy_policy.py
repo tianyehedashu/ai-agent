@@ -6,7 +6,6 @@ import uuid
 
 import pytest
 
-from domains.gateway.domain.errors import CredentialNotFoundError, TeamPermissionDeniedError
 from domains.gateway.domain.credential.credential_copy_policy import (
     CredentialCopyScope,
     assert_copy_endpoints_valid,
@@ -14,6 +13,7 @@ from domains.gateway.domain.credential.credential_copy_policy import (
     assert_credential_copy_source_allowed,
     credential_copy_failure_reason,
 )
+from domains.gateway.domain.errors import CredentialNotFoundError, TeamPermissionDeniedError
 from libs.exceptions import ValidationError
 
 

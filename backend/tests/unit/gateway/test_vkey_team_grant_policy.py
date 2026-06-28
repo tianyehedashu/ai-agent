@@ -6,7 +6,7 @@ import uuid
 
 import pytest
 
-from domains.gateway.application.vkey.management.vkey_team_grant_policy import (
+from domains.gateway.application.vkey.management.virtual_key_team_grant_policy import (
     assert_actor_member_of_vkey_grant_targets,
     resolve_extra_vkey_grant_tenant_ids,
 )

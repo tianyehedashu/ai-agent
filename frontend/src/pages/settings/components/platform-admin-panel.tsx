@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { HardDrive, Loader2, Search, Users } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
-import { adminUsersApi, type PlatformRole, type PlatformUserSummary } from '@/api/adminUsers'
+import { adminUsersApi, type PlatformRole, type PlatformUserSummary } from '@/api/admin-users'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'

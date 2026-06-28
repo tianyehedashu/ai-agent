@@ -16,11 +16,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from domains.gateway.application.proxy.proxy_deferred_tasks import shutdown_proxy_deferred_tasks
 from domains.gateway.domain.quota.quota_plan import PLATFORM_NS
+from domains.gateway.infrastructure.litellm.router_singleton import reload_router
 from domains.gateway.infrastructure.models.quota_plan_usage_bucket import (
     GatewayQuotaPlanUsageBucket,
 )
 from domains.gateway.infrastructure.models.request_log import GatewayRequestLog
-from domains.gateway.infrastructure.litellm.router_singleton import reload_router
 from domains.identity.infrastructure.models.user import User
 from domains.tenancy.application.team_service import TeamService
 from libs.api.paths import openai_compat_base

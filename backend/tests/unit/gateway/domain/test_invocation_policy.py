@@ -2,8 +2,8 @@
 
 import pytest
 
-from domains.gateway.domain.errors import InvocationPolicyViolationError
 from domains.gateway.domain.catalog.model_capability import ModelCapabilitySnapshot
+from domains.gateway.domain.errors import InvocationPolicyViolationError
 from domains.gateway.domain.proxy.invocation_policy import (
     apply_invocation_kwargs,
     client_thinking_request_fields,

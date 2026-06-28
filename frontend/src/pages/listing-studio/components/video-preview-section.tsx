@@ -10,7 +10,7 @@ import { useState, useCallback, useEffect, useMemo } from 'react'
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
-import { videoTaskApi } from '@/api/videoTask'
+import { videoTaskApi } from '@/api/video-task'
 import { ModelSelector } from '@/components/model-selector'
 import { Button } from '@/components/ui/button'
 import {

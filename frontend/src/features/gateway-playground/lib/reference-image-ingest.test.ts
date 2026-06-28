@@ -1,11 +1,11 @@
 import { describe, expect, test, vi, beforeEach } from 'vitest'
 
-vi.mock('@/api/userImageUpload', () => ({
+vi.mock('@/api/user-image-upload', () => ({
   uploadUserImage: vi.fn(),
 }))
 
 import { ApiError } from '@/api/errors'
-import { uploadUserImage } from '@/api/userImageUpload'
+import { uploadUserImage } from '@/api/user-image-upload'
 
 import {
   DEFAULT_REFERENCE_IMAGE_INLINE_MAX_BYTES,

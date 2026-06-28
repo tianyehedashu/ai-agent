@@ -4,7 +4,7 @@
 
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 
-import { listingStudioApi } from '@/api/listingStudio'
+import { listingStudioApi } from '@/api/listing-studio'
 import { Button } from '@/components/ui/button'
 import {
   Select,

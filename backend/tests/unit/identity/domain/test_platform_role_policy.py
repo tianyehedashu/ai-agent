@@ -9,8 +9,8 @@ import pytest
 from domains.identity.domain.policies.platform_role_policy import (
     assert_bootstrap_grant_admin,
     assert_bootstrap_revoke_admin,
-    assert_emergency_grant_admin,
     assert_can_change_platform_role,
+    assert_emergency_grant_admin,
     is_assignable_platform_role,
 )
 from domains.identity.domain.rbac import Role

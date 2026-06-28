@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import uuid
 
-from domains.gateway.presentation.gateway_log_list_response import build_request_log_list_response
 from domains.gateway.presentation.schemas.common import RequestLogResponse
+from domains.gateway.presentation.schemas.gateway_log_list_response import (
+    build_request_log_list_response,
+)
 
 
 def _log_item() -> RequestLogResponse:

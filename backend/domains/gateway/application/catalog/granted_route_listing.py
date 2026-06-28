@@ -14,8 +14,9 @@ import uuid
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
-    from .gateway_model_listing import GatewayRegistryModelRow
     from domains.gateway.application.management import GatewayManagementReadService
+
+    from .gateway_model_listing import GatewayRegistryModelRow
 
 
 @dataclass(frozen=True, slots=True)

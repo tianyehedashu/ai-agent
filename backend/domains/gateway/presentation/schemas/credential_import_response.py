@@ -5,7 +5,6 @@ from __future__ import annotations
 from domains.gateway.application.credential.management.credential_copy_types import (
     ImportCredentialsWithModelsResult,
 )
-from domains.gateway.presentation.credential_response import build_credential_response
 from domains.gateway.presentation.schemas.credential_import import (
     CredentialCopyFailureItem,
     ImportCredentialsWithModelsResponse,
@@ -13,6 +12,7 @@ from domains.gateway.presentation.schemas.credential_import import (
     ImportedModelSummary,
     ModelImportFailureItem,
 )
+from domains.gateway.presentation.schemas.credential_response import build_credential_response
 
 
 def build_import_credentials_with_models_response(

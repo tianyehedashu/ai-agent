@@ -205,6 +205,7 @@ class GatewayManagementReadService(GatewayUsageLogReadMixin):
         self._entitlement_plans = EntitlementPlanRepository(session)
         self._plan_usage = GatewayPlanUsageReadService(session)
         self.access = GatewayManagementAccessAssertions(
+            session=session,
             creds=self._creds,
             vkeys=self._vkeys,
             api_key_grants=self._api_key_grants,
@@ -216,8 +217,6 @@ class GatewayManagementReadService(GatewayUsageLogReadMixin):
         team_id: UUID,
         *,
         actor_user_id: UUID | None = None,
-        team_role: str = "owner",
-        is_platform_admin: bool = False,
     ) -> list[VirtualKeyReadModel]:
         keys = await self._vkeys.list_for_tenant(
             team_id, include_system=False, include_inactive=False
@@ -341,13 +340,11 @@ class GatewayManagementReadService(GatewayUsageLogReadMixin):
         is_platform_admin: bool,
     ) -> CredentialReadModel:
         """reveal/写路径：仅创建者可读（与 workspace 全量列表分离）。"""
-        row = await self._creds.get_bindable_for_team_gateway_model(
+        row = await self.access.assert_credential_in_team(
             credential_id,
             tenant_id=tenant_id,
             is_platform_admin=is_platform_admin,
         )
-        if row is None:
-            raise CredentialNotFoundError(str(credential_id))
         from domains.gateway.infrastructure.models.provider_credential import (
             ProviderCredential,
         )

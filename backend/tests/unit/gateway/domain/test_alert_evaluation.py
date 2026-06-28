@@ -6,14 +6,14 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 import uuid
 
-from domains.gateway.domain.alert.alert_metric_aggregates import AlertMetricAggregates
-from domains.gateway.domain.alert.alert_rule_snapshot import AlertRuleSnapshot
 from domains.gateway.domain.alert.alert_evaluation import (
     alert_cooldown_elapsed,
     evaluate_alert_rule,
     evaluate_error_rate,
     evaluate_request_rate,
 )
+from domains.gateway.domain.alert.alert_metric_aggregates import AlertMetricAggregates
+from domains.gateway.domain.alert.alert_rule_snapshot import AlertRuleSnapshot
 
 
 def test_alert_cooldown_elapsed_when_never_triggered() -> None:

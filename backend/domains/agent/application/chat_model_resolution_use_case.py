@@ -7,9 +7,12 @@ from typing import TYPE_CHECKING, Any
 import uuid
 
 from bootstrap.config import settings
-from domains.gateway.application.catalog.chat_model_selector_reads import count_active_credentials_for_team
-from domains.gateway.application.quota.entitlement_model_status import is_connectivity_requestable
-from domains.gateway.application.bridge.internal_bridge_actor import resolve_internal_gateway_team_id
+from domains.gateway.application.bridge.internal_bridge_actor import (
+    resolve_internal_gateway_team_id,
+)
+from domains.gateway.application.catalog.chat_model_selector_reads import (
+    count_active_credentials_for_team,
+)
 from domains.gateway.application.catalog.model_selector_reads import (
     get_default_for_model_type,
     list_personal_models_for_selector,
@@ -20,6 +23,7 @@ from domains.gateway.application.catalog.model_selector_reads import (
 from domains.gateway.application.catalog.model_selector_reads import (
     list_available_system_models as list_system_models_for_selector,
 )
+from domains.gateway.application.quota.entitlement_model_status import is_connectivity_requestable
 from domains.gateway.domain.catalog.chat_model_readiness import (
     chat_readiness_error_code,
     chat_readiness_message,
@@ -292,7 +296,9 @@ class ChatModelResolutionUseCase:
     def _resolve_default_vision_model(
         self, allowed_image_system_ids: frozenset[str]
     ) -> ResolvedModel:
-        from domains.gateway.domain.catalog.scenario_defaults_policy import pick_scenario_from_visible
+        from domains.gateway.domain.catalog.scenario_defaults_policy import (
+            pick_scenario_from_visible,
+        )
 
         picked = pick_scenario_from_visible(
             env_override=settings.vision_model,

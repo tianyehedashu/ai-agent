@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { ImagePlus, Loader2, X, AlertCircle, Plus, Clock, Wand2, Settings2 } from 'lucide-react'
 
 import { ApiError } from '@/api/client'
-import { videoTaskApi } from '@/api/videoTask'
+import { videoTaskApi } from '@/api/video-task'
 import { ModelSelector } from '@/components/model-selector'
 import { Button } from '@/components/ui/button'
 import {

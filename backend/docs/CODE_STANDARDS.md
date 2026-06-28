@@ -291,6 +291,22 @@ if TYPE_CHECKING:
 | API 函数 | 动词_名词 | `list_sessions`, `create_agent` |
 | 布尔变量 | is_/has_/can_ | `is_active`, `has_permission` |
 
+## 统一开发风格
+
+> 大局观原则，指导所有新代码。违反项以 code-check / PR review 拦截。
+
+**DDD 分层 + 业务能力子包** — 每个限界上下文固定四层（presentation / application / domain / infrastructure）。层内按**业务能力**子包组织，不按技术分类切分；同义子包禁止并存。层根目录只放跨子包的装配点（`ports.py` / `__init__.py` / `deps.py` 等），业务文件一律进子包。
+
+**命名即契约** — 领域概念的命名由 `domain/` 单点定义，application / infrastructure / presentation 继承同一术语；文件名、模块名、前缀、类名保持一一对应，禁止同义词混用。同一概念在全项目只用一种拼写。
+
+**迁移不留残** — 重命名 / 迁移完成后必须删除旧路径、死副本与再导出 shim，权威实现只允许一处。`libs/` 不得存放业务模块的再导出别名。
+
+**格式自动化** — Import 排序与命名风格交给 linter 自动维护（后端 `ruff --select I --fix`，前端 `eslint --fix`），禁止手动维护顺序、禁止堆在文件末尾。
+
+**设计模式落点** — CQRS 读写分离落 `application/management/`（reads / writes）；跨域协作落 `application/ports.py` 的 Protocol；纯策略落 `domain/` 的 policy 函数 / 值对象。详见前述「DDD 反退化约束」「读路径 CQRS」「Gateway 热路径分层约束」三节。
+
+**读路径权限分层** — 带权限过滤的查询严格三段式：infrastructure 仓储只做**租户隔离**（物理边界，`list_for_tenant(team_id)`，禁止接收 `is_platform_admin` / `team_role` / `actor_user_id` 等权限语义）；权限规则落 **domain 纯函数**（`filter_*_visible_to_actor`，无 IO，可单测）；application 编排（取租户全集 → 调 domain policy 内存过滤 → 映射 ReadModel）。跨数据源编排（如 team-scope 凭据 + grant + system fallback）落 `application/grant/` 的编排函数，禁止 infrastructure 反向 import application。禁止读方法签名出现未使用的权限参数（死参数易误导调用者以为做了过滤）。
+
 ## 代码风格
 
 ```python

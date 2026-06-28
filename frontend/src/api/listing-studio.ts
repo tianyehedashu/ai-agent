@@ -19,7 +19,7 @@ import type {
 } from '@/types/listing-studio'
 
 import { apiClient } from './client'
-import { uploadUserImage } from './userImageUpload'
+import { uploadUserImage } from './user-image-upload'
 
 const PREFIX = apiV1Path('/listing-studio')
 

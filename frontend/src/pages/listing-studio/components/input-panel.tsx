@@ -4,7 +4,7 @@
 
 import { useState, useRef } from 'react'
 
-import { listingStudioApi } from '@/api/listingStudio'
+import { listingStudioApi } from '@/api/listing-studio'
 import { Button } from '@/components/ui/button'
 import { ImageLightbox } from '@/components/ui/image-lightbox'
 import { Input } from '@/components/ui/input'

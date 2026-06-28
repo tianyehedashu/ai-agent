@@ -9,13 +9,13 @@ from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from domains.gateway.domain.credential.credential_copy_policy import CredentialCopyScope
-from domains.gateway.presentation.credential_import_response import (
-    build_import_credentials_with_models_response,
-)
 from domains.gateway.presentation.routers._common import MgmtWrites, encryption_key
 from domains.gateway.presentation.schemas.credential_import import (
     CopyCredentialsWithModelsRequest,
     ImportCredentialsWithModelsResponse,
+)
+from domains.gateway.presentation.schemas.credential_import_response import (
+    build_import_credentials_with_models_response,
 )
 from domains.identity.domain.policies.gateway_access_policy import assert_gateway_write_allowed
 from domains.identity.domain.rbac import Role

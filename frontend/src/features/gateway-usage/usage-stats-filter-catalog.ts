@@ -2,7 +2,7 @@
  * 调用统计页筛选下拉的数据源（团队工作区 vs 跨团队/全平台）。
  */
 
-import type { PlatformUserSummary } from '@/api/adminUsers'
+import type { PlatformUserSummary } from '@/api/admin-users'
 import type { VirtualKey } from '@/api/gateway/keys'
 import type { GatewayUsageAggregation } from '@/api/gateway/logs'
 import type { GatewayModel } from '@/api/gateway/models'

@@ -45,8 +45,6 @@ async def list_keys(
     keys = await reads.list_virtual_keys_for_team(
         team.team_id,
         actor_user_id=team.user_id,
-        team_role=team.team_role,
-        is_platform_admin=team.is_platform_admin,
     )
     return [vkey_to_response(k) for k in keys]
 

@@ -161,15 +161,11 @@ async def test_list_virtual_keys_member_sees_only_own(db_session, test_user) -> 
     as_owner = await reads.list_virtual_keys_for_team(
         team.id,
         actor_user_id=owner_id,
-        team_role="owner",
-        is_platform_admin=False,
     )
     assert {k.id for k in as_owner} == {own_id}
 
     as_member = await reads.list_virtual_keys_for_team(
         team.id,
         actor_user_id=member_id,
-        team_role="member",
-        is_platform_admin=False,
     )
     assert {k.id for k in as_member} == {other_id}

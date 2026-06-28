@@ -7,11 +7,11 @@ import uuid
 
 import pytest
 
-from domains.gateway.domain.quota.period_reset_anchor import DEFAULT_PERIOD_RESET_ANCHOR
 from domains.gateway.domain.budget.platform_budget_upsert_policy import (
     resolve_platform_period_reset_anchor,
     validate_platform_budget_upsert,
 )
+from domains.gateway.domain.quota.period_reset_anchor import DEFAULT_PERIOD_RESET_ANCHOR
 from libs.exceptions import ValidationError
 
 

@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import uuid
 
-from domains.gateway.domain.credential.team_credential_access import team_credential_management_access
+from domains.gateway.domain.credential.team_credential_access import (
+    team_credential_management_access,
+)
 
 
 def test_member_sees_metadata_for_others_team_credential() -> None:

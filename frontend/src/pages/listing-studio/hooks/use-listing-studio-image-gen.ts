@@ -7,7 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { gatewayApi } from '@/api/gateway'
-import { listingStudioApi } from '@/api/listingStudio'
+import { listingStudioApi } from '@/api/listing-studio'
 import { GATEWAY_MODELS_AVAILABLE_QUERY_KEY } from '@/features/gateway-models/query-keys'
 import {
   defaultImageGenSizeForProvider,

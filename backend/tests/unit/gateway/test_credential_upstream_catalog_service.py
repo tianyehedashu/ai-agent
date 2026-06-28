@@ -22,7 +22,10 @@ from domains.gateway.infrastructure.repositories.system_credential_repository im
 from domains.identity.infrastructure.models.user import User
 from domains.tenancy.application.team_service import TeamService
 from libs.crypto import derive_encryption_key, encrypt_value
-from tests.unit.gateway.credential_test_helpers import create_tenant_test_credential, team_owner_actor_kw
+from tests.unit.gateway.credential_test_helpers import (
+    create_tenant_test_credential,
+    team_owner_actor_kw,
+)
 
 
 @pytest.mark.asyncio

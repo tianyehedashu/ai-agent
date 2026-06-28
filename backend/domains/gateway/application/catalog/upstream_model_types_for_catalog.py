@@ -2,16 +2,17 @@
 
 from __future__ import annotations
 
-from .litellm_capability_hint import (
-    merge_litellm_capability_hints,
-)
-from .config_catalog_sync import model_types_for_gateway_registration
 from domains.gateway.application.ports import LitellmCapabilityHintPort
 from domains.gateway.domain.litellm.litellm_model_id import normalize_gateway_stored_real_model
 from domains.gateway.domain.types import PERSONAL_MODEL_TYPES
 from domains.gateway.domain.upstream.upstream_type_inference import (
     filter_valid_personal_model_types,
     infer_upstream_model_types,
+)
+
+from .config_catalog_sync import model_types_for_gateway_registration
+from .litellm_capability_hint import (
+    merge_litellm_capability_hints,
 )
 
 

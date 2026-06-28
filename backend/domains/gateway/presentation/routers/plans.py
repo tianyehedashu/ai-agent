@@ -8,13 +8,13 @@ import uuid
 from fastapi import APIRouter, Query, status
 
 from domains.gateway.presentation.deps import RequiredTeamAdmin
-from domains.gateway.presentation.plan_response import entitlement_plan_to_response
 from domains.gateway.presentation.schemas.common import (
     EntitlementPlanCreate,
     EntitlementPlanResponse,
     EntitlementPlanUpdate,
     EntitlementUsageResponse,
 )
+from domains.gateway.presentation.schemas.plan_response import entitlement_plan_to_response
 from libs.exceptions import AIAgentError, NotFoundError
 from libs.exceptions.codes import INTERNAL_ERROR
 

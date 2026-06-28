@@ -27,6 +27,9 @@ from domains.gateway.application.credential.management.credential_read_mappers i
 from domains.gateway.application.credential.management.multi_credential_types import (
     MultiCredentialGatewayModelResult,
 )
+from domains.gateway.application.grant.credential_binding import (
+    resolve_bindable_credential,
+)
 from domains.gateway.application.route.routing_strategy_validation import validate_routing_strategy
 from domains.gateway.application.upstream.litellm_real_model_prefix import (
     litellm_prefix_violation_message,
@@ -72,9 +75,7 @@ _BATCH_MODEL_OP_MAX = 200
 _ALLOWED_UPSTREAM_CALL_SHAPES = frozenset({"openai_compat", "anthropic_native"})
 
 
-async def generate_unique_model_name(
-    exists_fn: Any, base: str, *, max_len: int = 200
-) -> str:
+async def generate_unique_model_name(exists_fn: Any, base: str, *, max_len: int = 200) -> str:
     """Generate a unique model name by appending numeric suffixes.
 
     Shared across ``CredentialWritesMixin``, ``CredentialUpstreamCatalogService``
@@ -507,7 +508,9 @@ class ModelWritesMixin:
             if not new_name:
                 raise ValidationError("调用名称不能为空")
             if new_name != existing.name:
-                if await self._models.name_exists_in_scope(tenant_id, new_name, exclude_id=model_id):
+                if await self._models.name_exists_in_scope(
+                    tenant_id, new_name, exclude_id=model_id
+                ):
                     raise ValidationError(f"调用名称已存在: {new_name}")
                 await self._assert_model_name_free_of_route_grant_alias(tenant_id, new_name)
                 await rename_gateway_model_name_references(
@@ -700,8 +703,11 @@ class ModelWritesMixin:
         enabled: bool = True,
         reload_router: bool = True,
     ) -> Any:
-        cred = await self._creds.get_bindable_for_team_gateway_model(
-            credential_id, tenant_id=tenant_id, is_platform_admin=is_platform_admin
+        cred = await resolve_bindable_credential(
+            self._session,
+            credential_id=credential_id,
+            tenant_id=tenant_id,
+            is_platform_admin=is_platform_admin,
         )
         if cred is None:
             raise CredentialNotFoundError(str(credential_id))
@@ -1017,8 +1023,11 @@ class ModelWritesMixin:
         if existing_route is not None:
             raise ValidationError(f"虚拟模型名 {cleaned_name} 已存在 GatewayRoute")
         for cid in credential_ids:
-            bindable = await self._creds.get_bindable_for_team_gateway_model(
-                cid, tenant_id=tenant_id, is_platform_admin=is_platform_admin
+            bindable = await resolve_bindable_credential(
+                self._session,
+                credential_id=cid,
+                tenant_id=tenant_id,
+                is_platform_admin=is_platform_admin,
             )
             if bindable is None:
                 raise CredentialNotFoundError(str(cid))
@@ -1108,8 +1117,11 @@ class ModelWritesMixin:
             new_cid = (
                 new_cid_raw if isinstance(new_cid_raw, uuid.UUID) else uuid.UUID(str(new_cid_raw))
             )
-            cred = await self._creds.get_bindable_for_team_gateway_model(
-                new_cid, tenant_id=tenant_id, is_platform_admin=is_platform_admin
+            cred = await resolve_bindable_credential(
+                self._session,
+                credential_id=new_cid,
+                tenant_id=tenant_id,
+                is_platform_admin=is_platform_admin,
             )
             if cred is None:
                 raise CredentialNotFoundError(str(new_cid))
@@ -1143,8 +1155,9 @@ class ModelWritesMixin:
                 if owner_tenant_id is None:
                     cred_for_rm = await self._system_creds.get(effective_cred_id)
                 else:
-                    cred_for_rm = await self._creds.get_bindable_for_team_gateway_model(
-                        effective_cred_id,
+                    cred_for_rm = await resolve_bindable_credential(
+                        self._session,
+                        credential_id=effective_cred_id,
                         tenant_id=tenant_id,
                         is_platform_admin=is_platform_admin,
                     )
@@ -1187,8 +1200,9 @@ class ModelWritesMixin:
                     if owner_tenant_id is None:
                         cred_check = await self._system_creds.get(check_cred_id)
                     else:
-                        cred_check = await self._creds.get_bindable_for_team_gateway_model(
-                            check_cred_id,
+                        cred_check = await resolve_bindable_credential(
+                            self._session,
+                            credential_id=check_cred_id,
                             tenant_id=tenant_id,
                             is_platform_admin=is_platform_admin,
                         )
@@ -1200,9 +1214,7 @@ class ModelWritesMixin:
         resync_capabilities = bool(update_fields.pop("resync_capabilities", False))
         if resync_capabilities and config_managed:
             raise ValidationError("配置托管的系统模型不可从 LiteLLM 同步能力")
-        effective_capability = str(
-            update_fields.get("capability") or existing.capability
-        ).strip()
+        effective_capability = str(update_fields.get("capability") or existing.capability).strip()
         if model_types_raw is not None:
             if config_managed:
                 raise ValidationError("配置托管的系统模型不可修改产品特性")
@@ -1234,8 +1246,9 @@ class ModelWritesMixin:
                 if owner_tenant_id is None:
                     cred_for_tags = await self._system_creds.get(effective_cred_id)
                 else:
-                    cred_for_tags = await self._creds.get_bindable_for_team_gateway_model(
-                        effective_cred_id,
+                    cred_for_tags = await resolve_bindable_credential(
+                        self._session,
+                        credential_id=effective_cred_id,
                         tenant_id=tenant_id,
                         is_platform_admin=is_platform_admin,
                     )
@@ -1367,9 +1380,7 @@ class ModelWritesMixin:
             old_credential_id=system_existing.credential_id,
             new_credential_id=update_fields.get("credential_id") or system_existing.credential_id,
             old_real_model=str(system_existing.real_model or ""),
-            new_real_model=str(
-                update_fields.get("real_model") or system_existing.real_model or ""
-            ),
+            new_real_model=str(update_fields.get("real_model") or system_existing.real_model or ""),
         )
         updated = await repo.update_system(model_id, **update_fields)
         if updated is None:
@@ -1675,9 +1686,7 @@ class ModelWritesMixin:
             plan.source_credential_id: plan for plan in credential_plans
         }
         if len(plan_by_cred) != len(credential_plans):
-            raise ValidationError(
-                "credential_plans must have unique source_credential_id values"
-            )
+            raise ValidationError("credential_plans must have unique source_credential_id values")
         for plan in credential_plans:
             assert_model_copy_credential_plan_valid(
                 mode=plan.mode,
@@ -1698,9 +1707,7 @@ class ModelWritesMixin:
         team_resolver = TenancyManagementTeamResolveUseCase(self._session)
         source_team_roles: dict[uuid.UUID, str] = {}
         for tenant_id in {
-            row.tenant_id
-            for row in models_by_id.values()
-            if row.tenant_id != personal_team_id
+            row.tenant_id for row in models_by_id.values() if row.tenant_id != personal_team_id
         }:
             ctx = await team_resolver.resolve_management_team(
                 user_id=actor_user_id,
@@ -1717,9 +1724,7 @@ class ModelWritesMixin:
         for model_id in unique_ids:
             row = models_by_id.get(model_id)
             if row is None:
-                failed.append(
-                    ModelCopyFailure(model_id=str(model_id), reason="model not found")
-                )
+                failed.append(ModelCopyFailure(model_id=str(model_id), reason="model not found"))
                 continue
             groups.setdefault(row.credential_id, []).append(row)
 
@@ -1879,9 +1884,7 @@ class ModelWritesMixin:
                 reason = model_copy_failure_reason(exc)
                 for row in group_rows:
                     if not any(s.source_model_id == str(row.id) for s in succeeded):
-                        failed.append(
-                            ModelCopyFailure(model_id=str(row.id), reason=reason)
-                        )
+                        failed.append(ModelCopyFailure(model_id=str(row.id), reason=reason))
 
         if any_created:
             await self.reload_litellm_router(tenant_id=destination_team_id)

@@ -17,7 +17,7 @@ import {
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
-import { videoTaskApi } from '@/api/videoTask'
+import { videoTaskApi } from '@/api/video-task'
 import { ConfirmAlertDialog } from '@/components/confirm-alert-dialog'
 import { Button } from '@/components/ui/button'
 import {

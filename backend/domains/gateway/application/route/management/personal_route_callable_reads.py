@@ -16,7 +16,7 @@ from domains.gateway.application.catalog.model_list_pipeline import (
     _filter_merged_rows_deployable,
     _filter_rows_in_memory,
 )
-from domains.gateway.application.vkey.vkey_team_resolution import fetch_grant_team_slug_rows
+from domains.gateway.application.vkey.virtual_key_team_resolution import fetch_grant_team_slug_rows
 from domains.gateway.domain.catalog.model_selection import registry_kind_for_merged_row
 from domains.gateway.domain.credential.managed_team_credentials_policy import WritableTeamSnapshot
 from domains.gateway.domain.route.route_model_ref import (
@@ -26,7 +26,7 @@ from domains.gateway.domain.route.route_model_ref import (
 from domains.gateway.domain.visibility.managed_team_resource_policy import (
     build_managed_team_readable_resource_list_plan,
 )
-from domains.gateway.domain.vkey.vkey_grant_slug_policy import (
+from domains.gateway.domain.vkey.virtual_key_grant_slug_policy import (
     build_slug_by_tenant_id,
     find_ambiguous_grant_slugs,
 )

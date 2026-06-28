@@ -6,7 +6,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 
 import { gatewayApi } from '@/api/gateway'
 import { sessionApi } from '@/api/session'
-import { videoTaskApi } from '@/api/videoTask'
+import { videoTaskApi } from '@/api/video-task'
 import { InterruptDialog } from '@/components/chat/interrupt-dialog'
 import { SessionNotice } from '@/components/chat/session-notice'
 import { TimeTravelDebugger } from '@/components/chat/time-travel-debugger'

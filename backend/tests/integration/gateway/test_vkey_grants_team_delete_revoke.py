@@ -8,10 +8,10 @@ import uuid
 
 import pytest
 
+from domains.gateway.application.proxy.proxy_deferred_tasks import shutdown_proxy_deferred_tasks
 from domains.gateway.application.vkey.management.virtual_key_team_grant_reads import (
     list_active_grants_for_vkey,
 )
-from domains.gateway.application.proxy.proxy_deferred_tasks import shutdown_proxy_deferred_tasks
 from domains.gateway.infrastructure.litellm.router_singleton import reload_router
 from domains.tenancy.application.team_service import TeamService
 from libs.api.paths import openai_compat_base

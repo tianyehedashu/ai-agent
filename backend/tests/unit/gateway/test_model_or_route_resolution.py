@@ -11,7 +11,9 @@ from domains.gateway.application.catalog.model_or_route_resolution import (
     GatewayModelResolveSnapshot,
     resolve_model_or_route,
 )
-from domains.gateway.application.grant.resolve_model_cache import clear_resolve_model_cache_for_tests
+from domains.gateway.application.grant.resolve_model_cache import (
+    clear_resolve_model_cache_for_tests,
+)
 from domains.gateway.infrastructure.repositories.model_repository import (
     GatewayModelRepository,
     GatewayRouteRepository,

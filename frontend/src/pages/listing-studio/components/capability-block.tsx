@@ -10,7 +10,7 @@ import { useState, useCallback, useEffect, useRef, useMemo, useId } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { ApiError } from '@/api/client'
-import { listingStudioApi } from '@/api/listingStudio'
+import { listingStudioApi } from '@/api/listing-studio'
 import { ModelSelector } from '@/components/model-selector'
 import { Button } from '@/components/ui/button'
 import {

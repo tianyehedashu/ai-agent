@@ -11,12 +11,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from domains.gateway.application.catalog.model_list_pipeline import resolved_registry_ability
 from domains.gateway.application.catalog.model_selector_list_reads import list_available_models_page
 from domains.gateway.application.catalog.sql_model_catalog import get_model_catalog_adapter
-from domains.gateway.presentation.gateway_model_list_response import (
-    build_personal_model_list_response,
-)
-from domains.gateway.presentation.gateway_usage_list_response import (
-    build_gateway_model_usage_summary_response,
-)
 from domains.gateway.presentation.model_list_query import ModelListQueryDep
 from domains.gateway.presentation.schemas.common import (
     AvailableModelsListResponse,
@@ -34,6 +28,12 @@ from domains.gateway.presentation.schemas.common import (
     PersonalModelListResponse,
     PersonalModelResponse,
     PersonalModelUpdate,
+)
+from domains.gateway.presentation.schemas.gateway_model_list_response import (
+    build_personal_model_list_response,
+)
+from domains.gateway.presentation.schemas.gateway_usage_list_response import (
+    build_gateway_model_usage_summary_response,
 )
 from domains.identity.presentation.deps import (
     OptionalAuthUser,

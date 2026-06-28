@@ -8,13 +8,13 @@ import uuid
 from sqlalchemy import select
 
 from domains.gateway.domain.errors import VkeyAmbiguousModelError
-from domains.gateway.domain.vkey.vkey_grant_slug_policy import (
+from domains.gateway.domain.vkey.virtual_key_grant_slug_policy import (
     GrantTeamSlugRow,
     build_slug_by_tenant_id,
     build_unique_slug_to_tenant_id,
     find_ambiguous_grant_slugs,
 )
-from domains.gateway.domain.vkey.vkey_team_prefix_policy import (
+from domains.gateway.domain.vkey.virtual_key_team_prefix_policy import (
     VkeyModelDispatch,
     resolve_vkey_model_prefix,
 )

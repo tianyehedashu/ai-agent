@@ -2,7 +2,7 @@ import { useDeferredValue, useMemo, useState } from 'react'
 
 import { useQuery } from '@tanstack/react-query'
 
-import { adminUsersApi } from '@/api/adminUsers'
+import { adminUsersApi } from '@/api/admin-users'
 import {
   GATEWAY_FILTER_ALL,
   type GatewayFilterOption,

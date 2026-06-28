@@ -7,7 +7,6 @@ import uuid
 
 import pytest
 
-from domains.gateway.domain.errors import CredentialNotFoundError
 from domains.gateway.domain.catalog.model_copy_policy import (
     assert_model_copy_credential_plan_valid,
     assert_model_copy_destination_credential_allowed,
@@ -15,6 +14,7 @@ from domains.gateway.domain.catalog.model_copy_policy import (
     assert_model_copy_source_credential_allowed,
     model_copy_failure_reason,
 )
+from domains.gateway.domain.errors import CredentialNotFoundError
 from domains.tenancy.domain.errors import TeamPermissionDeniedError
 from libs.exceptions import ValidationError
 

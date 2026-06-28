@@ -12,7 +12,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { RotateCcw, Loader2 } from 'lucide-react'
 
-import { videoTaskApi } from '@/api/videoTask'
+import { videoTaskApi } from '@/api/video-task'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,

@@ -10,8 +10,8 @@ from domains.gateway.application.catalog.gateway_catalog_maintenance import (
     GatewayCatalogMaintenanceReport,
     run_gateway_catalog_maintenance,
 )
-from domains.gateway.application.upstream.upstream_pricing_audit import UpstreamPricingAuditReport
 from domains.gateway.application.route.route_audit import RouteAuditReport
+from domains.gateway.application.upstream.upstream_pricing_audit import UpstreamPricingAuditReport
 
 
 @pytest.mark.asyncio

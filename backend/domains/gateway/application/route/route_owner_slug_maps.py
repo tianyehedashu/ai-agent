@@ -6,8 +6,8 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 import uuid
 
-from domains.gateway.application.vkey.vkey_team_resolution import fetch_grant_team_slug_rows
-from domains.gateway.domain.vkey.vkey_grant_slug_policy import build_unique_slug_to_tenant_id
+from domains.gateway.application.vkey.virtual_key_team_resolution import fetch_grant_team_slug_rows
+from domains.gateway.domain.vkey.virtual_key_grant_slug_policy import build_unique_slug_to_tenant_id
 from domains.tenancy.application.team_service import TeamService
 
 if TYPE_CHECKING:

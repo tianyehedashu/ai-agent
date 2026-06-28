@@ -11,10 +11,10 @@ from domains.gateway.application.credential.management.managed_team_credential_r
     list_managed_team_credentials_for_actor,
 )
 from domains.gateway.application.management.reads import GatewayManagementReadService
-from domains.gateway.presentation.credential_response import (
+from domains.gateway.presentation.schemas.common import ManagedTeamCredentialListResponse
+from domains.gateway.presentation.schemas.credential_response import (
     build_credential_response_for_team_workspace_list,
 )
-from domains.gateway.presentation.schemas.common import ManagedTeamCredentialListResponse
 from domains.identity.domain.rbac import Role
 from domains.identity.presentation.deps import RequiredAuthUser, get_user_uuid
 from libs.api.pagination import PageParams, page_query_params

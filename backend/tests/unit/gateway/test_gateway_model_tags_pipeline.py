@@ -5,7 +5,10 @@ from domains.gateway.application.catalog.gateway_model_tags_pipeline import (
     merge_tags_patch,
 )
 from domains.gateway.domain.litellm.litellm_capability_mapping import LitellmModelInfoHints
-from domains.gateway.domain.proxy.thinking_param import THINKING_PARAM_ANTHROPIC, THINKING_PARAM_NONE
+from domains.gateway.domain.proxy.thinking_param import (
+    THINKING_PARAM_ANTHROPIC,
+    THINKING_PARAM_NONE,
+)
 
 
 class _FakeHint:

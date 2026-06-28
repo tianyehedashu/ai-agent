@@ -10,7 +10,7 @@ import { useState, useCallback, useMemo, useEffect } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useParams, useNavigate } from 'react-router-dom'
 
-import { listingStudioApi } from '@/api/listingStudio'
+import { listingStudioApi } from '@/api/listing-studio'
 import { Button } from '@/components/ui/button'
 import { DEFAULT_LISTING_STUDIO_INPUTS } from '@/constants/listing-studio'
 import { useListingStudioCapabilities } from '@/hooks/use-listing-studio-capabilities'

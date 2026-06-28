@@ -10,12 +10,12 @@ from httpx import AsyncClient
 import pytest
 
 from bootstrap.config import settings
+from domains.gateway.application.proxy.proxy_deferred_tasks import shutdown_proxy_deferred_tasks
 from domains.gateway.application.usage.gateway_vkey_metrics import (
     AMBIGUOUS_MODEL_INVOCATIONS_TOTAL,
     export_vkey_metrics,
     reset_vkey_metrics_for_tests,
 )
-from domains.gateway.application.proxy.proxy_deferred_tasks import shutdown_proxy_deferred_tasks
 from domains.gateway.infrastructure.litellm.router_singleton import reload_router
 from libs.api.paths import openai_compat_base
 from tests.integration.gateway.vkey_grant_helpers import (

@@ -5,7 +5,9 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, cast
 
 from domains.gateway.application.proxy.proxy_context import ProxyContext
-from domains.gateway.application.proxy.proxy_rate_limit_headers import build_proxy_rate_limit_headers
+from domains.gateway.application.proxy.proxy_rate_limit_headers import (
+    build_proxy_rate_limit_headers,
+)
 from domains.gateway.domain.catalog.client_type import infer_client_type, truncate_client_ua
 from domains.gateway.domain.types import GatewayCapability
 from domains.gateway.presentation.deps import VkeyOrApikeyPrincipal

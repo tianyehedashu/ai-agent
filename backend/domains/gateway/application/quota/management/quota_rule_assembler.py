@@ -101,8 +101,6 @@ async def assemble_team_quota_rules(
     vkeys = await reads.list_virtual_keys_for_team(
         team_id,
         actor_user_id=actor_user_id,
-        team_role=team_role,
-        is_platform_admin=is_platform_admin,
     )
     visible_vkey_ids = frozenset(v.id for v in vkeys)
     if vkeys:

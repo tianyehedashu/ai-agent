@@ -7,7 +7,9 @@ import uuid
 
 import pytest
 
-from domains.gateway.application.route.management.route_grant_reads import list_shared_routes_for_team
+from domains.gateway.application.route.management.route_grant_reads import (
+    list_shared_routes_for_team,
+)
 from domains.gateway.infrastructure.models.gateway_route import GatewayRoute
 from domains.gateway.infrastructure.models.gateway_route_team_grant import GatewayRouteTeamGrant
 

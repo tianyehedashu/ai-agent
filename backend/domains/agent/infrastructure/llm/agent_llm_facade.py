@@ -20,7 +20,9 @@ from domains.gateway.application.bridge.gateway_internal_log_context import (
     get_internal_store_full_override,
 )
 from domains.gateway.application.bridge.gateway_proxy_factory import get_gateway_proxy
-from domains.gateway.application.bridge.internal_bridge_actor import resolve_internal_gateway_user_id
+from domains.gateway.application.bridge.internal_bridge_actor import (
+    resolve_internal_gateway_user_id,
+)
 from domains.gateway.application.ports import (
     GatewayCallContext,
     GatewayResponse,

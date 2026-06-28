@@ -20,12 +20,12 @@ from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bootstrap.config import settings
+from domains.gateway.application.credential.management.credential_upstream_catalog import (
+    CredentialUpstreamCatalogService,
+)
 from domains.gateway.application.management import (
     GatewayManagementReadService,
     GatewayManagementWriteService,
-)
-from domains.gateway.application.credential.management.credential_upstream_catalog import (
-    CredentialUpstreamCatalogService,
 )
 from domains.gateway.application.vkey.management.virtual_key_read_model import VirtualKeyReadModel
 from domains.gateway.domain.credential.credential_probe import CredentialProbeResult

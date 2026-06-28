@@ -38,7 +38,9 @@ class _FakeCatalog:
 
     async def resolve_chat_default_text_model(self, *, billing_team_id, user_id=None):
         from bootstrap.config import settings
-        from domains.gateway.domain.catalog.scenario_defaults_policy import pick_scenario_from_visible
+        from domains.gateway.domain.catalog.scenario_defaults_policy import (
+            pick_scenario_from_visible,
+        )
 
         items = await self.list_visible_models(
             billing_team_id=billing_team_id,

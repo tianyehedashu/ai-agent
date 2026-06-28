@@ -88,7 +88,7 @@ class CredentialWritesMixin:
         bound_team_id: uuid.UUID,
         requested_tenant_ids: Sequence[uuid.UUID],
     ) -> list[uuid.UUID]:
-        from domains.gateway.application.vkey.management.vkey_team_grant_policy import (
+        from domains.gateway.application.vkey.management.virtual_key_team_grant_policy import (
             resolve_extra_vkey_grant_tenant_ids,
         )
 

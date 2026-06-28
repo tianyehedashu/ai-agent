@@ -6,7 +6,7 @@ import { Clock, Sparkles } from 'lucide-react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 
 import { sessionApi } from '@/api/session'
-import { videoTaskApi } from '@/api/videoTask'
+import { videoTaskApi } from '@/api/video-task'
 import { InterruptDialog } from '@/components/chat/interrupt-dialog'
 import { VIDEO_TASK_EXAMPLE_PROMPTS } from '@/constants/video-task'
 import { useChat } from '@/hooks/use-chat'

@@ -11,8 +11,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from bootstrap.config import settings
 from domains.agent.infrastructure.llm.agent_llm_facade import AgentLlmFacade
-from domains.gateway.application.model_catalog_port import ModelCatalogPort
 from domains.gateway.application.catalog.scenario_defaults import require_scenario_default
+from domains.gateway.application.model_catalog_port import ModelCatalogPort
 from libs.db.session_lifecycle import rollback_open_transaction
 from utils.logging import get_logger
 

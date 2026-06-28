@@ -8,7 +8,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { Clock, CheckCircle2, XCircle, AlertTriangle, Play, ExternalLink } from 'lucide-react'
 
-import { videoTaskApi } from '@/api/videoTask'
+import { videoTaskApi } from '@/api/video-task'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import type { VideoTaskStatus } from '@/types/video-task'

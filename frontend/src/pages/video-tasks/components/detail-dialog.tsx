@@ -16,7 +16,7 @@ import {
   Loader2,
 } from 'lucide-react'
 
-import { videoTaskApi } from '@/api/videoTask'
+import { videoTaskApi } from '@/api/video-task'
 import { Button } from '@/components/ui/button'
 import { VIDEO_TASK_MARKETPLACES } from '@/constants/video-task'
 import { useToast } from '@/hooks/use-toast'

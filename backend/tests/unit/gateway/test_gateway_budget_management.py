@@ -9,9 +9,9 @@ import uuid
 
 import pytest
 
-from domains.gateway.application.management.reads import GatewayManagementReadService
 from domains.gateway.application.management import GatewayManagementWriteService
-from domains.gateway.domain.errors import ManagementEntityNotFoundError
+from domains.gateway.application.management.reads import GatewayManagementReadService
+from domains.gateway.domain.errors import CredentialNotFoundError, ManagementEntityNotFoundError
 
 
 @pytest.mark.asyncio
@@ -263,9 +263,7 @@ async def test_delete_budget_rejects_other_team_member_guardrail() -> None:
         )
     )
     # 该成员同时也在当前团队，target 归属校验本身会通过。
-    writes._teams.list_team_members = AsyncMock(
-        return_value=[SimpleNamespace(user_id=member_id)]
-    )
+    writes._teams.list_team_members = AsyncMock(return_value=[SimpleNamespace(user_id=member_id)])
     writes._budgets.delete = AsyncMock(return_value=True)
 
     with pytest.raises(ManagementEntityNotFoundError):
@@ -297,10 +295,10 @@ async def test_delete_budget_rejects_foreign_credential_scoped_budget() -> None:
             credential_id=foreign_cred,
         )
     )
-    writes._teams.list_team_members = AsyncMock(
-        return_value=[SimpleNamespace(user_id=member_id)]
+    writes._teams.list_team_members = AsyncMock(return_value=[SimpleNamespace(user_id=member_id)])
+    writes._assert_credential_in_team = AsyncMock(
+        side_effect=CredentialNotFoundError(str(foreign_cred))
     )
-    writes._creds.get_bindable_for_team_gateway_model = AsyncMock(return_value=None)
     writes._budgets.delete = AsyncMock(return_value=True)
 
     with pytest.raises(ManagementEntityNotFoundError):
@@ -331,9 +329,7 @@ async def test_delete_budget_allows_member_guardrail_in_team() -> None:
             credential_id=None,
         )
     )
-    writes._teams.list_team_members = AsyncMock(
-        return_value=[SimpleNamespace(user_id=member_id)]
-    )
+    writes._teams.list_team_members = AsyncMock(return_value=[SimpleNamespace(user_id=member_id)])
     writes._budgets.delete = AsyncMock(return_value=True)
 
     await writes.delete_budget(

@@ -11,13 +11,13 @@ from domains.gateway.application.vkey.management.managed_team_virtual_key_reads 
     list_managed_team_virtual_keys_for_actor,
     list_managed_team_vkey_entitlements_for_actor,
 )
-from domains.gateway.presentation.plan_response import entitlement_plan_to_response
 from domains.gateway.presentation.routers._common import vkey_to_response
 from domains.gateway.presentation.schemas.common import (
     ManagedTeamVirtualKeyListResponse,
     ManagedTeamVkeyEntitlementItem,
     ManagedTeamVkeyEntitlementsResponse,
 )
+from domains.gateway.presentation.schemas.plan_response import entitlement_plan_to_response
 from domains.identity.domain.rbac import Role
 from domains.identity.presentation.deps import RequiredAuthUser, get_user_uuid
 from libs.api.pagination import PageParams, build_page, page_query_params

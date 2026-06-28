@@ -18,11 +18,13 @@ from domains.gateway.domain.usage.usage_read_model import (
     UsageAggregation,
 )
 from domains.gateway.presentation.deps import CurrentTeam
-from domains.gateway.presentation.gateway_log_list_response import build_request_log_list_response
 from domains.gateway.presentation.schemas.common import (
     RequestLogDetailResponse,
     RequestLogListResponse,
     RequestLogResponse,
+)
+from domains.gateway.presentation.schemas.gateway_log_list_response import (
+    build_request_log_list_response,
 )
 from libs.api.pagination import PageParams, page_query_params
 from libs.exceptions import NotFoundError

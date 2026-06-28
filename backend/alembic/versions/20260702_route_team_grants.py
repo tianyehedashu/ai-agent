@@ -17,8 +17,8 @@ Create Date: 2026-07-02
 from collections.abc import Sequence
 
 import sqlalchemy as sa
-from alembic import op
 
+from alembic import op
 from utils.logging import get_logger
 
 logger = get_logger(__name__)

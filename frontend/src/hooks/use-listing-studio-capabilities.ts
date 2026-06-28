@@ -6,7 +6,7 @@ import { useMemo } from 'react'
 
 import { useQuery } from '@tanstack/react-query'
 
-import { listingStudioApi } from '@/api/listingStudio'
+import { listingStudioApi } from '@/api/listing-studio'
 import {
   CAPABILITY_ORDER,
   CAPABILITY_NAMES,

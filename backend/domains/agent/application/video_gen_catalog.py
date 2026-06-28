@@ -62,7 +62,9 @@ async def list_merged_video_models(
 
     与 ``GET /gateway/models/available?type=video`` 对齐：合并系统可见模型与个人团队模型。
     """
-    from domains.gateway.application.bridge.internal_bridge_actor import resolve_internal_gateway_team_id
+    from domains.gateway.application.bridge.internal_bridge_actor import (
+        resolve_internal_gateway_team_id,
+    )
     from domains.gateway.application.catalog.model_selector_reads import (
         list_available_system_models,
         list_personal_models_for_selector,

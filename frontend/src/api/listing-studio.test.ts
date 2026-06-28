@@ -29,7 +29,7 @@ function getLastFetchUrl(): string {
   return tuple[0]
 }
 
-import { listingStudioApi } from './listingStudio'
+import { listingStudioApi } from './listing-studio'
 import { apiV1Path } from './paths'
 
 describe('listingStudioApi', () => {

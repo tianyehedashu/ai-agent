@@ -15,7 +15,7 @@ from domains.gateway.application.management.writes import GatewayManagementWrite
 from domains.gateway.infrastructure.repositories.system_credential_repository import (
     SystemProviderCredentialRepository,
 )
-from domains.gateway.presentation.credential_response import (
+from domains.gateway.presentation.schemas.credential_response import (
     build_credential_response,
     build_credential_summary_response,
 )
@@ -87,7 +87,9 @@ async def test_build_credential_response_uses_prefilled_masked_without_decrypt(
     from datetime import UTC, datetime
     from unittest.mock import patch
 
-    from domains.gateway.application.credential.management.credential_read_model import CredentialReadModel
+    from domains.gateway.application.credential.management.credential_read_model import (
+        CredentialReadModel,
+    )
 
     encryption_key = derive_encryption_key(settings.secret_key.get_secret_value())
     cred_id = uuid.uuid4()
@@ -108,7 +110,7 @@ async def test_build_credential_response_uses_prefilled_masked_without_decrypt(
     )
 
     with patch(
-        "domains.gateway.presentation.credential_response.decrypt_value",
+        "domains.gateway.presentation.schemas.credential_response.decrypt_value",
     ) as decrypt_mock:
         resp = build_credential_response(read_model, encryption_key=encryption_key)
 

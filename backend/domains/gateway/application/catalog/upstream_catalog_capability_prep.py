@@ -4,17 +4,18 @@ from __future__ import annotations
 
 from typing import Any
 
-from .upstream_model_types_for_catalog import (
-    infer_upstream_model_types_for_catalog,
-)
-from domains.gateway.domain.litellm.litellm_capability_mapping import LITELLM_CAPABILITY_TAG_KEYS
 from domains.gateway.domain.catalog.model_types_tags import (
     model_types_for_capability_write,
     resolve_catalog_write_capability,
     tags_from_model_types,
 )
+from domains.gateway.domain.litellm.litellm_capability_mapping import LITELLM_CAPABILITY_TAG_KEYS
 from domains.gateway.domain.upstream.upstream_type_inference import (
     infer_non_personal_gateway_capability,
+)
+
+from .upstream_model_types_for_catalog import (
+    infer_upstream_model_types_for_catalog,
 )
 
 

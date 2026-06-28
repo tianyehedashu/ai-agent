@@ -79,6 +79,7 @@ class GatewayManagementWriteBaseMixin:
         self._entitlement_plans = EntitlementPlanRepository(session)
         self._teams = TeamService(session)
         self._access = GatewayManagementAccessAssertions(
+            session=session,
             creds=self._creds,
             vkeys=self._vkeys,
             api_key_grants=ApiKeyUseCase(session),
@@ -186,11 +187,11 @@ class GatewayManagementWriteBaseMixin:
         self, credential_id: uuid.UUID, *, tenant_id: uuid.UUID, is_platform_admin: bool
     ) -> None:
         """与 ``list_credentials_for_team`` 可见集合一致：team-scope 凭据 + 平台管理员可见 system。"""
-        row = await self._creds.get_bindable_for_team_gateway_model(
-            credential_id, tenant_id=tenant_id, is_platform_admin=is_platform_admin
+        await self._access.assert_credential_in_team(
+            credential_id,
+            tenant_id=tenant_id,
+            is_platform_admin=is_platform_admin,
         )
-        if row is None:
-            raise CredentialNotFoundError(str(credential_id))
 
     async def _assert_upstream_credential_writable(
         self,

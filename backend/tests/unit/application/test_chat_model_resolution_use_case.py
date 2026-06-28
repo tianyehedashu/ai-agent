@@ -178,7 +178,9 @@ class TestGetAvailableModels:
 
         ctx = await permission_context_for_user(db_session, user_id=user.id)
         set_permission_context(ctx)
-        from domains.gateway.application.catalog.config_catalog_sync import sync_app_config_gateway_catalog
+        from domains.gateway.application.catalog.config_catalog_sync import (
+            sync_app_config_gateway_catalog,
+        )
         from domains.gateway.application.catalog.sql_model_catalog import get_model_catalog_adapter
 
         await sync_app_config_gateway_catalog(db_session)

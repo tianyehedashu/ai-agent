@@ -10,7 +10,6 @@ from domains.gateway.domain.usage.normalized_usage import (
     normalized_usage_from_raw,
 )
 
-
 # ---- NormalizedUsage 属性 ----
 
 

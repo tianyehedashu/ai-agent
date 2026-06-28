@@ -7,8 +7,10 @@ import uuid
 
 import pytest
 
-from domains.gateway.application.credential.management.credential_read_model import CredentialReadModel
-from domains.gateway.presentation.credential_response import (
+from domains.gateway.application.credential.management.credential_read_model import (
+    CredentialReadModel,
+)
+from domains.gateway.presentation.schemas.credential_response import (
     METADATA_ONLY_API_KEY_MASKED,
     build_credential_response_for_team_workspace_list,
 )
@@ -83,7 +85,9 @@ def test_metadata_response_includes_api_base_not_secret(encryption_key: str) -> 
     owner_id = uuid.uuid4()
     row = _cred(created_by=owner_id)
 
-    from domains.gateway.presentation.credential_response import build_credential_metadata_response
+    from domains.gateway.presentation.schemas.credential_response import (
+        build_credential_metadata_response,
+    )
 
     resp = build_credential_metadata_response(row)
 
@@ -117,7 +121,9 @@ def test_metadata_response_api_base_falls_back_to_provider_default() -> None:
         created_at=datetime.now(UTC),
     )
 
-    from domains.gateway.presentation.credential_response import build_credential_metadata_response
+    from domains.gateway.presentation.schemas.credential_response import (
+        build_credential_metadata_response,
+    )
 
     resp = build_credential_metadata_response(row)
 

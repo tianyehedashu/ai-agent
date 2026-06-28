@@ -13,14 +13,17 @@ from domains.gateway.application.catalog.gateway_model_listing import (
     resolve_by_name_visible,
 )
 from domains.gateway.application.catalog.model_or_route_resolution import resolve_model_or_route
-from domains.gateway.application.route.router_model_name import router_model_name_for_client
+from domains.gateway.application.grant.credential_binding import (
+    resolve_bindable_credential,
+)
 from domains.gateway.application.grant.management.resource_grant_writes import (
     ResourceGrantWriteService,
 )
-from domains.gateway.domain.errors import VkeyAmbiguousModelError
 from domains.gateway.application.grant.resource_grant_resolution import (
     resolve_granted_model_by_name,
 )
+from domains.gateway.application.route.router_model_name import router_model_name_for_client
+from domains.gateway.domain.errors import VkeyAmbiguousModelError
 from domains.gateway.infrastructure.repositories.credential_repository import (
     ProviderCredentialRepository,
 )
@@ -176,9 +179,9 @@ async def test_get_bindable_accepts_granted_byok_credential(db_session, test_use
     )
     await db_session.flush()
 
-    repo = ProviderCredentialRepository(db_session)
-    bound = await repo.get_bindable_for_team_gateway_model(
-        cred.id,
+    bound = await resolve_bindable_credential(
+        db_session,
+        credential_id=cred.id,
         tenant_id=shared.id,
         is_platform_admin=False,
     )

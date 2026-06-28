@@ -12,7 +12,6 @@ from libs.iam.data_scope_policy import (
 )
 from libs.iam.permission_context import get_permission_context
 
-
 __all__ = [
     "assert_tenant_access",
     "assert_tenant_access_or_public",

@@ -23,8 +23,8 @@ from domains.identity.application.token_service import TokenPair, TokenService
 from domains.identity.domain.policies.platform_role_policy import (
     assert_bootstrap_grant_admin,
     assert_bootstrap_revoke_admin,
-    assert_emergency_grant_admin,
     assert_can_change_platform_role,
+    assert_emergency_grant_admin,
 )
 from domains.identity.domain.policies.platform_user_admin_policy import (
     assert_can_admin_manage_user,

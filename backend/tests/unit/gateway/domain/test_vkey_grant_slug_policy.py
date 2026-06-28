@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 
-from domains.gateway.domain.vkey.vkey_grant_slug_policy import (
+from domains.gateway.domain.vkey.virtual_key_grant_slug_policy import (
     build_slug_by_tenant_id,
     build_unique_slug_to_tenant_id,
     find_ambiguous_grant_slugs,

@@ -1,6 +1,6 @@
 import { useQuery, type UseQueryResult } from '@tanstack/react-query'
 
-import { adminUsersApi, type PlatformRole, type PlatformUserListResponse } from '@/api/adminUsers'
+import { adminUsersApi, type PlatformRole, type PlatformUserListResponse } from '@/api/admin-users'
 import { GATEWAY_TEAMS_STALE_MS } from '@/features/gateway-teams/use-gateway-teams'
 import { DEFAULT_PAGE_SIZE } from '@/lib/pagination'
 

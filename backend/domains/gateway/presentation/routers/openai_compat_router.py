@@ -24,10 +24,10 @@ from fastapi.responses import Response, StreamingResponse
 import orjson
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from domains.gateway.application.vkey.vkey_proxy_model_list import list_openai_proxy_models
 from domains.gateway.application.proxy.proxy_allowed_models import resolve_proxy_allowed_model_names
 from domains.gateway.application.proxy.proxy_timing import timing_response_headers
 from domains.gateway.application.proxy.proxy_use_case import ProxyUseCase
+from domains.gateway.application.vkey.virtual_key_proxy_model_list import list_openai_proxy_models
 from domains.gateway.domain.proxy.stream_utils import safe_aclose_stream
 from domains.gateway.domain.types import GatewayCapability
 from domains.gateway.presentation.deps import (

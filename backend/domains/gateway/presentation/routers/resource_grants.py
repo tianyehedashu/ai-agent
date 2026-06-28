@@ -10,6 +10,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from domains.gateway.application.grant.management.resource_grant_reads import (
     list_owner_grants,
+)
+from domains.gateway.application.grant.management.resource_grant_reads import (
     list_team_granted_models as fetch_team_granted_models,
 )
 from domains.gateway.application.grant.management.resource_grant_writes import (

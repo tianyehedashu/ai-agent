@@ -24,6 +24,7 @@ from domains.identity.infrastructure.auth.jwt import (
     verify_token,
 )
 from domains.identity.infrastructure.auth.password import hash_password, verify_password
+
 __all__ = [
     "JWTManager",
     "Permission",

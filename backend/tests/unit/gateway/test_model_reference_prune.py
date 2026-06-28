@@ -6,8 +6,10 @@ import uuid
 
 import pytest
 
+from domains.gateway.application.catalog.model_reference_prune import (
+    prune_gateway_model_name_references,
+)
 from domains.gateway.application.management.writes import GatewayManagementWriteService
-from domains.gateway.application.catalog.model_reference_prune import prune_gateway_model_name_references
 from domains.gateway.domain.vkey.virtual_key_service import generate_vkey
 from domains.gateway.infrastructure.repositories.model_repository import (
     GatewayModelRepository,
@@ -15,7 +17,10 @@ from domains.gateway.infrastructure.repositories.model_repository import (
 )
 from domains.gateway.infrastructure.repositories.virtual_key_repository import VirtualKeyRepository
 from domains.tenancy.application.team_service import TeamService
-from tests.unit.gateway.credential_test_helpers import create_tenant_test_credential, team_owner_actor_kw
+from tests.unit.gateway.credential_test_helpers import (
+    create_tenant_test_credential,
+    team_owner_actor_kw,
+)
 
 
 @pytest.mark.asyncio

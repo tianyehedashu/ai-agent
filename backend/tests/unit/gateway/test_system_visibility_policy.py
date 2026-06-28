@@ -6,15 +6,15 @@ import uuid
 
 import pytest
 
+from domains.gateway.application.catalog.gateway_model_listing import list_merged_models_for_tenant
 from domains.gateway.application.grant.system_grants_cache import (
     clear_grants_cache_for_tests,
     invalidate_grants_for_team,
 )
-from domains.gateway.application.catalog.gateway_model_listing import list_merged_models_for_tenant
-from domains.gateway.application.management import GatewayManagementReadService
 from domains.gateway.application.grant.system_visibility_filter import (
     system_credential_visible_to_subject,
 )
+from domains.gateway.application.management import GatewayManagementReadService
 from domains.gateway.domain.visibility.system_visibility import (
     SystemModelVisibilitySnapshot,
     visible_system_model_ids,

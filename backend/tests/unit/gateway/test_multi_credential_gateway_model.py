@@ -21,7 +21,10 @@ from domains.gateway.infrastructure.repositories.model_repository import (
 from domains.tenancy.application.team_service import TeamService
 from libs.crypto import derive_encryption_key, encrypt_value
 from libs.exceptions import ValidationError
-from tests.unit.gateway.credential_test_helpers import create_tenant_test_credential, team_owner_actor_kw
+from tests.unit.gateway.credential_test_helpers import (
+    create_tenant_test_credential,
+    team_owner_actor_kw,
+)
 
 
 async def _seed_team_creds(db_session, team_id: uuid.UUID, owner_id: uuid.UUID, n: int = 2):

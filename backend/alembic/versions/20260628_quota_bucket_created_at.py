@@ -9,8 +9,9 @@ Create Date: 2026-06-28
 
 from collections.abc import Sequence
 
-from alembic import op
 import sqlalchemy as sa
+
+from alembic import op
 
 revision: str = "20260628_gqpub_cat"
 down_revision: str | None = "20260704_lim"

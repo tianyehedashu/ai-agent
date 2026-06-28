@@ -10,7 +10,9 @@ from domains.gateway.application.credential.management.credential_creator_labels
     credential_creator_display_label,
     credential_creator_labels_for_read_models,
 )
-from domains.gateway.application.credential.management.credential_read_model import CredentialReadModel
+from domains.gateway.application.credential.management.credential_read_model import (
+    CredentialReadModel,
+)
 from domains.identity.application.ports import UserSummaryView
 
 

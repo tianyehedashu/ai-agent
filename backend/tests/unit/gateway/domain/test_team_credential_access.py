@@ -4,7 +4,6 @@ from uuid import uuid4
 
 import pytest
 
-from domains.gateway.domain.errors import CredentialNotFoundError
 from domains.gateway.domain.credential.team_credential_access import (
     actor_owns_team_credential,
     assert_team_credential_readable_by_actor,
@@ -13,6 +12,7 @@ from domains.gateway.domain.credential.team_credential_access import (
     can_read_team_credential,
     filter_team_credentials_visible_to_actor,
 )
+from domains.gateway.domain.errors import CredentialNotFoundError
 from domains.tenancy.domain.policies.team_role import TeamRole
 
 

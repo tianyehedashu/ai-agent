@@ -2,10 +2,12 @@
 
 import pytest
 
-from domains.gateway.application.proxy.invocation_overrides import merge_invocation_overrides_into_body
 from domains.gateway.application.ports import InvocationOverrides
-from domains.gateway.domain.errors import InvocationPolicyViolationError
+from domains.gateway.application.proxy.invocation_overrides import (
+    merge_invocation_overrides_into_body,
+)
 from domains.gateway.domain.catalog.model_capability import ModelCapabilitySnapshot
+from domains.gateway.domain.errors import InvocationPolicyViolationError
 from domains.gateway.domain.proxy.thinking_param import (
     THINKING_PARAM_DASHSCOPE,
     THINKING_PARAM_DEEPSEEK_V4,

@@ -7,7 +7,6 @@
 
 from __future__ import annotations
 
-
 RESERVED_TEAM_SLUGS: frozenset[str] = frozenset({
     # Major providers
     "openai", "anthropic", "azure", "aws", "bedrock", "vertex_ai", "gemini",
